@@ -1,0 +1,176 @@
+/**
+ * Microcontroller pin state: what firmware has asked each pin to do.
+ *
+ * This layer knows nothing about voltages. It records intent -- direction,
+ * duty cycle -- and the engine turns that intent into circuit elements. Keeping
+ * the split clean is what lets the same pin model serve a UI inspector, the
+ * firmware VM, and the solver without any of them knowing about the others.
+ */
+
+import type { BoardPin, BoardSpec, PartDefinition } from './catalog';
+
+export type PinDirection = 'input' | 'output' | 'inputPullUp';
+
+export interface PinConfiguration {
+  readonly direction: PinDirection;
+  /** True once analogWrite has put the pin into PWM mode. */
+  readonly pwm: boolean;
+  /** Output level as a 0..1 duty cycle; 0 or 1 for plain digital writes. */
+  readonly duty: number;
+}
+
+
+/**
+ * Internal pull-up resistance brought out by `INPUT_PULLUP`.
+ *
+ * Datasheets put the ESP32's internal pull-up between 45 kOhm and range into
+ * the megaohms. The slow end is the honest one: it is why an internal pull-up
+ * is fine for reading a switch but not for driving anything.
+ */
+export const INTERNAL_PULLUP_OHMS = 45_000;
+
+/**
+ * Input impedance presented by an unconnected GPIO.
+ *
+ * A CMOS input is high-impedance and leaks only picoamps, which is exactly why
+ * a floating pin wanders. Modelling that leakage explicitly is what lets an
+ * unwired input read erratically instead of quietly sitting at 0 V, and it is
+ * also why any real pull-down resistor swamps it.
+ */
+export const INPUT_IMPEDANCE_OHMS = 1e12;
+
+/**
+ * Voltage a floating input wanders between, as a fraction of the supply.
+ *
+ * Two incommensurate sine terms so the pattern does not visibly repeat while
+ * still being a pure function of simulated time -- tests need a drifting pin to
+ * drift reproducibly.
+ */
+export function floatingInputFraction(timeMs: number): number {
+  return 0.5 + 0.5 * Math.sin(timeMs / 370) * Math.sin(timeMs / 91);
+}
+
+export class McuRuntime {
+  readonly definition: PartDefinition;
+  readonly board: BoardSpec;
+
+  private readonly pinIdByGpio = new Map<number, string>();
+  private readonly boardPinById = new Map<string, BoardPin>();
+  private readonly configurations = new Map<string, PinConfiguration>();
+  /** Simulated time each pin's PWM phase was last restarted at. */
+  private readonly pwmEpochMs = new Map<string, number>();
+
+  constructor(definition: PartDefinition) {
+    if (definition.component.kind !== 'mcu') {
+      throw new Error(`${definition.id} is not a microcontroller board`);
+    }
+    this.definition = definition;
+    this.board = definition.component.board;
+
+    for (const pin of definition.boardPins ?? []) {
+      this.boardPinById.set(pin.id, pin);
+      if (pin.gpio !== undefined) this.pinIdByGpio.set(pin.gpio, pin.id);
+    }
+  }
+
+  /** Every pin firmware is allowed to name, mapped to its board pin. */
+  pins(): readonly BoardPin[] {
+    return this.definition.boardPins ?? [];
+  }
+
+  boardPin(pinId: string): BoardPin | undefined {
+    return this.boardPinById.get(pinId);
+  }
+
+  pinIdForGpio(gpio: number): string | undefined {
+    return this.pinIdByGpio.get(gpio);
+  }
+
+  gpioForPinId(pinId: string): number | undefined {
+    return this.boardPinById.get(pinId)?.gpio;
+  }
+
+  /**
+   * Sets a pin's direction.
+   *
+   * Pins with no output driver stay inputs whatever firmware asks for. Silently
+   * ignoring the request is the honest outcome -- the same thing that happens on
+   * real silicon, where GPIO34-39 simply have no driver to route to.
+   */
+  setDirection(gpio: number, direction: PinDirection): void {
+    const pinId = this.pinIdByGpio.get(gpio);
+    if (pinId === undefined) return;
+
+    const pin = this.boardPinById.get(pinId)!;
+    if (pin.role === 'power' || pin.role === 'ground') return;
+    if (direction === 'output' && pin.canDrive === false) return;
+
+    const existing = this.configurations.get(pinId);
+    this.configurations.set(pinId, {
+      direction,
+      pwm: direction === 'output' ? (existing?.pwm ?? false) : false,
+      duty: direction === 'output' ? (existing?.duty ?? 0) : 0,
+    });
+  }
+
+  writeDigital(gpio: number, high: boolean, timeMs: number): void {
+    const pinId = this.pinIdByGpio.get(gpio);
+    if (pinId === undefined) return;
+    const pin = this.boardPinById.get(pinId)!;
+    if (pin.role === 'power' || pin.role === 'ground') return;
+    if (pin.canDrive === false) return;
+
+    const existing = this.configurations.get(pinId);
+    if (existing?.direction === 'output' && existing.pwm) {
+      // Writing HIGH/LOW to a PWM pin overrides the duty outright, which is
+      // what the real PWM peripheral does when the duty register is assigned.
+      this.configurations.set(pinId, { direction: 'output', pwm: false, duty: high ? 1 : 0 });
+      return;
+    }
+    this.configurations.set(pinId, { direction: 'output', pwm: false, duty: high ? 1 : 0 });
+    if (existing?.pwm) this.pwmEpochMs.set(pinId, timeMs);
+  }
+
+  /** Sets a PWM duty from an Arduino `analogWrite` value of 0..255. */
+  writeAnalog(gpio: number, value: number, timeMs: number): void {
+    const pinId = this.pinIdByGpio.get(gpio);
+    if (pinId === undefined) return;
+    const pin = this.boardPinById.get(pinId)!;
+    if (pin.role === 'power' || pin.role === 'ground') return;
+    if (pin.canDrive === false) return;
+
+    const clamped = Math.min(255, Math.max(0, value));
+    const wasPwm = this.configurations.get(pinId)?.pwm ?? false;
+    this.configurations.set(pinId, {
+      direction: 'output',
+      pwm: true,
+      duty: clamped / 255,
+    });
+    // Restart the phase on the rising edge of PWM so a fresh duty does not
+    // inherit the middle of the previous period.
+    if (!wasPwm) this.pwmEpochMs.set(pinId, timeMs);
+  }
+
+  /** Instantaneous output level of a pin at `timeMs`, accounting for PWM phase. */
+  levelOf(pinId: string, timeMs: number): number {
+    const configuration = this.configurations.get(pinId);
+    if (!configuration || configuration.direction !== 'output') return 0;
+
+    if (!configuration.pwm) return configuration.duty;
+
+    const periodMs = 1000 / this.board.pwmHz;
+    const epoch = this.pwmEpochMs.get(pinId) ?? 0;
+    const phase = (((timeMs - epoch) / periodMs) % 1 + 1) % 1;
+    return phase < configuration.duty ? 1 : 0;
+  }
+
+  configurationOf(pinId: string): PinConfiguration {
+    return this.configurations.get(pinId) ?? { direction: 'input', pwm: false, duty: 0 };
+  }
+
+  /** Resets every pin to a floating input, as a board would come out of reset. */
+  reset(): void {
+    this.configurations.clear();
+    this.pwmEpochMs.clear();
+  }
+}
