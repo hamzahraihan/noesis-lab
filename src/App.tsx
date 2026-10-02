@@ -9,6 +9,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isLargePart, type CatalogueEntry } from './sim/catalogue';
+import { ComponentBrowser } from './ui/ComponentBrowser';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from './sim/breadboard';
 import { arduinoUnoR3, esp32DevKitV1 } from './sim/boards';
 import { ledDefinition, resistorDefinition } from './sim/passives';
@@ -148,11 +150,40 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
   connect(tft, 'GND', spiColumn + 2, 4);
 }
 
-/** Dropped parts walk along the breadboard so they do not land on each other. */
+/**
+ * Where dropped parts land.
+ *
+ * Small parts go onto the breadboard's row-e strip, spaced far enough apart not
+ * to sit on each other. Anything board-sized goes on the bench below instead,
+ * because dropping a breadboard onto a breadboard would just hide it.
+ */
 let nextDropColumn = 44;
+let nextBenchSlot = 0;
+
+const BENCH_SLOTS_X = [230, 240, 250, 260, 270, 280];
+const BENCH_SLOTS_Y = [70, 78, 86];
+
+/**
+ * Offset of a part's first pin inside its own footprint.
+ *
+ * Dropping a part means landing its leads in holes, and where the leads sit
+ * inside the footprint differs per part: a resistor's are 1.6 mm down, an
+ * LED's are 3 mm and a potentiometer's 4.5 mm. Dropping the origin on the
+ * strip row instead is what left half the palette floating above the board.
+ */
+function offsetOfFirstPin(definition: PartDefinition): [x: number, y: number] {
+  let x = Infinity;
+  let y = Infinity;
+  for (const pin of definition.pins) {
+    if (pin.x < x) x = pin.x;
+    if (pin.y < y) y = pin.y;
+  }
+  return [x, y];
+}
 
 export default function App() {
   const [firmware, setFirmware] = useState(BLINK_SKETCH);
+  const [browserOpen, setBrowserOpen] = useState(false);
   const [boardId, setBoardId] = useState<BoardId>('esp32');
   const [, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -267,15 +298,38 @@ export default function App() {
     [simulation],
   );
 
+  const onTogglePressed = useCallback(
+    (partId: string, pressed: boolean) => simulation.setButtonPressed(partId, pressed),
+    [simulation],
+  );
+
   const onPlacePart = useCallback(
-    (definition: PartDefinition) => {
-      const column = nextDropColumn;
-      nextDropColumn = (nextDropColumn + 8) % 60;
-      const part = simulation.addPart(
-        definition,
-        BREADBOARD_ORIGIN_X + columnX(column),
-        stripRowY(8) - 1.6,
-      );
+    (definition: PartDefinition, entry: CatalogueEntry) => {
+      const part = isLargePart(entry.id)
+        ? (() => {
+            const slot = nextBenchSlot++;
+            return simulation.addPart(
+              definition,
+              BENCH_SLOTS_X[slot % BENCH_SLOTS_X.length],
+              BENCH_SLOTS_Y[Math.floor(slot / BENCH_SLOTS_X.length) % BENCH_SLOTS_Y.length],
+            );
+          })()
+        : (() => {
+            const column = nextDropColumn;
+            nextDropColumn = (nextDropColumn + 8) % 60;
+            /*
+             * Land the part's topmost, leftmost pin on a real hole rather than
+             * its origin. Every part's leads sit at a different offset inside
+             * its own footprint, so dropping the origin on the hole row left
+             * everything but the resistor hanging in mid-air.
+             */
+            const [pinX, pinY] = offsetOfFirstPin(definition);
+            return simulation.addPart(
+              definition,
+              BREADBOARD_ORIGIN_X + columnX(column) - pinX,
+              stripRowY(8) - pinY,
+            );
+          })();
       setSelectedId(part.id);
     },
     [simulation],
@@ -318,6 +372,13 @@ export default function App() {
         >
           Swap board
         </button>
+        <button
+          type="button"
+          onClick={() => setBrowserOpen(true)}
+          className="rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-sky-500"
+        >
+          Components
+        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -329,7 +390,7 @@ export default function App() {
          * as broken.
          */}
         <aside className="hidden w-44 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-900 lg:block">
-          <PartPalette onPlace={onPlacePart} />
+          <PartPalette onPlace={onPlacePart} onBrowse={() => setBrowserOpen(true)} />
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
@@ -343,6 +404,7 @@ export default function App() {
               onSelect={setSelectedId}
               onMovePart={onMovePart}
               onRouteWire={onRouteWire}
+              onTogglePressed={onTogglePressed}
             />
           </div>
 
@@ -426,6 +488,16 @@ export default function App() {
             onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
           />
         </aside>
+
+      {browserOpen && (
+        <ComponentBrowser
+          onPlace={(definition, entry) => {
+            onPlacePart(definition, entry);
+            setBrowserOpen(false);
+          }}
+          onClose={() => setBrowserOpen(false)}
+        />
+      )}
 
       </div>
 
