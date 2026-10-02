@@ -14,7 +14,8 @@ import { arduinoUnoR3, esp32DevKitV1 } from './sim/boards';
 import { ledDefinition, resistorDefinition } from './sim/passives';
 import { DIODE_PROFILES } from './sim/elements';
 import type { PartDefinition } from './sim/catalog';
-import type { Terminal } from './sim/bench';
+import type { PartInstance, Terminal } from './sim/bench';
+import { ili9341Definition, ssd1306Definition } from './sim/display/part';
 import { Workbench } from './ui/Workbench';
 import type { FootprintState } from './ui/footprints';
 import { BLINK_SKETCH, Simulation } from './ui/simulation';
@@ -25,19 +26,37 @@ import {
   SerialMonitor,
   StatusBar,
 } from './ui/Panels';
+import { ScopePanel } from './ui/Scope';
+import { MultimeterPanel } from './ui/Multimeter';
 
 type BoardId = 'esp32' | 'uno';
 
 /** Where the breadboard sits, clear of the board plugged in beside it. */
 const BREADBOARD_ORIGIN_X = 230;
 
-/** Signal column the starter LED circuit is wired onto. */
+/** Column the starter LED circuit is wired onto. */
 const SIGNAL_COLUMN = 20;
 
 /** Which header pin drives the starter LED on each board. */
 const LED_PIN: Readonly<Record<BoardId, string>> = {
   esp32: 'R_D2',
   uno: 'J1_D13',
+};
+
+/** Header pins carrying the TFT's four SPI signals on each board. */
+const SPI_PINS: Readonly<Record<BoardId, ReadonlyArray<[string, string]>>> = {
+  esp32: [
+    ['R_D5', 'CS'],
+    ['R_D15', 'DC'],
+    ['R_D18', 'SCK'],
+    ['R_D23', 'MOSI'],
+  ],
+  uno: [
+    ['J1_D10', 'CS'],
+    ['J1_D9', 'DC'],
+    ['J1_D13', 'SCK'],
+    ['J1_D11', 'MOSI'],
+  ],
 };
 
 function boardDefinition(boardId: BoardId): PartDefinition {
@@ -50,9 +69,12 @@ function at(x: number, y: number): Terminal {
 }
 
 /**
- * Builds the bench the app opens with: a board, a breadboard, and a blinking
- * LED wired pin -> resistor -> LED -> ground. Starting populated means the first
- * thing on screen is the thing the tool is actually for.
+ * Builds the bench the app opens with: a board, a breadboard, a blinking LED,
+ * an OLED on I2C and a TFT on SPI.
+ *
+ * Both displays are wired through to the controller pins their buses actually
+ * run on. Pull a wire and that screen goes dark while the other carries on,
+ * which is the whole reason they are both here.
  */
 function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
   const board = simulation.addPart(boardDefinition(boardId), 0, 0);
@@ -65,31 +87,65 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
   };
   const holeX = (column: number) => BREADBOARD_ORIGIN_X + columnX(column);
   const holeY = (row: number) => stripRowY(row);
+  const groundRailY = railRowY(2);
 
-  // Pin -> column 20 of the bottom strip.
+  // --- LED on the bench ---------------------------------------------------
   const ledPin = pinAt(LED_PIN[boardId]);
   simulation.routeWire(at(ledPin.x, ledPin.y), at(holeX(SIGNAL_COLUMN), holeY(8)));
-
-  // 330 Ohm across columns 20 to 24, then the LED on to the next column.
   simulation.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
-  simulation.addPart(ledDefinition(DIODE_PROFILES.red, 'Red'), holeX(SIGNAL_COLUMN + 4), holeY(8) - 3);
-
-  // LED cathode to the bottom ground rail, and the board's own ground to it.
-  const groundRailY = railRowY(2);
+  simulation.addPart(
+    ledDefinition(DIODE_PROFILES.red, 'Red'),
+    holeX(SIGNAL_COLUMN + 4),
+    holeY(8) - 3,
+  );
   simulation.routeWire(
     at(holeX(SIGNAL_COLUMN + 5), holeY(8)),
     at(holeX(SIGNAL_COLUMN + 5), groundRailY),
   );
   const ground = pinAt(boardId === 'esp32' ? 'L_GND' : 'J1_GND');
   simulation.routeWire(at(ground.x, ground.y), at(holeX(10), groundRailY));
-}
 
-function createSimulation(boardId: BoardId, firmware: string): Simulation {
-  const simulation = new Simulation(boardDefinition(boardId));
-  buildStartingBench(simulation, boardId);
-  simulation.loadFirmware(firmware);
-  simulation.start();
-  return simulation;
+  /** Wires a display pin to a breadboard column, and the board pin to it too. */
+  const connect = (display: PartInstance, pin: string, column: number, row: number) => {
+    const spec = display.definition.pins.find((candidate) => candidate.id === pin);
+    if (!spec) throw new Error(`${display.definition.name} has no pin ${pin}`);
+    simulation.routeWire(
+      at(holeX(column), holeY(row)),
+      at(display.x + spec.x, display.y + spec.y),
+    );
+  };
+
+  // --- 128x64 OLED, on I2C ------------------------------------------------
+  const oled = simulation.addPart(ssd1306Definition(), BREADBOARD_ORIGIN_X + 40, 86);
+  const oledColumn = SIGNAL_COLUMN + 7;
+  connect(oled, 'SDA', oledColumn, 8);
+  connect(oled, 'SCL', oledColumn + 2, 8);
+  simulation.routeWire(
+    at(holeX(oledColumn), groundRailY),
+    at(oled.x + oled.definition.pins[1].x, oled.y + oled.definition.pins[1].y),
+  );
+  simulation.routeWire(
+    at(holeX(oledColumn + 2), groundRailY),
+    at(oled.x + oled.definition.pins[0].x, oled.y + oled.definition.pins[0].y),
+  );
+  const i2cPins: readonly [string, string][] =
+    boardId === 'esp32' ? [['R_D21', 'SDA'], ['R_D22', 'SCL']] : [['J3_A4', 'SDA'], ['J3_A5', 'SCL']];
+  i2cPins.forEach(([boardPin, _signal], index) => {
+    const pin = pinAt(boardPin);
+    simulation.routeWire(at(pin.x, pin.y), at(holeX(oledColumn + index * 2), holeY(8)));
+  });
+
+  // --- 2.4" TFT, on SPI ---------------------------------------------------
+  const tft = simulation.addPart(ili9341Definition(), BREADBOARD_ORIGIN_X + 55, 150);
+  const spiColumn = SIGNAL_COLUMN + 13;
+  SPI_PINS[boardId].forEach(([boardPin, signal], index) => {
+    const column = spiColumn + index * 2;
+    const pin = pinAt(boardPin);
+    simulation.routeWire(at(pin.x, pin.y), at(holeX(column), holeY(8)));
+    connect(tft, signal, column, 8);
+  });
+  connect(tft, 'VCC', spiColumn, 4);
+  connect(tft, 'GND', spiColumn + 2, 4);
 }
 
 /** Dropped parts walk along the breadboard so they do not land on each other. */
@@ -98,20 +154,36 @@ let nextDropColumn = 44;
 export default function App() {
   const [firmware, setFirmware] = useState(BLINK_SKETCH);
   const [boardId, setBoardId] = useState<BoardId>('esp32');
-  const simulation = useMemo(
-    () => createSimulation(boardId, firmware),
-    // Rebuilding on board change is deliberate: pin numbers genuinely differ,
-    // so carrying a sketch across would silently target the wrong pins.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [boardId],
-  );
-
   const [, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [wireMode, setWireMode] = useState(false);
+  const [firmwareOpen, setFirmwareOpen] = useState(true);
 
+  // Rebuilt on board change only: a sketch's pin numbers mean something
+  // different on each board, so carrying one across would silently misfire.
+  const simulation = useMemo(
+    () => {
+      const created = new Simulation(boardDefinition(boardId));
+      buildStartingBench(created, boardId);
+      created.loadFirmware(BLINK_SKETCH);
+      created.start();
+      return created;
+    },
+    [boardId],
+  );
+
+
+  const [baud, setBaud] = useState(9600);
+
+  // Only pins firmware can actually name are worth probing; the power and
+  // ground headers are rails, not signals.
+  const probePins = useMemo(
+    () => simulation.mcu.pins().filter((pin) => pin.role === 'gpio' || pin.role === 'adc'),
+    [simulation],
+  );
   // One animation frame drives both the firmware and the circuit solver. The
   // wall-clock delta is what keeps simulated time honest: without it the bench
+
   // would advance as fast as the solver could go, not as fast as real time.
   useEffect(() => {
     let frame = 0;
@@ -128,11 +200,13 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [simulation]);
 
+
   const bench = simulation.bench;
 
   const renderState = useMemo<FootprintState>(
     () => ({
       pinVolts: simulation.pinVoltages(),
+      displays: simulation.displayControllers(),
       pressedButtons: new Set(
         bench.parts
           .filter((part) => part.definition.component.kind === 'button')
@@ -147,6 +221,28 @@ export default function App() {
     }),
     [bench, simulation],
   );
+
+
+  // Meter probes come from the same pin list as the scope's. The black probe
+  // defaults to bench ground, which is where it sits when unclipped.
+  const [meterRedPin, setMeterRedPin] = useState<string | null>(null);
+  const [meterBlackPin, setMeterBlackPin] = useState<string | null>(null);
+
+  useEffect(() => {
+    simulation.setMeterProbes(
+      meterRedPin ? simulation.engine.netOfMcuPin(meterRedPin) : null,
+      meterBlackPin ? simulation.engine.netOfMcuPin(meterBlackPin) : null,
+    );
+  }, [simulation, meterRedPin, meterBlackPin]);
+
+  // The meter can be clipped anywhere, including the power rails -- measuring
+  // rail current is one of the main reasons to reach for it. The scope stays
+  // limited to signal pins, where a trace is actually interesting.
+  const meterPins = useMemo(() => simulation.mcu.pins(), [simulation]);
+
+  const meterRedLabel = meterPins.find((pin) => pin.id === meterRedPin)?.label ?? null;
+  const meterBlackLabel = meterPins.find((pin) => pin.id === meterBlackPin)?.label ?? null;
+
 
   const netOfTerminal = useMemo(() => {
     const netlist = simulation.engine.currentNetlist;
@@ -167,9 +263,7 @@ export default function App() {
   );
 
   const onRouteWire = useCallback(
-    (from: Terminal, to: Terminal) => {
-      simulation.routeWire(from, to);
-    },
+    (from: Terminal, to: Terminal) => simulation.routeWire(from, to),
     [simulation],
   );
 
@@ -192,6 +286,7 @@ export default function App() {
       <header className="flex items-center gap-3 border-b border-slate-800 px-4 py-2">
         <h1 className="text-sm font-semibold tracking-tight">Noesis Lab</h1>
         <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+
           {simulation.mcu.board.name}
         </span>
         <button
@@ -226,24 +321,62 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-44 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-900">
+        {/*
+         * The bench is the product, so the canvas takes every pixel the panels
+         * do not need and each panel steps aside when the window is too narrow
+         * to hold it. Four fixed columns on a laptop screen left the canvas
+         * about a fifth of the width, which is what made the whole thing read
+         * as broken.
+         */}
+        <aside className="hidden w-44 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-900 lg:block">
           <PartPalette onPlace={onPlacePart} />
         </aside>
 
-        <main className="min-w-0 flex-1">
-          <Workbench
-            bench={bench}
-            renderState={renderState}
-            netOfTerminal={netOfTerminal}
-            selectedId={selectedId}
-            wireMode={wireMode}
-            onSelect={setSelectedId}
-            onMovePart={onMovePart}
-            onRouteWire={onRouteWire}
-          />
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1">
+            <Workbench
+              bench={bench}
+              renderState={renderState}
+              netOfTerminal={netOfTerminal}
+              selectedId={selectedId}
+              wireMode={wireMode}
+              onSelect={setSelectedId}
+              onMovePart={onMovePart}
+              onRouteWire={onRouteWire}
+            />
+          </div>
+
+          {/*
+           * The editor lives under the bench rather than beside it. A wide
+           * text area does not need a tall column, and a landscape bench on a
+           * landscape canvas frames the whole board without zooming out.
+           */}
+          <section
+            className={`flex shrink-0 flex-col border-t border-slate-800 bg-slate-900 ${
+              firmwareOpen ? 'h-[42%]' : ''
+            }`}
+          >
+            <FirmwareEditor
+              value={firmware}
+              error={simulation.firmwareError}
+              expanded={firmwareOpen}
+              onToggle={() => setFirmwareOpen((open) => !open)}
+              onChange={setFirmware}
+              onRun={() => {
+                simulation.loadFirmware(firmware);
+                simulation.start();
+                forceRender((n) => n + 1);
+              }}
+              onReset={() => {
+                simulation.reset();
+                forceRender((n) => n + 1);
+              }}
+              running={simulation.running}
+            />
+          </section>
         </main>
 
-        <aside className="flex w-60 shrink-0 flex-col border-l border-slate-800 bg-slate-900">
+        <aside className="hidden w-60 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
           <div className="min-h-0 flex-1 overflow-y-auto">
             <Inspector
               part={selected}
@@ -268,23 +401,32 @@ export default function App() {
           </div>
         </aside>
 
-        <aside className="w-96 shrink-0 border-l border-slate-800 bg-slate-900">
-          <FirmwareEditor
-            value={firmware}
-            error={simulation.firmwareError}
-            onChange={setFirmware}
-            onRun={() => {
-              simulation.loadFirmware(firmware);
-              simulation.start();
-              forceRender((n) => n + 1);
-            }}
-            onReset={() => {
-              simulation.reset();
-              forceRender((n) => n + 1);
-            }}
-            running={simulation.running}
+        <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-slate-800 bg-slate-900 xl:block">
+          <ScopePanel
+            pins={probePins}
+            baud={baud}
+            probePinId={simulation.probePinId}
+            samples={simulation.probeTrace()}
+            logicVolts={simulation.mcu.board.logicVolts}
+            onProbe={(pinId: string | null) => simulation.setProbePin(pinId)}
+            onBaud={setBaud}
+          />
+          <MultimeterPanel
+            pins={meterPins}
+            redPinId={meterRedPin}
+            blackPinId={meterBlackPin}
+            onRedPin={setMeterRedPin}
+            onBlackPin={setMeterBlackPin}
+            mode={simulation.meterMode}
+            reading={simulation.meterReading()}
+            redLabel={meterRedLabel ?? 'not clipped'}
+            blackLabel={meterBlackLabel ?? 'ground'}
+            rangeId={simulation.meterRangeId}
+            onMode={(mode) => simulation.setMeterMode(mode)}
+            onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
           />
         </aside>
+
       </div>
 
       <StatusBar

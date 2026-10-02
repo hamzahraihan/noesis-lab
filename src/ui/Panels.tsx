@@ -205,6 +205,8 @@ export function SerialMonitor({ lines }: { lines: readonly string[] }) {
 export function FirmwareEditor({
   value,
   error,
+  expanded,
+  onToggle,
   onChange,
   onRun,
   onReset,
@@ -212,6 +214,9 @@ export function FirmwareEditor({
 }: {
   value: string;
   error: string | null;
+  /** Whether the editor body is showing under its header. */
+  expanded: boolean;
+  onToggle(): void;
   onChange(next: string): void;
   onRun(): void;
   onReset(): void;
@@ -219,10 +224,22 @@ export function FirmwareEditor({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1.5">
-        <h3 className="flex-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase transition-colors hover:text-slate-200"
+        >
+          <span
+            aria-hidden="true"
+            className={`text-slate-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          >
+            &#9656;
+          </span>
           Firmware
-        </h3>
+        </button>
+        <span className="flex-1" />
         <button
           type="button"
           onClick={running ? onReset : onRun}
@@ -232,15 +249,17 @@ export function FirmwareEditor({
         </button>
       </div>
 
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-        className="flex-1 resize-none bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none"
-      />
+      {expanded && (
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          spellCheck={false}
+          className="min-h-0 flex-1 resize-none bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none"
+        />
+      )}
 
       {error && (
-        <p className="border-t border-red-900 bg-red-950 px-3 py-1.5 text-xs text-red-300">
+        <p className="shrink-0 border-t border-red-900 bg-red-950 px-3 py-1.5 text-xs text-red-300">
           {error}
         </p>
       )}

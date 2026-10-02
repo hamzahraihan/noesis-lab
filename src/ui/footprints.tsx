@@ -1,18 +1,24 @@
 /**
  * SVG renderers for part footprints.
  *
- * Everything is drawn in millimetres at 1:1, in the part's own coordinate
- * space, so the canvas only has to apply the bench transform once. Nothing here
- * knows about zoom, selection or the simulation -- a footprint is a pure
- * function of a definition plus the live electrical state it is handed.
+ * Everything is drawn in millimetres at 1:1, in the part's own coordinate space,
+ * so the canvas only has to apply the bench transform once. Nothing here knows
+ * about zoom, selection or the simulation -- a footprint is a pure function of a
+ * definition plus the live electrical state it is handed.
  */
 
 import type { PartInstance } from '../sim/bench';
 import type { PartDefinition, PinSpec } from '../sim/catalog';
 import { DIODE_PROFILES } from '../sim/elements';
+import { memo, useEffect, useRef } from 'react';
+import { Ili9341 } from '../sim/display/ili9341';
+import { Ssd1306 } from '../sim/display/ssd1306';
+import type { DisplayController } from '../sim/display/part';
 
 /** Live electrical state a footprint needs in order to look right. */
 export interface FootprintState {
+  /** Live controller models for display parts, keyed by part id. */
+  readonly displays?: ReadonlyMap<string, DisplayController>;
   /** `${partId}:${pinId}` to volts on that pin's net. */
   readonly pinVolts: ReadonlyMap<string, number>;
   readonly pressedButtons: ReadonlySet<string>;
@@ -20,6 +26,20 @@ export interface FootprintState {
 }
 
 export const PIN_RADIUS_MM = 0.9;
+
+/**
+ * Wraps a body whose whole appearance is fixed by its definition.
+ *
+ * The parts layer is re-rendered every frame, because pin voltages, displays
+ * and pressed buttons change every frame. A breadboard alone is nine hundred
+ * elements that can never look any different, so without this the whole board
+ * is rebuilt sixty times a second to produce an identical picture. The
+ * definition a part holds never changes identity, so memoising on it lets
+ * React skip these subtrees entirely.
+ */
+function staticBody<P extends object>(render: (props: P) => React.ReactNode) {
+  return memo(render);
+}
 
 export function PartFootprint({
   part,
@@ -59,13 +79,7 @@ function PinMark({
 
   return (
     <g>
-      <circle
-        cx={pin.x}
-        cy={pin.y}
-        r={PIN_RADIUS_MM + 0.55}
-        fill="#0f1115"
-        opacity={0.55}
-      />
+      <circle cx={pin.x} cy={pin.y} r={PIN_RADIUS_MM + 0.55} fill="#0f1115" opacity={0.55} />
       <circle
         cx={pin.x}
         cy={pin.y}
@@ -98,12 +112,20 @@ function shapeFor(
       return <ButtonBody definition={definition} state={state} part={part} />;
     case 'potentiometer':
       return <PotentiometerBody definition={definition} state={state} part={part} />;
+    case 'display':
+      return <DisplayBody definition={definition} state={state} part={part} />;
   }
 }
 
 // ---------------------------------------------------------------------------
 
-function Board({ definition, children }: { definition: PartDefinition; children?: React.ReactNode }) {
+function Board({
+  definition,
+  children,
+}: {
+  definition: PartDefinition;
+  children?: React.ReactNode;
+}) {
   return (
     <g>
       <rect
@@ -119,7 +141,7 @@ function Board({ definition, children }: { definition: PartDefinition; children?
   );
 }
 
-/** The pin header silkscreen: a rounded outline behind each pin's label. */
+/** The pin header silkscreen: an outline behind each pin's label. */
 function HeaderStrip({
   definition,
   x,
@@ -131,6 +153,7 @@ function HeaderStrip({
   from: number;
   to: number;
 }) {
+  const onLeft = x < definition.widthMm / 2;
   return (
     <g>
       <rect
@@ -148,10 +171,10 @@ function HeaderStrip({
         .map((pin) => (
           <text
             key={pin.id}
-            x={x + (x < definition.widthMm / 2 ? 1.5 : -1.5)}
+            x={x + (onLeft ? 1.5 : -1.5)}
             y={pin.y + 0.7}
             fontSize={1.9}
-            textAnchor={x < definition.widthMm / 2 ? 'start' : 'end'}
+            textAnchor={onLeft ? 'start' : 'end'}
             fill={definition.legendColour}
             opacity={0.9}
           >
@@ -162,7 +185,7 @@ function HeaderStrip({
   );
 }
 
-function BoardBody({ definition }: { definition: PartDefinition }) {
+const BoardBody = staticBody(function BoardBody({ definition }: { definition: PartDefinition }) {
   const left = definition.pins.filter((pin) => pin.x < definition.widthMm / 2);
   const right = definition.pins.filter((pin) => pin.x >= definition.widthMm / 2);
 
@@ -193,29 +216,37 @@ function BoardBody({ definition }: { definition: PartDefinition }) {
         x={left[0]?.x ?? 0}
         from={left[0]?.y ?? 0}
         to={left[left.length - 1]?.y ?? 0}
-
       />
       <HeaderStrip
         definition={definition}
         x={right[0]?.x ?? 0}
         from={right[0]?.y ?? 0}
         to={right[right.length - 1]?.y ?? 0}
-
       />
     </Board>
   );
-}
+});
 
-function BreadboardBody({ definition }: { definition: PartDefinition }) {
-  const holes = definition.pins;
-  const stripHoles = holes.filter((pin) => pin.id.startsWith('s'));
-  const railHoles = holes.filter((pin) => pin.id.startsWith('r'));
+const BreadboardBody = staticBody(function BreadboardBody({
+  definition,
+}: {
+  definition: PartDefinition;
+}) {
+  const stripHoles = definition.pins.filter((pin) => pin.id.startsWith('s'));
+  const railHoles = definition.pins.filter((pin) => pin.id.startsWith('r'));
 
   return (
     <g>
-      <rect width={definition.widthMm} height={definition.heightMm} rx={2} fill={definition.bodyColour} stroke="#b8b4ab" strokeWidth={0.4} />
+      <rect
+        width={definition.widthMm}
+        height={definition.heightMm}
+        rx={2}
+        fill={definition.bodyColour}
+        stroke="#b8b4ab"
+        strokeWidth={0.4}
+      />
 
-      {/* Rail lines run to the centre notch; the two halves are not joined. */}
+      {/* Rail lines stop at the centre notch: the halves are not connected. */}
       {railHoles
         .filter((pin) => pin.x < 79)
         .map((pin) => (
@@ -225,9 +256,9 @@ function BreadboardBody({ definition }: { definition: PartDefinition }) {
             y1={pin.y}
             x2={pin.x + 75}
             y2={pin.y}
-            stroke={pin.y < definition.heightMm / 2
-              ? (pin.id.startsWith('r0') || pin.id.startsWith('r3') ? '#d94f4f' : '#4f7fd9')
-              : (pin.id.startsWith('r2') ? '#4f7fd9' : '#d94f4f')}
+            stroke={
+              pin.id.startsWith('r0') || pin.id.startsWith('r3') ? '#d94f4f' : '#4f7fd9'
+            }
             strokeWidth={0.5}
             opacity={0.55}
           />
@@ -268,7 +299,7 @@ function BreadboardBody({ definition }: { definition: PartDefinition }) {
       ))}
     </g>
   );
-}
+});
 
 /** Resistor colour bands, decoded from the actual resistance value. */
 const BAND_COLOURS = [
@@ -280,19 +311,18 @@ const MULTIPLIER_COLOURS = ['#d4af37', '#c62828', '#2e7d32', '#ef6c00'];
 const TOLERANCE_COLOUR = '#6a4c93';
 
 function bandsFor(ohms: number): string[] {
-  if (ohms <= 0) return [BAND_COLOURS[0], BAND_COLOURS[0], BAND_COLOURS[0], TOLERANCE_COLOUR];
+  if (ohms <= 0) {
+    return [BAND_COLOURS[0], BAND_COLOURS[0], BAND_COLOURS[0], TOLERANCE_COLOUR];
+  }
 
   const exponent = Math.floor(Math.log10(ohms));
   const normalised = ohms / Math.pow(10, exponent);
-  let first = Math.round(normalised) - 1;
-  let second = 0;
-  if (first >= 10) {
-    // >= 100 Ohm: fold the top decade into the multiplier band.
-    first = Math.round(normalised / 10) - 1;
-    second = Math.round((normalised / 10 - Math.round(normalised / 10)) * 10);
-  }
+  // 100 Ohm and up folds the leading digit into the multiplier band.
+  const folds = normalised >= 10;
+  const first = Math.round(folds ? normalised / 10 : normalised) - 1;
+  const second = folds ? Math.round((normalised / 10 - Math.round(normalised / 10)) * 10) : 0;
+  const multiplierIndex = Math.min(3, Math.max(0, exponent - (folds ? 1 : 0)));
 
-  const multiplierIndex = Math.min(3, Math.max(0, exponent - (first >= 10 ? 1 : 0)));
   return [
     BAND_COLOURS[Math.min(9, Math.max(0, first))],
     BAND_COLOURS[Math.min(9, Math.max(0, second))],
@@ -301,7 +331,11 @@ function bandsFor(ohms: number): string[] {
   ];
 }
 
-function ResistorBody({ definition }: { definition: PartDefinition }) {
+const ResistorBody = staticBody(function ResistorBody({
+  definition,
+}: {
+  definition: PartDefinition;
+}) {
   const ohms = definition.component.kind === 'resistor' ? definition.component.ohms : 0;
   const bands = bandsFor(ohms);
 
@@ -309,20 +343,22 @@ function ResistorBody({ definition }: { definition: PartDefinition }) {
     <g>
       {/* Leads run out to the holes; the body sits between them. */}
       <line x1={0} y1={1.6} x2={10.16} y2={1.6} stroke="#b0b0b0" strokeWidth={0.5} />
-      <rect x={1.4} y={0.5} width={7.4} height={2.2} rx={1.1} fill={definition.bodyColour} stroke="#8d7f5c" strokeWidth={0.2} />
+      <rect
+        x={1.4}
+        y={0.5}
+        width={7.4}
+        height={2.2}
+        rx={1.1}
+        fill={definition.bodyColour}
+        stroke="#8d7f5c"
+        strokeWidth={0.2}
+      />
       {bands.map((colour, index) => (
-        <rect
-          key={index}
-          x={2.3 + index * 1.35}
-          y={0.6}
-          width={0.7}
-          height={2}
-          fill={colour}
-        />
+        <rect key={index} x={2.3 + index * 1.35} y={0.6} width={0.7} height={2} fill={colour} />
       ))}
     </g>
   );
-}
+});
 
 function LedBody({
   definition,
@@ -335,31 +371,20 @@ function LedBody({
 }) {
   const anode = state.pinVolts.get(`${part.id}:anode`) ?? 0;
   const cathode = state.pinVolts.get(`${part.id}:cathode`) ?? 0;
-  const volts = anode - cathode;
-  const base = definition.component.kind === 'led' ? definition.component.profile : DIODE_PROFILES.red;
-  const tint = base === DIODE_PROFILES.blue ? '#2b4fd6' : base === DIODE_PROFILES.white ? '#f5f5f0' : '#d63b3b';
+  const profile =
+    definition.component.kind === 'led' ? definition.component.profile : DIODE_PROFILES.red;
+  const tint =
+    profile === DIODE_PROFILES.blue ? '#2b4fd6' : profile === DIODE_PROFILES.white ? '#f5f5f0' : '#d63b3b';
 
-  // Brightness follows the forward bias, which is what the solver reports.
-  const drive = Math.max(0, Math.min(1, (volts - 1.4) / 1.1));
+  // Brightness follows the forward bias the solver reports, not the pin state.
+  const drive = Math.max(0, Math.min(1, (anode - cathode - 1.4) / 1.1));
 
   return (
     <g>
       <line x1={0} y1={3} x2={2.54} y2={3} stroke="#b0b0b0" strokeWidth={0.45} />
-      <circle
-        cx={2.2}
-        cy={3}
-        r={2.1}
-        fill={tint}
-        opacity={0.55 + drive * 0.45}
-      />
+      <circle cx={2.2} cy={3} r={2.1} fill={tint} opacity={0.55 + drive * 0.45} />
       {drive > 0.02 && (
-        <circle
-          cx={2.2}
-          cy={3}
-          r={1.3 + drive * 1.5}
-          fill={tint}
-          opacity={Math.min(0.55, drive * 0.55)}
-        />
+        <circle cx={2.2} cy={3} r={1.3 + drive * 1.5} fill={tint} opacity={Math.min(0.55, drive * 0.55)} />
       )}
       {/* The cathode side is flat, as on a real 5 mm LED. */}
       <rect x={0.1} y={1.6} width={1.1} height={2.8} fill={tint} opacity={0.5 + drive * 0.5} />
@@ -367,18 +392,33 @@ function LedBody({
   );
 }
 
-function CapacitorBody({ definition }: { definition: PartDefinition }) {
+const CapacitorBody = staticBody(function CapacitorBody({
+  definition,
+}: {
+  definition: PartDefinition;
+}) {
   return (
     <g>
       <line x1={0} y1={4} x2={2.54} y2={4} stroke="#b0b0b0" strokeWidth={0.5} />
-      <rect x={1.2} y={1.2} width={5.4} height={5.6} rx={1} fill={definition.bodyColour} stroke="#1b2740" strokeWidth={0.25} />
+      <rect
+        x={1.2}
+        y={1.2}
+        width={5.4}
+        height={5.6}
+        rx={1}
+        fill={definition.bodyColour}
+        stroke="#1b2740"
+        strokeWidth={0.25}
+      />
       <g stroke="#dfe6f5" strokeWidth={0.45} fill="none" opacity={0.9}>
         <path d="M 3.2 2.2 L 5.4 6.4 M 4.4 2.2 L 6.6 6.4" />
       </g>
-      <text x={1.9} y={5.9} fontSize={1.5} fill="#dfe6f5" opacity={0.95}>+</text>
+      <text x={1.9} y={5.9} fontSize={1.5} fill="#dfe6f5" opacity={0.95}>
+        +
+      </text>
     </g>
   );
-}
+});
 
 function ButtonBody({
   definition,
@@ -393,7 +433,16 @@ function ButtonBody({
   return (
     <g>
       <line x1={0} y1={3} x2={5.08} y2={3} stroke="#b0b0b0" strokeWidth={0.5} />
-      <rect x={0.4} y={0.4} width={5.2} height={5.2} rx={0.6} fill={definition.bodyColour} stroke="#3f3f46" strokeWidth={0.25} />
+      <rect
+        x={0.4}
+        y={0.4}
+        width={5.2}
+        height={5.2}
+        rx={0.6}
+        fill={definition.bodyColour}
+        stroke="#3f3f46"
+        strokeWidth={0.25}
+      />
       <circle
         cx={3}
         cy={3}
@@ -420,7 +469,16 @@ function PotentiometerBody({
   return (
     <g>
       <line x1={0} y1={4.5} x2={10.16} y2={4.5} stroke="#b0b0b0" strokeWidth={0.5} />
-      <rect x={0.6} y={1.4} width={10.2} height={6.2} rx={1} fill={definition.bodyColour} stroke="#151922" strokeWidth={0.25} />
+      <rect
+        x={0.6}
+        y={1.4}
+        width={10.2}
+        height={6.2}
+        rx={1}
+        fill={definition.bodyColour}
+        stroke="#151922"
+        strokeWidth={0.25}
+      />
       {/* Pointer rotates across roughly 280 degrees, like a real trimmer. */}
       <g transform={`rotate(${angle} 5.7 2.6)`}>
         <rect x={5.35} y={0.2} width={0.7} height={2.6} rx={0.3} fill="#d8dde8" />
@@ -428,6 +486,175 @@ function PotentiometerBody({
       <text x={2} y={8.3} fontSize={1.8} fill={definition.legendColour} opacity={0.85}>1</text>
       <text x={5.1} y={8.3} fontSize={1.8} fill={definition.legendColour} opacity={0.85}>2</text>
       <text x={9.1} y={8.3} fontSize={1.8} fill={definition.legendColour} opacity={0.85}>3</text>
+    </g>
+  );
+}
+
+/** Scale from panel pixels to millimetres of glass. */
+const PIXEL_MM = 0.19;
+const PANEL_MM = 26;
+/** Glass size of the 2.4" TFT, which is a very different shape from the OLED. */
+const TFT_PANEL_MM = 53;
+
+interface PixelRun {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+}
+
+/**
+ * Merges each row of lit pixels into horizontal runs.
+ *
+ * A 128x64 panel is 8192 pixels. Emitting one rectangle each would dominate the
+ * bench's DOM and make dragging any other part on it stutter; merging runs
+ * gives the same picture from a few hundred shapes.
+ */
+function pixelRuns(controller: Ssd1306, width: number, height: number): PixelRun[] {
+  const runs: PixelRun[] = [];
+  for (let y = 0; y < height; y++) {
+    let start = -1;
+    for (let x = 0; x <= width; x++) {
+      const lit = x < width && controller.isLit(x, y);
+      if (lit && start < 0) start = x;
+      if (!lit && start >= 0) {
+        runs.push({ x: start, y, width: x - start });
+        start = -1;
+      }
+    }
+  }
+  return runs;
+}
+function DisplayBody({
+  definition,
+  state,
+  part,
+}: {
+  definition: PartDefinition;
+  state: FootprintState;
+  part: PartInstance;
+}) {
+  const controller = state.displays?.get(part.id);
+  const panel = definition.displayPixels;
+  const isColour = controller instanceof Ili9341;
+
+  return (
+    <g>
+      <rect
+        width={definition.widthMm}
+        height={definition.heightMm}
+        rx={1.2}
+        fill={definition.bodyColour}
+        stroke="#05070a"
+        strokeWidth={0.3}
+      />
+      {isColour ? (
+        <ColourPanel definition={definition} controller={controller} panel={panel} />
+      ) : (
+        <MonoPanel controller={controller} panel={panel} />
+      )}
+      {definition.pins.map((pin) => (
+        <text
+          key={`label-${pin.id}`}
+          x={pin.x + 2.1}
+          y={pin.y + 0.9}
+          fontSize={1.8}
+          fill={definition.legendColour}
+          opacity={0.85}
+        >
+          {pin.label}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+/** The 128x64 OLED: merged runs of lit pixels, a few hundred shapes at most. */
+function MonoPanel({
+  controller,
+  panel,
+}: {
+  controller: DisplayController | undefined;
+  panel: PartDefinition['displayPixels'];
+}) {
+  const oled = controller instanceof Ssd1306 ? controller : undefined;
+  const runs = oled && panel ? pixelRuns(oled, panel.width, panel.height) : [];
+
+  return (
+    <g>
+      {/* Glass: faintly lit green-on-black when on, flat black when off. */}
+      <rect
+        x={0.9}
+        y={0.9}
+        width={PANEL_MM}
+        height={PANEL_MM}
+        rx={0.6}
+        fill={oled?.lit ? '#0b1418' : '#05080b'}
+        stroke="#1e293b"
+        strokeWidth={0.25}
+      />
+      {runs.map((run) => (
+        <rect
+          key={`${run.x}-${run.y}`}
+          x={0.9 + run.x * PIXEL_MM}
+          y={0.9 + run.y * PIXEL_MM}
+          width={run.width * PIXEL_MM}
+          height={PIXEL_MM}
+          fill={oled?.mirrored ? '#38bdf8' : '#7df9c0'}
+        />
+      ))}
+    </g>
+  );
+}
+
+/** The 320x240 TFT: blitted to a canvas, because 76800 rects is not a DOM. */
+function ColourPanel({
+  controller,
+  panel,
+}: {
+  definition: PartDefinition;
+  controller: DisplayController | undefined;
+  panel: PartDefinition['displayPixels'];
+}) {
+  const tft = controller instanceof Ili9341 ? controller : undefined;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Deliberately no dependency list. The framebuffer is mutated in place, so
+  // the controller's identity never changes and a memoised effect would run
+  // once on mount and pin a black canvas for the rest of the session. The bench
+  // re-renders every frame, so re-blitting after each render is the cadence we
+  // actually want.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !tft || !panel) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const image = context.createImageData(panel.width, panel.height);
+    image.data.set(tft.toRgba());
+    context.putImageData(image, 0, 0);
+  });
+
+  return (
+    <g>
+      <rect
+        x={0.9}
+        y={0.9}
+        width={TFT_PANEL_MM}
+        height={TFT_PANEL_MM}
+        rx={0.6}
+        fill={tft?.isOn() ? '#050a12' : '#020408'}
+        stroke="#1e293b"
+        strokeWidth={0.25}
+      />
+      {tft && panel && (
+        <foreignObject x={0.9} y={0.9} width={TFT_PANEL_MM} height={TFT_PANEL_MM}>
+          <canvas
+            ref={canvasRef}
+            width={panel.width}
+            height={panel.height}
+            style={{ width: '100%', height: '100%', display: 'block' }}
+          />
+        </foreignObject>
+      )}
     </g>
   );
 }

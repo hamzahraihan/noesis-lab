@@ -10,14 +10,14 @@
  * land, which is the opposite of what this tool is for.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bench, Terminal } from '../sim/bench';
 import { PartFootprint, type FootprintState } from './footprints';
 
 export interface WorkbenchProps {
   bench: Bench;
   renderState: FootprintState;
-  /** Terminal id to net index, for tracing a connection on hover. */
+  /** Terminal id to net index, used to trace the connection under the cursor. */
   readonly netOfTerminal: ReadonlyMap<number, number>;
   selectedId: string | null;
   wireMode: boolean;
@@ -30,12 +30,30 @@ const MIN_VIEW_WIDTH_MM = 24;
 const MAX_VIEW_WIDTH_MM = 900;
 /** How close a click must land to a hole to count as hitting it. */
 const HOLE_PICK_RADIUS_MM = 2;
+/** Zoom applied per millimetre of wheel travel, before the per-device scaling. */
+const ZOOM_PER_WHEEL_MM = 0.0015;
+/**
+ * One notch cannot zoom further than this, so a flung trackpad gesture or a
+ * high-resolution mouse cannot throw the view off the bench entirely.
+ */
+const MAX_WHEEL_ZOOM_STEP = 0.6;
+/**
+ * How many pixels of travel one unit of `WheelEvent.deltaMode` is worth:
+ * pixels, lines (Firefox on some platforms) and whole pages.
+ */
+const WHEEL_UNITS_PER_MODE = [1, 16, 400];
+/** Aspect assumed until the canvas has been measured. */
+const DEFAULT_ASPECT = 16 / 10;
 
+/**
+ * The visible slice of the bench. Only the width is stored: the height is
+ * derived from the canvas shape, which is what keeps the view box and the
+ * element rectangle in the same proportions.
+ */
 interface ViewBox {
   x: number;
   y: number;
   width: number;
-  height: number;
 }
 
 type DragState =
@@ -56,8 +74,31 @@ export function Workbench({
   const [wireAnchor, setWireAnchor] = useState<Terminal | null>(null);
   const [pointerMm, setPointerMm] = useState<{ x: number; y: number } | null>(null);
   const movedRef = useRef(false);
-  const [view, setView] = useState<ViewBox>({ x: -12, y: -10, width: 428, height: 240 });
+  const [view, setView] = useState<ViewBox>({ x: -12, y: -10, width: 428 });
+  const [aspect, setAspect] = useState(DEFAULT_ASPECT);
   const dragRef = useRef<DragState | null>(null);
+
+  /** Visible height, always the same shape as the canvas it is drawn into. */
+  const viewHeight = view.width / aspect;
+
+  /**
+   * Tracks the canvas shape so the view box can match it.
+   *
+   * An SVG letterboxes any view box that does not share its aspect ratio, and
+   * the pointer maths below maps the element rectangle straight onto the view
+   * box. Matching the two is what puts a click on the hole actually under it,
+   * and it fills the canvas instead of centring a narrow strip of bench in it.
+   */
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setAspect(width / height);
+    });
+    observer.observe(svg);
+    return () => observer.disconnect();
+  }, []);
 
   /** Converts a pointer event into world millimetres. */
   const toWorld = useCallback(
@@ -67,10 +108,10 @@ export function Workbench({
       const rect = svg.getBoundingClientRect();
       return {
         x: view.x + ((clientX - rect.left) / rect.width) * view.width,
-        y: view.y + ((clientY - rect.top) / rect.height) * view.height,
+        y: view.y + ((clientY - rect.top) / rect.height) * viewHeight,
       };
     },
-    [view],
+    [view, viewHeight],
   );
 
   const onPointerDown = (event: React.PointerEvent) => {
@@ -81,6 +122,9 @@ export function Workbench({
       ?.getAttribute('data-part-id');
 
     // Middle button, shift, or empty space all pan. Dragging a part does not.
+    // Capture either way: a drag that wanders off the canvas has to keep
+    // going, or the part is left wherever the pointer happened to cross the
+    // edge.
     if (event.button === 1 || event.shiftKey || !partId || wireMode) {
       dragRef.current = {
         kind: 'pan',
@@ -89,6 +133,7 @@ export function Workbench({
         originX: view.x,
         originY: view.y,
       };
+      (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
       return;
     }
 
@@ -116,7 +161,7 @@ export function Workbench({
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
       const dx = ((event.clientX - drag.startX) / rect.width) * view.width;
-      const dy = ((event.clientY - drag.startY) / rect.height) * view.height;
+      const dy = ((event.clientY - drag.startY) / rect.height) * viewHeight;
       setView((current) => ({ ...current, x: drag.originX - dx, y: drag.originY - dy }));
       return;
     }
@@ -124,30 +169,43 @@ export function Workbench({
     onMovePart(drag.partId, world.x - drag.grabDx, world.y - drag.grabDy);
   };
 
-  const endDrag = () => {
+  const endDrag = (event: React.PointerEvent) => {
     dragRef.current = null;
+    const target = event.currentTarget as Element;
+    if (target.hasPointerCapture?.(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
   };
 
+  /**
+   * Zooms about the pointer, so the hole under the cursor stays under it.
+   *
+   * Wheel up pulls the view in and wheel down pushes it out, matching every
+   * other map and CAD canvas. The delta is normalised first because browsers
+   * disagree on its unit -- Firefox reports lines where Chromium reports
+   * pixels -- and then clamped so one flung gesture cannot throw the view off
+   * the bench.
+   */
   const onWheel = (event: React.WheelEvent) => {
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
     const focusX = view.x + ((event.clientX - rect.left) / rect.width) * view.width;
-    const focusY = view.y + ((event.clientY - rect.top) / rect.height) * view.height;
+    const focusY = view.y + ((event.clientY - rect.top) / rect.height) * viewHeight;
 
-    const factor = Math.exp(-event.deltaY * 0.0015);
-    const width = Math.min(
-      MAX_VIEW_WIDTH_MM,
-      Math.max(MIN_VIEW_WIDTH_MM, view.width * factor),
-    );
-    const scale = width / view.width;
+    const unit = WHEEL_UNITS_PER_MODE[event.deltaMode] ?? 1;
+    const step = clamp(event.deltaY * unit * ZOOM_PER_WHEEL_MM, -MAX_WHEEL_ZOOM_STEP, MAX_WHEEL_ZOOM_STEP);
+    const width = clamp(view.width * Math.exp(step), MIN_VIEW_WIDTH_MM, MAX_VIEW_WIDTH_MM);
 
-    setView((current) => ({
-      x: focusX - (focusX - current.x) * scale,
-      y: focusY - (focusY - current.y) * scale,
+    // Hold the pointer at the same fraction across the view rather than at the
+    // same millimetre offset, so zooming in still converges on the cursor.
+    const fractionX = (focusX - view.x) / view.width;
+    const fractionY = (focusY - view.y) / viewHeight;
+    setView({
+      x: focusX - fractionX * width,
+      y: focusY - fractionY * (width / aspect),
       width,
-      height: current.height * scale,
-    }));
+    });
   };
 
   /** Clicking a hole in wire mode anchors, then completes, a jumper. */
@@ -173,13 +231,37 @@ export function Workbench({
     if (!partId) onSelect(null);
   };
 
+  /** The hole under the cursor, which is what a click would pick. */
+  const hovered = useMemo(
+    () => (pointerMm ? nearestHole(bench, pointerMm.x, pointerMm.y) : null),
+    [bench, pointerMm],
+  );
+
+  /**
+   * Every contact sharing the hovered hole's net.
+   *
+   * Tracing the whole net on hover is the whole point: it shows where a signal
+   * actually goes, which is the question a wiring bench exists to answer. It
+   * is scoped to one net because ringing every hole on the board says nothing.
+   */
+  const traced = useMemo(() => {
+    if (!hovered) return [];
+    const net = netOfTerminal.get(hovered.id);
+    if (net === undefined || net < 0) return [];
+    const ids: number[] = [];
+    for (const terminal of bench.terminals) {
+      if (netOfTerminal.get(terminal.id) === net) ids.push(terminal.id);
+    }
+    return ids;
+  }, [bench, netOfTerminal, hovered]);
+
   const scale = 900 / view.width;
 
   return (
     <svg
       ref={svgRef}
       className="h-full w-full touch-none select-none bg-slate-950"
-      viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
+      viewBox={`${view.x} ${view.y} ${view.width} ${viewHeight}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
@@ -194,7 +276,7 @@ export function Workbench({
         </pattern>
       </defs>
 
-      <rect x={view.x} y={view.y} width={view.width} height={view.height} fill="url(#bench-grid)" />
+      <rect x={view.x} y={view.y} width={view.width} height={viewHeight} fill="url(#bench-grid)" />
 
       <g data-layer="wires" pointerEvents="none">
         {bench.wires.map((wire) => {
@@ -235,7 +317,11 @@ export function Workbench({
         {bench.parts.map((part) => {
           const selected = part.id === selectedId;
           return (
-            <g key={part.id} transform={`translate(${part.x} ${part.y})`}>
+            <g
+              key={part.id}
+              data-part-id={part.id}
+              transform={`translate(${part.x} ${part.y})`}
+            >
               {selected && (
                 <rect
                   x={-1.5}
@@ -269,25 +355,29 @@ export function Workbench({
       )}
 
       <g data-layer="net-trace" pointerEvents="none">
-        {bench.terminals.map((terminal) => {
-          const net = netOfTerminal.get(terminal.id);
-          if (net === undefined || net < 0) return null;
+        {traced.map((terminalId) => {
+          const terminal = bench.terminals[terminalId];
+          const isHovered = terminal.id === hovered?.id;
           return (
             <circle
               key={terminal.id}
               cx={terminal.x}
               cy={terminal.y}
-              r={1.9}
-              fill="none"
+              r={isHovered ? 2.1 : 1.7}
+              fill={isHovered ? '#38bdf8' : 'none'}
               stroke="#38bdf8"
-              strokeWidth={0.3}
-              opacity={0.85}
+              strokeWidth={isHovered ? 0.2 : 0.28}
+              opacity={isHovered ? 1 : 0.8}
             />
           );
         })}
       </g>
     </svg>
   );
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
 }
 
 /** Nearest terminal within picking range, or null. */

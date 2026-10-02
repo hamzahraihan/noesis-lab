@@ -18,8 +18,21 @@ import {
 import { FirmwareSyntaxError } from '../sim/firmware/parser';
 import type { PartDefinition } from '../sim/catalog';
 import { GROUND } from '../sim/elements';
-import type { DynamicState } from '../sim/catalog';
+import type { DisplayController } from '../sim/display/part';
+import { I2CBus } from '../sim/bus/i2c';
+import { SpiBus } from '../sim/bus/spi';
+import type { TraceSample } from '../sim/probe';
+import {
+  AMP_RANGES,
+  OHM_RANGES,
+  Multimeter,
+  type AmpRange,
+  type MeterMode,
+  type MeterReading,
+  type OhmRange,
+} from '../sim/multimeter';
 
+import type { DynamicState } from '../sim/catalog';
 /** Longest slice of simulated time one rendered frame may cover. */
 const MAX_FRAME_MS = 40;
 /** Upper bound on generator steps per frame, so a runaway loop cannot hang. */
@@ -32,16 +45,79 @@ const MAX_SLICES_PER_FRAME = 400;
  */
 const TIME_SCALE = 1;
 
+/**
+ * The sketch the bench opens with: a blinking LED, a bar on the OLED over
+ * I2C, and a bar on the TFT over SPI.
+ */
 export const BLINK_SKETCH = `#include <Arduino.h>
+#include <Wire.h>
 
 #define LED_PIN 2
+#define OLED_ADDR 0x3C
 
 int blinks = 0;
+
+void oledCommand(int c) {
+  Wire.beginTransmission(OLED_ADDR);
+  Wire.write(0x00);
+  Wire.write(c);
+  Wire.endTransmission();
+}
+
+// A TFT command and its parameters share one chip-select window: the bytes
+// after the command count as its parameters only while it is still selected.
+void tftCommand(int command, int first, int second) {
+  SPI.beginTransaction();
+  SPI.transfer(command, 0);
+  if (first >= 0) {
+    SPI.transfer(first >> 8, 1);
+    SPI.transfer(first & 255, 1);
+  }
+  if (second >= 0) {
+    SPI.transfer(second >> 8, 1);
+    SPI.transfer(second & 255, 1);
+  }
+  SPI.end();
+}
+
+// One RGB565 pixel, sent while a transfer is already open.
+void tftPixel(int colour) {
+  SPI.transfer(colour >> 8, 1);
+  SPI.transfer(colour & 255, 1);
+}
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
   Serial.println("ESP32 online");
+
+  Wire.begin(21, 22);
+  oledCommand(0xAE);
+  // Page addressing, so each frame writes where it is told rather than
+  // carrying on from wherever the last one stopped.
+  oledCommand(0x20); oledCommand(0x02);
+  oledCommand(0x21); oledCommand(0x00); oledCommand(0x7F);
+  oledCommand(0x22); oledCommand(0x00); oledCommand(0x07);
+  oledCommand(0x81); oledCommand(0x9F);
+  oledCommand(0xA1); oledCommand(0xA6);
+  oledCommand(0xA8); oledCommand(0x3F);
+  oledCommand(0xD3); oledCommand(0x00);
+  oledCommand(0xD5); oledCommand(0x80);
+  oledCommand(0xD9); oledCommand(0x22);
+  oledCommand(0xDA); oledCommand(0x12);
+  oledCommand(0xDB); oledCommand(0x20);
+  oledCommand(0x8D); oledCommand(0x14);
+  oledCommand(0xAF);
+
+  // Bring up the TFT. Leaving D/C on the wrong pin turns every one of these
+  // commands into pixel data, and the panel fills with noise instead of drawing.
+  SPI.begin();
+  tftCommand(0x01, -1, -1);
+  delay(50);
+  tftCommand(0x11, -1, -1);
+  delay(120);
+  tftCommand(0x3A, 0x0055, -1);
+  tftCommand(0x29, -1, -1);
 }
 
 void loop() {
@@ -49,8 +125,24 @@ void loop() {
   delay(400);
   digitalWrite(LED_PIN, LOW);
   delay(400);
+
+  // A bar along the top of the OLED.
+  oledCommand(0xB0); oledCommand(0x00); oledCommand(0x10);
+  Wire.beginTransmission(OLED_ADDR);
+  Wire.write(0x40);
+  for (int i = 0; i < 40; i++) { Wire.write(0xFF); }
+  Wire.endTransmission();
+
+  // A bar along the top of the TFT: a 320-pixel window, forty of them lit.
+  tftCommand(0x2A, 0x0000, 0x013F);
+  tftCommand(0x2B, 0x0000, 0x00EF);
+  SPI.beginTransaction();
+  SPI.transfer(0x2C, 0);
+  for (int i = 0; i < 40; i++) { tftPixel(0x001F); }
+  for (int i = 0; i < 280; i++) { tftPixel(0x0000); }
+  SPI.end();
+
   blinks++;
-  Serial.print("blink ");
   Serial.print("blink ");
   Serial.println(blinks);
 }
@@ -131,6 +223,71 @@ export class Simulation {
     this.running = true;
   }
 
+  private probedPinId: string | null = null;
+
+  /**
+   * Moves the scope probe onto a board pin, or lifts it with null.
+   *
+   * Watching follows the *net* the pin sits on, so probing a pin wired to
+   * something interesting shows that thing's voltage -- and probing one wired
+   * to nothing shows nothing, exactly as a real probe would.
+   */
+  setProbePin(pinId: string | null): void {
+    if (this.probedPinId) {
+      this.engine.probes.unwatch(this.engine.netOfMcuPin(this.probedPinId));
+    }
+    if (pinId) this.engine.probes.watch(this.engine.netOfMcuPin(pinId));
+    this.probedPinId = pinId;
+  }
+
+  get probePinId(): string | null {
+    return this.probedPinId;
+  }
+
+  /** Captured samples on the probed net, oldest first. */
+  probeTrace(): TraceSample[] {
+    if (!this.probedPinId) return [];
+    return this.engine.probes.waveform(this.engine.netOfMcuPin(this.probedPinId))?.toArray() ?? [];
+  }
+
+  /** Clips the multimeter onto two nets, or lifts it with nulls. */
+  setMeterProbes(redNet: number | null, blackNet: number | null): void {
+    this.meter.setProbes(redNet ?? GROUND, blackNet ?? GROUND);
+    this.engine.setMeter(this.meter);
+    this.engine.settle();
+  }
+
+  get meterMode(): MeterMode {
+    return this.meter.mode;
+  }
+
+  setMeterMode(mode: MeterMode): void {
+    this.meter.mode = mode;
+    this.engine.settle();
+  }
+
+  setMeterRange(rangeId: string): void {
+    const found =
+      this.meter.mode === 'amps'
+        ? AMP_RANGES.find((range) => range.id === rangeId)
+        : OHM_RANGES.find((range) => range.id === rangeId);
+    if (!found) return;
+    if (this.meter.mode === 'amps') this.meter.ampRange = found as AmpRange;
+    else this.meter.ohmRange = found as OhmRange;
+    this.engine.settle();
+  }
+
+  get meterRangeId(): string {
+    return this.meter.mode === 'amps' ? this.meter.ampRange.id : this.meter.ohmRange.id;
+  }
+
+  /** What the meter's display would currently show. */
+  meterReading(): MeterReading {
+    return this.meter.read((net) => this.engine.voltageOfNet(net));
+  }
+
+  private readonly meter = new Multimeter();
+
   stop(): void {
     this.running = false;
   }
@@ -201,6 +358,16 @@ export class Simulation {
     }
     return volts;
   }
+
+  /** Live controller models for every display part, for the UI to render. */
+  displayControllers(): Map<string, DisplayController> {
+    const controllers = new Map<string, DisplayController>();
+    for (const part of this.bench.parts) {
+      const controller = this.engine.displayController(part.id);
+      if (controller) controllers.set(part.id, controller);
+    }
+    return controllers;
+  }
   /**
    * Serial output, as a new array whenever it has actually changed.
    *
@@ -219,6 +386,7 @@ export class Simulation {
 
   /**
    * Advances one rendered frame.
+
    *
    * Simulated time tracks wall-clock time: each frame gets a budget derived
    * from how long the frame actually took, and a firmware `delay` is spent
@@ -234,10 +402,21 @@ export class Simulation {
 
     let slice = 0;
     while (this.engine.timeMs < frameEnd && slice++ < MAX_SLICES_PER_FRAME) {
+      // A delay still in flight blocks the firmware outright. Spending only
+      // what fits in this frame and then resuming would let a 400 ms delay
+      // complete in 400/frame-budget frames while the sketch carried on as
+      // though it had waited -- turning a blink into a flicker.
+      if (this.pendingDelayMs > 0) {
+        const spend = Math.min(this.pendingDelayMs, frameEnd - this.engine.timeMs);
+        this.pendingDelayMs -= spend;
+        this.advanceBy(spend);
+        continue;
+      }
+
       if (!this.runner || this.runner.done) break;
       const requested = this.runner.step();
       if (requested === null) break;
-      this.advanceBy(Math.min(requested, frameEnd - this.engine.timeMs));
+      this.pendingDelayMs = requested;
     }
 
     // Whatever budget the firmware did not use still keeps the circuit
@@ -248,6 +427,14 @@ export class Simulation {
       this.engine.step(Math.min(remainingMs, 2) / 1000);
     }
   }
+
+  /** Simulated milliseconds a firmware `delay` still owes before it resumes. */
+  private pendingDelayMs = 0;
+
+  private readonly spi = new SpiBus((byte, dataSelect, chipSelected) => {
+    this.engine.deliverSpi(byte, dataSelect, chipSelected);
+    return true;
+  });
 
   /** Spends `ms` of simulated time on the circuit, without any firmware. */
   private advanceBy(ms: number): void {
@@ -268,10 +455,15 @@ export class Simulation {
     }
   }
 
+  private readonly i2c = new I2CBus((address, byte, isControl) =>
+    this.engine.deliverI2C(address, byte, isControl),
+  );
+
   private rebuild(): void {
     this.engine.rebuild(this.builder.build(), this.dynamicState);
     this.engine.settle();
   }
+
 
   private services(): FirmwareServices {
     return {
@@ -295,6 +487,25 @@ export class Simulation {
       analogRead: (pin) => {
         this.engine.settle();
         return this.engine.readAnalog(pin);
+      },
+      wire: {
+        begin: () => this.i2c.begin(0, 0),
+        beginTransmission: (address) => this.i2c.beginTransmission(address),
+        write: (value) => this.i2c.write(value),
+        endTransmission: () => {
+          const transfer = this.i2c.endTransmission();
+          this.engine.settle();
+          return transfer.micros;
+        },
+      },
+      spi: {
+        begin: () => this.spi.begin(),
+        transfer: (value, dataSelect) => this.spi.transfer(value, dataSelect),
+        end: () => {
+          const transfer = this.spi.end();
+          this.engine.settle();
+          return transfer.micros;
+        },
       },
       serialBegin: () => {},
       serialWrite: (text) => {
