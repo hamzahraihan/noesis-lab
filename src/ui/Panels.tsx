@@ -1,4 +1,5 @@
 /**
+ *
  * Side panels: the parts palette, the inspector, the firmware editor and the
  * serial monitor.
  *
@@ -6,52 +7,88 @@
  * panels are instruments, and an instrument that needs explaining is a bad one.
  */
 
-import { useEffect, useRef } from 'react';
+import Editor from '@monaco-editor/react';
+import { FIRMWARE_LANGUAGE, FIRMWARE_THEME } from './monaco-setup';
+import { useEffect, useMemo, useRef } from 'react';
 import type { PartDefinition } from '../sim/catalog';
 import type { PartInstance } from '../sim/bench';
-import { ledDefinition, potentiometerDefinition, resistorDefinition } from '../sim/passives';
-import { DIODE_PROFILES } from '../sim/elements';
+import { PART_CATALOGUE, type CatalogueEntry } from '../sim/catalogue';
+import { PartPreview } from './PartPreview';
 import { formatOhms, formatVolts } from './format';
 
 // ---------------------------------------------------------------------------
 
-export interface PaletteItem {
-  readonly label: string;
-  readonly make: () => PartDefinition;
-}
-/** What you can drop onto the bench. Boards themselves are placed as a pair. */
-const PALETTE: readonly PaletteItem[] = [
-  { label: '220 Ω resistor', make: () => resistorDefinition(220) },
-  { label: '330 Ω resistor', make: () => resistorDefinition(330) },
-  { label: '1 kΩ resistor', make: () => resistorDefinition(1000) },
-  { label: '10 kΩ resistor', make: () => resistorDefinition(10_000) },
-  { label: 'Red LED', make: () => ledDefinition(DIODE_PROFILES.red, 'Red') },
-  { label: 'Green LED', make: () => ledDefinition(DIODE_PROFILES.green, 'Green') },
-  { label: 'Blue LED', make: () => ledDefinition(DIODE_PROFILES.blue, 'Blue') },
-  { label: '10 kΩ pot', make: () => potentiometerDefinition(10_000) },
+/**
+ * The parts you reach for every time, drawn from the shared catalogue.
+ *
+ * This is deliberately a short list. The browser behind the header button has
+ * everything; a palette that listed all of it would just be a worse browser.
+ */
+const QUICK_PARTS: readonly string[] = [
+  'resistor-220',
+  'resistor-10000',
+  'led-red',
+  'led-green',
+  'potentiometer-10000',
+  'button-tactile',
 ];
 
-export function PartPalette({ onPlace }: { onPlace: (definition: PartDefinition) => void }) {
+export function PartPalette({
+  onPlace,
+  onBrowse,
+}: {
+  onPlace: (definition: PartDefinition, entry: CatalogueEntry) => void;
+  onBrowse(): void;
+}) {
+  const quick = useMemo(
+    () =>
+      QUICK_PARTS.map((id) => PART_CATALOGUE.find((entry) => entry.id === id)).filter(
+        (entry): entry is CatalogueEntry => entry !== undefined,
+      ),
+    [],
+  );
+
   return (
     <section className="flex flex-col gap-1">
       <h2 className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-        Parts
+        Quick parts
       </h2>
-      {PALETTE.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          onClick={() => onPlace(item.make())}
-          className="mx-2 rounded-md px-3 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-slate-700"
-        >
-          {item.label}
-        </button>
+      {quick.map((entry) => (
+        <PaletteRow key={entry.id} entry={entry} onPlace={onPlace} />
       ))}
+      <button
+        type="button"
+        onClick={onBrowse}
+        className="mx-2 mt-2 rounded-md border border-slate-700 px-3 py-1.5 text-left text-sm text-slate-300 transition-colors hover:border-sky-600 hover:text-sky-300"
+      >
+        Browse all components…
+      </button>
     </section>
   );
 }
 
+function PaletteRow({
+  entry,
+  onPlace,
+}: {
+  entry: CatalogueEntry;
+  onPlace: (definition: PartDefinition, entry: CatalogueEntry) => void;
+}) {
+  const definition = useMemo(() => entry.make(), [entry]);
+  return (
+    <button
+      type="button"
+      onClick={() => onPlace(definition, entry)}
+      className="mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-slate-700"
+    >
+      <PartPreview definition={definition} className="h-7 w-9 shrink-0" />
+      <span className="truncate">{entry.name}</span>
+    </button>
+  );
+}
+
 // ---------------------------------------------------------------------------
+
 
 export interface InspectorProps {
   part: PartInstance | null;
@@ -250,11 +287,26 @@ export function FirmwareEditor({
       </div>
 
       {expanded && (
-        <textarea
+        <Editor
+          height="100%"
+          language={FIRMWARE_LANGUAGE}
+          theme={FIRMWARE_THEME}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
-          spellCheck={false}
-          className="min-h-0 flex-1 resize-none bg-slate-950 p-3 font-mono text-xs leading-relaxed text-slate-200 outline-none"
+          onChange={(next) => onChange(next ?? '')}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 12,
+            lineHeight: 19,
+            fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+            scrollBeyondLastLine: false,
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            padding: { top: 10, bottom: 10 },
+            renderLineHighlight: 'none',
+            automaticLayout: true,
+            tabSize: 2,
+            wordWrap: 'off',
+          }}
         />
       )}
 
