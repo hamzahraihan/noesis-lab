@@ -46,7 +46,6 @@ const ESP32_RIGHT_HEADER: ReadonlyArray<[string, string]> = [
   ['TX0', 'GPIO1'],
   ['RX0', 'GPIO3'],
   ['D21', 'GPIO21'],
-  ['D19', 'GPIO19'],
   ['D18', 'GPIO18'],
   ['D5', 'GPIO5'],
   ['TX2', 'GPIO17'],
@@ -58,26 +57,29 @@ const ESP32_RIGHT_HEADER: ReadonlyArray<[string, string]> = [
   ['GND', 'GND'],
 ];
 
+// Keyed by *header* label, not silkscreen. The two differ on this board -- the
+// header calls GPIO36 "VP", GPIO39 "VN" and GPIO15 "D15" -- and keying this by
+// silkscreen silently leaves those three pins unreachable from firmware.
 const ESP32_GPIO_NUMBERS: Readonly<Record<string, number>> = {
-  EN: -1, GPIO36: 36, GPIO39: 39, GPIO34: 34, GPIO35: 35, GPIO32: 32,
+  EN: -1, VP: 36, VN: 39, GPIO34: 34, GPIO35: 35, GPIO32: 32,
   GPIO33: 33, GPIO25: 25, GPIO26: 26, GPIO27: 27, GPIO14: 14, GPIO12: 12,
   GND: -1, GPIO13: 13, D9: 9, D23: 23, D22: 22, TX0: 1, RX0: 3, D21: 21,
-  D19: 19, D18: 18, D5: 5, TX2: 17, RX2: 16, D4: 4, D2: 2, GPIO15: 15,
+  D19: 19, D18: 18, D5: 5, TX2: 17, RX2: 16, D4: 4, D2: 2, D15: 15,
   '3V3': -1,
 };
 
 /** ADC1 channels for the ESP32 pins that expose them. */
 const ESP32_ADC_CHANNELS: Readonly<Record<string, number>> = {
-  GPIO36: 0, GPIO39: 3, GPIO34: 6, GPIO35: 7, GPIO32: 4, GPIO33: 5, GPIO27: 1,
+  VP: 0, VN: 3, GPIO34: 6, GPIO35: 7, GPIO32: 4, GPIO33: 5, GPIO27: 1,
 };
 
-/** GPIO34-39 are input-only: no output driver and no internal pull-up. */
-const ESP32_INPUT_ONLY = new Set(['GPIO36', 'GPIO39', 'GPIO34', 'GPIO35']);
+/** Header labels of the pins with no output driver or internal pull-up. */
+const ESP32_INPUT_ONLY = new Set(['VP', 'VN', 'GPIO34', 'GPIO35']);
 
-/** Pins sampled at reset; holding these the wrong way stops the board booting. */
+/** Header labels of the pins sampled at reset, and the level they expect. */
 const ESP32_STRAPPING: Readonly<Record<string, 'low' | 'high'>> = {
   GPIO12: 'low',
-  GPIO15: 'high',
+  D15: 'high',
 };
 
 function esp32BoardPin(id: string, headerLabel: string, silkscreen: string): BoardPin {

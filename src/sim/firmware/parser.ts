@@ -154,8 +154,15 @@ export function tokenize(source: string): Token[] {
         }
       }
 
+      const isHex = /^0[xX]/.test(text);
       let value = Number(text);
-      if (text.endsWith('f') || text.endsWith('F')) value = Number(text.slice(0, -1));
+      // `f` is a float suffix in C -- but only for decimal literals. Stripping it
+      // from a hex one silently turns 0xAF into 0xA and 0xFF into 0xF, which
+      // would corrupt every display constant that happens to end in a nibble of
+      // F rather than fail loudly.
+      if (!isHex && (text.endsWith('f') || text.endsWith('F'))) {
+        value = Number(text.slice(0, -1));
+      }
       if (Number.isNaN(value)) value = 0;
       tokens.push({ kind: 'number', text, value, location });
       continue;
@@ -351,14 +358,39 @@ class Parser {
     this.expectPunctuation(';');
     return declarations;
   }
+  /**
+   * Reads `#define NAME value`.
+   *
+   * The value goes back through the real lexer rather than a second regex, so
+   * a define holds exactly what the same literal would in code. A private
+   * number pattern here once accepted only decimals, which meant
+   * `#define OLED_ADDR 0x3C` quietly defined nothing -- and the sketch then
+   * addressed the display at 0 with no error anywhere.
+   *
+   * `#include` and everything else stay inert: the VM supplies its own runtime,
+   * so there is no header for them to reach into.
+   */
   private consumeDefine(defines: Map<string, number>): void {
     const token = this.next();
-    const match = /^#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)\s+([-+]?[0-9]*\.?[0-9]+)\s*$/.exec(
-      token.text.trim(),
-    );
-    if (match) defines.set(match[1], Number(match[2]));
-    // #include and everything else are inert here: the VM supplies its own
-    // runtime, so there is no header for them to reach into.
+    const match = /^#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(\S.*?)\s*$/.exec(token.text.trim());
+    if (!match) return;
+    const parts = tokenize(match[2]).filter((part) => part.kind !== 'eof');
+    const [sign, literal] =
+      parts.length === 2 && parts[0].kind === 'punctuation' ? parts : [null, parts[0]];
+    const magnitude = literal?.kind === 'number' ? literal.value : undefined;
+
+    if (magnitude === undefined) {
+      // Anything else -- a function call, an expression, a string -- resolves
+      // to zero. The VM has no macro expander, and guessing at the first number
+      // in `#define X (1 << 3)` would silently invent an 8.
+      defines.set(match[1], 0);
+      return;
+    }
+    if (sign?.kind === 'punctuation' && sign.text === '-') {
+      defines.set(match[1], -magnitude);
+      return;
+    }
+    defines.set(match[1], magnitude);
   }
 
   private readType(): string {

@@ -2,9 +2,10 @@
  * Netlist extraction: bench geometry in, solvable circuit out.
  *
  * The whole job is union-find. Anything that physically joins two terminals --
- * a jumper, a breadboard strip, a microcontroller's ground plane -- unions them,
- * and the resulting sets are the nets. Element emission is a second, mechanical
- * pass over the parts once the nets are numbered.
+ * a jumper, a breadboard strip, a microcontroller's ground plane, two leads
+ * pushed into one hole -- unions them, and the resulting sets are the nets.
+ * Element emission is a second, mechanical pass over the parts once the nets
+ * are numbered.
  *
  * Choosing ground matters more than it looks. The solver needs one node pinned
  * to 0 V, and picking an arbitrary net would silently shift every reading. The
@@ -15,7 +16,7 @@
 
 import { GROUND, type DiodeProfile, type Element } from './elements';
 import { wireResistanceOhms } from './units';
-import type { Bench, PartInstance } from './bench';
+import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
 import type { DynamicState } from './catalog';
 
 export interface NetInfo {
@@ -74,6 +75,41 @@ class DisjointSet {
     }
     this.parent[rootB] = rootA;
     if (this.rank[rootA] === this.rank[rootB]) this.rank[rootA]++;
+  }
+}
+
+/**
+ * Joins contacts that are sitting in the same hole.
+ *
+ * Two leads pushed into one breadboard column hold two contacts at one
+ * coordinate, and nothing but geometry says they are joined. Bucketing on the
+ * snap distance keeps this linear -- every contact only has to look at the
+ * nine cells around it -- which matters because a drag re-extracts the whole
+ * netlist on every pointer move.
+ */
+function unionCoincidentContacts(bench: Bench, sets: DisjointSet): void {
+  const cells = new Map<string, number[]>();
+  const snapSquared = SNAP_DISTANCE_MM * SNAP_DISTANCE_MM;
+
+  for (const terminal of bench.terminals) {
+    const cellX = Math.floor(terminal.x / SNAP_DISTANCE_MM);
+    const cellY = Math.floor(terminal.y / SNAP_DISTANCE_MM);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const neighbours = cells.get(`${cellX + dx},${cellY + dy}`);
+        if (!neighbours) continue;
+        for (const other of neighbours) {
+          const contact = bench.terminals[other];
+          const gapX = contact.x - terminal.x;
+          const gapY = contact.y - terminal.y;
+          if (gapX * gapX + gapY * gapY <= snapSquared) sets.union(other, terminal.id);
+        }
+      }
+    }
+    const key = `${cellX},${cellY}`;
+    const bucket = cells.get(key);
+    if (bucket) bucket.push(terminal.id);
+    else cells.set(key, [terminal.id]);
   }
 }
 
@@ -156,9 +192,10 @@ function elementsForPart(
 
     case 'mcu':
     case 'breadboard':
-      // Boards contribute topology only. Their pins become voltage sources when
-      // the engine drives them, which depends on firmware state and so cannot
-      // be frozen into a static netlist.
+    case 'display':
+      // These contribute topology only. Their pins become sources, or receive
+      // bus traffic, when the engine drives them -- which depends on firmware
+      // state and so cannot be frozen into a static netlist.
       return [];
   }
 }
@@ -190,6 +227,9 @@ export function buildNetlist(bench: Bench, state: DynamicState): Netlist {
   }
 
   for (const wire of bench.wires) sets.union(wire.from, wire.to);
+
+  // Two leads sharing a hole, with no jumper and no internal net to say so.
+  unionCoincidentContacts(bench, sets);
 
   const groundRoot = chooseGroundRoot(bench, sets);
 

@@ -36,6 +36,41 @@ export interface FirmwareServices {
   analogRead(pin: number): number;
   serialBegin(baud: number): void;
   serialWrite(text: string): void;
+  /** The I2C bus, for sketches that drive a display or sensor directly. */
+  wire: WirePort;
+  /** The SPI bus, for sketches that drive a TFT or a flash chip. */
+  spi: SpiPort;
+}
+
+/**
+ * The SPI bus as firmware sees it.
+ *
+ * The `dataSelect` flag is the D/C level the caller wants on the pin. For a
+ * display that choice decides whether a byte is a command or pixel data, so it
+ * belongs to the sketch rather than the driver.
+ */
+export interface SpiPort {
+  begin(): void;
+  /** Sends one byte with D/C high (data) or low (command). */
+  transfer(value: number, dataSelect: boolean): number;
+  /** Ends the transfer and reports how long it took, in microseconds. */
+  end(): number;
+}
+
+/**
+ * The I2C bus as firmware sees it.
+ *
+ * `endTransmission` returns the bus time in microseconds rather than an
+ * acknowledgement code, because the VM has to actually wait out a transfer --
+ * pushing a full framebuffer over I2C is tens of milliseconds of real time,
+ * and skipping it would let a sketch redraw faster than the hardware could.
+ */
+export interface WirePort {
+  begin(sda: number, scl: number): void;
+  beginTransmission(address: number): void;
+  write(value: number): number;
+  /** Finishes the transfer and reports how long it took, in microseconds. */
+  endTransmission(): number;
 }
 
 export const PIN_INPUT = 0;
@@ -440,8 +475,8 @@ export class FirmwareRuntime {
       }
 
       case 'member': {
-        // A bare `Serial` on the right of a dot has no value of its own; its
-        // methods are reached through the `call` branch below.
+        // A bare `Serial`, `Wire` or `SPI` on the right of a dot has no value
+        // of its own; their methods are reached through the `call` branch.
         return 0;
       }
 
@@ -459,7 +494,15 @@ export class FirmwareRuntime {
           for (const argument of expression.args) {
             args.push((yield* this.evaluate(argument, scope, services)) as Value);
           }
-          return this.evaluateSerialCall(callee.target.name, callee.member, args, services);
+          if (callee.target.name === 'Wire') {
+            yield* this.evaluateWireCall(callee.member, args, services);
+            return 0;
+          }
+          if (callee.target.name === 'SPI') {
+            yield* this.evaluateSpiCall(callee.member, args, services);
+            return 0;
+          }
+          return this.evaluateSerialCall(callee.member, args, services);
         }
         return 0;
       }
@@ -471,12 +514,7 @@ export class FirmwareRuntime {
     return scope.arrayFor(expression.name);
   }
 
-  private evaluateSerialCall(
-    _objectName: string,
-    member: string,
-    args: Value[],
-    services: FirmwareServices,
-  ): Value {
+  private evaluateSerialCall(member: string, args: Value[], services: FirmwareServices): Value {
     switch (member) {
       case 'begin':
         services.serialBegin(asNumber(args[0] ?? 9600));
@@ -505,6 +543,76 @@ export class FirmwareRuntime {
         return 0;
       case 'read':
         return -1;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles a `Wire.*` call.
+   *
+   * Only `endTransmission` can block: it yields however long the transfer took
+   * on the bus, so a sketch pushing a framebuffer genuinely waits for the
+   * screen to catch up instead of finishing instantly.
+   */
+  private *evaluateWireCall(
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    const wire = services.wire;
+
+    switch (member) {
+      case 'begin':
+        wire.begin(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0));
+        return 0;
+      case 'beginTransmission':
+        wire.beginTransmission(asNumber(args[0] ?? 0));
+        return 0;
+      case 'write':
+        return wire.write(asNumber(args[0] ?? 0));
+      case 'endTransmission': {
+        const micros = wire.endTransmission();
+        if (micros > 0) yield micros / 1000;
+        return 0;
+      }
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles an `SPI.*` call.
+   *
+   * Only `end()` blocks: it yields the bus time for the whole transfer, so a
+   * sketch pushing a 320x240 frame genuinely waits for it. Pushing a full frame
+   * at the bus clock is over a hundred milliseconds, and hiding that would make
+   * SPI look like something it is not.
+   */
+  private *evaluateSpiCall(
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    const spi = services.spi;
+
+    switch (member) {
+      case 'begin':
+        return 0;
+      case 'beginTransaction':
+      case 'setClockDivider':
+      case 'setBitOrder':
+      case 'setDataMode':
+        spi.begin();
+        return 0;
+      case 'end': {
+        const micros = spi.end();
+        if (micros > 0) yield micros / 1000;
+        return 0;
+      }
+      // `transfer(byte, true)` sends data; anything else sends a command.
+      case 'transfer':
+        return spi.transfer(asNumber(args[0] ?? 0), asNumber(args[1] ?? 1) !== 0);
       default:
         return 0;
     }

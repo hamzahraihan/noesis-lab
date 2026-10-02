@@ -12,8 +12,13 @@
  * successive steps, the way it does on real hardware, instead of being faked by
  * handing the LED an averaged voltage.
  */
+import { createController, type DisplayController } from './display/part';
+import { Ili9341 } from './display/ili9341';
+import { Ssd1306 } from './display/ssd1306';
 
 import { solveCircuit, type Solution } from './circuit';
+import { ProbeDeck } from './probe';
+import type { Multimeter } from './multimeter';
 import { GROUND, type Element } from './elements';
 import { buildNetlist, type Netlist } from './netlist';
 import type { Bench, PartInstance } from './bench';
@@ -68,6 +73,29 @@ export class Engine {
   }
 
   /**
+   * Probes currently clipped onto a net.
+   *
+   * Capture reads the solved voltages rather than anything a bus model reports,
+   * so a scope cannot show a cleaner signal than the circuit actually produced.
+   */
+
+  /**
+   * Multimeter clipped across the bench, or null when it is away.
+   *
+   * The meter is stamped into the netlist rather than merely reading from it,
+   * because in amps and ohms mode it *is* part of the circuit: an ammeter in
+   * series is a shunt, and an ohmmeter is a test current source.
+   */
+  readonly probes = new ProbeDeck();
+
+  private meter: Multimeter | null = null;
+
+  /** Clips the meter onto two nets, or lifts it with null. */
+  setMeter(meter: Multimeter | null): void {
+    this.meter = meter;
+  }
+
+  /**
    * Rebuilds the topology. Call after moving a part or rerouting a wire; the
    * netlist is derived from geometry, so a stale one silently reads the wrong
    * voltages rather than failing.
@@ -94,6 +122,120 @@ export class Engine {
           this.netlist.pinNode.get(`${this.mcuPart.id}:${railPin.id}`) ?? GROUND;
       }
     }
+    this.rebuildDisplays();
+  }
+
+  /** Display parts on the bench, keyed by part id. */
+  private readonly displays = new Map<string, DisplayController>();
+
+  /** Nets the firmware's I2C pins are driving. */
+  private i2cNets = new Set<number>();
+
+  /** Nets the firmware's SPI pins are driving. */
+  private spiNets = new Set<number>();
+
+  private rebuildDisplays(): void {
+    this.displays.clear();
+    this.i2cNets.clear();
+    this.spiNets.clear();
+    const netlist = this.currentNetlist;
+    const mcuPart = this.mcuPart;
+
+    for (const part of this.bench.parts) {
+      const controller = createController(part.definition);
+      if (controller) this.displays.set(part.id, controller);
+    }
+
+    // Each bus exists wherever the firmware's own pins sit. A display reaches
+    // one only by being wired there, which is why an unwired screen stays dark
+    // instead of mysteriously working.
+    if (!mcuPart) return;
+    for (const gpio of this.mcu.i2cPins) {
+      const net = this.netOfBoardGpio(netlist, mcuPart.id, gpio);
+      if (net !== null) this.i2cNets.add(net);
+    }
+    for (const gpio of this.mcu.spiPins) {
+      const net = this.netOfBoardGpio(netlist, mcuPart.id, gpio);
+      if (net !== null) this.spiNets.add(net);
+    }
+  }
+
+  /** Net of a board pin by firmware pin number, or null when not routable. */
+  private netOfBoardGpio(netlist: Netlist, partId: string, gpio: number): number | null {
+    const pinId = this.mcu.pinIdForGpio(gpio);
+    if (!pinId) return null;
+    const net = netlist.pinNode.get(`${partId}:${pinId}`);
+    return net === undefined || net === GROUND ? null : net;
+  }
+
+  /** Controller for a display part, or undefined if it is not a display. */
+  displayController(partId: string): DisplayController | undefined {
+    return this.displays.get(partId);
+  }
+
+  /**
+   * True while a probe is watching.
+   *
+   * Time is only ever skipped when nothing is changing, but a probe needs to
+   * observe what passes even when the circuit itself is settled: skipping over
+   * a blink would leave the scope reporting whatever the solver happened to see
+   * at the boundaries, which is aliasing rather than a waveform.
+   */
+  get isBeingProbed(): boolean {
+    return this.probes.watchedNets.length > 0;
+  }
+
+  /**
+   * Delivers one I2C byte to any display wired onto that bus.
+   *
+   * Returns whether a device claimed the address, so an unplugged screen makes
+   * the transaction come back unacknowledged, as it would on a real bench.
+   */
+  deliverI2C(address: number, byte: number, isControlPosition: boolean): boolean {
+    let claimed = false;
+    for (const [partId, controller] of this.displays) {
+      // Only the OLED speaks I2C; a TFT on the same wires stays silent.
+      if (!(controller instanceof Ssd1306)) continue;
+      if (!this.isOnI2cBus(partId)) continue;
+      if (controller.receive(address, byte, isControlPosition)) claimed = true;
+    }
+    return claimed;
+  }
+
+  /** True when a display's SDA and SCL both land on the firmware's I2C nets. */
+  private isOnI2cBus(partId: string): boolean {
+    const netlist = this.currentNetlist;
+    const sda = netlist.pinNode.get(`${partId}:SDA`);
+    const scl = netlist.pinNode.get(`${partId}:SCL`);
+    if (sda === undefined || scl === undefined) return false;
+    if (sda === GROUND || scl === GROUND) return false;
+    return this.i2cNets.has(sda) && this.i2cNets.has(scl);
+  }
+
+  /**
+   * Delivers one SPI byte to any display wired onto the SPI bus.
+   *
+   * Unlike I2C there is no address to acknowledge: the display is selected by
+   * its chip-select pin alone, which is why a TFT on the wrong CS simply never
+   * answers rather than reporting a fault.
+   */
+  deliverSpi(byte: number, dataSelect: boolean, chipSelected: boolean): void {
+    for (const [partId, controller] of this.displays) {
+      if (!(controller instanceof Ili9341)) continue;
+      if (!this.isOnSpiBus(partId)) continue;
+      controller.receive(byte, dataSelect, chipSelected);
+    }
+  }
+
+  /** True when a display's CS, D/C, MOSI and SCK all land on the SPI nets. */
+  private isOnSpiBus(partId: string): boolean {
+    const netlist = this.currentNetlist;
+    for (const pin of ['CS', 'DC', 'MOSI', 'SCK']) {
+      const net = netlist.pinNode.get(`${partId}:${pin}`);
+      if (net === undefined || net === GROUND) return false;
+      if (!this.spiNets.has(net)) return false;
+    }
+    return true;
   }
 
   get currentNetlist(): Netlist {
@@ -136,6 +278,10 @@ export class Engine {
    * cost, which is the difference between a smooth bench and a stalled one.
    */
   hasDynamics(): boolean {
+    // A probe counts as a reason to keep solving even when nothing in the
+    // circuit is moving: skipping past a blink would hand the scope whatever
+    // the solver happened to see at the boundaries, which is aliasing.
+    if (this.isBeingProbed) return true;
     for (const pin of this.mcu.pins()) {
       if (this.mcu.configurationOf(pin.id).pwm) return true;
     }
@@ -150,6 +296,7 @@ export class Engine {
    */
   skip(dtSeconds: number): void {
     this.timeMs += dtSeconds * 1000;
+    this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
   }
 
   /**
@@ -228,6 +375,9 @@ export class Engine {
     this.solution = solution;
     // Capacitor history only cares about real nets, so trim the internal rows.
     this.previousVoltages = solution.voltages.slice(0, netlist.nodeCount);
+    // Capture last, so a probe sees the voltages this solve produced rather
+    // than the previous step's.
+    this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
     return solution;
   }
 
@@ -249,6 +399,11 @@ export class Engine {
     timeMs: number,
   ): { elements: Element[]; nodeCount: number } {
     const elements: Element[] = [...netlist.elements];
+
+    // The meter is part of the circuit in amps and ohms mode, so it has to be
+    // stamped rather than merely consulted.
+    const meterElement = this.meter?.stamp();
+    if (meterElement) elements.push(meterElement);
     let internalNet = netlist.nodeCount;
     let sourceOrdinal = 0;
     this.pinSourceIndex.clear();

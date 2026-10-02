@@ -76,6 +76,7 @@ function harnessWithSketch(source: string, pin = 2): Harness {
 
   const serial: string[] = [];
   const services: FirmwareServices = {
+    spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
     nowMs: () => engine.timeMs,
     pinMode: (p, mode) => {
       engine.settle();
@@ -100,6 +101,12 @@ function harnessWithSketch(source: string, pin = 2): Harness {
     serialBegin: () => {},
     serialWrite: (text) => {
       serial.push(text);
+    },
+    wire: {
+      begin: () => {},
+      beginTransmission: () => {},
+      write: () => 1,
+      endTransmission: () => 0,
     },
   };
 

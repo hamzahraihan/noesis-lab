@@ -78,6 +78,29 @@ export class McuRuntime {
     return this.definition.boardPins ?? [];
   }
 
+  /**
+   * Pins this board's default I2C peripheral sits on.
+   *
+   * The engine uses these to decide which nets carry the bus. `Wire.begin`
+   * may move them, but these are what the board's silkscreen implies out of
+   * the box, so a sketch that never calls begin still has a bus to miss.
+   */
+  get i2cPins(): readonly number[] {
+    return this.board.id === 'uno' ? [18, 19] : [21, 22];
+  }
+
+  /**
+   * Pins the board's default SPI peripheral sits on, as
+   * [chipSelect, dataSelect, clock, mosi].
+   *
+   * These are the pins the engine treats as carrying SPI, so a display wired to
+   * anything else simply never sees the bus -- which is the failure worth being
+   * able to reproduce.
+   */
+  get spiPins(): readonly number[] {
+    return this.board.id === 'uno' ? [10, 9, 13, 11] : [5, 15, 18, 23];
+  }
+
   boardPin(pinId: string): BoardPin | undefined {
     return this.boardPinById.get(pinId);
   }

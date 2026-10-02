@@ -73,7 +73,12 @@ export type ComponentSpec =
   | { readonly kind: 'button' }
   | { readonly kind: 'potentiometer'; readonly ohms: number }
   | { readonly kind: 'mcu'; readonly board: BoardSpec }
-  | { readonly kind: 'breadboard' };
+  | { readonly kind: 'breadboard' }
+  | {
+      readonly kind: 'display';
+      readonly controller: 'ssd1306' | 'ili9341';
+      readonly address: number;
+    };
 
 export interface PartDefinition {
   readonly id: string;
@@ -86,6 +91,8 @@ export interface PartDefinition {
   readonly boardPins?: readonly BoardPin[];
   /** Body colour for the SVG renderer, as a hex string. */
   readonly bodyColour: string;
+  /** Panel resolution, for a display part. The pixels live in the controller. */
+  readonly displayPixels?: { readonly width: number; readonly height: number };
   /** Silkscreen / legend colour for the SVG renderer. */
   readonly legendColour: string;
 }
