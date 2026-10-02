@@ -48,32 +48,34 @@ export function ssd1306Definition(address = 0x3c): PartDefinition {
 }
 
 /**
- * 2.4" 320x240 TFT, ILI9341, on the usual 8-pin SPI breakout.
+ * 2.4" TFT, ILI9341, on the usual 8-pin SPI breakout.
  *
- * The panel sits on a carrier about 55 x 34 mm, which keeps it true scale
- * beside a breadboard while being visibly much bigger than the OLED.
+ * The carrier is 46.5 x 77.6 mm with its header along the bottom edge on a
+ * 2.54 mm pitch, which is the geometry of the `wokwi-ili9341` element the
+ * bench draws. Matching it matters: the artwork and the pin coordinates have to
+ * be the same part, or a jumper lands beside the pin it names.
  */
 export function ili9341Definition(): PartDefinition {
-  const headerX = 3.2;
-  const firstPinY = 38.0;
+  const headerX = 12.78;
+  const headerY = 76.0;
   const pitch = 2.54;
 
   return {
     id: 'ili9341-320x240',
     name: '2.4" TFT (ILI9341)',
     category: 'output',
-    widthMm: 55.2,
-    heightMm: 42.0,
+    widthMm: 46.5,
+    heightMm: 77.6,
     component: { kind: 'display', controller: 'ili9341', address: 0 },
     pins: [
-      { id: 'GND', label: 'GND', x: headerX, y: firstPinY, net: 'GND' },
-      { id: 'CS', label: 'CS', x: headerX + pitch, y: firstPinY },
-      { id: 'RESET', label: 'RST', x: headerX + 2 * pitch, y: firstPinY },
-      { id: 'DC', label: 'D/C', x: headerX + 3 * pitch, y: firstPinY },
-      { id: 'MOSI', label: 'DIN', x: headerX + 4 * pitch, y: firstPinY },
-      { id: 'SCK', label: 'CLK', x: headerX + 5 * pitch, y: firstPinY },
-      { id: 'VCC', label: 'VCC', x: headerX + 6 * pitch, y: firstPinY },
-      { id: 'LED', label: 'LED', x: headerX + 7 * pitch, y: firstPinY },
+      { id: 'VCC', label: 'VCC', x: headerX, y: headerY, net: 'VCC' },
+      { id: 'GND', label: 'GND', x: headerX + pitch, y: headerY, net: 'GND' },
+      { id: 'CS', label: 'CS', x: headerX + 2 * pitch, y: headerY },
+      { id: 'RESET', label: 'RST', x: headerX + 3 * pitch, y: headerY },
+      { id: 'DC', label: 'D/C', x: headerX + 4 * pitch, y: headerY },
+      { id: 'MOSI', label: 'DIN', x: headerX + 5 * pitch, y: headerY },
+      { id: 'SCK', label: 'CLK', x: headerX + 6 * pitch, y: headerY },
+      { id: 'LED', label: 'LED', x: headerX + 7 * pitch, y: headerY },
     ],
     bodyColour: '#0b1220',
     legendColour: '#93c5fd',
