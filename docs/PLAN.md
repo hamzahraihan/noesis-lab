@@ -100,3 +100,102 @@ An interactive simulation platform designed to bridge the gap between software c
 - **Simulation Engine:** SPICE-like fast transient circuit simulation combined with cycle-accurate micro-controller emulation (e.g., AVR/ARM instruction execution).
 - **Asset Rendering:** Low-poly 3D / high-DPI Vector 2D models using WebGL/Canvas to ensure smooth web/desktop rendering while preserving component labels and pin pitch detail.
 - **Extensibility:** Moddable component framework allowing users to define custom sensor behavior using JS/Lua scripting or JSON specs.
+
+---
+
+## 6. Implementation Decisions
+
+Decisions taken during implementation, with the reasoning that settled them.
+
+### 6.1 Firmware editor: Monaco
+
+The code pane uses **Monaco Editor** (`monaco-editor` + `@monaco-editor/react`, both MIT)
+rather than a plain textarea.
+
+**Why:** bracket matching, line numbers, folding, find/replace and undo history are
+what make a multi-function sketch writable rather than typeable, and every one of
+them is free here. The editor is bundled rather than loaded from a CDN so the bench
+works with no network, which matters for something that is otherwise entirely local.
+
+**Language support is deliberately narrower than real Arduino.** Monaco registers an
+`arduino-cpp` language whose completion list is *exactly* the set the firmware
+interpreter implements -- `pinMode`, `digitalWrite`, `analogWrite`, `Serial`, `Wire`,
+`SPI`, `delay`, the maths helpers and the pin constants. It does not offer
+`attachInterrupt` or `tone`, because those do not run here. An autocomplete that
+silently suggests a call the simulator will reject teaches the wrong thing; this
+one only ever promises something that works.
+
+### 6.2 Component artwork: Wokwi's, at true millimetre scale
+
+Parts are drawn with **`@wokwi/elements`** -- Wokwi's own published component
+library, MIT, 50+ parts as real SVG with live state properties -- integrated so
+that they sit on the bench at 1:1 alongside the breadboard.
+
+**The 1:1 requirement is load-bearing rather than aesthetic.** Holes sit on a real
+2.54 mm pitch and terminals merge within 0.4 mm of each other, so every part's pin
+coordinates are millimetres on that same grid -- which is what makes a lead
+dropped into a hole actually connect. Artwork that disagrees with its definition's
+pin coordinates gives parts that look right and wire wrongly.
+
+**Three things make the integration work, and each was found the hard way.**
+
+1. **The elements are HTML, not SVG.** A custom element cannot be a child of an
+   `<svg>`, so each part is rendered inside a `<foreignObject>`. CSS pixels
+   inside one map one-to-one onto the view box's user units, which means an
+   element's own millimetre size drops into the bench's coordinate system with no
+   conversion at all.
+
+2. **`pinInfo` is in an undocumented per-element unit.** Measured across eight
+   elements it is ~3.5x the view box for an Uno, 1x for an ESP32, 3.8x for a
+   resistor and 3.7x for a pushbutton -- there is no global mapping to derive.
+   Each adopted part therefore carries its own `mmPerPinUnit`, chosen so its pins
+   land where the real hardware's pins are, and asserted against the part's own
+   definition at render time so a mis-calibrated part falls back to the
+   hand-authored renderer instead of drawing a jumper onto the wrong hole.
+
+3. **The library exposes no way to find where its pins were actually drawn.**
+   The Uno declares 31 pins and renders 3 circles; the LED declares 2 and renders
+   none. So the calibration cannot be measured from the DOM and has to be stated.
+
+**Where a Wokwi part is not the same part as this bench's, it is not adopted.**
+
+- **The breadboard stays hand-authored.** Wokwi ships no breadboard element, so
+  there is nothing to replace it with -- and it is the simulation's coordinate
+  system besides, so swapping its artwork would mean re-basing every snap
+  distance along with it.
+- **The capacitor stays hand-authored.** No Wokwi equivalent.
+- **The 128x64 OLED stays hand-authored.** Wokwi's is an eight-pin *SPI* module;
+  this bench drives the four-pin *I2C* breakout its sketches talk to. Two
+  different parts, and the pin count alone rules out the swap.
+
+**State is pushed by property, not attribute.** Several element properties are
+booleans where the attribute string `"false"` is truthy. `LED.brightness` takes
+the forward bias the solver reports, `ILI9341.canvas` is painted directly from
+the controller's framebuffer, and the Uno's L lamp follows digital 13.
+
+### 6.2b Rejected: freesvg.org
+
+CC0 public domain, but a general clip-art library aimed at Cricut cutting
+machines, not an electronics component library. Its `electronics` tag is
+dominated by iPods, phones, speakers and monitors; its `capacitor` tag is mostly
+circuit-diagram *symbols* rather than physical parts; and there is no breadboard,
+microcontroller board, seven-segment module or shift register to be found.
+Individual items are CC0 and some are decent -- the electrolytic capacitor
+artwork is good -- but the files carry no pin metadata and are authored at
+arbitrary canvas sizes (one declares `width="210mm"`), so every pin position would
+be hand-specified and every part rescaled by eye.
+
+Worth knowing: Wokwi took the freesvg.org potentiometer and heavily modified it
+rather than using it directly. The source is a starting point, not a library.
+
+### 6.3 Jumper routing: orthogonal, on purpose
+
+Jumpers are drawn as polylines of horizontal and vertical runs with a rounded
+corner at each turn, routed along whichever axis dominates the connection and
+offset onto a lane so parallel wires do not overlap.
+
+**Why:** a bench reads as a bench because its wires turn at right angles. A
+diagonal jumper from a header pin to a breadboard hole looks like a scratch on the
+screen; the same jumper routed across and down, with the corner eased off, looks
+like wire. This is the single largest visual difference between a plausible bench
+and a convincing one, and it costs about a hundred lines rather than a dependency.
