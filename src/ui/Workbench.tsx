@@ -13,6 +13,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bench, Terminal } from '../sim/bench';
 import { PartFootprint, type FootprintState } from './footprints';
+import { HardwareDefs } from './hardware';
+import { routeWire } from './wire-route';
+import { renderedSizeMm } from './wokwi';
 
 export interface WorkbenchProps {
   bench: Bench;
@@ -23,11 +26,22 @@ export interface WorkbenchProps {
   wireMode: boolean;
   onSelect(partId: string | null): void;
   onMovePart(partId: string, x: number, y: number): void;
+  /** Forwarded from parts whose own element detects a press. */
+  onTogglePressed(partId: string, pressed: boolean): void;
   onRouteWire(from: Terminal, to: Terminal): void;
 }
 
 const MIN_VIEW_WIDTH_MM = 24;
 const MAX_VIEW_WIDTH_MM = 900;
+/**
+ * How far, in CSS pixels, the pointer must travel before a press counts as a
+ * drag rather than a click.
+ *
+ * Generous enough to absorb hand tremor on a click, small enough that nudging a
+ * part on the bench still moves it.
+ */
+const CLICK_SLOP_PX = 4;
+
 /** How close a click must land to a hole to count as hitting it. */
 const HOLE_PICK_RADIUS_MM = 2;
 /** Zoom applied per millimetre of wheel travel, before the per-device scaling. */
@@ -69,6 +83,7 @@ export function Workbench({
   onSelect,
   onMovePart,
   onRouteWire,
+  onTogglePressed,
 }: WorkbenchProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [wireAnchor, setWireAnchor] = useState<Terminal | null>(null);
@@ -77,6 +92,10 @@ export function Workbench({
   const [view, setView] = useState<ViewBox>({ x: -12, y: -10, width: 428 });
   const [aspect, setAspect] = useState(DEFAULT_ASPECT);
   const dragRef = useRef<DragState | null>(null);
+  /** Part id under the pointer at press time; see `onPointerDown`. */
+  const pressedPartRef = useRef<string | null>(null);
+  /** Where the pointer went down, in client pixels; see `onPointerMove`. */
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
 
   /** Visible height, always the same shape as the canvas it is drawn into. */
   const viewHeight = view.width / aspect;
@@ -116,10 +135,18 @@ export function Workbench({
 
   const onPointerDown = (event: React.PointerEvent) => {
     movedRef.current = false;
+    pressRef.current = { x: event.clientX, y: event.clientY };
     const world = toWorld(event.clientX, event.clientY);
-    const partId = (event.target as SVGElement)
+    /*
+     * Which part was pressed is decided here and remembered, because by the
+     * time the click event arrives its target has been retargeted to the
+     * capturing `<svg>` by setPointerCapture. Pointer-down hit-testing still
+     * sees the real target, so this is the one moment it can be read.
+     */
+    const partId = (event.target as Element)
       .closest('[data-part-id]')
       ?.getAttribute('data-part-id');
+    pressedPartRef.current = partId ?? null;
 
     // Middle button, shift, or empty space all pan. Dragging a part does not.
     // Capture either way: a drag that wanders off the canvas has to keep
@@ -154,7 +181,22 @@ export function Workbench({
 
     const drag = dragRef.current;
     if (!drag) return;
-    movedRef.current = true;
+
+    /*
+     * A press only becomes a drag once the pointer has actually travelled.
+     *
+     * A hand is never perfectly still, so a real click almost always emits a
+     * pointermove or two between press and release. Treating any movement as a
+     * drag meant a click could never complete, which is why a part could not be
+     * picked no matter how carefully it was clicked. Below the threshold
+     * nothing moves at all, so a shaky click stays a click.
+     */
+    const press = pressRef.current;
+    if (press && !movedRef.current) {
+      const travelled = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+      if (travelled > CLICK_SLOP_PX) movedRef.current = true;
+    }
+    if (!movedRef.current) return;
 
     if (drag.kind === 'pan') {
       const svg = svgRef.current;
@@ -171,6 +213,7 @@ export function Workbench({
 
   const endDrag = (event: React.PointerEvent) => {
     dragRef.current = null;
+    pressRef.current = null;
     const target = event.currentTarget as Element;
     if (target.hasPointerCapture?.(event.pointerId)) {
       target.releasePointerCapture(event.pointerId);
@@ -225,10 +268,12 @@ export function Workbench({
       return;
     }
 
-    const partId = (event.target as SVGElement)
-      .closest('[data-part-id]')
-      ?.getAttribute('data-part-id');
-    if (!partId) onSelect(null);
+    /*
+     * A click that did not turn into a drag selects whatever was pressed, and
+     * clicking bare bench clears the selection. A drag deliberately does not,
+     * so moving a part does not also change what the inspector is showing.
+     */
+    onSelect(pressedPartRef.current);
   };
 
   /** The hole under the cursor, which is what a click would pick. */
@@ -276,46 +321,60 @@ export function Workbench({
         </pattern>
       </defs>
 
+      <HardwareDefs />
+
       <rect x={view.x} y={view.y} width={view.width} height={viewHeight} fill="url(#bench-grid)" />
 
+      {/*
+       * Each jumper is drawn twice: a dark casing that reads as the shadow the
+       * wire casts on the board, and the coloured insulation over it. Both take
+       * the same route, so the corner radius stays put at any zoom.
+       */}
       <g data-layer="wires" pointerEvents="none">
-        {bench.wires.map((wire) => {
-          const from = bench.terminals[wire.from];
-          const to = bench.terminals[wire.to];
-          return (
-            <line
-              key={wire.id}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke="#0b1220"
-              strokeWidth={1.5 / scale + 0.8}
-              strokeLinecap="round"
-            />
-          );
-        })}
-        {bench.wires.map((wire) => {
-          const from = bench.terminals[wire.from];
-          const to = bench.terminals[wire.to];
-          return (
-            <line
-              key={`${wire.id}-core`}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke={wire.colour}
-              strokeWidth={0.9 / scale + 0.35}
-              strokeLinecap="round"
-            />
-          );
-        })}
+        {bench.wires.map((wire, index) => (
+          <path
+            key={wire.id}
+            d={routeWire(
+              bench.terminals[wire.from],
+              bench.terminals[wire.to],
+              index,
+            )}
+            fill="none"
+            stroke="#05080d"
+            strokeWidth={1.6 / scale + 0.7}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.85}
+          />
+        ))}
+        {bench.wires.map((wire, index) => (
+          <path
+            key={`${wire.id}-core`}
+            d={routeWire(
+              bench.terminals[wire.from],
+              bench.terminals[wire.to],
+              index,
+            )}
+            fill="none"
+            stroke={wire.colour}
+            strokeWidth={0.9 / scale + 0.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
       </g>
 
       <g data-layer="parts">
         {bench.parts.map((part) => {
           const selected = part.id === selectedId;
+          /*
+           * The outline has to bound what is actually drawn, which for a part
+           * Wokwi covers is the element's own size rather than the size its
+           * definition declares. Sizing it from the definition left the box
+           * floating beside the artwork on the smaller parts and cutting through
+           * it on the larger ones.
+           */
+          const drawn = renderedSizeMm(part.definition);
           return (
             <g
               key={part.id}
@@ -326,8 +385,8 @@ export function Workbench({
                 <rect
                   x={-1.5}
                   y={-1.5}
-                  width={part.definition.widthMm + 3}
-                  height={part.definition.heightMm + 3}
+                  width={drawn.widthMm + 3}
+                  height={drawn.heightMm + 3}
                   rx={2}
                   fill="none"
                   stroke="#38bdf8"
@@ -335,21 +394,20 @@ export function Workbench({
                   strokeDasharray={`${1.4} ${1.1}`}
                 />
               )}
-              <PartFootprint part={part} state={renderState} />
+              <PartFootprint part={part} state={renderState} onTogglePressed={onTogglePressed} />
             </g>
           );
         })}
       </g>
 
       {wireAnchor && pointerMm && (
-        <line
-          x1={wireAnchor.x}
-          y1={wireAnchor.y}
-          x2={pointerMm.x}
-          y2={pointerMm.y}
+        <path
+          d={routeWire(wireAnchor, pointerMm, bench.wires.length)}
+          fill="none"
           stroke="#38bdf8"
-          strokeWidth={0.6}
-          strokeDasharray="1.5 1.2"
+          strokeWidth={0.9 / scale + 0.4}
+          strokeDasharray="2.2 1.6"
+          strokeLinecap="round"
           pointerEvents="none"
         />
       )}
