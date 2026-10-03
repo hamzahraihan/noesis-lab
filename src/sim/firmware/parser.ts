@@ -49,7 +49,7 @@ export interface Token {
 }
 
 const KEYWORDS = new Set([
-  'void', 'int', 'float', 'double', 'bool', 'char', 'long', 'short',
+  'void', 'int', 'float', 'double', 'bool', 'char', 'byte', 'long', 'short',
   'unsigned', 'signed', 'const', 'static', 'volatile', 'true', 'false',
   'if', 'else', 'while', 'do', 'for', 'return', 'break', 'continue',
   'switch', 'case', 'default', 'HIGH', 'LOW', 'INPUT', 'OUTPUT',
@@ -260,9 +260,17 @@ export interface Program {
 // ---------------------------------------------------------------------------
 
 /** Type keywords that may precede a declarator, longest match first. */
+/**
+ * The type keywords the language accepts in a declaration.
+ *
+ * `byte` is Arduino's own name for an unsigned 8-bit value, and a sketch
+ * reading an I2C register gets one back from `Wire.read` whether it asked for
+ * a `byte` or not -- so rejecting the word would reject correct code over a
+ * spelling rather than over anything the VM does differently.
+ */
 const TYPE_KEYWORDS = [
   'unsigned long', 'unsigned', 'signed', 'long long', 'long', 'short',
-  'void', 'int', 'float', 'double', 'bool', 'char',
+  'void', 'int', 'float', 'double', 'bool', 'char', 'byte',
 ];
 
 class Parser {
