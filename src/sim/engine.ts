@@ -119,7 +119,12 @@ export class Engine {
         this.relayEnergized.delete(partId);
       }
     }
-    this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized);
+    for (const partId of [...this.sonarMeasuring.keys()]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.sonarMeasuring.delete(partId);
+      }
+    }
+    this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
     this.solution = null;
     this.previousVoltages = null;
     this.pinSourceIndex.clear();
@@ -155,6 +160,16 @@ export class Engine {
    * Pruned on rebuild so a removed relay leaves no stale entry behind.
    */
   private readonly relayEnergized = new Map<string, boolean>();
+
+  /**
+   * Sonar parts with an echo measurement running, keyed by part id.
+   *
+   * Written by the `pulseIn` service around the wait it reports (not
+   * derived from volts like the relay map), so the ECHO line is high only
+   * while a measurement runs. Changed through `setSonarMeasuring`, which
+   * rebuilds the netlist when the flag moves.
+   */
+  private readonly sonarMeasuring = new Map<string, boolean>();
 
   /** Character LCD parts, keyed by part id. */
   private readonly lcds = new Map<string, Lcd1602>();
@@ -537,7 +552,7 @@ export class Engine {
       // An armature moved: the contact elements above are stale, so rebuild
       // the netlist once and re-solve. The coil is an independent resistor,
       // so its volts barely move with the contacts and one pass converges.
-      netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized);
+      netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
       this.netlist = netlist;
       const rebuilt = this.buildElements(netlist, timeMs);
       elements = rebuilt.elements;
@@ -559,6 +574,20 @@ export class Engine {
     return solution;
   }
 
+  /**
+   * Arms or releases a sonar echo measurement.
+   *
+   * Rebuilds the netlist when the flag moves so the ECHO line follows
+   * within the same service call; settling after that solves the fresh
+   * topology. A no-op when nothing changes.
+   */
+  setSonarMeasuring(partId: string, measuring: boolean): void {
+    if ((this.sonarMeasuring.get(partId) ?? false) === measuring) return;
+    if (measuring) this.sonarMeasuring.set(partId, true);
+    else this.sonarMeasuring.delete(partId);
+    this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
+    this.solution = null;
+  }
   /**
    * Refreshes relay armature state from the solved coil volts.
    *
