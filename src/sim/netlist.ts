@@ -18,6 +18,7 @@ import { DIODE_PROFILES, GROUND, type DiodeProfile, type Element } from './eleme
 import { wireResistanceOhms } from './units';
 import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
 import type { DynamicState } from './catalog';
+import { RELAY_COIL_OHMS } from './relay';
 import { WIPER_KNOB } from './passives';
 import {
   COMPARATOR_THRESHOLD_KNOB,
@@ -205,6 +206,7 @@ function elementsForPart(
   part: PartInstance,
   pinNode: ReadonlyMap<string, number>,
   state: DynamicState,
+  relayEnergized: ReadonlyMap<string, boolean> = new Map(),
 ): Element[] {
   const nodeAt = (pinId: string): number => pinNode.get(`${part.id}:${pinId}`) ?? GROUND;
   const component = part.definition.component;
@@ -599,6 +601,45 @@ function elementsForPart(
       return elements;
     }
 
+    case 'relay': {
+      // One coil across COIL+/COIL-, two poles ganged. Energized state comes
+      // from the engine (which solved the coil volts last tick) because the
+      // netlist is built before solving -- reading volts here would be the
+      // answer to this same solve. Absent state rests on NC, never shorting.
+      const energized = relayEnergized.get(part.id) ?? false;
+      const pole = (poleId: string, noId: string, ncId: string): Element[] => [
+        {
+          kind: 'resistor',
+          a: nodeAt(poleId),
+          b: nodeAt(energized ? noId : ncId),
+          ohms: SWITCH_CLOSED_OHMS,
+          label: energized ? 'closed' : 'closed',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt(poleId),
+          b: nodeAt(energized ? ncId : noId),
+          ohms: SWITCH_OPEN_OHMS,
+          label: 'open',
+        },
+      ];
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('COIL+'),
+          b: nodeAt('COIL-'),
+          ohms: RELAY_COIL_OHMS,
+          label: 'coil',
+        },
+        ...pole('P1', 'NO1', 'NC1'),
+        ...pole('P2', 'NO2', 'NC2'),
+      ];
+    }
+
+    case 'rotary-encoder':
+      // Implemented in Task 3; resting stub keeps the switch exhaustive.
+      return [];
+
     case 'mcu':
     case 'breadboard':
     case 'display':
@@ -622,7 +663,11 @@ function isDegenerate(element: Element): boolean {
   return element.kind !== 'ground' && element.a === element.b;
 }
 
-export function buildNetlist(bench: Bench, state: DynamicState): Netlist {
+export function buildNetlist(
+  bench: Bench,
+  state: DynamicState,
+  relayEnergized: ReadonlyMap<string, boolean> = new Map(),
+): Netlist {
   const sets = new DisjointSet(bench.terminals.length);
 
   // Internal part connections: breadboard strips and rails, MCU ground planes.
@@ -679,7 +724,7 @@ export function buildNetlist(bench: Bench, state: DynamicState): Netlist {
 
   const elements: Element[] = [];
   for (const part of bench.parts) {
-    for (const element of elementsForPart(part, pinNode, state)) {
+    for (const element of elementsForPart(part, pinNode, state, relayEnergized)) {
       if (!isDegenerate(element)) elements.push(element);
     }
   }
