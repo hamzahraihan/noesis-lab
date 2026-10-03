@@ -78,7 +78,45 @@ export type ComponentSpec =
       readonly kind: 'display';
       readonly controller: 'ssd1306' | 'ili9341';
       readonly address: number;
-    };
+    }
+  | { readonly kind: 'photoresistor' }
+  | { readonly kind: 'thermistor' }
+  | { readonly kind: 'tilt-switch' }
+  | { readonly kind: 'slide-switch' }
+  | { readonly kind: 'joystick' }
+  | { readonly kind: 'rgb-led' }
+  | { readonly kind: 'buzzer' }
+  | { readonly kind: 'sensor-module'; readonly variant: SensorVariant }
+  | { readonly kind: 'dip-switch'; readonly ways: number }
+  | { readonly kind: 'slide-potentiometer'; readonly ohms: number }
+  | { readonly kind: 'led-bar-graph' }
+  | { readonly kind: 'ir-receiver' }
+  | { readonly kind: 'keypad' }
+  | { readonly kind: 'i2c-sensor'; readonly device: I2cSensorVariant }
+  | { readonly kind: 'lcd'; readonly variant: LcdVariant }
+  | { readonly kind: 'servo' }
+  | { readonly kind: '7segment' };
+
+/**
+ * The comparator sensor boards, which are the same circuit however many times
+ * it is drawn: a sensor, a comparator with a trimmer, and a pull-up.
+ *
+ * One kind rather than one per board because they are one circuit -- the
+ * variant picks the artwork and the label, nothing else.
+ */
+export type SensorVariant = 'pir' | 'sound' | 'soundSmall' | 'heartbeat' | 'gas' | 'flame';
+
+/**
+ * A four-wire I2C module that is not a display.
+ *
+ * One kind for the three of them, as with the comparator sensor family: they
+ * contribute no circuit of their own, they answer at an address, and what a
+ * device does with a read is the device's business.
+ */
+export type I2cSensorVariant = 'ds1307' | 'mpu6050' | 'hx711';
+
+/** The character LCDs, which differ only in how much glass they have. */
+export type LcdVariant = '1602' | '2004';
 
 export interface PartDefinition {
   readonly id: string;
@@ -89,6 +127,22 @@ export interface PartDefinition {
   readonly component: ComponentSpec;
   readonly pins: readonly PinSpec[];
   readonly boardPins?: readonly BoardPin[];
+  /**
+   * Controls this part exposes to the operator.
+   *
+   * Declared here rather than in the inspector so that the part is the only
+   * thing that has to know what it can be turned to: the netlist reads a knob to
+   * work out its resistance, the artwork reads the same knob to move, and the
+   * inspector reads the specs to know what to draw.
+   */
+  readonly knobs?: readonly KnobSpec[];
+  /**
+   * True for a part with a momentary contact the operator presses and holds.
+   *
+   * Momentary contacts are held in state rather than described by a knob,
+   * because they return to open on their own and are never left at a value.
+   */
+  readonly momentary?: boolean;
   /** Body colour for the SVG renderer, as a hex string. */
   readonly bodyColour: string;
   /** Panel resolution, for a display part. The pixels live in the controller. */
@@ -97,18 +151,75 @@ export interface PartDefinition {
   readonly legendColour: string;
 }
 
-/** Knobs a part exposes that change what it does electrically, not just how it looks. */
-export interface DynamicState {
-  /** Part ids of currently pressed buttons. */
-  readonly pressedButtons: ReadonlySet<string>;
-  /** Part id to wiper position in 0..1 for each potentiometer. */
-  readonly potPositions: ReadonlyMap<string, number>;
+/**
+ * One control the operator turns on a part.
+ *
+ * The value is in whatever unit the part actually works in -- degrees, per cent
+ * of travel, lux -- so the readout says what the part is doing rather than a
+ * bare fraction, and the model reads it in the unit its own formula uses.
+ */
+export interface KnobSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  /** Set on a two-position control, which reads better as a switch. */
+  readonly toggle?: boolean;
+  /** Set when the value means something in the world; shown in the readout. */
+  readonly unit?: string;
+  /** Where the part sits until it is touched. */
+  readonly defaultValue: number;
 }
 
-export const NO_DYNAMIC_STATE: DynamicState = {
-  pressedButtons: new Set(),
-  potPositions: new Map(),
-};
+/**
+ * What the operator is doing to the parts right now.
+ *
+ * The netlist and the renderers read one of these rather than each keeping its
+ * own idea of what is pressed or turned, so a part cannot be solved at one knob
+ * position and drawn at another.
+ */
+export class DynamicState {
+  private readonly pressed: Set<string>;
+  private readonly values: Map<string, number>;
+
+  constructor(
+    pressed: Iterable<string> = [],
+    values: ReadonlyMap<string, number> = new Map(),
+  ) {
+    this.pressed = new Set(pressed);
+    this.values = new Map(values);
+  }
+
+  /** Whether a momentary contact is being held down. */
+  isPressed(partId: string): boolean {
+    return this.pressed.has(partId);
+  }
+
+  /**
+   * A knob's current value, held inside the range its part declares.
+   *
+   * The clamp is here rather than at the setter because it is the only place
+   * the model's own arithmetic depends on the bound being true.
+   */
+  knob(partId: string, spec: KnobSpec): number {
+    const value = this.values.get(`${partId}:${spec.id}`) ?? spec.defaultValue;
+    return Math.min(spec.max, Math.max(spec.min, value));
+  }
+
+  /** Holds a momentary contact down or lets it spring back. */
+  setPressed(partId: string, pressed: boolean): void {
+    if (pressed) this.pressed.add(partId);
+    else this.pressed.delete(partId);
+  }
+
+  /** Moves a knob. Out-of-range values are clamped on the way in. */
+  setKnob(partId: string, spec: KnobSpec, value: number): void {
+    this.values.set(`${partId}:${spec.id}`, Math.min(spec.max, Math.max(spec.min, value)));
+  }
+}
+
+export const NO_DYNAMIC_STATE = new DynamicState();
 
 /** Rotates a pin offset by `rotation` quarters of a turn, clockwise. */
 export function rotateOffset(
