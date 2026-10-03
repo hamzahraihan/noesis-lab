@@ -15,11 +15,15 @@
 
 import type { PartInstance } from '../sim/bench';
 import type { PartDefinition, PinSpec } from '../sim/catalog';
+import { DynamicState } from '../sim/catalog';
 import { DIODE_PROFILES } from '../sim/elements';
+import { WIPER_KNOB } from '../sim/passives';
 import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '../sim/display/ili9341';
 import { Ssd1306 } from '../sim/display/ssd1306';
 import type { DisplayController } from '../sim/display/part';
+import type { Servo } from '../sim/devices/servo';
+import type { Lcd1602 } from '../sim/devices/lcd';
 import {
   AxialLeads,
   BarrelJack,
@@ -51,10 +55,21 @@ import '@wokwi/elements';
 export interface FootprintState {
   /** Live controller models for display parts, keyed by part id. */
   readonly displays?: ReadonlyMap<string, DisplayController>;
+  /** Servo parts, so their horns point where the sketch told them to. */
+  readonly servos?: ReadonlyMap<string, Servo>;
+  /** Character LCD parts, so their glass shows what reached it. */
+  readonly lcds?: ReadonlyMap<string, Lcd1602>;
+  /**
+   * How many parts the bench holds.
+   *
+   * Carried so a renderer's state object changes when a part is added, which an
+   * example does without replacing the simulation. Nothing reads it.
+   */
+  readonly parts?: number;
   /** `${partId}:${pinId}` to volts on that pin's net. */
   readonly pinVolts: ReadonlyMap<string, number>;
-  readonly pressedButtons: ReadonlySet<string>;
-  readonly potPositions: ReadonlyMap<string, number>;
+  /** What the operator is doing to the parts, read live as this is drawn. */
+  readonly controls: DynamicState;
 }
 
 export const PIN_RADIUS_MM = 0.9;
@@ -731,7 +746,7 @@ function ButtonBody({
   state: FootprintState;
   part: PartInstance;
 }) {
-  const pressed = state.pressedButtons.has(part.id);
+  const pressed = state.controls.isPressed(part.id);
   const travel = pressed ? 0.42 : 0;
 
   return (
@@ -758,7 +773,7 @@ function PotentiometerBody({
   state: FootprintState;
   part: PartInstance;
 }) {
-  const turn = state.potPositions.get(part.id) ?? 0.5;
+  const turn = state.controls.knob(part.id, WIPER_KNOB);
   const angle = -140 + turn * 280;
 
   return (
