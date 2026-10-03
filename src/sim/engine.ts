@@ -13,8 +13,10 @@
  * handing the LED an averaged voltage.
  */
 import { createController, type DisplayController } from './display/part';
+import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
+import { Servo } from './devices/servo';
+import { createLcd, type Lcd1602 } from './devices/lcd';
 import { Ili9341 } from './display/ili9341';
-import { Ssd1306 } from './display/ssd1306';
 
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
@@ -46,7 +48,10 @@ export interface EngineOptions {
  */
 const SUPPLY_RAIL_LABELS: Readonly<Record<string, string>> = {
   esp32: '3V3',
+  rp2040: '3V3',
   uno: '5V',
+  mega: '5V',
+  nano: '5V',
 };
 
 export class Engine {
@@ -122,11 +127,24 @@ export class Engine {
           this.netlist.pinNode.get(`${this.mcuPart.id}:${railPin.id}`) ?? GROUND;
       }
     }
-    this.rebuildDisplays();
+    this.rebuildBus();
   }
 
-  /** Display parts on the bench, keyed by part id. */
+  /** Display parts on the bench, keyed by part id, for the renderer to read. */
   private readonly displays = new Map<string, DisplayController>();
+
+  /** Everything on the bench that answers to an I2C address. */
+  private readonly devices = new Map<string, I2cDevice>();
+
+  /** Servo parts, keyed by part id, for the renderer and the firmware port. */
+  private readonly servos = new Map<string, Servo>();
+
+  /** Character LCD parts, keyed by part id. */
+  private readonly lcds = new Map<string, Lcd1602>();
+
+  /** Last level seen on each LCD's enable line, to spot its rising edge. */
+  private readonly lcdStrobe = new Map<string, boolean>();
+
 
   /** Nets the firmware's I2C pins are driving. */
   private i2cNets = new Set<number>();
@@ -134,8 +152,19 @@ export class Engine {
   /** Nets the firmware's SPI pins are driving. */
   private spiNets = new Set<number>();
 
-  private rebuildDisplays(): void {
+  /**
+   * Finds the parts that are on a bus at all, and works out which bus.
+   *
+   * Each bus exists wherever the firmware's own pins sit, so a device reaches
+   * one only by being wired there. That is why an unwired screen stays dark and
+   * an unwired sensor reads nothing, instead of both mysteriously working.
+   */
+  private rebuildBus(): void {
     this.displays.clear();
+    this.devices.clear();
+    this.servos.clear();
+    this.lcds.clear();
+    this.lcdStrobe.clear();
     this.i2cNets.clear();
     this.spiNets.clear();
     const netlist = this.currentNetlist;
@@ -144,11 +173,18 @@ export class Engine {
     for (const part of this.bench.parts) {
       const controller = createController(part.definition);
       if (controller) this.displays.set(part.id, controller);
+      /*
+       * A display that speaks I2C is one model, not two. Registering a second
+       * copy here would let the bus write into a framebuffer the renderer
+       * never reads, and the panel would sit dark on a bench wired correctly.
+       */
+      const device = controller && isI2cDevice(controller) ? controller : createI2cDevice(part.definition);
+      if (device) this.devices.set(part.id, device);
+      if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
+      const lcd = createLcd(part.definition);
+      if (lcd) this.lcds.set(part.id, lcd);
     }
 
-    // Each bus exists wherever the firmware's own pins sit. A display reaches
-    // one only by being wired there, which is why an unwired screen stays dark
-    // instead of mysteriously working.
     if (!mcuPart) return;
     for (const gpio of this.mcu.i2cPins) {
       const net = this.netOfBoardGpio(netlist, mcuPart.id, gpio);
@@ -158,6 +194,94 @@ export class Engine {
       const net = this.netOfBoardGpio(netlist, mcuPart.id, gpio);
       if (net !== null) this.spiNets.add(net);
     }
+
+    for (const partId of this.devices.keys()) {
+      this.devices.get(partId)!.onBus = this.isOnI2cBus(partId);
+    }
+  }
+
+  /**
+   * Feeds the character LCDs whatever their pins are actually saying.
+   *
+   * An HD44780 has no bus: a byte arrives as the enable line strobed high,
+   * with RS saying data or command and D4-D7 carrying the nibble. Decoding it
+   * from the pins rather than from the call that asked for it is what makes an
+   * LCD wired to the wrong pins stay blank instead of working anyway.
+   */
+  private pumpLcds(): void {
+    for (const [partId, lcd] of this.lcds) {
+      const nets = this.lcdNets(partId);
+      if (!nets) continue;
+      const high = this.mcu.board.logicVolts / 2;
+      /*
+       * One byte per rising edge, not per solve. Enable is held high across
+       * however many solves the solver takes, so latching on every one of them
+       * turns a single character into as many as the solver happened to need --
+       * and latching on the falling edge as well drops every other byte.
+       */
+      const strobe = this.voltageOfNet(nets.enable) >= high;
+      const previous = this.lcdStrobe.get(partId) ?? false;
+      /*
+       * The edge is consumed by the first solve that sees it: enable is held
+       * high across however many solves the solver takes, and a latch that
+       * re-armed on every one of them would turn one character into as many as
+       * the solver happened to need.
+       */
+      this.lcdStrobe.set(partId, false);
+      if (!strobe || previous) continue;
+
+      /*
+       * D4 is the panel's *most* significant bit. A four-bit HD44780 takes its
+       * command and data a nibble at a time, high nibble first, so D4 carries
+       * bit 4 and D7 carries bit 1 -- which is the opposite of the order a
+       * reader expects and the reason a first implementation sends zeros.
+       */
+      /*
+       * The five data lines carry a nibble, highest bit on D4, and the panel
+       * shifts the two halves together itself -- which is what an HD44780 does,
+       * and why it needs five data pins where eight would do the same job.
+       */
+      const value =
+        (this.voltageOfNet(nets.d4) ? 0b10000 : 0) |
+        (this.voltageOfNet(nets.d5) ? 0b01000 : 0) |
+        (this.voltageOfNet(nets.d6) ? 0b00100 : 0) |
+        (this.voltageOfNet(nets.d7) ? 0b00010 : 0) |
+        (this.voltageOfNet(nets.d0) ? 0b00001 : 0) |
+        0;
+      lcd.receive(this.voltageOfNet(nets.rs) >= high, value);
+    }
+  }
+
+  /** An LCD's signal nets, or null when it is not wired to anything usable. */
+  private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
+    const netlist = this.currentNetlist;
+    const net = (pin: string): number => {
+      const found = netlist.pinNode.get(`${partId}:${pin}`);
+      return found === undefined ? GROUND : found;
+    };
+    // A data line on the ground plane is a line the panel cannot read: the
+    // nibble would come out as a run of zeroes no matter what the sketch did.
+    const data = [net('D0'), net('D4'), net('D5'), net('D6'), net('D7')];
+    if (data.some((n) => n === GROUND)) return null;
+    return {
+      rs: net('RS'),
+      enable: net('E'),
+      d0: data[0],
+      d4: data[1],
+      d5: data[2],
+      d6: data[3],
+      d7: data[4],
+    };
+  }
+
+  /** The servo on a part, or undefined when it is not one. */
+  servo(partId: string): Servo | undefined {
+    return this.servos.get(partId);
+  }
+
+  /** The character LCD on a part, or undefined when it is not one. */
+  lcd(partId: string): Lcd1602 | undefined {
+    return this.lcds.get(partId);
   }
 
   /** Net of a board pin by firmware pin number, or null when not routable. */
@@ -186,18 +310,37 @@ export class Engine {
   }
 
   /**
-   * Delivers one I2C byte to any display wired onto that bus.
+   * Asks whichever device is at an address for `count` bytes.
    *
-   * Returns whether a device claimed the address, so an unplugged screen makes
+   * Empty when nothing on the bus answers, which is what a sketch sees when
+   * the device is unplugged or wired to the wrong pins -- and, unlike a write,
+   * a read has nothing to acknowledge, so silence is the only report there is.
+   */
+  requestI2C(address: number, count: number): readonly number[] {
+    for (const [partId, device] of this.devices) {
+      if (!device.onBus || device.address !== (address & 0x7f)) continue;
+      if (!this.isOnI2cBus(partId)) continue;
+      return device.read(count);
+    }
+    return [];
+  }
+
+  /** The I2C device a part is, if it is one. */
+  i2cDevice(partId: string): I2cDevice | undefined {
+    return this.devices.get(partId);
+  }
+
+  /**
+   * Delivers one written byte to any device on the bus.
+   *
+   * Returns whether a device claimed the address, so an unplugged sensor makes
    * the transaction come back unacknowledged, as it would on a real bench.
    */
-  deliverI2C(address: number, byte: number, isControlPosition: boolean): boolean {
+  writeI2C(address: number, byte: number, isControlPosition: boolean): boolean {
     let claimed = false;
-    for (const [partId, controller] of this.displays) {
-      // Only the OLED speaks I2C; a TFT on the same wires stays silent.
-      if (!(controller instanceof Ssd1306)) continue;
-      if (!this.isOnI2cBus(partId)) continue;
-      if (controller.receive(address, byte, isControlPosition)) claimed = true;
+    for (const [partId, device] of this.devices) {
+      if (device.address !== (address & 0x7f) || !this.isOnI2cBus(partId)) continue;
+      if (device.receive(byte, isControlPosition)) claimed = true;
     }
     return claimed;
   }
@@ -378,6 +521,7 @@ export class Engine {
     // Capture last, so a probe sees the voltages this solve produced rather
     // than the previous step's.
     this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
+    this.pumpLcds();
     return solution;
   }
 
@@ -404,6 +548,14 @@ export class Engine {
     // stamped rather than merely consulted.
     const meterElement = this.meter?.stamp();
     if (meterElement) elements.push(meterElement);
+    // A servo is a load the firmware changes by command, so it is stamped here
+    // rather than frozen into the netlist like the passive parts.
+    for (const [partId, servo] of this.servos) {
+      const supply = netlist.pinNode.get(`${partId}:V+`);
+      const ground = netlist.pinNode.get(`${partId}:GND`);
+      if (supply === undefined || ground === undefined) continue;
+      elements.push({ kind: 'resistor', a: supply, b: ground, ohms: servo.loadOhms, label: 'servo' });
+    }
     let internalNet = netlist.nodeCount;
     let sourceOrdinal = 0;
     this.pinSourceIndex.clear();
