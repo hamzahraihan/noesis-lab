@@ -21,6 +21,7 @@ import type { DynamicState } from './catalog';
 import { RELAY_COIL_OHMS } from './relay';
 import { WIPER_KNOB } from './passives';
 import { DETENT_KNOB, quadratureAt } from './encoder';
+import { WINDING_OHMS } from './stepper';
 import {
   COMPARATOR_THRESHOLD_KNOB,
   DIP_WAY_KNOBS,
@@ -637,6 +638,32 @@ function elementsForPart(
         ...pole('P2', 'NO2', 'NC2'),
       ];
     }
+
+    case 'stepper': {
+      // Two windings, both ends driven by the sketch. Position lives in
+      // the engine (coil history); here the windings are plain resistors
+      // so they draw real current through the pin output impedance.
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('A+'),
+          b: nodeAt('A-'),
+          ohms: WINDING_OHMS,
+          label: 'winding A',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('B+'),
+          b: nodeAt('B-'),
+          ohms: WINDING_OHMS,
+          label: 'winding B',
+        },
+      ];
+    }
+
+    case 'biaxial-stepper':
+      // Twin axes land in Task 4; resting stub keeps the switch exhaustive.
+      return [];
 
     case 'rotary-encoder': {
       // Board pull-ups hold CLK/DT high; the detent knob walks the Gray

@@ -15,6 +15,7 @@
 import { createController, type DisplayController } from './display/part';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
 import { coilEnergized } from './relay';
+import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
 import { Servo } from './devices/servo';
 import { createLcd, type Lcd1602 } from './devices/lcd';
 import { Ili9341 } from './display/ili9341';
@@ -124,6 +125,11 @@ export class Engine {
         this.sonarMeasuring.delete(partId);
       }
     }
+    for (const partId of [...this.stepperState.keys()]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.stepperState.delete(partId);
+      }
+    }
     this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
     this.solution = null;
     this.previousVoltages = null;
@@ -160,6 +166,12 @@ export class Engine {
    * Pruned on rebuild so a removed relay leaves no stale entry behind.
    */
   private readonly relayEnergized = new Map<string, boolean>();
+
+  /** Stepper shaft state: previous winding polarities plus angle, per axis. */
+  private readonly stepperState = new Map<
+    string,
+    Array<{ prevA: WindingPolarity; prevB: WindingPolarity; angle: number }>
+  >();
 
   /**
    * Sonar parts with an echo measurement running, keyed by part id.
@@ -565,6 +577,9 @@ export class Engine {
       this.solution = solution;
       this.pumpRelays();
     }
+    // Shafts only move, never change topology, so one pump after the final
+    // solve covers both paths above with no re-solve.
+    this.pumpSteppers();
     // Capacitor history only cares about real nets, so trim the internal rows.
     this.previousVoltages = solution.voltages.slice(0, this.currentNetlist.nodeCount);
     // Capture last, so a probe sees the voltages this solve produced rather
@@ -587,6 +602,55 @@ export class Engine {
     else this.sonarMeasuring.delete(partId);
     this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
     this.solution = null;
+  }
+  /** Shaft angle of a stepper part in degrees; axis 2 on a biaxial part. */
+  stepperAngle(partId: string, axis: 1 | 2 = 1): number {
+    return this.stepperState.get(partId)?.[axis - 1]?.angle ?? 0;
+  }
+
+  /**
+   * Advances stepper shafts from solved coil volts.
+   *
+   * Reads each winding differentially with a dead band, so identical
+   * levels on both ends hold position instead of stepping. Runs after
+   * the solve like the relay pump; shafts only move, never jump, so no
+   * re-solve is needed -- contacts are unaffected.
+   */
+  private pumpSteppers(): void {
+    const netlist = this.netlist;
+    if (!netlist) return;
+    const level = (partId: string, pinId: string): number => {
+      const net = netlist.pinNode.get(`${partId}:${pinId}`) ?? GROUND;
+      return this.voltageOfNet(net);
+    };
+    for (const part of this.bench.parts) {
+      const kind = part.definition.component.kind;
+      const axes = kind === 'stepper' ? [['A', 'B']] : kind === 'biaxial-stepper' ? [['A1', 'B1'], ['A2', 'B2']] : null;
+      if (!axes) continue;
+      let state = this.stepperState.get(part.id);
+      if (!state || state.length !== axes.length) {
+        state = axes.map(() => ({ prevA: 0 as WindingPolarity, prevB: 0 as WindingPolarity, angle: state?.[0]?.angle ?? 0 }));
+        this.stepperState.set(part.id, state);
+      }
+      axes.forEach(([a, b], index) => {
+        const nextA = windingPolarity(level(part.id, `${a}+`), level(part.id, `${a}-`));
+        const nextB = windingPolarity(level(part.id, `${b}+`), level(part.id, `${b}-`));
+        const axis = state[index];
+        const step = stepTransition([axis.prevA, axis.prevB], [nextA, nextB]);
+        // First sighting only arms the tracker: with no previous levels
+        // there is no edge to count yet.
+        if (axis.prevA === 0 && axis.prevB === 0 && (nextA !== 0 || nextB !== 0)) {
+          axis.prevA = nextA;
+          axis.prevB = nextB;
+          return;
+        }
+        if (nextA !== 0 || nextB !== 0) {
+          axis.angle += step * STEP_DEGREES;
+          axis.prevA = nextA;
+          axis.prevB = nextB;
+        }
+      });
+    }
   }
   /**
    * Refreshes relay armature state from the solved coil volts.
