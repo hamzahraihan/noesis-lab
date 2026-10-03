@@ -85,6 +85,7 @@ export type ComponentSpec =
   | { readonly kind: 'slide-switch' }
   | { readonly kind: 'relay' }
   | { readonly kind: 'rotary-encoder' }
+  | { readonly kind: 'sonar' }
   | { readonly kind: 'joystick' }
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }

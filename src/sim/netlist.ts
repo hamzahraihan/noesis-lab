@@ -689,6 +689,11 @@ function elementsForPart(
       ];
     }
 
+    case 'sonar':
+      // Full echo-line emission lands in Task 2; resting stub keeps the
+      // switch exhaustive until then.
+      return [];
+
     case 'mcu':
     case 'breadboard':
     case 'display':
