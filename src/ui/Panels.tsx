@@ -9,8 +9,10 @@
 import Editor from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import type { PartInstance } from '../sim/bench';
+import { DynamicState, type KnobSpec } from '../sim/catalog';
 import { formatOhms, formatVolts } from './format';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME } from './monaco-setup';
+import type { Example } from './examples';
 import {
   CaretRightIcon,
   CodeIcon,
@@ -31,21 +33,20 @@ import {
 export interface InspectorProps {
   part: PartInstance | null;
   pinVoltages: ReadonlyMap<string, number>;
-  pressed: boolean;
-  potPosition: number;
+  /** What the operator is doing to this part, read as the panel is drawn. */
+  controls: DynamicState;
   onDelete(): void;
-  onTogglePressed(pressed: boolean): void;
-  onSetPot(fraction: number): void;
+  onSetPressed(pressed: boolean): void;
+  onSetKnob(spec: KnobSpec, value: number): void;
 }
 
 export function Inspector({
   part,
   pinVoltages,
-  pressed,
-  potPosition,
+  controls,
   onDelete,
-  onTogglePressed,
-  onSetPot,
+  onSetPressed,
+  onSetKnob,
 }: InspectorProps) {
   if (!part) {
     // An empty panel is the first thing a new operator sees, so it says what
@@ -62,8 +63,7 @@ export function Inspector({
   }
 
   const { definition } = part;
-  const isButton = definition.component.kind === 'button';
-  const isPot = definition.component.kind === 'potentiometer';
+  const knobs = definition.knobs ?? [];
   // Only pins that carry a silkscreen label are worth a voltage readout; a
   // resistor's two leads would otherwise render an empty section header.
   const labelledPins = definition.pins.filter((pin) => pin.label !== '').slice(0, 32);
@@ -108,38 +108,29 @@ export function Inspector({
           </div>
         )}
 
-        {isButton && (
+        {definition.momentary && (
           <button
             type="button"
-            onMouseDown={() => onTogglePressed(true)}
-            onMouseUp={() => onTogglePressed(false)}
-            onMouseLeave={() => onTogglePressed(false)}
+            onMouseDown={() => onSetPressed(true)}
+            onMouseUp={() => onSetPressed(false)}
+            onMouseLeave={() => onSetPressed(false)}
             className={`ctl h-8 w-full text-xs ${
-              pressed ? '!bg-amber-400 !text-slate-900' : 'ctl-quiet'
+              controls.isPressed(part.id) ? '!bg-amber-400 !text-slate-900' : 'ctl-quiet'
             }`}
           >
             <ReaderIcon className="icon" aria-hidden="true" />
-            {pressed ? 'Pressed' : 'Press and hold'}
+            {controls.isPressed(part.id) ? 'Pressed' : 'Press and hold'}
           </button>
         )}
 
-        {isPot && (
-          <label className="flex flex-col gap-1.5 text-xs">
-            <span className="flex items-center justify-between">
-              <span className="text-slate-400">Wiper</span>
-              <span className="num text-slate-200">{Math.round(potPosition * 100)}%</span>
-            </span>
-            <input
-              type="range"
-              className="wiper"
-              min={0}
-              max={1}
-              step={0.01}
-              value={potPosition}
-              onChange={(event) => onSetPot(Number(event.target.value))}
-            />
-          </label>
-        )}
+        {knobs.map((spec) => (
+          <KnobControl
+            key={spec.id}
+            spec={spec}
+            value={controls.knob(part.id, spec)}
+            onChange={(value) => onSetKnob(spec, value)}
+          />
+        ))}
 
         <button type="button" onClick={onDelete} className="ctl ctl-danger mt-1 w-full">
           <TrashIcon className="icon" aria-hidden="true" />
@@ -148,6 +139,70 @@ export function Inspector({
       </div>
     </div>
   );
+}
+
+/**
+ * One of a part's controls.
+ *
+ * Every control arrives with the range and unit its part works in, so a new
+ * sensor on the bench needs this written once rather than again for each one:
+ * the panel has nothing left to decide beyond how to draw it.
+ */
+function KnobControl({
+  spec,
+  value,
+  onChange,
+}: {
+  spec: KnobSpec;
+  value: number;
+  onChange(value: number): void;
+}) {
+  if (spec.toggle) {
+    return (
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-slate-400">{spec.label}</span>
+        <input
+          type="checkbox"
+          className="ctl size-4 accent-amber-400"
+          checked={value >= 1}
+          onChange={(event) => onChange(event.target.checked ? 1 : 0)}
+        />
+      </label>
+    );
+  }
+  return (
+    <label className="flex flex-col gap-1.5 text-xs">
+      <span className="flex items-center justify-between">
+        <span className="text-slate-400">{spec.label}</span>
+        <span className="num text-slate-200">{formatKnobValue(spec, value)}</span>
+      </span>
+      <input
+        type="range"
+        className="wiper"
+        min={spec.min}
+        max={spec.max}
+        step={spec.step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
+
+/**
+ * A knob's readout in the unit its part works in.
+ *
+ * A bare fraction of travel says nothing about what a sensor is reading, so
+ * anything that has a unit of its own is shown in it.
+ */
+function formatKnobValue(spec: KnobSpec, value: number): string {
+  if (spec.unit) return `${trimNumber(value)} ${spec.unit}`;
+  return `${Math.round(((value - spec.min) / (spec.max - spec.min)) * 100)}%`;
+}
+
+/** Trims the float noise a slider's own step leaves behind. */
+function trimNumber(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -214,6 +269,9 @@ export function FirmwareEditor({
   onRun,
   onReset,
   running,
+  examples,
+  activeExampleId,
+  onLoadExample,
 }: {
   value: string;
   error: string | null;
@@ -224,6 +282,10 @@ export function FirmwareEditor({
   onRun(): void;
   onReset(): void;
   running: boolean;
+  /** What an example brings with it, so the panel can offer it. */
+  examples: readonly Example[];
+  activeExampleId: string | null;
+  onLoadExample(id: string): void;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -243,6 +305,28 @@ export function FirmwareEditor({
           </span>
           Firmware
         </button>
+        {/*
+         * An example carries its own wiring, so picking one replaces the
+         * sketch *and* rebuilds the bench around it. Loading a sketch onto a
+         * bench that has none of its parts teaches the wrong thing twice.
+         */}
+        <label className="flex items-center gap-1.5">
+          <span className="sr-only">Load an example</span>
+          <select
+            value={activeExampleId ?? ''}
+            onChange={(event) => onLoadExample(event.target.value)}
+            className="ctl-select max-w-44"
+            aria-label="Load an example"
+          >
+            <option value="">Load an example…</option>
+            {examples.map((example) => (
+              <option key={example.id} value={example.id} title={example.note}>
+                {example.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <span className="flex-1" />
         {/*
          * One button that changes what it does, so the pair never sits side by
