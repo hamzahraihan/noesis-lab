@@ -11,10 +11,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Bench, Terminal } from '../sim/bench';
+import type { Bench, Terminal, Wire } from '../sim/bench';
 import { PartFootprint, type FootprintState } from './footprints';
 import { HardwareDefs } from './hardware';
-import { routeWire } from './wire-route';
+import { routeWire, routeWireVia, type Point } from './wire-route';
 import { renderedSizeMm } from './wokwi';
 
 export interface WorkbenchProps {
@@ -28,7 +28,15 @@ export interface WorkbenchProps {
   onMovePart(partId: string, x: number, y: number): void;
   /** Forwarded from parts whose own element detects a press. */
   onTogglePressed(partId: string, pressed: boolean): void;
-  onRouteWire(from: Terminal, to: Terminal): void;
+  /** `bends` are the waypoints the operator placed along the way. */
+  onRouteWire(from: Terminal, to: Terminal, bends: readonly Point[]): void;
+  /** Reshapes a placed jumper, re-measuring it. */
+  onSetWireBends(wireId: string, bends: readonly Point[]): void;
+  onRemoveWireBend(wireId: string, index: number): void;
+  /** Inserts a waypoint at a leg index rather than always at the end. */
+  onInsertWireBend(wireId: string, index: number, bend: Point): void;
+  /** Which leg of a wire sits nearest a world position. */
+  bendIndexNear(wireId: string, x: number, y: number): number;
 }
 
 const MIN_VIEW_WIDTH_MM = 24;
@@ -72,11 +80,23 @@ interface ViewBox {
 
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
-  | { kind: 'move'; partId: string; grabDx: number; grabDy: number };
+  | { kind: 'move'; partId: string; grabDx: number; grabDy: number }
+  /**
+   * Reshaping a placed wire by dragging one of its own waypoints.
+   *
+   * Distinct from `move` because the thing under the pointer is a waypoint
+   * rather than a part, and because dropping it past the end of the list pulls
+   * it off rather than leaving it hanging there.
+   */
+  | { kind: 'bend'; wireId: string; index: number };
 
 export function Workbench({
   bench,
   renderState,
+  onSetWireBends,
+  onRemoveWireBend,
+  onInsertWireBend,
+  bendIndexNear,
   netOfTerminal,
   selectedId,
   wireMode,
@@ -87,6 +107,20 @@ export function Workbench({
 }: WorkbenchProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [wireAnchor, setWireAnchor] = useState<Terminal | null>(null);
+  /** Waypoints placed so far on the jumper being routed. */
+  const [wireBends, setWireBends] = useState<readonly Point[]>([]);
+
+  // Leaving the wire tool abandons the jumper in progress. Holding a stale
+  // anchor would mean the next click in wire mode silently attaching to a
+  // hole picked a minute ago in a different view.
+  const wasWireMode = useRef(wireMode);
+  useEffect(() => {
+    if (wasWireMode.current && !wireMode) {
+      setWireAnchor(null);
+      setWireBends([]);
+    }
+    wasWireMode.current = wireMode;
+  }, [wireMode]);
   const [pointerMm, setPointerMm] = useState<{ x: number; y: number } | null>(null);
   const movedRef = useRef(false);
   const [view, setView] = useState<ViewBox>({ x: -12, y: -10, width: 428 });
@@ -94,6 +128,14 @@ export function Workbench({
   const dragRef = useRef<DragState | null>(null);
   /** Part id under the pointer at press time; see `onPointerDown`. */
   const pressedPartRef = useRef<string | null>(null);
+  /**
+   * Wire id under the pointer at press time; see `onPointerDown`.
+   *
+   * Recorded for the same reason as `pressedPartRef`: by the time the click
+   * event arrives, pointer capture has retargeted it to the `<svg>` and the
+   * wire that was actually under the cursor is unrecoverable.
+   */
+  const pressedWireRef = useRef<string | null>(null);
   /** Where the pointer went down, in client pixels; see `onPointerMove`. */
   const pressRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -147,6 +189,29 @@ export function Workbench({
       .closest('[data-part-id]')
       ?.getAttribute('data-part-id');
     pressedPartRef.current = partId ?? null;
+    pressedWireRef.current =
+      (event.target as Element).closest('[data-wire-id]')?.getAttribute('data-wire-id') ?? null;
+
+
+    /*
+     * A waypoint of an already-placed wire is picked up before anything else,
+     * including before part hit-testing.
+     *
+     * Waypoints sit on top of the wires rather than inside the wire group, so
+     * they can be hit at all, and a wire crossing a part would otherwise win
+     * the press and leave the part immovable. Editing a wire is only possible
+     * out of wire mode: while the wire tool is up, every click means "route".
+     */
+    if (!wireMode && event.button === 0 && !event.shiftKey) {
+      const grab = event.target as Element;
+      const wireId = grab.closest('[data-wire-id]')?.getAttribute('data-wire-id');
+      const index = Number(grab.closest('[data-bend-index]')?.getAttribute('data-bend-index'));
+      if (wireId !== null && wireId !== undefined && Number.isInteger(index)) {
+        dragRef.current = { kind: 'bend', wireId, index };
+        (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+        return;
+      }
+    }
 
     // Middle button, shift, or empty space all pan. Dragging a part does not.
     // Capture either way: a drag that wanders off the canvas has to keep
@@ -207,6 +272,29 @@ export function Workbench({
       setView((current) => ({ ...current, x: drag.originX - dx, y: drag.originY - dy }));
       return;
     }
+    if (drag.kind === 'bend') {
+      const wire = bench.wires.find((candidate) => candidate.id === drag.wireId);
+      if (!wire) return;
+
+      // Dragging the last waypoint onto the wire's far contact pulls it off
+      // again. That is the one gesture that removes a bend, so there is no
+      // separate delete mode to discover.
+      if (drag.index === wire.bends.length - 1) {
+        const far = bench.terminals[wire.to];
+        if (Math.hypot(world.x - far.x, world.y - far.y) <= HOLE_PICK_RADIUS_MM * 2) {
+          onRemoveWireBend(drag.wireId, drag.index);
+          return;
+        }
+      }
+
+      const bends = [...wire.bends];
+      bends[drag.index] = {
+        x: Math.round(world.x / 2.54) * 2.54,
+        y: Math.round(world.y / 2.54) * 2.54,
+      };
+      onSetWireBends(drag.wireId, bends);
+      return;
+    }
 
     onMovePart(drag.partId, world.x - drag.grabDx, world.y - drag.grabDy);
   };
@@ -249,22 +337,64 @@ export function Workbench({
       y: focusY - fractionY * (width / aspect),
       width,
     });
-  };
+  }
 
-  /** Clicking a hole in wire mode anchors, then completes, a jumper. */
+  /**
+   * Routing a jumper: click a hole to anchor, click bare bench to drop a
+   * waypoint, click the far hole to finish.
+   *
+   * Bends are only taken from bare bench, and never from a hole. A click on a
+   * hole is unambiguous -- it is the contact to clip the wire to -- and
+   * stealing it to mean "bend here" would make the only gesture the tool
+   * actually needs impossible to perform by accident.
+   */
   const onClick = (event: React.MouseEvent) => {
     if (movedRef.current) return;
     const world = toWorld(event.clientX, event.clientY);
 
     if (wireMode) {
       const terminal = nearestHole(bench, world.x, world.y);
-      if (!terminal) return;
+
+      if (!terminal) {
+        // Bare bench: a waypoint, but only once there is something to route.
+        if (wireAnchor) {
+          setWireBends((bends) => [
+            ...bends,
+            {
+              // Snapped to the 2.54 mm grid so a hand-placed bend lands on a
+              // real hole pitch rather than a fraction off it.
+              x: Math.round(world.x / 2.54) * 2.54,
+              y: Math.round(world.y / 2.54) * 2.54,
+            },
+          ]);
+        }
+        return;
+      }
+
       if (!wireAnchor) {
         setWireAnchor(terminal);
         return;
       }
-      if (terminal.id !== wireAnchor.id) onRouteWire(wireAnchor, terminal);
+      if (terminal.id !== wireAnchor.id) onRouteWire(wireAnchor, terminal, wireBends);
       setWireAnchor(null);
+      setWireBends([]);
+      return;
+    }
+
+    /*
+     * Out of wire mode, clicking a wire inserts a waypoint on the leg the
+     * pointer is over. This is how a wire gets reshaped after the fact: click
+     * where the corner should go, then drag the new marker into place.
+     *
+     * It has to beat selecting a part, because a wire drawn over a part would
+     * otherwise swallow every click on that part's body.
+     */
+    const wireId = pressedWireRef.current;
+    if (wireId !== null) {
+      onInsertWireBend(wireId, bendIndexNear(wireId, world.x, world.y), {
+        x: Math.round(world.x / 2.54) * 2.54,
+        y: Math.round(world.y / 2.54) * 2.54,
+      });
       return;
     }
 
@@ -302,6 +432,22 @@ export function Workbench({
 
   const scale = 900 / view.width;
 
+  /**
+   * The drawn path of a placed jumper.
+   *
+   * A wire with hand-placed bends is routed through them exactly; one without
+   * takes the automatic lane-separated dogleg. Both the casing and the
+   * insulation pass through here, so the two can never disagree about where
+   * the wire runs.
+   */
+  const wirePath = (wire: Wire, index: number) => {
+    const from = bench.terminals[wire.from];
+    const to = bench.terminals[wire.to];
+    return wire.bends.length > 0
+      ? routeWireVia(from, wire.bends, to)
+      : routeWire(from, to, index);
+  };
+
   return (
     <svg
       ref={svgRef}
@@ -324,45 +470,6 @@ export function Workbench({
       <HardwareDefs />
 
       <rect x={view.x} y={view.y} width={view.width} height={viewHeight} fill="url(#bench-grid)" />
-
-      {/*
-       * Each jumper is drawn twice: a dark casing that reads as the shadow the
-       * wire casts on the board, and the coloured insulation over it. Both take
-       * the same route, so the corner radius stays put at any zoom.
-       */}
-      <g data-layer="wires" pointerEvents="none">
-        {bench.wires.map((wire, index) => (
-          <path
-            key={wire.id}
-            d={routeWire(
-              bench.terminals[wire.from],
-              bench.terminals[wire.to],
-              index,
-            )}
-            fill="none"
-            stroke="#05080d"
-            strokeWidth={1.6 / scale + 0.7}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.85}
-          />
-        ))}
-        {bench.wires.map((wire, index) => (
-          <path
-            key={`${wire.id}-core`}
-            d={routeWire(
-              bench.terminals[wire.from],
-              bench.terminals[wire.to],
-              index,
-            )}
-            fill="none"
-            stroke={wire.colour}
-            strokeWidth={0.9 / scale + 0.4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
-      </g>
 
       <g data-layer="parts">
         {bench.parts.map((part) => {
@@ -400,9 +507,111 @@ export function Workbench({
         })}
       </g>
 
+      {/*
+       * Each jumper is drawn twice: a dark casing that reads as the shadow the
+       * wire casts, and the coloured insulation over it. Both take the same
+       * route, so the corner radius stays put at any zoom.
+       *
+       * Drawn *after* the parts, not before. A jumper runs over the top of
+       * whatever it crosses -- that is what a wire plugged into a breadboard
+       * looks like from above -- and drawing it underneath let the opaque
+       * breadboard paint straight over it, so a wire crossing the board simply
+       * disappeared and read as broken.
+       */}
+      {/*
+       * Each jumper is drawn twice: a dark casing that reads as the shadow the
+       * wire casts on the board, and the coloured insulation over it. Both take
+       * the same route, so the corner radius stays put at any zoom.
+       */}
+      <g data-layer="wires" pointerEvents="none">
+        {bench.wires.map((wire, index) => (
+          <path
+            key={wire.id}
+            d={wirePath(wire, index)}
+            fill="none"
+            stroke="#05080d"
+            strokeWidth={1.6 / scale + 0.7}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.85}
+          />
+        ))}
+        {bench.wires.map((wire, index) => (
+          <path
+            key={`${wire.id}-core`}
+            d={wirePath(wire, index)}
+            fill="none"
+            stroke={wire.colour}
+            strokeWidth={0.9 / scale + 0.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+      </g>
+
+      {/*
+       * An invisible, fatter copy of every wire, sitting above the drawn ones.
+       *
+       * The drawn wires are only a millimetre or so thick, which at working
+       * zoom is a couple of pixels -- too thin to click reliably. This copy
+       * takes the press so a wire can be clicked to insert a waypoint on it,
+       * and carries the ids that identify which wire was hit.
+       */}
+      <g data-layer="wire-hit">
+        {bench.wires.map((wire, index) => (
+          <path
+            key={`${wire.id}-hit`}
+            d={wirePath(wire, index)}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={3.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            data-wire-id={wire.id}
+          />
+        ))}
+      </g>
+
+      {/*
+       * Draggable handles on a placed wire's waypoints. Only shown while the
+       * wire tool is off: with the tool up, a click on bare bench means "drop
+       * a waypoint here", and a handle under the cursor would make that
+       * unpredictable.
+       */}
+      {!wireMode && (
+        <g data-layer="wire-handles">
+          {bench.wires.map((wire) =>
+            wire.bends.map((bend, index) => (
+              <g key={`${wire.id}-bend-${index}`} data-wire-id={wire.id} data-bend-index={index}>
+                {/* Generous invisible grab area around a small visible dot. */}
+                <circle cx={bend.x} cy={bend.y} r={3 / scale + 0.6} fill="transparent" />
+                <circle
+                  cx={bend.x}
+                  cy={bend.y}
+                  r={1.2 / scale + 0.4}
+                  fill="#38bdf8"
+                  stroke="#0b1220"
+                  strokeWidth={0.25 / scale}
+                />
+              </g>
+            )),
+          )}
+        </g>
+      )}
+
+      {/*
+       * The jumper being drawn. Once any waypoint is down it follows those and
+       * stops taking a lane offset -- a hand-placed bend is an exact position,
+       * and nudging it would mean the wire missed the point the operator
+       * chose. With no bends it is still the automatic preview.
+       */}
       {wireAnchor && pointerMm && (
         <path
-          d={routeWire(wireAnchor, pointerMm, bench.wires.length)}
+          d={
+            wireBends.length > 0
+              ? routeWireVia(wireAnchor, wireBends, pointerMm)
+              : routeWire(wireAnchor, pointerMm, bench.wires.length)
+          }
           fill="none"
           stroke="#38bdf8"
           strokeWidth={0.9 / scale + 0.4}
@@ -411,6 +620,24 @@ export function Workbench({
           pointerEvents="none"
         />
       )}
+
+      {/*
+       * Each placed waypoint, so the operator can see what they have committed
+       * to and how many are queued up.
+       */}
+      <g data-layer="wire-bends" pointerEvents="none">
+        {wireBends.map((bend, index) => (
+          <circle
+            key={`${bend.x}:${bend.y}:${index}`}
+            cx={bend.x}
+            cy={bend.y}
+            r={1.1 / scale + 0.3}
+            fill="#38bdf8"
+            stroke="#0b1220"
+            strokeWidth={0.2 / scale}
+          />
+        ))}
+      </g>
 
       <g data-layer="net-trace" pointerEvents="none">
         {traced.map((terminalId) => {
