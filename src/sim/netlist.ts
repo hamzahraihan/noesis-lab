@@ -14,10 +14,27 @@
  * datum.
  */
 
-import { GROUND, type DiodeProfile, type Element } from './elements';
+import { DIODE_PROFILES, GROUND, type DiodeProfile, type Element } from './elements';
 import { wireResistanceOhms } from './units';
 import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
 import type { DynamicState } from './catalog';
+import { WIPER_KNOB } from './passives';
+import {
+  COMPARATOR_THRESHOLD_KNOB,
+  DIP_WAY_KNOBS,
+  HORIZONTAL_KNOB,
+  IR_CODE_KNOB,
+  KEYPAD_COLUMNS,
+  KEYPAD_KEY_KNOBS,
+  LED_BAR_GRAPH_SEGMENTS,
+  LIGHT_KNOB,
+  SEVEN_SEGMENT_SEGMENTS,
+  SENSOR_STIMULUS_KNOBS,
+  SLIDE_POSITION_KNOB,
+  TEMPERATURE_KNOB,
+  TILTED_KNOB,
+  VERTICAL_KNOB,
+} from './modules';
 
 export interface NetInfo {
   readonly index: number;
@@ -36,10 +53,60 @@ export interface Netlist {
 
 /** A tactile switch's open contact. High, but low enough to outvote gmin. */
 const SWITCH_OPEN_OHMS = 1e9;
+
+/**
+ * A GL5528's resistance at the ends of its range: about 50 k in near-darkness
+ * and 3.5 k in daylight. The curve between them is logarithmic, which is why
+ * the light knob is in lux and not in per cent.
+ */
+const LDR_DARK_OHMS = 50_000;
+const LDR_BRIGHT_OHMS = 3_500;
+
 /** Closed contact resistance of a tactile switch. */
 const SWITCH_CLOSED_OHMS = 0.05;
 /** Keeps a potentiometer at either end from producing an infinite conductance. */
 const MIN_POT_SEGMENT_OHMS = 0.1;
+
+/** The fixed resistor on a sensor module, which is what makes it a divider. */
+const MODULE_DIVIDER_OHMS = 10_000;
+/** Pull-up on a module's open-drain output, and on the joystick's select pin. */
+const MODULE_PULLUP_OHMS = 10_000;
+
+/** What an open-drain output measures against when it is pulling the line low. */
+const OPEN_DRAIN_SINK_OHMS = 1_000;
+
+/**
+ * The sensor's resistance on a comparator board with nothing to report.
+ *
+ * Nothing on the board pulls the analogue pin down but its own divider, so the
+ * sensor leg is left effectively open. A megohm is what puts AOUT on the bottom
+ * rail rather than floating, which is where the pin idles until the sensor has
+ * something to say.
+ */
+const SENSOR_IDLE_OHMS = 1e6;
+
+/**
+ * The sensor's resistance at full stimulus, which is the board's own divider
+ * value.
+ *
+ * Equal to `MODULE_DIVIDER_OHMS` on purpose: at maximum stimulus the analogue
+ * output then sits at exactly half the supply, which is where
+ * `COMPARATOR_THRESHOLD_KNOB` starts out. So the trimmer reads the same on all
+ * five boards -- half way up whatever range that board reports in.
+ */
+const SENSOR_FULL_SCALE_OHMS = 10_000;
+
+/** An NTC's resistance at 25 C, its beta constant, and that temperature in K. */
+const NTC_OHMS_AT_25C = 10_000;
+const NTC_BETA_K = 3950;
+const KELVIN_AT_25C = 273.15 + 25;
+
+/** A joystick's axis pot, the same 10 k the module ships with. */
+const JOYSTICK_AXIS_OHMS = 10_000;
+
+/** A piezo disc's capacitance, and the leakage that keeps it off an open circuit. */
+const PIEZO_FARADS = 100e-9;
+const PIEZO_LEAKAGE_OHMS = 1e6;
 
 class DisjointSet {
   private readonly parent: Int32Array;
@@ -142,6 +209,56 @@ function elementsForPart(
   const nodeAt = (pinId: string): number => pinNode.get(`${part.id}:${pinId}`) ?? GROUND;
   const component = part.definition.component;
 
+  /*
+   * A pot as the two resistors its wiper sits between. The same pair serves a
+   * discrete potentiometer and each of a joystick's axes, which is why it is
+   * pulled out rather than written twice.
+   */
+  const potLegs = (
+    endA: string,
+    wiper: string,
+    endB: string,
+    ohms: number,
+    turn: number,
+  ): Element[] => [
+    {
+      kind: 'resistor',
+      a: nodeAt(endA),
+      b: nodeAt(wiper),
+      ohms: Math.max(MIN_POT_SEGMENT_OHMS, ohms * turn),
+    },
+    {
+      kind: 'resistor',
+      a: nodeAt(wiper),
+      b: nodeAt(endB),
+      ohms: Math.max(MIN_POT_SEGMENT_OHMS, ohms * (1 - turn)),
+    },
+  ];
+
+  /*
+   * A board that reports by pulling its output line to ground, with a pull-up
+   * to its own supply over the top of it. A comparator's open-drain leg and a
+   * receiver's decoded carrier both arrive at exactly this, which is why the
+   * line reads high until something pulls it down: a sketch that treats it as
+   * active-high sees the polarity of the board rather than its own.
+   */
+  const openDrainOutput = (pin: string, sinking: boolean): Element[] => [
+    {
+      kind: 'resistor',
+      a: nodeAt(pin),
+      b: nodeAt('GND'),
+      ohms: sinking ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+      label: sinking ? 'closed' : 'open',
+    },
+    {
+      kind: 'resistor',
+      a: nodeAt(pin),
+      b: nodeAt('VCC'),
+      ohms: MODULE_PULLUP_OHMS,
+      label: 'pull-up',
+    },
+  ];
+
   switch (component.kind) {
     case 'resistor':
       return [{ kind: 'resistor', a: nodeAt('a'), b: nodeAt('b'), ohms: component.ohms }];
@@ -167,7 +284,7 @@ function elementsForPart(
       ];
 
     case 'button': {
-      const closed = state.pressedButtons.has(part.id);
+      const closed = state.isPressed(part.id);
       return [
         {
           kind: 'resistor',
@@ -179,27 +296,323 @@ function elementsForPart(
       ];
     }
 
-    case 'potentiometer': {
-      const turn = state.potPositions.get(part.id) ?? 0.5;
-      const clamped = Math.min(1, Math.max(0, turn));
-      const lower = Math.max(MIN_POT_SEGMENT_OHMS, component.ohms * clamped);
-      const upper = Math.max(MIN_POT_SEGMENT_OHMS, component.ohms * (1 - clamped));
-      return [
-        { kind: 'resistor', a: nodeAt('endA'), b: nodeAt('wiper'), ohms: lower },
-        { kind: 'resistor', a: nodeAt('wiper'), b: nodeAt('endB'), ohms: upper },
+    case 'potentiometer':
+      return [...potLegs('endA', 'wiper', 'endB', component.ohms, state.knob(part.id, WIPER_KNOB))];
+
+    /*
+     * The same divider with its travel turned sideways. It has a kind of its
+     * own only so that the renderer can tell the two pots' artwork apart; the
+     * circuit and the control are the rotary pot's.
+     */
+    case 'slide-potentiometer':
+      return [...potLegs('endA', 'wiper', 'endB', component.ohms, state.knob(part.id, WIPER_KNOB))];
+
+    case 'photoresistor': {
+      const light = state.knob(part.id, LIGHT_KNOB) / LIGHT_KNOB.max;
+      /*
+       * A photoresistor's resistance falls roughly logarithmically with light,
+       * so the two datasheet figures are joined through the log of the ratio
+       * rather than in a straight line between them.
+       */
+      const sensorOhms = LDR_DARK_OHMS * (LDR_BRIGHT_OHMS / LDR_DARK_OHMS) ** light;
+      // The fraction of the supply the divider sits at, which is what the
+      // on-board comparator measures the output against.
+      const dividerFraction = sensorOhms / (sensorOhms + MODULE_DIVIDER_OHMS);
+      const elements: Element[] = [
+        { kind: 'resistor', a: nodeAt('VCC'), b: nodeAt('AO'), ohms: sensorOhms, label: 'sensor' },
+        {
+          kind: 'resistor',
+          a: nodeAt('AO'),
+          b: nodeAt('GND'),
+          ohms: MODULE_DIVIDER_OHMS,
+          label: 'divider',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('DO'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
       ];
+      /*
+       * DO is the on-board comparator's open-drain output: it holds the line
+       * at the supply until the divider passes the trimmer, then pulls it down
+       * through the output's own impedance.
+       */
+      const tripped =
+        dividerFraction > state.knob(part.id, COMPARATOR_THRESHOLD_KNOB) / 100;
+      if (tripped) {
+        elements.push({
+          kind: 'resistor',
+          a: nodeAt('DO'),
+          b: nodeAt('GND'),
+          ohms: OPEN_DRAIN_SINK_OHMS,
+          label: 'comparator',
+        });
+      }
+      return elements;
+    }
+
+    case 'thermistor': {
+      const celsius = state.knob(part.id, TEMPERATURE_KNOB);
+      const kelvin = KELVIN_AT_25C + (celsius - 25);
+      const ohms =
+        NTC_OHMS_AT_25C * Math.exp(NTC_BETA_K * (1 / kelvin - 1 / KELVIN_AT_25C));
+      return [
+        { kind: 'resistor', a: nodeAt('VCC'), b: nodeAt('OUT'), ohms, label: 'thermistor' },
+        {
+          kind: 'resistor',
+          a: nodeAt('OUT'),
+          b: nodeAt('GND'),
+          ohms: MODULE_DIVIDER_OHMS,
+          label: 'divider',
+        },
+      ];
+    }
+
+    /*
+     * The tilt switch and the IR receiver are the same board as far as a solver
+     * is concerned: a contact to ground under a pull-up to the supply, with
+     * the stimulus -- a tilt or an arriving code -- deciding which state it is
+     * in.
+     */
+    case 'tilt-switch':
+      return openDrainOutput('OUT', state.knob(part.id, TILTED_KNOB) >= 0.5);
+
+    case 'ir-receiver':
+      return openDrainOutput('DAT', state.knob(part.id, IR_CODE_KNOB) >= 0.5);
+
+    case 'slide-switch': {
+      const thrownToOne = state.knob(part.id, SLIDE_POSITION_KNOB) >= 0.5;
+      const closedTo = thrownToOne ? '1' : '3';
+      const openTo = thrownToOne ? '3' : '1';
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('2'),
+          b: nodeAt(closedTo),
+          ohms: SWITCH_CLOSED_OHMS,
+          label: 'closed',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('2'),
+          b: nodeAt(openTo),
+          ohms: SWITCH_OPEN_OHMS,
+          label: 'open',
+        },
+      ];
+    }
+
+    case 'joystick': {
+      const held = state.isPressed(part.id);
+      return [
+        /*
+         * Each axis runs ground-to-supply, so the far end of the stick reads
+         * high. That is also the way the artwork reads: the element takes its
+         * position as a step from centre, left and up being positive.
+         */
+        ...potLegs('GND', 'HORZ', 'VCC', JOYSTICK_AXIS_OHMS, state.knob(part.id, HORIZONTAL_KNOB)),
+        ...potLegs('GND', 'VERT', 'VCC', JOYSTICK_AXIS_OHMS, state.knob(part.id, VERTICAL_KNOB)),
+        {
+          kind: 'resistor',
+          a: nodeAt('SEL'),
+          b: nodeAt('GND'),
+          ohms: held ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+          label: held ? 'closed' : 'open',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('SEL'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+      ];
+    }
+
+    case 'rgb-led':
+      return [
+        { kind: 'diode', a: nodeAt('red'), b: nodeAt('common'), profile: DIODE_PROFILES.red },
+        { kind: 'diode', a: nodeAt('green'), b: nodeAt('common'), profile: DIODE_PROFILES.green },
+        { kind: 'diode', a: nodeAt('blue'), b: nodeAt('common'), profile: DIODE_PROFILES.blue },
+      ];
+
+    /*
+     * Ten dice, each with its own anode and its own cathode out to the edge:
+     * that is what a bar graph is, and why lighting a level on one takes two
+     * wires rather than a single common.
+     */
+    case 'led-bar-graph': {
+      const elements: Element[] = [];
+      for (let segment = 1; segment <= LED_BAR_GRAPH_SEGMENTS; segment++) {
+        elements.push({
+          kind: 'diode',
+          a: nodeAt(`A${segment}`),
+          b: nodeAt(`C${segment}`),
+          profile: DIODE_PROFILES.red,
+        });
+      }
+      return elements;
+    }
+
+    /*
+     * A multiplexed display: each segment is one diode between the digit's
+     * common and its own line, so what lights a segment is which of the two is
+     * held where rather than the voltage on one wire. Both commons are the same
+     * electrode, joined in the part definition rather than here.
+     */
+    case '7segment': {
+      const elements: Element[] = [];
+      for (const segment of SEVEN_SEGMENT_SEGMENTS) {
+        elements.push({
+          kind: 'diode',
+          a: nodeAt('COM.1'),
+          b: nodeAt(segment),
+          profile: DIODE_PROFILES.red,
+        });
+      }
+      return elements;
+    }
+
+    case 'buzzer':
+      return [
+        {
+          kind: 'capacitor',
+          a: nodeAt('positive'),
+          b: nodeAt('negative'),
+          farads: PIEZO_FARADS,
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('positive'),
+          b: nodeAt('negative'),
+          ohms: PIEZO_LEAKAGE_OHMS,
+          label: 'leakage',
+        },
+      ];
+
+    /*
+     * One case for the whole comparator sensor family, because the circuit is
+     * the same on all five: a sensor and the board's own divider feeding an
+     * LM393, whose open-drain output is pulled up to the supply and only sinks
+     * the line once the stimulus is past the trimmer.
+     */
+    case 'sensor-module': {
+      const stimulus = SENSOR_STIMULUS_KNOBS[component.variant];
+      // Normalised against the knob's own range, so a board that reports 0-100
+      // dB and one that reports 0 or 1 land in the same place.
+      const level = state.knob(part.id, stimulus) / stimulus.max;
+      const elements: Element[] = [];
+
+      /*
+       * The sensor's leg of the divider falls as the stimulus rises, so the
+       * analogue output climbs with it -- joined through the log of the ratio,
+       * the same curve the photoresistor's is. The two three-pin boards bring
+       * no analogue tap out, and have no divider to bring it out of.
+       */
+      if (part.terminals.AOUT !== undefined) {
+        const sensorOhms =
+          SENSOR_IDLE_OHMS * (SENSOR_FULL_SCALE_OHMS / SENSOR_IDLE_OHMS) ** level;
+        elements.push(
+          { kind: 'resistor', a: nodeAt('VCC'), b: nodeAt('AOUT'), ohms: sensorOhms, label: 'sensor' },
+          {
+            kind: 'resistor',
+            a: nodeAt('AOUT'),
+            b: nodeAt('GND'),
+            ohms: MODULE_DIVIDER_OHMS,
+            label: 'divider',
+          },
+        );
+      }
+
+      elements.push({
+        kind: 'resistor',
+        a: nodeAt('DOUT'),
+        b: nodeAt('VCC'),
+        ohms: MODULE_PULLUP_OHMS,
+        label: 'pull-up',
+      });
+
+      /*
+       * The comparator sits between the sensor's signal and the trimmer, so its
+       * trip point is a place on the stimulus scale rather than a voltage. That
+       * is also what lets one threshold knob mean the same thing on all five:
+       * half way up the light range on one board, half way up the sound range
+       * on the next.
+       */
+      if (level > state.knob(part.id, COMPARATOR_THRESHOLD_KNOB) / COMPARATOR_THRESHOLD_KNOB.max) {
+        elements.push({
+          kind: 'resistor',
+          a: nodeAt('DOUT'),
+          b: nodeAt('GND'),
+          ohms: OPEN_DRAIN_SINK_OHMS,
+          label: 'comparator',
+        });
+      }
+      return elements;
+    }
+
+    /*
+     * The DIP switch is eight independent latching contacts and nothing else:
+     * no bus across the package, and no supply of its own, so a way is closed
+     * between its own two pins or it is the gap a rocker switch leaves.
+     */
+    case 'dip-switch': {
+      const elements: Element[] = [];
+      for (const [index, spec] of DIP_WAY_KNOBS.entries()) {
+        if (index >= component.ways) break;
+        const way = index + 1;
+        const closed = state.knob(part.id, spec) >= 0.5;
+        elements.push({
+          kind: 'resistor',
+          a: nodeAt(`${way}a`),
+          b: nodeAt(`${way}b`),
+          ohms: closed ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+          label: `way ${way} ${closed ? 'closed' : 'open'}`,
+        });
+      }
+      return elements;
+    }
+
+    /*
+     * Sixteen contacts and no bus: each one joins a row to a column and nothing
+     * else, which is the whole reason four outputs are enough to read sixteen
+     * keys. A column with no key down on the scanned row is whatever the
+     * sketch's own pull-up holds it at.
+     */
+    case 'keypad': {
+      const elements: Element[] = [];
+      for (const [index, spec] of KEYPAD_KEY_KNOBS.entries()) {
+        const row = Math.floor(index / KEYPAD_COLUMNS) + 1;
+        const column = (index % KEYPAD_COLUMNS) + 1;
+        const pressed = state.knob(part.id, spec) >= 0.5;
+        elements.push({
+          kind: 'resistor',
+          a: nodeAt(`R${row}`),
+          b: nodeAt(`C${column}`),
+          ohms: pressed ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+          label: `${spec.label} ${pressed ? 'closed' : 'open'}`,
+        });
+      }
+      return elements;
     }
 
     case 'mcu':
     case 'breadboard':
     case 'display':
-      // These contribute topology only. Their pins become sources, or receive
-      // bus traffic, when the engine drives them -- which depends on firmware
-      // state and so cannot be frozen into a static netlist.
+    case 'i2c-sensor':
+    case 'lcd':
+    case 'servo':
+      /*
+       * These contribute topology only. Their pins become sources, or receive
+       * bus traffic, when the engine drives them -- which depends on firmware
+       * state and so cannot be frozen into a static netlist.
+       */
       return [];
   }
 }
-
 /**
  * A component whose two pins landed on the same net would stamp a resistor
  * from a node to itself. That is not a modelling nicety -- it makes the matrix
