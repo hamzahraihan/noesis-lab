@@ -661,9 +661,23 @@ function elementsForPart(
       ];
     }
 
-    case 'biaxial-stepper':
-      // Twin axes land in Task 4; resting stub keeps the switch exhaustive.
-      return [];
+    case 'biaxial-stepper': {
+      // Two independent winding pairs; position per axis lives in the
+      // engine, here the windings are plain resistors like the single.
+      const winding = (plus: string, minus: string, axis: string): Element => ({
+        kind: 'resistor',
+        a: nodeAt(plus),
+        b: nodeAt(minus),
+        ohms: WINDING_OHMS,
+        label: `winding ${axis}`,
+      });
+      return [
+        winding('A1+', 'A1-', 'A1'),
+        winding('B1+', 'B1-', 'B1'),
+        winding('A2+', 'A2-', 'A2'),
+        winding('B2+', 'B2-', 'B2'),
+      ];
+    }
 
     case 'rotary-encoder': {
       // Board pull-ups hold CLK/DT high; the detent knob walks the Gray
