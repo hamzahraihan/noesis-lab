@@ -16,20 +16,29 @@ import { arduinoUnoR3, esp32DevKitV1 } from './sim/boards';
 import { ledDefinition, resistorDefinition } from './sim/passives';
 import { DIODE_PROFILES } from './sim/elements';
 import type { PartDefinition } from './sim/catalog';
-import type { PartInstance, Terminal } from './sim/bench';
+import type { BendPoint, PartInstance, Terminal } from './sim/bench';
 import { ili9341Definition, ssd1306Definition } from './sim/display/part';
 import { Workbench } from './ui/Workbench';
 import type { FootprintState } from './ui/footprints';
 import { BLINK_SKETCH, Simulation } from './ui/simulation';
+import { PartSearch } from './ui/PartSearch';
 import {
   FirmwareEditor,
   Inspector,
-  PartPalette,
   SerialMonitor,
   StatusBar,
 } from './ui/Panels';
 import { ScopePanel } from './ui/Scope';
 import { MultimeterPanel } from './ui/Multimeter';
+import {
+  CaretLeftIcon,
+  Component1Icon,
+  PauseIcon,
+  PlayIcon,
+  PlusIcon,
+  SwitchIcon,
+  UpdateIcon,
+} from '@radix-ui/react-icons';
 
 type BoardId = 'esp32' | 'uno';
 
@@ -184,6 +193,7 @@ function offsetOfFirstPin(definition: PartDefinition): [x: number, y: number] {
 export default function App() {
   const [firmware, setFirmware] = useState(BLINK_SKETCH);
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [boardId, setBoardId] = useState<BoardId>('esp32');
   const [, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -197,7 +207,11 @@ export default function App() {
       const created = new Simulation(boardDefinition(boardId));
       buildStartingBench(created, boardId);
       created.loadFirmware(BLINK_SKETCH);
-      created.start();
+      // Deliberately left stopped. The bench opens on a loaded sketch at
+      // t=0 that the operator has to run themselves, which is the honest
+      // initial state -- starting the moment the page loads ran the firmware
+      // before anyone had looked at it, and left the status lamp claiming
+      // "running" over a simulation nobody had started.
       return created;
     },
     [boardId],
@@ -230,6 +244,58 @@ export default function App() {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [simulation]);
+
+  /*
+   * The four controls an operator reaches for while watching a sketch run were
+   * all mouse-only, and every one of them is a single keystroke's worth of work.
+   *
+   * Keys are ignored whenever focus is in a text field: pressing `w` has to
+   * type a `w`, not arm the wire tool mid-sketch.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      switch (event.key) {
+        case ' ':
+          event.preventDefault();
+          if (simulation.running) simulation.stop();
+          else simulation.start();
+          forceRender((n) => n + 1);
+          break;
+        case 'w':
+          setWireMode((mode) => !mode);
+          break;
+        case 'b':
+          setSidebarOpen((open) => !open);
+          break;
+        case 'c':
+          setBrowserOpen(true);
+          break;
+        case 'Escape':
+          // Escape backs out of the mode you are in, deepest first, so it
+          // never leaves the bench armed for wiring with no way back.
+          if (browserOpen) setBrowserOpen(false);
+          else if (wireMode) setWireMode(false);
+          else if (selectedId) setSelectedId(null);
+          else if (firmwareOpen) setFirmwareOpen(false);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [simulation, browserOpen, wireMode, selectedId, firmwareOpen]);
 
 
   const bench = simulation.bench;
@@ -294,7 +360,37 @@ export default function App() {
   );
 
   const onRouteWire = useCallback(
-    (from: Terminal, to: Terminal) => simulation.routeWire(from, to),
+    (from: Terminal, to: Terminal, bends: readonly BendPoint[]) =>
+      simulation.routeWire(from, to, bends),
+    [simulation],
+  );
+
+  const onSetWireBends = useCallback(
+    (wireId: string, bends: readonly BendPoint[]) => {
+      simulation.setWireBends(wireId, bends);
+      forceRender((n) => n + 1);
+    },
+    [simulation],
+  );
+
+  const onRemoveWireBend = useCallback(
+    (wireId: string, index: number) => {
+      simulation.removeWireBend(wireId, index);
+      forceRender((n) => n + 1);
+    },
+    [simulation],
+  );
+
+  const onInsertWireBend = useCallback(
+    (wireId: string, index: number, bend: BendPoint) => {
+      simulation.insertWireBend(wireId, index, bend);
+      forceRender((n) => n + 1);
+    },
+    [simulation],
+  );
+
+  const bendIndexNear = useCallback(
+    (wireId: string, x: number, y: number) => simulation.bendIndexNear(wireId, x, y),
     [simulation],
   );
 
@@ -337,48 +433,74 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
-      <header className="flex items-center gap-3 border-b border-slate-800 px-4 py-2">
+      {/*
+       * Three groups, left to right: what bench you are on, what the simulation
+       * is doing, then what you can reach. The old header ran them together as
+       * five equal buttons, so stopping the firmware and opening the parts
+       * browser looked like the same kind of act.
+       */}
+      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-slate-800 pr-3 pl-4">
         <h1 className="text-sm font-semibold tracking-tight">Noesis Lab</h1>
-        <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
 
-          {simulation.mcu.board.name}
-        </span>
-        <button
-          type="button"
-          onClick={() => setWireMode((mode) => !mode)}
-          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-            wireMode
-              ? 'bg-sky-500 text-slate-900'
-              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
-          }`}
-        >
-          {wireMode ? 'Wiring…' : 'Wire tool'}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (simulation.running) simulation.stop();
-            else simulation.start();
-            forceRender((n) => n + 1);
-          }}
-          className="rounded bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-600"
-        >
-          {simulation.running ? 'Pause' : 'Resume'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setBoardId((current) => (current === 'esp32' ? 'uno' : 'esp32'))}
-          className="rounded bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-600"
-        >
-          Swap board
-        </button>
-        <button
-          type="button"
-          onClick={() => setBrowserOpen(true)}
-          className="rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-sky-500"
-        >
-          Components
-        </button>
+        <div className="flex items-center gap-1.5 border-l border-slate-800 pl-3">
+          <span className="text-slate-500" aria-hidden="true">
+            <Component1Icon className="icon" />
+          </span>
+          <span className="text-xs text-slate-300">{simulation.mcu.board.name}</span>
+          <button
+            type="button"
+            onClick={() => setBoardId((current) => (current === 'esp32' ? 'uno' : 'esp32'))}
+            className="ctl ctl-icon ctl-quiet ml-0.5"
+            title="Swap board"
+            aria-label="Swap board"
+          >
+            <UpdateIcon className="icon" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              if (simulation.running) simulation.stop();
+              else simulation.start();
+              forceRender((n) => n + 1);
+            }}
+            className="ctl ctl-quiet"
+            title={simulation.running ? 'Pause the simulation (Space)' : 'Run the simulation (Space)'}
+          >
+            {simulation.running ? (
+              <PauseIcon className="icon" aria-hidden="true" />
+            ) : (
+              <PlayIcon className="icon" aria-hidden="true" />
+            )}
+            {simulation.running ? 'Pause' : 'Run'}
+          </button>
+        </div>
+
+        <span className="flex-1" />
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setWireMode((mode) => !mode)}
+            aria-pressed={wireMode}
+            className="ctl"
+            title="Drag between two terminals to route a jumper (W)"
+          >
+            <SwitchIcon className="icon" aria-hidden="true" />
+            {wireMode ? 'Wiring…' : 'Wire tool'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setBrowserOpen(true)}
+            className="ctl ctl-accent"
+            title="Browse every part the bench can hold (C)"
+          >
+            <PlusIcon className="icon" aria-hidden="true" />
+            Components
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -389,8 +511,34 @@ export default function App() {
          * about a fifth of the width, which is what made the whole thing read
          * as broken.
          */}
-        <aside className="hidden w-44 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-900 lg:block">
-          <PartPalette onPlace={onPlacePart} onBrowse={() => setBrowserOpen(true)} />
+        {/*
+         * The sidebar collapses to a slim rail rather than disappearing.
+         *
+         * It used to step aside under the `lg` breakpoint, which meant a
+         * laptop could reach the bench but could not reach the parts list at
+         * all. A rail costs almost nothing and keeps the toggle discoverable.
+         */}
+        <aside
+          className={`flex shrink-0 flex-col border-r border-slate-800 bg-slate-900 transition-[width] ${
+            sidebarOpen ? 'w-56' : 'w-9'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-expanded={sidebarOpen}
+            aria-label={sidebarOpen ? 'Collapse the parts sidebar' : 'Expand the parts sidebar'}
+            title={`${sidebarOpen ? 'Collapse' : 'Expand'} sidebar (B)`}
+            className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          >
+            <CaretLeftIcon
+              className={`icon transition-transform ${sidebarOpen ? '' : 'rotate-180'}`}
+              aria-hidden="true"
+            />
+          </button>
+          {sidebarOpen && (
+            <PartSearch onPlace={onPlacePart} onBrowse={() => setBrowserOpen(true)} />
+          )}
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
@@ -405,6 +553,10 @@ export default function App() {
               onMovePart={onMovePart}
               onRouteWire={onRouteWire}
               onTogglePressed={onTogglePressed}
+              onSetWireBends={onSetWireBends}
+              onRemoveWireBend={onRemoveWireBend}
+              onInsertWireBend={onInsertWireBend}
+              bendIndexNear={bendIndexNear}
             />
           </div>
 
