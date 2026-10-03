@@ -23,6 +23,17 @@
 import { type PartDefinition, type Rotation, rotateOffset } from './catalog';
 
 /**
+ * A bend position, in millimetres.
+ *
+ * Declared here rather than imported so the bench model stays independent of
+ * the UI's geometry types; the shape is the same and structurally compatible.
+ */
+export interface BendPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
  * How close two contacts must be to count as sharing one hole.
  *
  * Exported because the netlist needs the same number to decide which contacts
@@ -30,6 +41,40 @@ import { type PartDefinition, type Rotation, rotateOffset } from './catalog';
  * that the picker cannot see.
  */
 export const SNAP_DISTANCE_MM = 0.4;
+
+/**
+ * Length of the path a jumper actually runs, in millimetres.
+ *
+ * With no bends this is the straight line between the contacts. With them it
+ * sums the legs, and each leg is measured along the same orthogonal path the
+ * renderer draws -- so the resistance the solver uses is the length of the
+ * wire on the bench, not the distance between where its ends happen to sit.
+ */
+function routedLengthMm(
+  fromX: number,
+  fromY: number,
+  bends: readonly BendPoint[],
+  toX: number,
+  toY: number,
+): number {
+  let total = 0;
+  let x = fromX;
+  let y = fromY;
+
+  for (const bend of bends) {
+    // A leg whose ends do not line up is drawn as two runs, so it is measured
+    // as two; see `legCorners` in the router.
+    if (x !== bend.x && y !== bend.y) total += Math.abs(bend.x - x) + Math.abs(bend.y - y);
+    else total += Math.hypot(bend.x - x, bend.y - y);
+    x = bend.x;
+    y = bend.y;
+  }
+
+  if (x !== toX && y !== toY) total += Math.abs(toX - x) + Math.abs(toY - y);
+  else total += Math.hypot(toX - x, toY - y);
+
+  return total;
+}
 
 export interface Terminal {
   readonly id: number;
@@ -54,8 +99,18 @@ export interface Wire {
   from: number;
   to: number;
   readonly gaugeAwg: number;
-  readonly lengthMm: number;
+  /** Recomputed whenever the route changes; see `setWireBends`. */
+  lengthMm: number;
   readonly colour: string;
+  /**
+   * Bends the operator placed by hand, in millimetres.
+   *
+   * Empty means the wire takes the automatic dogleg. These are a *routing*
+   * detail and nothing else: the netlist unions the two ends whether there is
+   * one bend or nine, because a jumper connects its contacts wherever it
+   * happens to run. Mutable, like `from` and `to`.
+   */
+  bends: readonly BendPoint[];
 }
 
 export interface Bench {
@@ -132,20 +187,72 @@ export class BenchBuilder {
     fromY: number,
     toX: number,
     toY: number,
-    options: { colour?: string; gaugeAwg?: number } = {},
+    options: { colour?: string; gaugeAwg?: number; bends?: readonly BendPoint[] } = {},
   ): Wire {
     const from = this.terminalAt(fromX, fromY);
     const to = this.terminalAt(toX, toY);
+    const bends = options.bends ?? [];
     const wire: Wire = {
       id: `w${this.nextWireSerial++}`,
       from,
       to,
       gaugeAwg: options.gaugeAwg ?? 26,
-      lengthMm: Math.hypot(toX - fromX, toY - fromY),
+      // A wire bent round corners is longer than the straight line between its
+      // ends, and the solver turns this into resistance, so it has to be the
+      // length actually run rather than the crow-flies distance.
+      lengthMm: routedLengthMm(fromX, fromY, bends, toX, toY),
       colour: options.colour ?? '#d94f4f',
+      bends: [...bends],
     };
     this.wires.push(wire);
     return wire;
+  }
+
+  /**
+   * Replaces a jumper's bends wholesale, re-measuring its length.
+   *
+   * The one way to change a placed wire's shape. Setting an empty list hands
+   * it back to the automatic router, which is how a hand-routed wire is
+   * released rather than deleted.
+   */
+  setWireBends(id: string, bends: readonly BendPoint[]): void {
+    const wire = this.wires.find((candidate) => candidate.id === id);
+    if (!wire) return;
+    const from = this.terminals[wire.from];
+    const to = this.terminals[wire.to];
+    wire.bends = [...bends];
+    // Length tracks the route, so it has to be re-measured on every change or
+    // the solver would price a reshaped jumper at its old resistance.
+    wire.lengthMm = routedLengthMm(from.x, from.y, wire.bends, to.x, to.y);
+  }
+
+  /**
+   * Drops one bend, keeping the rest in order.
+   *
+   * Used both for the operator removing a waypoint and for a drag that pulls
+   * one off the end of the list, which is the same operation.
+   */
+  removeWireBend(id: string, index: number): void {
+    const wire = this.wires.find((candidate) => candidate.id === id);
+    if (!wire || index < 0 || index >= wire.bends.length) return;
+    const bends = wire.bends.filter((_, position) => position !== index);
+    this.setWireBends(id, bends);
+  }
+
+  /**
+   * Inserts a bend at a position along the route rather than at its end.
+   *
+   * Order is what makes the wire's shape, so inserting mid-list is what puts
+   * a waypoint on the leg it was clicked near instead of always tacking it on
+   * the far end.
+   */
+  insertWireBend(id: string, index: number, bend: BendPoint): void {
+    const wire = this.wires.find((candidate) => candidate.id === id);
+    if (!wire) return;
+    const bends = [...wire.bends];
+    const at = Math.max(0, Math.min(index, bends.length));
+    bends.splice(at, 0, bend);
+    this.setWireBends(id, bends);
   }
 
   /**
