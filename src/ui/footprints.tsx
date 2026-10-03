@@ -57,6 +57,8 @@ export interface FootprintState {
   readonly displays?: ReadonlyMap<string, DisplayController>;
   /** Servo parts, so their horns point where the sketch told them to. */
   readonly servos?: ReadonlyMap<string, Servo>;
+  /** Stepper shaft angles in degrees, so rotors draw turned. */
+  readonly steppers?: ReadonlyMap<string, number>;
   /** Character LCD parts, so their glass shows what reached it. */
   readonly lcds?: ReadonlyMap<string, Lcd1602>;
   /**

@@ -6,6 +6,7 @@ import { solveCircuit, type Solution } from './circuit';
 import { DynamicState } from './catalog';
 import { buildNetlist, type Netlist } from './netlist';
 import { DISTANCE_KNOB, echoMicroseconds, sonarDefinition } from './sonar';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 describe('sonar definition', () => {
   it('exposes VCC/TRIG/ECHO/GND with a distance knob', () => {
@@ -64,6 +65,15 @@ function echoVolts(solved: { netlist: Netlist; solution: Solution }, sonar: Part
   const node = solved.netlist.pinNode.get(`${sonar.id}:ECHO`)!;
   return node === GROUND ? 0 : solved.solution.voltages[node];
 }
+
+describe('sonar selection', () => {
+  it('selection box matches the sonar artwork', () => {
+    const drawn = renderedSizeMm(sonarDefinition());
+    expect(drawn.widthMm).toBe(45);
+    expect(drawn.heightMm).toBe(25);
+    expect(wokwiPartFor(sonarDefinition())?.tag).toBe('wokwi-hc-sr04');
+  });
+});
 
 describe('echo line', () => {
   it('rests low, drives high while measuring, releases after', () => {

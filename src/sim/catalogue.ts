@@ -41,6 +41,8 @@ import {
 } from './modules';
 import { relayDefinition } from './relay';
 import { encoderDefinition } from './encoder';
+import { sonarDefinition } from './sonar';
+import { biaxialStepperDefinition, stepperDefinition } from './stepper';
 
 export interface CatalogueEntry {
   readonly id: string;
@@ -218,6 +220,27 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: encoderDefinition,
   },
   {
+    id: 'sonar-hcsr04',
+    name: 'Ultrasonic Sensor (HC-SR04)',
+    group: 'input',
+    note: 'Trigger it and read the echo with pulseIn: the width in microseconds is centimeters times 58. Turn the distance knob to move the wall.',
+    make: sonarDefinition,
+  },
+  {
+    id: 'stepper-motor',
+    name: 'Stepper Motor',
+    group: 'output',
+    note: 'Four wires, two windings: sequence the coils and the shaft follows in 7.5 degree steps.',
+    make: stepperDefinition,
+  },
+  {
+    id: 'biaxial-stepper',
+    name: 'Biaxial Stepper',
+    group: 'output',
+    note: 'Two steppers in one frame: each axis sequences on its own four wires.',
+    make: biaxialStepperDefinition,
+  },
+  {
     id: 'analog-joystick',
     name: 'Analog Joystick',
     group: 'input',
@@ -346,6 +369,7 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   'ili9341-320x240': true,
   'slide-potentiometer': true,
   'membrane-keypad': true,
+  'biaxial-stepper': true,
 };
 
 export function isLargePart(id: string): boolean {

@@ -6,6 +6,7 @@ import { buildNetlist } from './netlist';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { STEP_DEGREES, biaxialStepperDefinition, stepperDefinition, stepTransition } from './stepper';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 describe('stepper definition', () => {
   it('exposes four coil pins in a row', () => {
@@ -86,6 +87,19 @@ describe('stepper shaft', () => {  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5,
     mcu.writeDigital(PINS.aMinus, true, engine.timeMs);
     engine.settle();
     expect(engine.stepperAngle(stepper.id)).toBeCloseTo(armed, 6);
+  });
+});
+
+describe('stepper selection', () => {
+  it('selection boxes match the stepper artworks', () => {
+    const single = renderedSizeMm(stepperDefinition());
+    expect(single.widthMm).toBe(42);
+    expect(single.heightMm).toBe(42);
+    expect(wokwiPartFor(stepperDefinition())?.tag).toBe('wokwi-stepper-motor');
+    const twin = renderedSizeMm(biaxialStepperDefinition());
+    expect(twin.widthMm).toBe(56);
+    expect(twin.heightMm).toBe(67.5);
+    expect(wokwiPartFor(biaxialStepperDefinition())?.tag).toBe('wokwi-biaxial-stepper');
   });
 });
 

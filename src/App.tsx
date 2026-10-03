@@ -353,6 +353,7 @@ export default function App() {
       pinVolts: simulation.pinVoltages(),
       displays: simulation.displayControllers(),
       servos: simulation.servoModels(),
+      steppers: simulation.stepperAngles(),
       lcds: simulation.lcdModels(),
       controls: simulation.controls,
       // Read here so the memo is honest about depending on the bench: the maps
