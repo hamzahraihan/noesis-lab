@@ -22,11 +22,19 @@ import {
   type FirmwareServices,
 } from '../sim/firmware/interpreter';
 import { FirmwareSyntaxError } from '../sim/firmware/parser';
-import type { PartDefinition } from '../sim/catalog';
+import type { BoardPin, KnobSpec, PartDefinition } from '../sim/catalog';
+import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
+
 import { GROUND } from '../sim/elements';
 import type { DisplayController } from '../sim/display/part';
 import { I2CBus } from '../sim/bus/i2c';
 import { SpiBus } from '../sim/bus/spi';
+import { BusLog, type BusEntry } from '../sim/bus/log';
+import type { Servo } from '../sim/devices/servo';
+import type { Lcd1602 } from '../sim/devices/lcd';
+import { LcdDriver, type LcdCommand } from '../sim/devices/lcd-driver';
+
+
 import type { TraceSample } from '../sim/probe';
 import {
   AMP_RANGES,
@@ -38,7 +46,7 @@ import {
   type OhmRange,
 } from '../sim/multimeter';
 
-import type { DynamicState } from '../sim/catalog';
+import { DynamicState } from '../sim/catalog';
 import { routeWireViaCorners } from './wire-route';
 /** Longest slice of simulated time one rendered frame may cover. */
 const MAX_FRAME_MS = 40;
@@ -56,104 +64,6 @@ const TIME_SCALE = 1;
  * The sketch the bench opens with: a blinking LED, a bar on the OLED over
  * I2C, and a bar on the TFT over SPI.
  */
-export const BLINK_SKETCH = `#include <Arduino.h>
-#include <Wire.h>
-
-#define LED_PIN 2
-#define OLED_ADDR 0x3C
-
-int blinks = 0;
-
-void oledCommand(int c) {
-  Wire.beginTransmission(OLED_ADDR);
-  Wire.write(0x00);
-  Wire.write(c);
-  Wire.endTransmission();
-}
-
-// A TFT command and its parameters share one chip-select window: the bytes
-// after the command count as its parameters only while it is still selected.
-void tftCommand(int command, int first, int second) {
-  SPI.beginTransaction();
-  SPI.transfer(command, 0);
-  if (first >= 0) {
-    SPI.transfer(first >> 8, 1);
-    SPI.transfer(first & 255, 1);
-  }
-  if (second >= 0) {
-    SPI.transfer(second >> 8, 1);
-    SPI.transfer(second & 255, 1);
-  }
-  SPI.end();
-}
-
-// One RGB565 pixel, sent while a transfer is already open.
-void tftPixel(int colour) {
-  SPI.transfer(colour >> 8, 1);
-  SPI.transfer(colour & 255, 1);
-}
-
-void setup() {
-  pinMode(LED_PIN, OUTPUT);
-  Serial.begin(115200);
-  Serial.println("ESP32 online");
-
-  Wire.begin(21, 22);
-  oledCommand(0xAE);
-  // Page addressing, so each frame writes where it is told rather than
-  // carrying on from wherever the last one stopped.
-  oledCommand(0x20); oledCommand(0x02);
-  oledCommand(0x21); oledCommand(0x00); oledCommand(0x7F);
-  oledCommand(0x22); oledCommand(0x00); oledCommand(0x07);
-  oledCommand(0x81); oledCommand(0x9F);
-  oledCommand(0xA1); oledCommand(0xA6);
-  oledCommand(0xA8); oledCommand(0x3F);
-  oledCommand(0xD3); oledCommand(0x00);
-  oledCommand(0xD5); oledCommand(0x80);
-  oledCommand(0xD9); oledCommand(0x22);
-  oledCommand(0xDA); oledCommand(0x12);
-  oledCommand(0xDB); oledCommand(0x20);
-  oledCommand(0x8D); oledCommand(0x14);
-  oledCommand(0xAF);
-
-  // Bring up the TFT. Leaving D/C on the wrong pin turns every one of these
-  // commands into pixel data, and the panel fills with noise instead of drawing.
-  SPI.begin();
-  tftCommand(0x01, -1, -1);
-  delay(50);
-  tftCommand(0x11, -1, -1);
-  delay(120);
-  tftCommand(0x3A, 0x0055, -1);
-  tftCommand(0x29, -1, -1);
-}
-
-void loop() {
-  digitalWrite(LED_PIN, HIGH);
-  delay(400);
-  digitalWrite(LED_PIN, LOW);
-  delay(400);
-
-  // A bar along the top of the OLED.
-  oledCommand(0xB0); oledCommand(0x00); oledCommand(0x10);
-  Wire.beginTransmission(OLED_ADDR);
-  Wire.write(0x40);
-  for (int i = 0; i < 40; i++) { Wire.write(0xFF); }
-  Wire.endTransmission();
-
-  // A bar along the top of the TFT: a 320-pixel window, forty of them lit.
-  tftCommand(0x2A, 0x0000, 0x013F);
-  tftCommand(0x2B, 0x0000, 0x00EF);
-  SPI.beginTransaction();
-  SPI.transfer(0x2C, 0);
-  for (int i = 0; i < 40; i++) { tftPixel(0x001F); }
-  for (int i = 0; i < 280; i++) { tftPixel(0x0000); }
-  SPI.end();
-
-  blinks++;
-  Serial.print("blink ");
-  Serial.println(blinks);
-}
-`;
 
 /**
  * Real jumper colours, cycled so a populated board looks like a real one.
@@ -180,27 +90,29 @@ export class Simulation {
   serial: string[] = [];
   running = false;
 
-  private pressedButtons = new Set<string>();
-  private potPositions = new Map<string, number>();
-  private firmwareSource = BLINK_SKETCH;
+  /** What the operator is doing to the parts, shared with the renderers. */
+  readonly controls = new DynamicState();
+  private firmwareSource = '';
   private serialSnapshot: string[] = [];
+
+  /**
+   * Board pins the logic analyser is watching.
+   *
+   * Held as ids rather than nets because a net is only known once the bench
+   * settles, and the operator picks pins before anything moves.
+   */
+  private analysedPins: string[] = [];
+  private readonly busLog = new BusLog();
   private serialDirty = true;
 
   constructor(board: PartDefinition) {
     this.mcu = new McuRuntime(board);
-    this.engine = new Engine({ bench: this.builder.build(), mcu: this.mcu });
-    this.engine.rebuild();
+    this.engine = new Engine({ bench: this.builder.build(), mcu: this.mcu, dynamicState: this.controls });
   }
   get bench(): Bench {
     return this.builder.build();
   }
 
-  private get dynamicState(): DynamicState {
-    return {
-      pressedButtons: this.pressedButtons,
-      potPositions: this.potPositions,
-    };
-  }
 
   /** Loads firmware, reporting a syntax error instead of throwing at the UI. */
   loadFirmware(source: string): void {
@@ -367,28 +279,127 @@ export class Simulation {
     return part;
   }
 
+  /**
+   * Places one of an example's parts and wires it the way its sketch expects.
+   *
+   * The wiring is per part rather than per board because it is the part that
+   * decides: an I2C module needs four wires to whatever the board calls its bus
+   * pins, and a servo needs one signal plus its ground. Which pins those are is
+   * the board's business, so they are asked for by pin number here.
+   *
+   * An example whose parts are not wired would be worse than no example: the
+   * sketch would run and quietly read nothing, which is indistinguishable from
+   * the API being broken.
+   */
+  placeExampleDevice(what: ExampleDevice, x: number, y: number): PartInstance {
+    const definition = EXAMPLE_DEVICES[what]();
+    const part = this.builder.addPart(definition, x, y);
+    const bench = this.builder.build();
+    const terminal = (pin: string): Terminal | undefined => {
+      const id = part.terminals[pin];
+      return id === undefined ? undefined : bench.terminals[id];
+    };
+
+    const wire = (pin: string, boardPin: string) => {
+      if (!boardPin) return;
+      const from = terminal(pin);
+      if (!from) return;
+      const to = this.boardPin(boardPin);
+      if (!to) return;
+      this.builder.addWire(from.x, from.y, to.x, to.y);
+    };
+
+    /*
+     * Pins are asked for by the number firmware would name them with, not by the
+     * silkscreen. The ESP32 calls its bus pins GPIO21 and GPIO22 where an Uno
+     * calls the same wires SDA and SCL, and an example that worked on one board
+     * and silently stopped on the other would be a bug the reader spends an
+     * afternoon on.
+     */
+    const byNumber = (gpio: number): string => this.firstGpio((pin) => pin.gpio === gpio);
+    const ground = this.firstGpio((pin) => pin.role === 'ground');
+
+    if (what === 'servo') {
+      // The signal, and the ground it references. The supply is left alone: a
+      // servo wants its own 4.8 V, and joining it here would be deciding that
+      // on the operator's behalf.
+      // Pin 19 is a general-purpose pin on every board here, chosen because it
+      // is on neither bus -- a signal line that shared a net with a display's
+      // chip-select would drive both.
+      wire('PWM', byNumber(19));
+      wire('GND', ground);
+    } else {
+      const [sda, scl] = this.mcu.i2cPins;
+      wire('SDA', byNumber(sda));
+      wire('SCL', byNumber(scl));
+      wire('GND', ground);
+      wire('VCC', this.firstGpio((pin) => pin.role === 'power'));
+
+      /*
+       * A character LCD also needs its six control lines, or the glass stays
+       * dark however correctly the clock behind it is wired. They go to whatever
+       * general-purpose pins the board has going spare, in order, so the wiring
+       * is the same on every board even though the pins differ.
+       */
+      if (what === 'lcd1602') {
+        /*
+         * The panel's lines to spare board pins, chosen by number and
+         * remembered: its job is to find the same pin again, and a net is not a
+         * pin -- two holes can share one, so resolving a line by the net it
+         * landed on finds whichever of them the board happens to list first.
+         */
+        const taken = new Set([...this.mcu.i2cPins, ...this.mcu.spiPins]);
+        // A pin firmware cannot name is no use here: the library addresses its
+        // own lines by number, so a hole with none is not one it can hold.
+        const spare = this.mcu.pins().filter(
+          (pin) => pin.role === 'gpio' && pin.gpio !== undefined && !taken.has(pin.gpio),
+        );
+        LCD_LINES.forEach((line, index) => {
+          const boardPin = spare[index];
+          if (!boardPin) return;
+          this.lcdBoardPins.set(line, boardPin.gpio ?? -1);
+          wire(line, boardPin.id);
+        });
+        wire('VSS', ground);
+      }
+    }
+
+    this.rebuild();
+    return part;
+  }
+
+  /**
+
+    this.rebuild();
+    return part;
+  }
+
+  /** World position of a board pin by id, for wiring a part to the board. */
+  private boardPin(pinId: string): Terminal | null {
+    const pin = this.mcu.definition.pins.find((candidate) => candidate.id === pinId);
+    return pin ? { id: -1, x: pin.x, y: pin.y } : null;
+  }
+
+  /** The first board pin matching a predicate, which is how a board is asked. */
+  private firstGpio(match: (pin: BoardPin) => boolean): string {
+    return this.mcu.pins().find(match)?.id ?? '';
+  }
+
   removePart(id: string): void {
     this.builder.removePart(id);
     this.rebuild();
   }
 
-  setButtonPressed(partId: string, pressed: boolean): void {
-    if (pressed) this.pressedButtons.add(partId);
-    else this.pressedButtons.delete(partId);
+  /** Holds a momentary contact down or lets it spring back. */
+  setPressed(partId: string, pressed: boolean): void {
+    this.controls.setPressed(partId, pressed);
     this.rebuild();
   }
 
-  setPotPosition(partId: string, fraction: number): void {
-    this.potPositions.set(partId, Math.min(1, Math.max(0, fraction)));
+  /** Moves one of a part's controls and re-solves around it. */
+  setKnob(partId: string, spec: KnobSpec, value: number): void {
+    this.controls.setKnob(partId, spec, value);
     this.rebuild();
-  }
-
-  isButtonPressed(partId: string): boolean {
-    return this.pressedButtons.has(partId);
-  }
-
-  potPosition(partId: string): number {
-    return this.potPositions.get(partId) ?? 0.5;
   }
 
   /** Volts on each board pin's net, keyed for the footprint renderer. */
@@ -405,6 +416,26 @@ export class Simulation {
       }
     }
     return volts;
+  }
+
+  /** Servo models, so the artwork can draw each horn where it was told to. */
+  servoModels(): ReadonlyMap<string, Servo> {
+    const servos = new Map<string, Servo>();
+    for (const part of this.bench.parts) {
+      const servo = this.engine.servo(part.id);
+      if (servo) servos.set(part.id, servo);
+    }
+    return servos;
+  }
+
+  /** Character LCD models, so the artwork can show what reached the glass. */
+  lcdModels(): ReadonlyMap<string, Lcd1602> {
+    const lcds = new Map<string, Lcd1602>();
+    for (const part of this.bench.parts) {
+      const lcd = this.engine.lcd(part.id);
+      if (lcd) lcds.set(part.id, lcd);
+    }
+    return lcds;
   }
 
   /** Live controller models for every display part, for the UI to render. */
@@ -430,6 +461,50 @@ export class Simulation {
       this.serialDirty = false;
     }
     return this.serialSnapshot;
+  }
+
+  /** Transfers over the I2C and SPI buses, oldest first. */
+  busLines(): readonly BusEntry[] {
+    return this.busLog.lines();
+  }
+
+  clearBusLog(): void {
+    this.busLog.clear();
+  }
+
+  /**
+   * Adds or removes a pin from the logic analyser's capture.
+   *
+   * Watching follows the *net* the pin sits on, exactly as the scope probe
+   * does, so a pin wired to something interesting shows that thing's level.
+   */
+  toggleAnalysedPin(pinId: string): void {
+    if (this.analysedPins.includes(pinId)) {
+      this.engine.probes.unwatch(this.engine.netOfMcuPin(pinId));
+      this.analysedPins = this.analysedPins.filter((id) => id !== pinId);
+    } else {
+      this.engine.probes.watch(this.engine.netOfMcuPin(pinId));
+      this.analysedPins = [...this.analysedPins, pinId];
+    }
+  }
+
+  /** Whether the logic analyser is capturing a pin. */
+  isPinAnalysed(pinId: string): boolean {
+    return this.analysedPins.includes(pinId);
+  }
+
+  /**
+   * One captured trace per analysed pin, named by the header label the
+   * operator sees on the silkscreen rather than by the pin's id.
+   */
+  analyserTraces(): ReadonlyArray<{ label: string; samples: TraceSample[] }> {
+    return this.analysedPins.map((pinId) => {
+      const waveform = this.engine.probes.waveform(this.engine.netOfMcuPin(pinId));
+      return {
+        label: this.mcu.pins().find((pin) => pin.id === pinId)?.label ?? pinId,
+        samples: waveform?.toArray() ?? [],
+      };
+    });
   }
 
   /**
@@ -503,15 +578,157 @@ export class Simulation {
     }
   }
 
-  private readonly i2c = new I2CBus((address, byte, isControl) =>
-    this.engine.deliverI2C(address, byte, isControl),
+  private readonly i2c = new I2CBus(
+    (address, byte, isControl) => this.engine.writeI2C(address, byte, isControl),
+    (address, count) => this.engine.requestI2C(address, count),
   );
 
   private rebuild(): void {
-    this.engine.rebuild(this.builder.build(), this.dynamicState);
+    this.engine.rebuild(this.builder.build(), this.controls);
     this.engine.settle();
   }
 
+
+  /**
+   * The character LCD on the bench, and the board pins its header sits on.
+   *
+   * There is only ever one on a bench: a second would need a second host
+   * object, and the sketch language here has no way to name one.
+   */
+  /** The board pin each of the panel's control lines was wired to. */
+  private readonly lcdBoardPins = new Map<string, number>();
+
+  private characterLcd(): LcdDriver | null {
+    if (!this.lcdDriver) {
+      for (const part of this.bench.parts) {
+        const panel = this.engine.lcd(part.id);
+        if (panel) this.lcdDriver = new LcdDriver(panel);
+      }
+    }
+    return this.lcdDriver;
+  }
+
+  private lcdDriver: LcdDriver | null = null;
+
+  /**
+   * Puts one library operation on the wire, byte by byte.
+   *
+   * The handshake is the real one: the enable line is pulsed around each
+   * nibble, and the engine reads those pins back, so a header that is not
+   * wired stops the bytes arriving rather than only failing to look right.
+   */
+  private sendLcd(action: (lcd: LcdDriver) => readonly LcdCommand[]): number {
+    const found = this.characterLcd();
+    if (!found) return 0;
+    // Each byte goes out as two strobed nibbles: the panel takes four bits at a
+    // time and shifts the halves together itself.
+    for (const command of action(found)) {
+      const high = (command.value >> 4) & 0x0f;
+      const low = command.value & 0x0f;
+      this.strokeLcd(command.isData, high);
+      this.strokeLcd(command.isData, low);
+    }
+    return 0;
+  }
+
+  /**
+   * Claims the panel's control lines as outputs.
+   *
+   * A pin comes out of reset as a floating input, and a write to one is ignored
+   * -- so the library has to configure its own pins, which is exactly what a
+   * real `LiquidCrystal` constructor does with the six numbers it is handed.
+   * Called once, at `begin`, rather than per byte.
+   */
+  private driveLcdPins(): void {
+    for (const line of this.lcdPins().all) {
+      if (line >= 0) this.mcu.setDirection(line, 'output');
+    }
+  }
+
+  /** One HD44780 byte: four data lines with an enable strobe around them. */
+  /**
+   * One nibble onto the panel's four data lines, with an enable strobe.
+   *
+   * The nibble, not the byte: a four-bit HD44780 never sees a whole one, and
+   * the panel joins the halves again on its own side.
+   */
+  private strokeLcd(isData: boolean, value: number): void {
+    const pins = this.lcdPins();
+    const level = (line: number, high: boolean) => {
+      if (line >= 0) this.mcu.writeDigital(line, high, this.engine.timeMs);
+    };
+    level(pins.rs, isData);
+    /*
+     * The five data lines carry one byte whole, bit 4 on D4 down to bit 0 on
+     * D0 -- which is a sixth bit short of a full byte, and the reason a real
+     * HD44780 in four-bit mode sends a nibble at a time and never asks the
+     * panel to carry more than four bits in one go.
+     */
+    level(pins.data[0], ((value >> 4) & 1) === 1);
+    level(pins.data[1], ((value >> 3) & 1) === 1);
+    level(pins.data[2], ((value >> 2) & 1) === 1);
+    level(pins.data[3], ((value >> 1) & 1) === 1);
+    level(pins.data[4], (value & 1) === 1);
+    if (pins.enable < 0) return;
+    /*
+     * The panel latches on the rising edge of enable, and it can only do that
+     * after the data lines have settled -- so the circuit is solved with the
+     * lines written and enable still low, and then again with enable high. One
+     * solve for all of it is a single edge the solver never observes, and a
+     * display wired correctly stays blank.
+     */
+    level(pins.enable, false);
+    this.engine.settle();
+    level(pins.enable, true);
+    this.engine.settle();
+  }
+
+
+  /**
+   * The panel's own header, resolved to board pin numbers.
+   *
+   * A pin the panel is not wired to comes back as -1, and every write to it is
+   * skipped, which is how a display on the wrong header ends up dark.
+   */
+  /**
+   * The board pins driving the panel's control lines.
+   *
+   * Read back from the wiring rather than from the nets, because a net is not a
+   * pin: two holes can share one, and looking a control line up by the net it
+   * landed on finds whichever of them the board happens to list first.
+   */
+  private lcdPins(): { rs: number; enable: number; data: readonly number[]; all: readonly number[] } {
+    const on = (line: string): number => this.lcdBoardPins.get(line) ?? -1;
+    // D4 first: the panel's bit 4 is on its D4, and the order here is the
+    // order the host writes them in.
+    const data = ['D4', 'D5', 'D6', 'D7', 'D0'].map(on);
+    const rs = on('RS');
+    const enable = on('E');
+    return { rs, enable, data, all: [rs, enable, ...data].filter((pin) => pin >= 0) };
+  }
+
+  /**
+   * Lights or dims the backlight, which on this module is a pin rather than a
+   * command -- so it is driven through the same header as everything else.
+   */
+  private backlight(on: boolean): void {
+    const panel = this.characterLcd()?.target;
+    panel?.setBacklight(on);
+    this.engine.settle();
+  }
+
+  /** The servo whose signal pin is wired to a board pin, if there is one. */
+  private servoOnPin(pin: number): Servo | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      const servo = this.engine.servo(part.id);
+      if (servo && this.engine.currentNetlist.pinNode.get(`${part.id}:PWM`) === net) return servo;
+    }
+    return null;
+  }
 
   private services(): FirmwareServices {
     return {
@@ -540,8 +757,19 @@ export class Simulation {
         begin: () => this.i2c.begin(0, 0),
         beginTransmission: (address) => this.i2c.beginTransmission(address),
         write: (value) => this.i2c.write(value),
+        requestFrom: (address, count) => this.i2c.requestFrom(address, count),
+        read: () => this.i2c.read(),
+        available: () => this.i2c.available(),
         endTransmission: () => {
           const transfer = this.i2c.endTransmission();
+          this.busLog.record({
+            timeMs: this.engine.timeMs,
+            bus: 'i2c',
+            address: transfer.address,
+            bytes: transfer.bytes,
+            acknowledged: transfer.acknowledged,
+            micros: transfer.micros,
+          });
           this.engine.settle();
           return transfer.micros;
         },
@@ -551,9 +779,49 @@ export class Simulation {
         transfer: (value, dataSelect) => this.spi.transfer(value, dataSelect),
         end: () => {
           const transfer = this.spi.end();
+          this.busLog.record({
+            timeMs: this.engine.timeMs,
+            bus: 'spi',
+            address: null,
+            bytes: transfer.bytes.map((byte) => byte.value),
+            acknowledged: transfer.acknowledged,
+            micros: transfer.micros,
+          });
           this.engine.settle();
           return transfer.micros;
         },
+      },
+      /*
+       * The LCD drives its own header, exactly as the library does: every
+       * command becomes RS, four data lines and a strobe on E. The engine
+       * reads those pins back into the panel, so an LCD on the wrong header
+       * stays blank rather than working anyway.
+       */
+      lcd: {
+        begin: (columns, rows) => {
+          if (!this.characterLcd()) return 0;
+          this.driveLcdPins();
+          return this.sendLcd((lcd) => lcd.begin(columns, rows));
+        },
+        clear: () => this.sendLcd((lcd) => lcd.clear()),
+        home: () => this.sendLcd((lcd) => lcd.home()),
+        setCursor: (column, row) => this.sendLcd((lcd) => lcd.setCursor(column, row)),
+        print: (text) => this.sendLcd((lcd) => lcd.text(text)),
+        write: (value) => this.sendLcd((lcd) => lcd.byte(value)),
+        createChar: (slot, bitmap) => this.sendLcd((lcd) => lcd.createChar(slot, bitmap)),
+        backlight: () => this.backlight(true),
+        noBacklight: () => this.backlight(false),
+      },
+      servo: {
+        attach: () => {},
+        write: (pin, angle) => {
+          const servo = this.servoOnPin(pin);
+          if (!servo) return;
+          servo.write(angle);
+          this.engine.settle();
+        },
+        read: (pin) => this.servoOnPin(pin)?.angle ?? 0,
+        detach: (pin) => this.servoOnPin(pin)?.detach(),
       },
       serialBegin: () => {},
       serialWrite: (text) => {
