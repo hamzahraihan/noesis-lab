@@ -49,6 +49,37 @@ export const INPUT_IMPEDANCE_OHMS = 1e12;
 export function floatingInputFraction(timeMs: number): number {
   return 0.5 + 0.5 * Math.sin(timeMs / 370) * Math.sin(timeMs / 91);
 }
+/**
+ * Where each board's I2C peripheral sits out of the box, as SDA then SCL.
+ *
+ * Keyed by board id rather than derived, because the answer is a property of
+ * the board rather than of the chip: the Mega and the ESP32 both use pin 21,
+ * for SCL on one and for SDA on the other.
+ */
+const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
+  esp32: [21, 22],
+  uno: [18, 19],
+  nano: [18, 19],
+  mega: [20, 21],
+  rp2040: [26, 27],
+};
+
+/**
+ * Where each board's SPI peripheral sits, as [chipSelect, clock, mosi], with
+ * the data-select line the bench's TFT happens to be wired to in between.
+ *
+ * The Mega's hardware SPI is the 50-53 block rather than the 10-13 a sketch
+ * ported from an Uno names, so a sketch that hard-codes 10/11/12/13 behaves
+ * differently there -- which is true of the real board, and the reason the
+ * table is per board rather than shared.
+ */
+const SPI_PINS: Readonly<Record<string, readonly number[]>> = {
+  esp32: [5, 15, 18, 23],
+  uno: [10, 9, 13, 11],
+  nano: [10, 9, 13, 11],
+  mega: [53, 9, 52, 51],
+  rp2040: [10, 9, 13, 11],
+};
 
 export class McuRuntime {
   readonly definition: PartDefinition;
@@ -80,13 +111,13 @@ export class McuRuntime {
 
   /**
    * Pins this board's default I2C peripheral sits on.
-   *
+
    * The engine uses these to decide which nets carry the bus. `Wire.begin`
    * may move them, but these are what the board's silkscreen implies out of
    * the box, so a sketch that never calls begin still has a bus to miss.
    */
   get i2cPins(): readonly number[] {
-    return this.board.id === 'uno' ? [18, 19] : [21, 22];
+    return I2C_PINS[this.board.id] ?? [];
   }
 
   /**
@@ -95,10 +126,11 @@ export class McuRuntime {
    *
    * These are the pins the engine treats as carrying SPI, so a display wired to
    * anything else simply never sees the bus -- which is the failure worth being
-   * able to reproduce.
+   * able to reproduce. `dataSelect` is the one the bench's own TFT is wired to,
+   * not a peripheral pin: the D/C line is whichever pin the sketch chose.
    */
   get spiPins(): readonly number[] {
-    return this.board.id === 'uno' ? [10, 9, 13, 11] : [5, 15, 18, 23];
+    return SPI_PINS[this.board.id] ?? [];
   }
 
   boardPin(pinId: string): BoardPin | undefined {
