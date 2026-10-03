@@ -8,7 +8,13 @@
  * expensive work out of the render path entirely.
  */
 
-import { BenchBuilder, type Bench, type PartInstance, type Terminal } from '../sim/bench';
+import {
+  BenchBuilder,
+  type Bench,
+  type BendPoint,
+  type PartInstance,
+  type Terminal,
+} from '../sim/bench';
 import { Engine } from '../sim/engine';
 import { McuRuntime } from '../sim/mcu';
 import {
@@ -33,6 +39,7 @@ import {
 } from '../sim/multimeter';
 
 import type { DynamicState } from '../sim/catalog';
+import { routeWireViaCorners } from './wire-route';
 /** Longest slice of simulated time one rendered frame may cover. */
 const MAX_FRAME_MS = 40;
 /** Upper bound on generator steps per frame, so a runaway loop cannot hang. */
@@ -306,11 +313,52 @@ export class Simulation {
     this.rebuild();
   }
 
-  routeWire(from: Terminal, to: Terminal): void {
+  routeWire(from: Terminal, to: Terminal, bends: readonly BendPoint[] = []): void {
     this.builder.addWire(from.x, from.y, to.x, to.y, {
       colour: pickWireColour(this.bench.wires.length),
+      bends,
     });
     this.rebuild();
+  }
+
+  /** Reshapes a placed jumper, re-measuring and re-solving it. */
+  setWireBends(wireId: string, bends: readonly BendPoint[]): void {
+    this.builder.setWireBends(wireId, bends);
+    this.rebuild();
+  }
+
+  removeWireBend(wireId: string, index: number): void {
+    this.builder.removeWireBend(wireId, index);
+    this.rebuild();
+  }
+
+  insertWireBend(wireId: string, index: number, bend: BendPoint): void {
+    this.builder.insertWireBend(wireId, index, bend);
+    this.rebuild();
+  }
+
+  /** Which leg of a wire a world position sits nearest, as a bend index. */
+  bendIndexNear(wireId: string, x: number, y: number): number {
+    const wire = this.bench.wires.find((candidate) => candidate.id === wireId);
+    if (!wire) return 0;
+    const from = this.bench.terminals[wire.from];
+    const to = this.bench.terminals[wire.to];
+    const legs = routeWireViaCorners(from, wire.bends, to);
+
+    // Compare the pointer against each leg's midpoint; the leg the pointer
+    // lands nearest is the leg a new waypoint would belong to.
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < legs.length - 1; i++) {
+      const middleX = (legs[i].x + legs[i + 1].x) / 2;
+      const middleY = (legs[i].y + legs[i + 1].y) / 2;
+      const distance = Math.hypot(x - middleX, y - middleY);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    }
+    return best;
   }
 
   addPart(definition: PartDefinition, x: number, y: number): PartInstance {
