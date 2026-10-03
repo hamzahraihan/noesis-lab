@@ -39,6 +39,7 @@ function mm(value: string, unit: string | undefined): number {
 export const WOKWI_LIBRARY: readonly LibraryElement[] = [
   { tag: 'wokwi-esp32-devkit-v1', name: 'ESP32 DevKit V1', sizeMm: { w: 28.2, h: 54.053 }, status: 'placed' },
   { tag: 'wokwi-arduino-uno', name: 'Arduino Uno R3', sizeMm: { w: 72.58, h: 53.34 }, status: 'placed' },
+  { tag: 'wokwi-arduino-mega', name: 'Arduino Mega 2560', sizeMm: { w: 102.66, h: 50.8 }, status: 'placed' },
   { tag: 'wokwi-resistor', name: 'Resistor', sizeMm: { w: 15.645, h: 3 }, status: 'placed' },
   { tag: 'wokwi-arduino-nano', name: 'Arduino Nano', sizeMm: { w: 44.9, h: 17.8 }, status: 'placed' },
   { tag: 'wokwi-nano-rp2040-connect', name: 'Nano RP2040 Connect', sizeMm: { w: 44.573, h: 17.956 }, status: 'placed' },
@@ -68,14 +69,14 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
   { tag: 'wokwi-gas-sensor', name: 'Gas sensor module', sizeMm: { w: 36.232, h: 16.617 }, status: 'placed' },
   { tag: 'wokwi-flame-sensor', name: 'Flame sensor module', sizeMm: { w: 52.904, h: 16.267 }, status: 'placed' },
   { tag: 'wokwi-ir-receiver', name: 'IR receiver module', sizeMm: { w: 16.178, h: 23.482 }, status: 'placed' },
-  { tag: 'wokwi-7segment', name: '7-segment display', sizeMm: { w: 30.48, h: 20.32 }, status: 'placed' },
+  { tag: 'wokwi-7segment', name: '7-segment display', sizeMm: { w: 12.55, h: 22 }, status: 'placed' },
   { tag: 'wokwi-ili9341', name: '2.4" TFT (ILI9341)', sizeMm: { w: 46.5, h: 77.6 }, status: 'placed' },
 
   { tag: 'wokwi-ds1307', name: 'DS1307 real-time clock', sizeMm: { w: 25.8, h: 22.212 }, status: 'placed' },
   { tag: 'wokwi-mpu6050', name: 'MPU-6050 accelerometer', sizeMm: { w: 21.6, h: 16.2 }, status: 'placed' },
-  { tag: 'wokwi-hx711', name: 'HX711 load-cell amplifier', sizeMm: { w: mm('3', undefined), h: mm('33', undefined) }, status: 'placed' },
-  { tag: 'wokwi-lcd1602', name: 'LCD1602, 16x2', sizeMm: { w: mm('2.95', undefined), h: mm('5.55', undefined) }, status: 'placed' },
-  { tag: 'wokwi-lcd2004', name: 'LCD2004, 20x4', sizeMm: { w: 98, h: 60 }, status: 'placed' },
+  { tag: 'wokwi-hx711', name: 'HX711 load-cell amplifier', sizeMm: { w: 58, h: 43 }, status: 'placed' },
+  { tag: 'wokwi-lcd1602', name: 'LCD1602, 16x2', sizeMm: { w: 80, h: 36 }, status: 'placed' },
+  { tag: 'wokwi-lcd2004', name: 'LCD2004, 20x4', sizeMm: { w: 94.05, h: 47.5 }, status: 'placed' },
   { tag: 'wokwi-servo', name: 'Hobby servo', sizeMm: { w: 45, h: 31.63 }, status: 'placed' },
   {
     tag: 'wokwi-dht22',

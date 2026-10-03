@@ -878,6 +878,10 @@ function DisplayBody({
   const panel = definition.displayPixels;
   const isColour = controller instanceof Ili9341;
   const headerY = definition.pins[0]?.y ?? definition.heightMm - 6;
+  // The bezel is the glass on its carrier: 26 mm square on the OLED, 53 mm
+  // square on the TFT. Sizing both from the TFT left the OLED's outline
+  // hanging 20 mm past its own carrier, so clicks on the glass missed the part.
+  const bezelMm = isColour ? TFT_PANEL_MM : PANEL_MM;
 
   return (
     <g filter="url(#nz-lift)">
@@ -895,7 +899,7 @@ function DisplayBody({
       <MountingHole x={definition.widthMm - 2.4} y={2.4} radius={1.1} />
 
       {/* The black bezel the glass is bonded to. */}
-      <rect x={0.7} y={0.7} width={TFT_PANEL_MM} height={TFT_PANEL_MM} rx={0.8} fill="#0a0d12" />
+      <rect x={0.7} y={0.7} width={bezelMm} height={bezelMm} rx={0.8} fill="#0a0d12" />
 
       {isColour ? (
         <ColourPanel controller={controller} panel={panel} />
@@ -965,7 +969,7 @@ function MonoPanel({
       ))}
       {/* Glass over the top, which is what makes it read as a screen. */}
       <rect x={1.4} y={1.4} width={PANEL_MM - 1.4} height={PANEL_MM - 1.4} fill="url(#nz-glass)" />
-      <rect x={0.7} y={0.7} width={TFT_PANEL_MM} height={TFT_PANEL_MM} rx={0.8} fill="none" stroke="#000" strokeWidth={0.5} />
+      <rect x={0.7} y={0.7} width={PANEL_MM} height={PANEL_MM} rx={0.8} fill="none" stroke="#000" strokeWidth={0.5} />
     </g>
   );
 }

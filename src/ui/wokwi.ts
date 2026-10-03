@@ -68,17 +68,14 @@ export interface WokwiPart {
 }
 
 /** The parts this bench adopts, with the size each element draws at. */
-/** Bare pixels to millimetres, for the elements that state their size that way. */
-function mm(pixels: string): number {
-  return Number(pixels) * (25.4 / 96);
-}
-
 export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   esp32: { tag: 'wokwi-esp32-devkit-v1', sizeMm: { w: 28.2, h: 54.053 } },
   uno: { tag: 'wokwi-arduino-uno', sizeMm: { w: 72.58, h: 53.34 } },
+  // Bare pixels to millimetres (px * 25.4 / 96): the LED states 40 x 50 px.
   led: { tag: 'wokwi-led', sizeMm: { w: 10.583, h: 13.229 } },
   resistor: { tag: 'wokwi-resistor', sizeMm: { w: 15.645, h: 3 } },
-  'pushbutton-6mm': { tag: 'wokwi-pushbutton', sizeMm: { w: 17.802, h: 12 } },
+  'pushbutton-6mm': { tag: 'wokwi-pushbutton-6mm', sizeMm: { w: 7.413, h: 6 } },
+  pushbutton: { tag: 'wokwi-pushbutton', sizeMm: { w: 17.802, h: 12 } },
   mega: { tag: 'wokwi-arduino-mega', sizeMm: { w: 102.66, h: 50.8 } },
   nano: { tag: 'wokwi-arduino-nano', sizeMm: { w: 44.9, h: 17.8 } },
   rp2040: { tag: 'wokwi-nano-rp2040-connect', sizeMm: { w: 44.573, h: 17.956 } },
@@ -103,13 +100,17 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   'slide-potentiometer': { tag: 'wokwi-slide-potentiometer', sizeMm: { w: 55, h: 29 } },
   keypad: { tag: 'wokwi-membrane-keypad', sizeMm: { w: 70.336, h: 91 } },
   '7segment': { tag: 'wokwi-7segment', sizeMm: { w: 12.55, h: 22 } },
+  // Kept for inventory only: the rotary pot keeps its hand-authored renderer
+  // because the element's pins (29/39/49 px, 5.3 mm span) do not land where
+  // this bench's 10.16 mm header is, so adopting it would miswire it.
+  potentiometer: { tag: 'wokwi-potentiometer', sizeMm: { w: 20, h: 20 } },
   ds1307: { tag: 'wokwi-ds1307', sizeMm: { w: 25.8, h: 22.212 } },
   mpu6050: { tag: 'wokwi-mpu6050', sizeMm: { w: 21.6, h: 16.2 } },
-  hx711: { tag: 'wokwi-hx711', sizeMm: { w: mm('3'), h: mm('33') } },
-  // The element states this one in bare pixels: 2.95 x 5.55 px at 96 per
-  // inch, which is 80.1 x 15.0 mm -- the 16x2 glass on its carrier.
-  lcd1602: { tag: 'wokwi-lcd1602', sizeMm: { w: 80.1, h: 15 } },
-  lcd2004: { tag: 'wokwi-lcd2004', sizeMm: { w: 98, h: 22.2 } },
+  hx711: { tag: 'wokwi-hx711', sizeMm: { w: 58, h: 43 } },
+  // 16x2 glass: panel 56.2 x 11.5 mm plus the carrier around it (see
+  // lcd1602-element render(): panelWidth + 23.8, panelHeight + 24.5).
+  lcd1602: { tag: 'wokwi-lcd1602', sizeMm: { w: 80, h: 36 } },
+  lcd2004: { tag: 'wokwi-lcd2004', sizeMm: { w: 94.05, h: 47.5 } },
   servo: { tag: 'wokwi-servo', sizeMm: { w: 45, h: 31.63 } },
 };
 
@@ -184,7 +185,8 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
     case 'button':
       return WOKWI_PARTS['pushbutton-6mm'];
     case 'potentiometer':
-      return WOKWI_PARTS.potentiometer;
+      // Intentional fallback: see the inventory note on WOKWI_PARTS.potentiometer.
+      return null;
     case 'photoresistor':
       return WOKWI_PARTS.photoresistor;
     case 'thermistor':
