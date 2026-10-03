@@ -176,8 +176,11 @@ describe('display on the bench', () => {
     // Both bus lines land on ordinary GPIO rather than the I2C pins, so the
     // bytes go nowhere -- the mistake of wiring the display to "any two pins".
     const { engine, bus, display } = buildDisplayBench({
-      sdaPin: 'L_GPIO13',
-      sclPin: 'L_GPIO14',
+      // Both land on ordinary GPIO rather than the I2C pins, which is the
+      // mistake the test is about. D13 and D14 are the ESP32's header labels
+      // for GPIO13 and GPIO14.
+      sdaPin: 'L_D13',
+      sclPin: 'L_D14',
     });
     bus.begin(21, 22);
     bus.beginTransmission(0x3c);
