@@ -128,4 +128,20 @@ describe('encoder quadrature', () => {
     const held = solveBench(bench, state);
     expect(pinVolts(held.netlist, held.solution, bench.module, 'SW')).toBeLessThan(0.5);
   });
+
+  it('reads sane finite levels with VCC floating', () => {
+    const builder = new BenchBuilder();
+    const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
+    const module = builder.addPart(encoderDefinition(), 200, 0);
+    const gnd = module.definition.pins.find((p) => p.id === 'GND')!;
+    const boardGround = esp32.definition.pins.find((p) => p.id === 'L_GND')!;
+    builder.addWire(module.x + gnd.x, module.y + gnd.y, boardGround.x, boardGround.y);
+    const bench = { builder, esp32, module, columns: new Map<string, number>(), wirePower: () => {} };
+    const state = new DynamicState();
+    const solved = solveBench(bench, state);
+    for (const pinId of ['CLK', 'DT', 'SW']) {
+      const volts = pinVolts(solved.netlist, solved.solution, module, pinId);
+      expect(Number.isFinite(volts)).toBe(true);
+    }
+  });
 });

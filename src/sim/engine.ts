@@ -112,6 +112,13 @@ export class Engine {
 
     this.mcuPart =
       this.bench.parts.find((part) => part.definition.component.kind === 'mcu') ?? null;
+    // Drop armature state for parts that are gone; a later part reusing an
+    // id must start resting, never energized.
+    for (const partId of [...this.relayEnergized.keys()]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.relayEnergized.delete(partId);
+      }
+    }
     this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized);
     this.solution = null;
     this.previousVoltages = null;
@@ -143,10 +150,9 @@ export class Engine {
   /**
    * Relay armature state, keyed by part id.
    *
-   * Updated from the solved coil volts after each solve; the next rebuild
-   * picks it up, so pull-in costs one tick -- the honest delay of a real
-   * armature, and what breaks the otherwise circular read of coil volts
-   * during the solve that decides the contacts.
+   * Updated from the solved coil volts after each solve, with the solve
+   * repeated once on change -- the armature moves within the same tick.
+   * Pruned on rebuild so a removed relay leaves no stale entry behind.
    */
   private readonly relayEnergized = new Map<string, boolean>();
 
@@ -517,19 +523,35 @@ export class Engine {
   }
 
   private solveAt(timeMs: number, dtSeconds: number): Solution {
-    const netlist = this.currentNetlist;
-    const { elements, nodeCount } = this.buildElements(netlist, timeMs);
+    let netlist = this.currentNetlist;
+    let { elements, nodeCount } = this.buildElements(netlist, timeMs);
 
-    const solution = solveCircuit(elements, {
+    let solution = solveCircuit(elements, {
       nodeCount,
       dtSeconds,
       previousVoltages: this.previousVoltages,
     });
 
     this.solution = solution;
+    if (this.pumpRelays()) {
+      // An armature moved: the contact elements above are stale, so rebuild
+      // the netlist once and re-solve. The coil is an independent resistor,
+      // so its volts barely move with the contacts and one pass converges.
+      netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized);
+      this.netlist = netlist;
+      const rebuilt = this.buildElements(netlist, timeMs);
+      elements = rebuilt.elements;
+      nodeCount = rebuilt.nodeCount;
+      solution = solveCircuit(elements, {
+        nodeCount,
+        dtSeconds,
+        previousVoltages: this.previousVoltages,
+      });
+      this.solution = solution;
+      this.pumpRelays();
+    }
     // Capacitor history only cares about real nets, so trim the internal rows.
-    this.previousVoltages = solution.voltages.slice(0, netlist.nodeCount);
-    this.pumpRelays();
+    this.previousVoltages = solution.voltages.slice(0, this.currentNetlist.nodeCount);
     // Capture last, so a probe sees the voltages this solve produced rather
     // than the previous step's.
     this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
@@ -540,20 +562,27 @@ export class Engine {
   /**
    * Refreshes relay armature state from the solved coil volts.
    *
-   * Runs after the solve, so a change takes effect on the next rebuild --
-   * one tick of pull-in delay. Reads both coil ends through the pin map, so
-   * an unwired coil rests at 0 V and stays on NC.
+   * Returns whether any armature moved. Runs after the solve; the caller
+   * re-solves once on change, so pull-in still costs at most one extra
+   * pass. Reads both coil ends through the pin map, so an unwired coil
+   * rests at 0 V and stays on NC.
    */
-  private pumpRelays(): void {
+  private pumpRelays(): boolean {
     const netlist = this.netlist;
-    if (!netlist) return;
+    if (!netlist) return false;
+    let changed = false;
     for (const part of this.bench.parts) {
       if (part.definition.component.kind !== 'relay') continue;
       const plus = netlist.pinNode.get(`${part.id}:COIL+`) ?? GROUND;
       const minus = netlist.pinNode.get(`${part.id}:COIL-`) ?? GROUND;
       const volts = this.voltageOfNet(plus) - this.voltageOfNet(minus);
-      this.relayEnergized.set(part.id, coilEnergized(volts));
+      const energized = coilEnergized(volts);
+      if (this.relayEnergized.get(part.id) !== energized) {
+        this.relayEnergized.set(part.id, energized);
+        changed = true;
+      }
     }
+    return changed;
   }
 
   /**

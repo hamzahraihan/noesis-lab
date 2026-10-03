@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
 import { columnX, railRowY, stripRowY, breadboardDefinition } from './breadboard';
 import { esp32DevKitV1 } from './boards';
+import { McuRuntime } from './mcu';
+import { Engine } from './engine';
 import { GROUND, type Element } from './elements';
 import { solveCircuit, type Solution } from './circuit';
 import { DynamicState, type PartDefinition } from './catalog';
@@ -87,6 +89,75 @@ describe('relay definition', () => {
   });
 });
 
+describe('relay under firmware control', () => {
+  function engineBench() {
+    // No breadboard: direct terminal-to-terminal jumpers, so nothing
+    // coincides with a strip and shorts.
+    const builder = new BenchBuilder();
+    const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
+    const relay = builder.addPart(relayDefinition(), 200, 0);
+    const at = (part: PartInstance, pinId: string) => {
+      const pin = part.definition.pins.find((p) => p.id === pinId)!;
+      return { x: part.x + pin.x, y: part.y + pin.y };
+    };
+    const wire = (a: PartInstance, aPin: string, b: PartInstance, bPin: string) => {
+      const pa = at(a, aPin);
+      const pb = at(b, bPin);
+      builder.addWire(pa.x, pa.y, pb.x, pb.y);
+    };
+    wire(esp32, 'R_D2', relay, 'COIL+');
+    wire(esp32, 'L_GND', relay, 'COIL-');
+    wire(esp32, 'R_3V3', relay, 'NO1');
+    wire(esp32, 'L_GND', relay, 'NC1');
+    const mcu = new McuRuntime(esp32.definition);
+    const engine = new Engine({ bench: builder.build(), mcu });
+    engine.rebuild();
+    return { engine, mcu, relay };
+  }
+
+  function poleVolts(engine: Engine, relay: PartInstance, pinId: string): number {
+    const net = engine.currentNetlist.pinNode.get(`${relay.id}:${pinId}`)!;
+    return engine.voltageOfNet(net);
+  }
+
+  it('throws the pole from firmware within two settles', () => {
+    const { engine, mcu, relay } = engineBench();
+    mcu.setDirection(2, 'output');
+
+    mcu.writeDigital(2, false, engine.timeMs);
+    engine.settle();
+    engine.settle();
+    expect(poleVolts(engine, relay, 'P1')).toBeLessThan(0.5);
+
+    mcu.writeDigital(2, true, engine.timeMs);
+    engine.settle();
+    engine.settle();
+    expect(poleVolts(engine, relay, 'P1')).toBeGreaterThan(2.8);
+  });
+
+  it('rests on NC with the coil unwired', () => {
+    const builder = new BenchBuilder();
+    const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
+    const relay = builder.addPart(relayDefinition(), 200, 0);
+    const at = (part: PartInstance, pinId: string) => {
+      const pin = part.definition.pins.find((p) => p.id === pinId)!;
+      return { x: part.x + pin.x, y: part.y + pin.y };
+    };
+    const join = (a: PartInstance, aPin: string, b: PartInstance, bPin: string) => {
+      const pa = at(a, aPin);
+      const pb = at(b, bPin);
+      builder.addWire(pa.x, pa.y, pb.x, pb.y);
+    };
+    join(relay, 'NO1', esp32, 'R_3V3');
+    join(relay, 'NC1', esp32, 'L_GND');
+    const mcu = new McuRuntime(esp32.definition);
+    const engine = new Engine({ bench: builder.build(), mcu });
+    engine.rebuild();
+    engine.settle();
+    engine.settle();
+    expect(poleVolts(engine, relay, 'P1')).toBeLessThan(0.5);
+  });
+});
 describe('relay selection', () => {
   it('selection box matches the relay artwork', () => {
     const drawn = renderedSizeMm(relayDefinition());
@@ -96,9 +167,11 @@ describe('relay selection', () => {
   });
 });
 describe('relay coil threshold', () => {
-  it('pulls in at 3.3V and 5V, rests below 2.5V', () => {
+  it('pulls in on direct GPIO drive and rests below threshold', () => {
     expect(coilEnergized(0)).toBe(false);
-    expect(coilEnergized(2.4)).toBe(false);
+    expect(coilEnergized(1.0)).toBe(false);
+    // A 3.3 V pin sags to ~2.1 V through its output impedance into 70 ohm.
+    expect(coilEnergized(2.1)).toBe(true);
     expect(coilEnergized(3.3)).toBe(true);
     expect(coilEnergized(5)).toBe(true);
   });
