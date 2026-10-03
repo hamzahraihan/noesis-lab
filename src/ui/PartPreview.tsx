@@ -9,6 +9,7 @@
 import { useMemo } from 'react';
 import type { PartInstance } from '../sim/bench';
 import type { PartDefinition } from '../sim/catalog';
+import { DynamicState } from '../sim/catalog';
 import { PartFootprint, type FootprintState } from './footprints';
 import { HardwareDefs } from './hardware';
 import { renderedSizeMm } from './wokwi';
@@ -31,11 +32,7 @@ function previewState(definition: PartDefinition, partId: string): FootprintStat
     pinVolts.set(`${partId}:anode`, 3.3);
     pinVolts.set(`${partId}:cathode`, 0);
   }
-  return {
-    pinVolts,
-    pressedButtons: new Set<string>(),
-    potPositions: new Map([[partId, 0.62]]),
-  };
+  return { pinVolts, controls: new DynamicState() };
 }
 
 export function PartPreview({
