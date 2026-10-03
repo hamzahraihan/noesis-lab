@@ -40,6 +40,16 @@ export interface FirmwareServices {
   wire: WirePort;
   /** The SPI bus, for sketches that drive a TFT or a flash chip. */
   spi: SpiPort;
+  /**
+   * Character LCDs and servos.
+   *
+   * Optional because a host that has no such part on the bench has nothing to
+   * drive: a display test has no reason to implement a servo, and requiring it
+   * would only teach the next reader that the field is decorative. The bench
+   * itself always supplies both.
+   */
+  lcd?: LiquidCrystalPort;
+  servo?: ServoPort;
 }
 
 /**
@@ -71,6 +81,55 @@ export interface WirePort {
   write(value: number): number;
   /** Finishes the transfer and reports how long it took, in microseconds. */
   endTransmission(): number;
+  /**
+   * Asks the device at an address for `count` bytes, returning how many are
+   * waiting. The register to start from is whatever the last write left as the
+   * device's pointer, exactly as on hardware.
+   */
+  requestFrom(address: number, count: number): number;
+  /** One byte of the last request, or -1 once they are spent. */
+  read(): number;
+  /** Bytes of the last request still unread. */
+  available(): number;
+}
+
+/**
+ * A character LCD, as the Arduino library presents it.
+ *
+ * The pins are not passed to `begin` because the bench already shows them: an
+ * LCD part on the bench carries its own RS/RW/E/D4-D7 header, and a sketch
+ * that repeated those numbers would be a second place to get the wiring wrong.
+ * Wiring the display to the wrong pins is a mistake worth being able to make.
+ */
+export interface LiquidCrystalPort {
+  /** Binds to the LCD on the bench, or reports that there is none. */
+  begin(columns: number, rows: number): number;
+  clear(): void;
+  home(): void;
+  setCursor(column: number, row: number): void;
+  /** Writes text at the cursor, advancing it. */
+  print(text: string): void;
+  /** Writes one byte: a character, or a command when `isCommand`. */
+  write(value: number): void;
+  /** Loads one custom glyph into CGRAM slot 0-7. */
+  createChar(slot: number, bitmap: readonly number[]): void;
+  backlight(): void;
+  noBacklight(): void;
+}
+
+/**
+ * Servos, by the pin they are attached to.
+ *
+ * An angle is a fact about the servo rather than about a pulse, so this is
+ * where the pulse width lives: the bench measures what the sketch sent and
+ * the part shows where it ended up.
+ */
+export interface ServoPort {
+  attach(pin: number): void;
+  /** Angle in degrees, clamped to whatever the servo can actually reach. */
+  write(pin: number, angle: number): void;
+  read(pin: number): number;
+  detach(pin: number): void;
 }
 
 export const PIN_INPUT = 0;
@@ -494,6 +553,12 @@ export class FirmwareRuntime {
           for (const argument of expression.args) {
             args.push((yield* this.evaluate(argument, scope, services)) as Value);
           }
+          if (callee.target.name === 'lcd' || callee.target.name === 'LiquidCrystal') {
+            return this.evaluateLcdCall(callee.member, args, services);
+          }
+          if (callee.target.name === 'servo' || callee.target.name === 'Servo') {
+            return this.evaluateServoCall(callee.member, args, services);
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
@@ -576,6 +641,82 @@ export class FirmwareRuntime {
         if (micros > 0) yield micros / 1000;
         return 0;
       }
+      case 'requestFrom':
+        return wire.requestFrom(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0));
+      case 'read':
+        return wire.read();
+      case 'available':
+        return wire.available();
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles an `lcd.*` call.
+   *
+   * Nothing here blocks: an HD44780 is a parallel device whose whole cost is
+   * the microseconds the bus takes, which no sketch here is fast enough to
+   * notice. What matters is that the characters land on the glass and that a
+   * display wired to the wrong pins stays blank.
+   */
+  private evaluateLcdCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const lcd = services.lcd;
+    if (!lcd) return 0;
+    const number = (index: number): number => asNumber(args[index] ?? 0);
+
+    switch (member) {
+      case 'begin':
+        return lcd.begin(number(0), number(1));
+      case 'clear':
+        lcd.clear();
+        return 0;
+      case 'home':
+        lcd.home();
+        return 0;
+      case 'setCursor':
+        lcd.setCursor(number(0), number(1));
+        return 0;
+      case 'print':
+        lcd.print(typeof args[0] === 'string' ? args[0] : String(asNumber(args[0] ?? 0)));
+        return 0;
+      case 'write':
+        lcd.write(number(0));
+        return 0;
+      case 'createChar': {
+        const bitmap = Array.isArray(args[1]) ? (args[1] as number[]) : [];
+        lcd.createChar(number(0), bitmap.map((row) => asNumber(row)));
+        return 0;
+      }
+      case 'backlight':
+        lcd.backlight();
+        return 0;
+      case 'noBacklight':
+        lcd.noBacklight();
+        return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /** Handles a `servo.*` call, which addresses servos by the pin they are on. */
+  private evaluateServoCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const servo = services.servo;
+    if (!servo) return 0;
+    const pin = asNumber(args[0] ?? -1);
+
+    switch (member) {
+      case 'attach':
+        servo.attach(pin);
+        return 0;
+      case 'write':
+        servo.write(pin, asNumber(args[1] ?? 0));
+        return 0;
+      case 'read':
+        return servo.read(pin);
+      case 'detach':
+        servo.detach(pin);
+        return 0;
       default:
         return 0;
     }
