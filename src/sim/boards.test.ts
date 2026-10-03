@@ -41,13 +41,19 @@ describe('board pin maps', () => {
 
   it('records the ESP32 strapping pins', () => {
     const runtime = new McuRuntime(esp32DevKitV1());
-    expect(runtime.boardPin('L_GPIO12')!.strapLevel).toBe('low');
+    // GPIO12 and GPIO15 are the strapping pins; the header labels them D12/D15.
+    expect(runtime.boardPin('L_D12')!.strapLevel).toBe('low');
+    expect(runtime.boardPin('L_D12')!.gpio).toBe(12);
     expect(runtime.boardPin('R_D15')!.strapLevel).toBe('high');
   });
 
   it('gives every Uno pin a reachable id', () => {
     const runtime = new McuRuntime(arduinoUnoR3());
+    // Pin ids follow the artwork's own header blocks, which are what the
+    // silkscreen beside each pin calls them.
     expect(runtime.pinIdForGpio(13)).toBe('J1_D13');
+    expect(runtime.pinIdForGpio(1)).toBe('J1_TX');
+    expect(runtime.pinIdForGpio(0)).toBe('J1_RX');
     expect(runtime.pinIdForGpio(18)).toBe('J3_A4');
     expect(runtime.pinIdForGpio(19)).toBe('J3_A5');
   });
