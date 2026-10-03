@@ -86,6 +86,8 @@ export type ComponentSpec =
   | { readonly kind: 'relay' }
   | { readonly kind: 'rotary-encoder' }
   | { readonly kind: 'sonar' }
+  | { readonly kind: 'stepper' }
+  | { readonly kind: 'biaxial-stepper' }
   | { readonly kind: 'joystick' }
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }
