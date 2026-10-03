@@ -7,6 +7,7 @@ import { solveCircuit, type Solution } from './circuit';
 import { DynamicState, type PartDefinition } from './catalog';
 import { buildNetlist, type Netlist } from './netlist';
 import { coilEnergized, RELAY_COIL_OHMS, relayDefinition } from './relay';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 const BOARD_ORIGIN_X = 200;
 const SUPPLY_VOLTS = 3.3;
@@ -86,6 +87,14 @@ describe('relay definition', () => {
   });
 });
 
+describe('relay selection', () => {
+  it('selection box matches the relay artwork', () => {
+    const drawn = renderedSizeMm(relayDefinition());
+    expect(drawn.widthMm).toBe(21);
+    expect(drawn.heightMm).toBe(10);
+    expect(wokwiPartFor(relayDefinition())?.tag).toBe('wokwi-ks2e-m-dc5');
+  });
+});
 describe('relay coil threshold', () => {
   it('pulls in at 3.3V and 5V, rests below 2.5V', () => {
     expect(coilEnergized(0)).toBe(false);

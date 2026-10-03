@@ -138,8 +138,7 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     tag: 'wokwi-ky-040',
     name: 'Rotary encoder',
     sizeMm: { w: 30.815, h: 18.63 },
-    status: 'needs-api',
-    note: 'Quadrature: the meaning is in the order of the edges, not their level.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-ir-remote',
@@ -159,8 +158,7 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     tag: 'wokwi-ks2e-m-dc5',
     name: 'Relay module',
     sizeMm: { w: 21, h: 10 },
-    status: 'needs-api',
-    note: 'A contact that follows its coil, on a board whose artwork declares no pin positions yet.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-ssd1306',
