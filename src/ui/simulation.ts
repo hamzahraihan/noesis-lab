@@ -429,6 +429,11 @@ export class Simulation {
     return servos;
   }
 
+  /** Stepper shaft angles, so the artwork can draw each rotor turned. */
+  stepperAngles(): ReadonlyMap<string, number> {
+    return this.engine.stepperAngles();
+  }
+
   /** Character LCD models, so the artwork can show what reached the glass. */
   lcdModels(): ReadonlyMap<string, Lcd1602> {
     const lcds = new Map<string, Lcd1602>();

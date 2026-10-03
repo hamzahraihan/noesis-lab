@@ -85,6 +85,9 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   thermistor: { tag: 'wokwi-ntc-temperature-sensor', sizeMm: { w: 35.826, h: 19 } },
   'tilt-switch': { tag: 'wokwi-tilt-switch', sizeMm: { w: 23.4, h: 14.7 } },
   'slide-switch': { tag: 'wokwi-slide-switch', sizeMm: { w: 8.5, h: 9.23 } },
+  sonar: { tag: 'wokwi-hc-sr04', sizeMm: { w: 45, h: 25 } },
+  stepper: { tag: 'wokwi-stepper-motor', sizeMm: { w: 42, h: 42 } },
+  'biaxial-stepper': { tag: 'wokwi-biaxial-stepper', sizeMm: { w: 56, h: 67.5 } },
   relay: { tag: 'wokwi-ks2e-m-dc5', sizeMm: { w: 21, h: 10 } },
   'rotary-encoder': { tag: 'wokwi-ky-040', sizeMm: { w: 30.815, h: 18.63 } },
   joystick: { tag: 'wokwi-analog-joystick', sizeMm: { w: 27.2, h: 31.8 } },
@@ -201,6 +204,12 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS.relay;
     case 'rotary-encoder':
       return WOKWI_PARTS['rotary-encoder'];
+    case 'sonar':
+      return WOKWI_PARTS.sonar;
+    case 'stepper':
+      return WOKWI_PARTS.stepper;
+    case 'biaxial-stepper':
+      return WOKWI_PARTS['biaxial-stepper'];
     case 'joystick':
       return WOKWI_PARTS.joystick;
     case 'rgb-led':
@@ -357,6 +366,13 @@ export function pushWokwiState(
 
   if (kind === 'servo') {
     set(element, 'angle', state.servos?.get(part.id)?.angle ?? 90);
+    return;
+  }
+
+  if (kind === 'stepper') {
+    // The element draws its rotor from `angle`; the biaxial one exposes no
+    // such prop, so it stays stateless artwork like the relay.
+    set(element, 'angle', state.steppers?.get(part.id) ?? 0);
     return;
   }
 

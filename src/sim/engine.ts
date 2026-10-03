@@ -608,6 +608,16 @@ export class Engine {
     return this.stepperState.get(partId)?.[axis - 1]?.angle ?? 0;
   }
 
+  /** Shaft angles of single steppers, so the artwork can draw each rotor. */
+  stepperAngles(): ReadonlyMap<string, number> {
+    const angles = new Map<string, number>();
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'stepper') continue;
+      angles.set(part.id, this.stepperAngle(part.id));
+    }
+    return angles;
+  }
+
   /**
    * Advances stepper shafts from solved coil volts.
    *

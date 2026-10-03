@@ -96,15 +96,13 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     tag: 'wokwi-stepper-motor',
     name: 'Stepper motor',
     sizeMm: { w: 42, h: 42 },
-    status: 'needs-api',
-    note: 'Coils in sequence; the angle is how many steps have been pulsed.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-biaxial-stepper',
     name: 'Biaxial stepper',
     sizeMm: { w: 56, h: 67.5 },
-    status: 'needs-api',
-    note: 'Two of the above, geared.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-neopixel',
@@ -131,8 +129,7 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     tag: 'wokwi-hc-sr04',
     name: 'HC-SR04 ultrasonic',
     sizeMm: { w: 45, h: 25 },
-    status: 'needs-api',
-    note: 'Its echo is a pulse whose width is a distance, so it needs timing the solver does not do.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-ky-040',
