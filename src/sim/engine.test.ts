@@ -7,6 +7,7 @@ import { DIODE_PROFILES, GROUND } from './elements';
 import { Engine } from './engine';
 import { McuRuntime } from './mcu';
 import { elementCurrent } from './circuit';
+import { DynamicState } from './catalog';
 
 const BOARD_ORIGIN_X = 200;
 const BOTTOM_NEGATIVE_RAIL = 2;
@@ -242,7 +243,7 @@ describe('inputs', () => {
 
     // The netlist is derived from state, so a held button appears as a low
     // resistance path from the input net to the ground rail.
-    engine.rebuild(undefined, { pressedButtons: new Set([buttonId]), potPositions: new Map() });
+    engine.rebuild(undefined, new DynamicState([buttonId]));
     engine.settle();
 
     expect(engine.readDigital(27)).toBe(false);
