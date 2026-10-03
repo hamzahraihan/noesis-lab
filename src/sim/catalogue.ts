@@ -214,7 +214,7 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     id: 'rotary-encoder',
     name: 'Rotary Encoder (KY-040)',
     group: 'input',
-    note: 'Turn the detents to walk CLK/DT through quadrature; press for SW. Reads with digitalRead.',
+    note: 'Turn the detents to walk CLK/DT through quadrature; press for SW. Reads with digitalRead. Needs VCC wired: the outputs are pull-ups to it.',
     make: encoderDefinition,
   },
   {

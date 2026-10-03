@@ -12,8 +12,15 @@ import type { PartDefinition } from './catalog';
 /** Coil resistance of a 5 V signal relay of this class (~70 mA pull-in). */
 export const RELAY_COIL_OHMS = 70;
 
-/** Coil volts above which the armature pulls in. Suits 3.3 V and 5 V logic. */
-export const RELAY_PULLIN_VOLTS = 2.5;
+/**
+ * Coil volts above which the armature pulls in.
+ *
+ * Generous toward real 5 V-coil behavior on purpose: a GPIO driving the
+ * 70 ohm coil sags through its own output impedance (40 ohm on the ESP32),
+ * so a 3.3 V pin delivers ~2.1 V at the coil. The threshold sits below
+ * that so both logic families pull in on direct drive.
+ */
+export const RELAY_PULLIN_VOLTS = 1.8;
 
 /** Whether a solved coil voltage pulls the armature in. */
 export function coilEnergized(coilVolts: number): boolean {
