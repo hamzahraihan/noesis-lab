@@ -1,0 +1,145 @@
+/**
+ * I2C sensor modules: the small breakout boards that answer on the bus instead
+ * of contributing a circuit to it.
+ *
+ * Each is four holes on the header every I2C breakout has, drawn at the size
+ * the element draws it, so a jumper lands beside the pin it names. The pin
+ * names are the ones a wiring tutorial will use, because the whole point is
+ * that the wiring has to be right.
+ */
+
+import type { I2cSensorVariant, KnobSpec, PartDefinition, PinSpec } from '../catalog';
+
+/** The hole pitch, and the grid every module's header is snapped to. */
+const PITCH = 2.54;
+
+/**
+ * The load the bench can put on the cell.
+ *
+ * In grams, because that is the unit a scale is read in; the amplifier does the
+ * conversion to counts itself. At rest the reading is the tare offset, which
+ * is what an unloaded cell reports.
+ */
+export const HX711_LOAD_KNOB: KnobSpec = {
+  id: 'load',
+  label: 'Load',
+  min: 0,
+  max: 1000,
+  step: 10,
+  unit: 'g',
+  defaultValue: 0,
+};
+
+/** One module: the element that draws it, and the header that element carries. */
+interface I2cModule {
+  readonly id: string;
+  readonly name: string;
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly bodyColour: string;
+  readonly legendColour: string;
+  /** The element's header: its first hole, and which way the row runs. */
+  readonly header: {
+    readonly x: number;
+    readonly y: number;
+    readonly names: readonly string[];
+    readonly alongColumn: boolean;
+  };
+  readonly knobs?: readonly KnobSpec[];
+}
+
+const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
+  ds1307: {
+    id: 'ds1307-rtc',
+    name: 'DS1307 RTC Module',
+    widthMm: 25.8,
+    heightMm: 22.212,
+    bodyColour: '#015abe',
+    legendColour: '#e6e6e6',
+    // The element draws five holes down the left edge, the last of them SQW.
+    // This part has no wire for that one, so the header is the first four: the
+    // supply, which the element silkscreens as 5V and every tutorial calls
+    // VCC, and then the bus.
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+  },
+  mpu6050: {
+    id: 'mpu6050-accel',
+    name: 'MPU-6050 Accel/Gyro',
+    widthMm: 21.6,
+    heightMm: 16.2,
+    bodyColour: '#16619d',
+    legendColour: '#ffffff',
+    // Eight holes run along the top edge, of which the last four are the ones
+    // on the bus. The first four are INT, AD0 and the auxiliary master's two
+    // lines, and a header hole the bench can do nothing with is a hole a
+    // jumper can reach and never learn anything from. The holes the element
+    // draws are already 2.54 mm apart on the bench's grid, so nothing moves.
+    header: { x: 12.065, y: 1.27, names: ['SDA', 'SCL', 'GND', 'VCC'], alongColumn: false },
+  },
+  hx711: {
+    id: 'hx711-load-cell',
+    name: 'HX711 Load Cell Amplifier',
+    widthMm: 58,
+    heightMm: 43,
+    bodyColour: '#1c8944',
+    legendColour: '#fbfbfb',
+    // Four holes up the left edge, which the element silkscreens GND, DAT, SCK
+    // and VCC: DAT and SCK are the bit-banged pair of the bare amplifier. The
+    // module the bench models is the one with a microcontroller on it, which
+    // is the part that answers at an address, and it spells the same two wires
+    // SDA and SCL. The element spaces them unevenly, so the first hole is
+    // snapped to the grid and the rest follow at the pitch.
+    header: { x: 1.27, y: 7.62, names: ['GND', 'SDA', 'SCL', 'VCC'], alongColumn: true },
+    knobs: [HX711_LOAD_KNOB],
+  },
+};
+
+function headerPins(module: I2cModule): PinSpec[] {
+  const { header } = module;
+  return header.names.map((name, index) => {
+    const step = index * PITCH;
+    return {
+      id: name,
+      label: name,
+      x: header.alongColumn ? header.x : header.x + step,
+      y: header.alongColumn ? header.y + step : header.y,
+      // Ground is the one pin that has to be tied. The engine decides whether
+      // a device is on the bus by looking for its SDA and SCL on the firmware's
+      // own nets, and a part whose ground is floating is a part that is not
+      // there at all. The supply and the bus are separate nets, deliberately:
+      // joining them here would hide every wiring mistake.
+      net: name === 'GND' ? 'GND' : undefined,
+    };
+  });
+}
+
+function i2cSensorDefinition(variant: I2cSensorVariant): PartDefinition {
+  const module = I2C_MODULES[variant];
+  return {
+    id: module.id,
+    name: module.name,
+    category: 'input',
+    widthMm: module.widthMm,
+    heightMm: module.heightMm,
+    component: { kind: 'i2c-sensor', device: variant },
+    pins: headerPins(module),
+    knobs: module.knobs,
+    bodyColour: module.bodyColour,
+    legendColour: module.legendColour,
+  };
+}
+
+/** DS1307 real-time clock: the blue coin-cell module on a four-pin header. */
+export function ds1307Definition(): PartDefinition {
+  return i2cSensorDefinition('ds1307');
+}
+
+/** MPU-6050 accelerometer and gyroscope, on the carrier board it is sold on. */
+export function mpu6050Definition(): PartDefinition {
+  return i2cSensorDefinition('mpu6050');
+}
+
+/** HX711 load-cell amplifier, with the load cell connector along the top. */
+export function hx711Definition(): PartDefinition {
+  return i2cSensorDefinition('hx711');
+}
