@@ -1,92 +1,30 @@
 /**
  *
- * Side panels: the parts palette, the inspector, the firmware editor and the
- * serial monitor.
+ * Side panels: the inspector, the firmware editor and the serial monitor.
  *
  * Each is deliberately plain. The bench is the thing worth looking at; these
  * panels are instruments, and an instrument that needs explaining is a bad one.
  */
 
 import Editor from '@monaco-editor/react';
-import { FIRMWARE_LANGUAGE, FIRMWARE_THEME } from './monaco-setup';
-import { useEffect, useMemo, useRef } from 'react';
-import type { PartDefinition } from '../sim/catalog';
+import { useEffect, useRef } from 'react';
 import type { PartInstance } from '../sim/bench';
-import { PART_CATALOGUE, type CatalogueEntry } from '../sim/catalogue';
-import { PartPreview } from './PartPreview';
 import { formatOhms, formatVolts } from './format';
+import { FIRMWARE_LANGUAGE, FIRMWARE_THEME } from './monaco-setup';
+import {
+  CaretRightIcon,
+  CodeIcon,
+  CrossCircledIcon,
+  CubeIcon,
+  PlayIcon,
+  ReaderIcon,
+  ResetIcon,
+  TargetIcon,
+  TrashIcon,
+  ValueIcon,
+} from '@radix-ui/react-icons';
 
 // ---------------------------------------------------------------------------
-
-/**
- * The parts you reach for every time, drawn from the shared catalogue.
- *
- * This is deliberately a short list. The browser behind the header button has
- * everything; a palette that listed all of it would just be a worse browser.
- */
-const QUICK_PARTS: readonly string[] = [
-  'resistor-220',
-  'resistor-10000',
-  'led-red',
-  'led-green',
-  'potentiometer-10000',
-  'button-tactile',
-];
-
-export function PartPalette({
-  onPlace,
-  onBrowse,
-}: {
-  onPlace: (definition: PartDefinition, entry: CatalogueEntry) => void;
-  onBrowse(): void;
-}) {
-  const quick = useMemo(
-    () =>
-      QUICK_PARTS.map((id) => PART_CATALOGUE.find((entry) => entry.id === id)).filter(
-        (entry): entry is CatalogueEntry => entry !== undefined,
-      ),
-    [],
-  );
-
-  return (
-    <section className="flex flex-col gap-1">
-      <h2 className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-        Quick parts
-      </h2>
-      {quick.map((entry) => (
-        <PaletteRow key={entry.id} entry={entry} onPlace={onPlace} />
-      ))}
-      <button
-        type="button"
-        onClick={onBrowse}
-        className="mx-2 mt-2 rounded-md border border-slate-700 px-3 py-1.5 text-left text-sm text-slate-300 transition-colors hover:border-sky-600 hover:text-sky-300"
-      >
-        Browse all components…
-      </button>
-    </section>
-  );
-}
-
-function PaletteRow({
-  entry,
-  onPlace,
-}: {
-  entry: CatalogueEntry;
-  onPlace: (definition: PartDefinition, entry: CatalogueEntry) => void;
-}) {
-  const definition = useMemo(() => entry.make(), [entry]);
-  return (
-    <button
-      type="button"
-      onClick={() => onPlace(definition, entry)}
-      className="mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-slate-700"
-    >
-      <PartPreview definition={definition} className="h-7 w-9 shrink-0" />
-      <span className="truncate">{entry.name}</span>
-    </button>
-  );
-}
-
 // ---------------------------------------------------------------------------
 
 
@@ -110,9 +48,15 @@ export function Inspector({
   onSetPot,
 }: InspectorProps) {
   if (!part) {
+    // An empty panel is the first thing a new operator sees, so it says what
+    // to click and shows the glyph for the thing they'd click.
     return (
-      <div className="p-4 text-sm text-slate-400">
-        Select a part to inspect it, or turn on the wire tool and click two holes.
+      <div className="flex flex-1 flex-col">
+        <PanelTitle icon={<CubeIcon className="icon-sm" />} text="Inspector" />
+        <div className="empty flex-1">
+          <TargetIcon className="icon text-slate-700" aria-hidden="true" />
+          <p>Select a part on the bench to read its pins and drive it.</p>
+        </div>
       </div>
     );
   }
@@ -125,80 +69,100 @@ export function Inspector({
   const labelledPins = definition.pins.filter((pin) => pin.label !== '').slice(0, 32);
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <div>
-        <h2 className="text-sm font-semibold text-slate-100">{definition.name}</h2>
-        <p className="text-xs text-slate-500">{definition.id}</p>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PanelTitle icon={<CubeIcon className="icon-sm" />} text="Inspector" />
 
-      <dl className="flex flex-col gap-1 text-xs">
-        <Row label="Pins" value={String(definition.pins.length)} />
-        <Row label="Footprint" value={`${definition.widthMm} × ${definition.heightMm} mm`} />
-        {definition.component.kind === 'resistor' && (
-          <Row label="Resistance" value={formatOhms(definition.component.ohms)} />
-        )}
-        {definition.component.kind === 'led' && (
-          <Row label="Forward voltage" value={`${definition.component.profile.forwardVolts} V`} />
-        )}
-      </dl>
-
-      {labelledPins.length > 0 && (
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         <div>
-          <h3 className="mb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-            Pin voltages
-          </h3>
-          <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-            {labelledPins.map((pin) => (
-              <li key={pin.id} className="flex justify-between gap-2">
-                <span className="truncate text-slate-500">{pin.label}</span>
-                <span className="tabular-nums text-slate-200">
-                  {formatVolts(pinVoltages.get(`${part.id}:${pin.id}`) ?? 0)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <h2 className="text-sm font-semibold text-slate-100">{definition.name}</h2>
+          <p className="mt-0.5 font-mono text-[11px] text-slate-500">{definition.id}</p>
         </div>
-      )}
 
-      {isButton && (
-        <button
-          type="button"
-          onMouseDown={() => onTogglePressed(true)}
-          onMouseUp={() => onTogglePressed(false)}
-          onMouseLeave={() => onTogglePressed(false)}
-          className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-            pressed
-              ? 'bg-amber-400 text-slate-900'
-              : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
-          }`}
-        >
-          {pressed ? 'Pressed' : 'Press and hold'}
+        <dl className="flex flex-col gap-1 text-xs">
+          <Row label="Pins" value={String(definition.pins.length)} />
+          <Row label="Footprint" value={`${definition.widthMm} × ${definition.heightMm} mm`} />
+          {definition.component.kind === 'resistor' && (
+            <Row label="Resistance" value={formatOhms(definition.component.ohms)} />
+          )}
+          {definition.component.kind === 'led' && (
+            <Row label="Forward voltage" value={`${definition.component.profile.forwardVolts} V`} />
+          )}
+        </dl>
+
+        {labelledPins.length > 0 && (
+          <div>
+            <h3 className="panel-title mb-1.5">
+              <ValueIcon className="icon-sm" aria-hidden="true" />
+              Pin voltages
+            </h3>
+            <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+              {labelledPins.map((pin) => (
+                <li key={pin.id} className="flex justify-between gap-2">
+                  <span className="truncate text-slate-500">{pin.label}</span>
+                  <span className="num text-slate-200">
+                    {formatVolts(pinVoltages.get(`${part.id}:${pin.id}`) ?? 0)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {isButton && (
+          <button
+            type="button"
+            onMouseDown={() => onTogglePressed(true)}
+            onMouseUp={() => onTogglePressed(false)}
+            onMouseLeave={() => onTogglePressed(false)}
+            className={`ctl h-8 w-full text-xs ${
+              pressed ? '!bg-amber-400 !text-slate-900' : 'ctl-quiet'
+            }`}
+          >
+            <ReaderIcon className="icon" aria-hidden="true" />
+            {pressed ? 'Pressed' : 'Press and hold'}
+          </button>
+        )}
+
+        {isPot && (
+          <label className="flex flex-col gap-1.5 text-xs">
+            <span className="flex items-center justify-between">
+              <span className="text-slate-400">Wiper</span>
+              <span className="num text-slate-200">{Math.round(potPosition * 100)}%</span>
+            </span>
+            <input
+              type="range"
+              className="wiper"
+              min={0}
+              max={1}
+              step={0.01}
+              value={potPosition}
+              onChange={(event) => onSetPot(Number(event.target.value))}
+            />
+          </label>
+        )}
+
+        <button type="button" onClick={onDelete} className="ctl ctl-danger mt-1 w-full">
+          <TrashIcon className="icon" aria-hidden="true" />
+          Remove part
         </button>
-      )}
-
-      {isPot && (
-        <label className="flex flex-col gap-1 text-xs text-slate-400">
-          Wiper {Math.round(potPosition * 100)}%
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={potPosition}
-            onChange={(event) => onSetPot(Number(event.target.value))}
-            className="w-full accent-sky-400"
-          />
-        </label>
-      )}
-
-      <button
-        type="button"
-        onClick={onDelete}
-        className="mt-2 rounded-md border border-red-900 px-3 py-1.5 text-sm text-red-300 transition-colors hover:bg-red-950"
-      >
-        Remove part
-      </button>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Every instrument's heading, so the panels read as one console.
+ *
+ * The glyph is part of the heading rather than decoration beside it: it is what
+ * lets an operator find the serial monitor by shape while their eyes are on the
+ * waveform.
+ */
+function PanelTitle({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <h3 className="panel-title h-9 shrink-0 border-b border-slate-800 px-3">
+      <span className="text-slate-500">{icon}</span>
+      {text}
+    </h3>
   );
 }
 
@@ -220,12 +184,14 @@ export function SerialMonitor({ lines }: { lines: readonly string[] }) {
 
   return (
     <div className="flex h-full flex-col">
-      <h3 className="border-b border-slate-800 px-3 py-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-        Serial Monitor
-      </h3>
-      <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-xs whitespace-pre-wrap text-emerald-300">
+      <PanelTitle icon={<ReaderIcon className="icon-sm" />} text="Serial Monitor" />
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap text-emerald-300">
         {lines.length === 0 ? (
-          <span className="text-slate-600">no output yet</span>
+          // Dim prose here read as a stalled instrument rather than an idle
+          // one, so it names what would make the sketch start printing.
+          <span className="font-sans text-slate-600">
+            Serial.print and Serial.println output lands here.
+          </span>
         ) : (
           // Serial.print fragments concatenate; only println breaks the line,
           // so the stream is joined before rendering rather than split per write.
@@ -266,22 +232,34 @@ export function FirmwareEditor({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase transition-colors hover:text-slate-200"
+          className="panel-title transition-colors hover:text-slate-200"
         >
-          <span
+          <CaretRightIcon
+            className={`icon-sm transition-transform ${expanded ? 'rotate-90' : ''}`}
             aria-hidden="true"
-            className={`text-slate-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          >
-            &#9656;
+          />
+          <span className="text-slate-500">
+            <CodeIcon className="icon-sm" aria-hidden="true" />
           </span>
           Firmware
         </button>
         <span className="flex-1" />
+        {/*
+         * One button that changes what it does, so the pair never sits side by
+         * side claiming equal weight. Reset is deliberately the quiet
+         * dressing: it discards run state, it does not start work.
+         */}
         <button
           type="button"
           onClick={running ? onReset : onRun}
-          className="rounded bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-sky-500"
+          className={`ctl ${running ? 'ctl-quiet' : 'ctl-accent'}`}
+          title={running ? 'Reset the running sketch' : 'Run this sketch'}
         >
+          {running ? (
+            <ResetIcon className="icon" aria-hidden="true" />
+          ) : (
+            <PlayIcon className="icon" aria-hidden="true" />
+          )}
           {running ? 'Reset' : 'Run'}
         </button>
       </div>
@@ -311,7 +289,8 @@ export function FirmwareEditor({
       )}
 
       {error && (
-        <p className="shrink-0 border-t border-red-900 bg-red-950 px-3 py-1.5 text-xs text-red-300">
+        <p className="flex shrink-0 items-start gap-1.5 border-t border-red-900 bg-red-950 px-3 py-1.5 text-xs text-red-300">
+          <CrossCircledIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
           {error}
         </p>
       )}
@@ -331,14 +310,26 @@ export function StatusBar({
   netCount: number;
 }) {
   return (
-    <footer className="flex items-center gap-4 border-t border-slate-800 bg-slate-900 px-4 py-1.5 text-xs text-slate-400">
-      <span
-        className={`inline-block size-2 rounded-full ${running ? 'bg-emerald-400' : 'bg-slate-600'}`}
-      />
-      <span>{running ? 'Running' : 'Stopped'}</span>
-      <span className="tabular-nums">t = {timeMs.toFixed(0)} ms</span>
-      <span className="tabular-nums">{netCount} nets</span>
-      <span className="ml-auto text-slate-600">
+    <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-slate-800 bg-slate-900 px-3 text-xs text-slate-400">
+      <span className="flex items-center gap-1.5">
+        {/*
+         * The lamp is the fastest read on the whole bench: it is the only
+         * thing visible when the operator's eyes are on the breadboard, so it
+         * pulses in step with the solver rather than sitting steady.
+         */}
+        <span className="relative flex size-2">
+          {running && (
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+          )}
+          <span
+            className={`relative inline-block size-2 rounded-full ${running ? 'bg-emerald-400' : 'bg-slate-600'}`}
+          />
+        </span>
+        <span className={running ? 'text-slate-200' : ''}>{running ? 'Running' : 'Stopped'}</span>
+      </span>
+      <span className="num">t = {timeMs.toFixed(0)} ms</span>
+      <span className="num">{netCount} nets</span>
+      <span className="ml-auto hidden truncate text-slate-600 md:inline">
         Drag to move · wheel to zoom · shift-drag to pan
       </span>
     </footer>
