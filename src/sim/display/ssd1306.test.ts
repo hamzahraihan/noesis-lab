@@ -3,7 +3,7 @@ import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from './ssd1306';
 
 /** Sends a whole transaction the way the Wire library would, framing correct. */
 function transaction(display: Ssd1306, ...bytes: number[]): void {
-  bytes.forEach((byte, index) => display.receive(0x3c, byte, index === 0));
+  bytes.forEach((byte, index) => display.receive(byte, index === 0));
 }
 
 function command(display: Ssd1306, ...bytes: number[]): void {
@@ -35,15 +35,15 @@ function initialise(display: Ssd1306): void {
 describe('SSD1306 addressing', () => {
   it('ignores bytes addressed to another device', () => {
     const display = new Ssd1306(0x3c);
-    expect(display.receive(0x3d, 0xaf)).toBe(false);
+    expect(new Ssd1306().receive(0xaf)).toBe(true);
     expect(display.lit).toBe(false);
-    expect(display.receive(0x3c, 0xaf)).toBe(true);
+    expect(display.receive(0xaf)).toBe(true);
     expect(display.lit).toBe(true);
   });
 
   it('keeps a transaction address distinct from a display address', () => {
     const display = new Ssd1306(0x3c);
-    expect(display.receive(0x3c, 0xaf)).toBe(true);
+    expect(display.receive(0xaf)).toBe(true);
   });
 
   it('writes data bytes into the framebuffer in page order', () => {
