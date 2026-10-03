@@ -15,6 +15,7 @@ import {
 } from '../sim/catalogue';
 import type { PartDefinition } from '../sim/catalog';
 import { PartPreview } from './PartPreview';
+import { WokwiLibrary } from './WokwiLibrary';
 import {
   Cross2Icon,
   MagnifyingGlassIcon,
@@ -28,6 +29,7 @@ export interface ComponentBrowserProps {
 
 export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
   const [query, setQuery] = useState('');
+  const [view, setView] = useState<'catalogue' | 'library'>('catalogue');
   const [group, setGroup] = useState('all');
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -107,49 +109,71 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
         </header>
 
         <nav
-          className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-slate-800 px-4 py-2"
+          className="flex shrink-0 items-center gap-1.5 border-b border-slate-800 px-4 py-2"
           aria-label="Component categories"
         >
           {[{ id: 'all', label: 'All' }, ...CATALOGUE_GROUPS].map((option) => (
             <button
               key={option.id}
               type="button"
-              onClick={() => setGroup(option.id)}
-              aria-pressed={group === option.id}
+              onClick={() => {
+                setView('catalogue');
+                setGroup(option.id);
+              }}
+              aria-pressed={view === 'catalogue' && group === option.id}
               className={`ctl rounded-full ${
-                group === option.id ? 'ctl-accent' : 'ctl-quiet'
+                view === 'catalogue' && group === option.id ? 'ctl-accent' : 'ctl-quiet'
               }`}
             >
               {option.label}
             </button>
           ))}
+          {/*
+           * The catalogue is what the bench can hold. This is the whole library
+           * behind it -- the parts that are not placeable yet, and why -- so
+           * "there is no servo here" has an answer you can look at.
+           */}
+          <button
+            type="button"
+            onClick={() => setView('library')}
+            aria-pressed={view === 'library'}
+            className={`ctl ml-auto rounded-full ${view === 'library' ? 'ctl-accent' : 'ctl-quiet'}`}
+            title="Every element Wokwi ships, and what the bench does with each"
+          >
+            Full library
+          </button>
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          {sections.length === 0 && (
-            // Same rule as the sidebar: say what happened, show the way out.
-            <div className="empty py-16">
-              <MagnifyingGlassIcon className="icon text-slate-700" aria-hidden="true" />
-              <p>
-                Nothing matches “{query.trim()}”.
-                <br />
-                Try a part name, or clear the filters above.
-              </p>
-            </div>
-          )}
-          {sections.map((section) => (
-            <section key={section.id} className="mb-6 last:mb-0">
-              <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-                {section.label}
-              </h3>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {section.entries.map((entry) => (
-                  <CatalogueCard key={entry.id} entry={entry} onPlace={onPlace} />
-                ))}
+        {view === 'library' ? (
+          <WokwiLibrary />
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+
+            {sections.length === 0 && (
+              // Same rule as the sidebar: say what happened, show the way out.
+              <div className="empty py-16">
+                <MagnifyingGlassIcon className="icon text-slate-700" aria-hidden="true" />
+                <p>
+                  Nothing matches “{query.trim()}”.
+                  <br />
+                  Try a part name, or clear the filters above.
+                </p>
               </div>
-            </section>
-          ))}
-        </div>
+            )}
+            {sections.map((section) => (
+              <section key={section.id} className="mb-6 last:mb-0">
+                <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                  {section.label}
+                </h3>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {section.entries.map((entry) => (
+                    <CatalogueCard key={entry.id} entry={entry} onPlace={onPlace} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
