@@ -75,7 +75,10 @@ function runSketch(engine: Engine, mcu: McuRuntime, source: string, ms: number):
     serialBegin: () => {},
     serialWrite: () => {},
     spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
-    wire: { begin: () => {}, beginTransmission: () => {}, write: () => 1, endTransmission: () => 0 },
+    wire: {
+      begin: () => {}, beginTransmission: () => {}, write: () => 1, endTransmission: () => 0,
+      requestFrom: () => 0, read: () => -1, available: () => 0,
+    },
   });
 
   let guard = 0;
