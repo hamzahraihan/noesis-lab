@@ -27,6 +27,8 @@ import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
 
 import { GROUND } from '../sim/elements';
 import { DISTANCE_KNOB, echoMicroseconds } from '../sim/sonar';
+import { HUMIDITY_KNOB } from '../sim/dht';
+import { TEMPERATURE_KNOB } from '../sim/modules';
 import type { DisplayController } from '../sim/display/part';
 import { I2CBus } from '../sim/bus/i2c';
 import { SpiBus } from '../sim/bus/spi';
@@ -122,6 +124,9 @@ export class Simulation {
     this.serialDirty = true;
     this.engine.timeMs = 0;
     this.mcu.reset();
+    // A fresh sketch owes nothing: without this, the previous sketch's
+    // in-flight delay would gate the new one, which reads as a hang.
+    this.pendingDelayMs = 0;
 
     try {
       this.runner = new FirmwareRunner(source, this.services());
@@ -752,6 +757,19 @@ export class Simulation {
   /** Sonar part armed by the running `pulseIn`, released when it returns. */
   private sonarArmed: string | null = null;
 
+  /** The DHT sensor whose data pin is wired to a board pin, if there is one. */
+  private dhtOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'dht') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:SDA`) === net) return part;
+    }
+    return null;
+  }
+
   private services(): FirmwareServices {
     return {
       nowMs: () => this.engine.timeMs,
@@ -863,6 +881,17 @@ export class Simulation {
         this.engine.setSonarMeasuring(this.sonarArmed, false);
         this.sonarArmed = null;
         this.engine.settle();
+      },
+      dht: {
+        begin: () => {},
+        temperature: (pin) => {
+          const part = this.dhtOnPin(pin);
+          return part ? this.controls.knob(part.id, TEMPERATURE_KNOB) : 0;
+        },
+        humidity: (pin) => {
+          const part = this.dhtOnPin(pin);
+          return part ? this.controls.knob(part.id, HUMIDITY_KNOB) : 0;
+        },
       },
       serialBegin: () => {},
       serialWrite: (text) => {

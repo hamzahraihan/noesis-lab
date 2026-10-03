@@ -755,10 +755,20 @@ function elementsForPart(
       ];
     }
 
-    case 'dht':
-      // SDA pull-up lands in Task 2; resting stub keeps the switch
-      // exhaustive until then.
-      return [];
+    case 'dht': {
+      // The single-wire waveform is deliberately not modeled: SDA idles
+      // high behind its pull-up and the sketch reads climate through the
+      // `dht` firmware port, the way a servo reads an angle.
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('SDA'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+      ];
+    }
 
     case 'mcu':
     case 'breadboard':
