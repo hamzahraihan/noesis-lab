@@ -1,67 +1,124 @@
 import { describe, expect, it } from 'vitest';
-import { esp32DevKitV1, arduinoUnoR3 } from './boards';
+import {
+  arduinoMega2560,
+  arduinoNano,
+  arduinoUnoR3,
+  esp32DevKitV1,
+  nanoRp2040Connect,
+} from './boards';
 import { McuRuntime } from './mcu';
+import type { PartDefinition } from './catalog';
 
-/**
- * The two label systems on a board are not the same thing: the header says `D15`
- * where the silkscreen says `GPIO15`, and firmware only ever sees the number.
- * Reconciling them is easy to get subtly wrong, so every pin is checked.
- */
-describe('board pin maps', () => {
-  it('gives every ESP32 GPIO a reachable pin id', () => {
-    const runtime = new McuRuntime(esp32DevKitV1());
+const BOARDS: ReadonlyArray<readonly [string, () => PartDefinition]> = [
+  ['esp32', esp32DevKitV1],
+  ['uno', arduinoUnoR3],
+  ['mega', arduinoMega2560],
+  ['nano', arduinoNano],
+  ['rp2040', nanoRp2040Connect],
+];
 
-    // Pins whose header label and silkscreen differ. These were silently
-    // unreachable when the map was keyed by silkscreen.
-    for (const gpio of [36, 39, 15]) {
-      const pinId = runtime.pinIdForGpio(gpio);
-      expect(pinId, `GPIO${gpio} has no pin id`).toBeDefined();
-      expect(runtime.boardPin(pinId!)!.gpio).toBe(gpio);
+describe('board definitions', () => {
+  it.each(BOARDS)('gives every hole on the %s a unique pin id', (_name, make) => {
+    const ids = make().pins.map((pin) => pin.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it.each(BOARDS)('never numbers two holes on the %s the same', (_name, make) => {
+    // `pinIdForGpio` is a map keyed by pin number, so a second pin claiming a
+    // number overwrites the first and silently takes its terminal with it.
+    const definition = make();
+    const numbered = (definition.boardPins ?? []).filter((pin) => pin.gpio !== undefined);
+    const numbers = numbered.map((pin) => pin.gpio);
+    expect(new Set(numbers).size).toBe(numbers.length);
+  });
+
+  it.each(BOARDS)('exposes at least one firmware-visible pin on the %s', (_name, make) => {
+    expect(new McuRuntime(make()).pins().length).toBeGreaterThan(0);
+  });
+
+  it.each(BOARDS)('runs the %s off a rail the engine can find', (_name, make) => {
+    // The engine holds the board's own regulator up by matching this label, so
+    // a board whose rail is spelled differently reads 0 V across the breadboard.
+    const mcu = new McuRuntime(make());
+    const rail = mcu.board.logicVolts === 5 ? '5V' : '3V3';
+    expect(mcu.pins().some((pin) => pin.role === 'power' && pin.label === rail)).toBe(true);
+  });
+
+  it.each(BOARDS)('resolves every default bus pin on the %s to a header hole', (_name, make) => {
+    // A bus pin that names nothing is a bus no display can ever reach, which
+    // looks exactly like a wiring mistake and is not one.
+    const mcu = new McuRuntime(make());
+    for (const gpio of [...mcu.i2cPins, ...mcu.spiPins]) {
+      expect(mcu.pinIdForGpio(gpio), `${mcu.board.id} pin ${gpio}`).toBeDefined();
     }
   });
 
-  it('maps the pins its buses run on', () => {
-    const runtime = new McuRuntime(esp32DevKitV1());
-    // ESP32 VSPI: chip-select 5, D/C 15, clock 18, data in 23. I2C is 21 and 22.
-    expect(runtime.spiPins.map((gpio) => runtime.pinIdForGpio(gpio))).toEqual([
-      'R_D5', 'R_D15', 'R_D18', 'R_D23',
-    ]);
-    expect(runtime.i2cPins.map((gpio) => runtime.pinIdForGpio(gpio))).toEqual([
-      'R_D21', 'R_D22',
-    ]);
-  });
-
-  it('marks the ESP32 input-only pins as unable to drive', () => {
-    const runtime = new McuRuntime(esp32DevKitV1());
-    for (const gpio of [34, 35, 36, 39]) {
-      const pinId = runtime.pinIdForGpio(gpio);
-      expect(runtime.boardPin(pinId!)!.canDrive, `GPIO${gpio}`).toBe(false);
+  it('lights the Arduino L lamp from digital 13 on every Arduino board', () => {
+    for (const make of [arduinoUnoR3, arduinoMega2560, arduinoNano]) {
+      const definition = make();
+      const mcu = new McuRuntime(definition);
+      const lamp = definition.boardPins?.find((pin) => pin.gpio === 13);
+      expect(lamp?.role, definition.id).toBe('gpio');
+      expect(mcu.pinIdForGpio(13)).toBe(lamp?.id);
     }
   });
 
-  it('records the ESP32 strapping pins', () => {
-    const runtime = new McuRuntime(esp32DevKitV1());
-    // GPIO12 and GPIO15 are the strapping pins; the header labels them D12/D15.
-    expect(runtime.boardPin('L_D12')!.strapLevel).toBe('low');
-    expect(runtime.boardPin('L_D12')!.gpio).toBe(12);
-    expect(runtime.boardPin('R_D15')!.strapLevel).toBe('high');
+  it('numbers the Mega analog block after the digital one, not from zero', () => {
+    // The trap worth remembering when a sketch moves between the two boards:
+    // A0 is pin 54 on the Mega and pin 14 on the Uno.
+    const mcu = new McuRuntime(arduinoMega2560());
+    expect(mcu.pinIdForGpio(54)).toBe('J3_A0');
+    expect(mcu.pinIdForGpio(69)).toBe('J3_A15');
+    expect(new McuRuntime(arduinoUnoR3()).pinIdForGpio(14)).toBe('J3_A0');
   });
 
-  it('gives every Uno pin a reachable id', () => {
-    const runtime = new McuRuntime(arduinoUnoR3());
-    // Pin ids follow the artwork's own header blocks, which are what the
-    // silkscreen beside each pin calls them.
-    expect(runtime.pinIdForGpio(13)).toBe('J1_D13');
-    expect(runtime.pinIdForGpio(1)).toBe('J1_TX');
-    expect(runtime.pinIdForGpio(0)).toBe('J1_RX');
-    expect(runtime.pinIdForGpio(18)).toBe('J3_A4');
-    expect(runtime.pinIdForGpio(19)).toBe('J3_A5');
+  it('samples the RP2040 analog block on the GPIO its silkscreen names', () => {
+    const mcu = new McuRuntime(nanoRp2040Connect());
+    expect(mcu.pinIdForGpio(26)).toBe('J3_A0');
+    expect(mcu.pinIdForGpio(29)).toBe('J3_A3');
+    expect(mcu.pinIdForGpio(3)).toBe('J1_D3');
   });
 
-  it('reports both header grounds as ground', () => {
-    const runtime = new McuRuntime(esp32DevKitV1());
-    expect(runtime.boardPin('L_GND')!.role).toBe('ground');
-    expect(runtime.boardPin('R_GND')!.role).toBe('ground');
-    expect(runtime.boardPin('R_3V3')!.role).toBe('power');
+  it('leaves the RP2040 aliases A4 to A7 unnumbered rather than guessing', () => {
+    // Two holes claiming one pin number would let one silently steal the
+    // other's terminal, and an invented mapping would be worse still.
+    const mcu = new McuRuntime(nanoRp2040Connect());
+    const aliases = ['J3_A4', 'J3_A5', 'J3_A6', 'J3_A7'].map((id) => mcu.boardPin(id)?.gpio);
+    expect(aliases).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  it('runs the Nano and the Uno off the same chip, at the same voltage', () => {
+    expect(arduinoNano().component).toMatchObject({ board: { logicVolts: 5, adcBits: 10 } });
+    expect(arduinoUnoR3().component).toMatchObject({ board: { logicVolts: 5, adcBits: 10 } });
+  });
+
+  it('runs the RP2040 at 3.3 V, which is what changes a sketch across boards', () => {
+    expect(nanoRp2040Connect().component).toMatchObject({ board: { logicVolts: 3.3, adcBits: 12 } });
+  });
+
+  it('keeps A6 and A7 off the Nano as output pins', () => {
+    const mcu = new McuRuntime(arduinoNano());
+    expect(mcu.boardPin('J3_A6')?.canDrive).toBe(false);
+    expect(mcu.boardPin('J3_A7')?.canDrive).toBe(false);
+  });
+});
+
+describe('default bus pins', () => {
+  it('puts the I2C bus on the pins each board silkscreens for it', () => {
+    expect(new McuRuntime(esp32DevKitV1()).i2cPins).toEqual([21, 22]);
+    expect(new McuRuntime(arduinoUnoR3()).i2cPins).toEqual([18, 19]);
+    expect(new McuRuntime(arduinoMega2560()).i2cPins).toEqual([20, 21]);
+    expect(new McuRuntime(nanoRp2040Connect()).i2cPins).toEqual([26, 27]);
+  });
+
+  it('puts the Mega SPI on its own 50-53 block rather than the Uno 10-13', () => {
+    expect(new McuRuntime(arduinoMega2560()).spiPins).toEqual([53, 9, 52, 51]);
+    expect(new McuRuntime(arduinoUnoR3()).spiPins).toEqual([10, 9, 13, 11]);
+  });
+
+  it('leaves the Nano and the Uno on the same bus pins', () => {
+    // Same chip, so a sketch that wires the Uno wires the Nano unchanged.
+    expect(new McuRuntime(arduinoNano()).spiPins).toEqual(new McuRuntime(arduinoUnoR3()).spiPins);
+    expect(new McuRuntime(arduinoNano()).i2cPins).toEqual(new McuRuntime(arduinoUnoR3()).i2cPins);
   });
 });
