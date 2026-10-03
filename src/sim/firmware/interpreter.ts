@@ -51,6 +51,13 @@ export interface FirmwareServices {
   lcd?: LiquidCrystalPort;
   servo?: ServoPort;
   /**
+   * Temperature/humidity sensor, by the pin its data line is wired to.
+   *
+   * Optional because a host with no such part on the bench has nothing to
+   * read, for the same reason `lcd` and `servo` are.
+   */
+  dht?: DhtPort;
+  /**
    * Sonar echo measurement, split across the wait it reports.
    *
    * Optional for the same reason `lcd` and `servo` are: hosts without a
@@ -142,6 +149,22 @@ export interface ServoPort {
   write(pin: number, angle: number): void;
   read(pin: number): number;
   detach(pin: number): void;
+}
+
+/**
+ * A temperature/humidity sensor, by the pin its data line is wired to.
+ *
+ * Climate is a fact about the part rather than about a waveform, the same
+ * way an angle is a fact about a servo: the bench reads the knobs and the
+ * sketch reads the bench. The single-wire protocol is deliberately not
+ * modeled -- see the `dht` netlist case.
+ */
+export interface DhtPort {
+  begin(pin: number): void;
+  /** Degrees of whatever unit the part's temperature knob works in. */
+  temperature(pin: number): number;
+  /** Percent relative humidity from the part's humidity knob. */
+  humidity(pin: number): number;
 }
 
 export const PIN_INPUT = 0;
@@ -582,6 +605,9 @@ export class FirmwareRuntime {
           if (callee.target.name === 'servo' || callee.target.name === 'Servo') {
             return this.evaluateServoCall(callee.member, args, services);
           }
+          if (callee.target.name === 'dht' || callee.target.name === 'DHT') {
+            return this.evaluateDhtCall(callee.member, args, services);
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
@@ -740,6 +766,25 @@ export class FirmwareRuntime {
       case 'detach':
         servo.detach(pin);
         return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /** Handles a `dht.*` call, which addresses sensors by the pin SDA is on. */
+  private evaluateDhtCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const dht = services.dht;
+    if (!dht) return 0;
+    const pin = asNumber(args[0] ?? -1);
+
+    switch (member) {
+      case 'begin':
+        dht.begin(pin);
+        return 0;
+      case 'temperature':
+        return dht.temperature(pin);
+      case 'humidity':
+        return dht.humidity(pin);
       default:
         return 0;
     }
