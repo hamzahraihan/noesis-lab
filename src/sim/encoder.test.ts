@@ -6,6 +6,7 @@ import { solveCircuit, type Solution } from './circuit';
 import { DynamicState, type KnobSpec, type PartDefinition } from './catalog';
 import { buildNetlist, type Netlist } from './netlist';
 import { DETENT_KNOB, encoderDefinition, quadratureAt } from './encoder';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 const SUPPLY_VOLTS = 3.3;
 
@@ -64,6 +65,15 @@ describe('encoder definition', () => {
     const def = encoderDefinition();
     expect(def.pins.map((p) => p.id)).toEqual(['CLK', 'DT', 'SW', 'VCC', 'GND']);
     expect(DETENT_KNOB.step).toBe(1);
+  });
+});
+
+describe('encoder selection', () => {
+  it('selection box matches the encoder artwork', () => {
+    const drawn = renderedSizeMm(encoderDefinition());
+    expect(drawn.widthMm).toBe(30.815);
+    expect(drawn.heightMm).toBe(18.63);
+    expect(wokwiPartFor(encoderDefinition())?.tag).toBe('wokwi-ky-040');
   });
 });
 

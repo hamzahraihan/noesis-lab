@@ -85,6 +85,8 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   thermistor: { tag: 'wokwi-ntc-temperature-sensor', sizeMm: { w: 35.826, h: 19 } },
   'tilt-switch': { tag: 'wokwi-tilt-switch', sizeMm: { w: 23.4, h: 14.7 } },
   'slide-switch': { tag: 'wokwi-slide-switch', sizeMm: { w: 8.5, h: 9.23 } },
+  relay: { tag: 'wokwi-ks2e-m-dc5', sizeMm: { w: 21, h: 10 } },
+  'rotary-encoder': { tag: 'wokwi-ky-040', sizeMm: { w: 30.815, h: 18.63 } },
   joystick: { tag: 'wokwi-analog-joystick', sizeMm: { w: 27.2, h: 31.8 } },
   'rgb-led': { tag: 'wokwi-rgb-led', sizeMm: { w: 11.148, h: 19.204 } },
   buzzer: { tag: 'wokwi-buzzer', sizeMm: { w: 17, h: 20 } },
@@ -195,6 +197,10 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS['tilt-switch'];
     case 'slide-switch':
       return WOKWI_PARTS['slide-switch'];
+    case 'relay':
+      return WOKWI_PARTS.relay;
+    case 'rotary-encoder':
+      return WOKWI_PARTS['rotary-encoder'];
     case 'joystick':
       return WOKWI_PARTS.joystick;
     case 'rgb-led':

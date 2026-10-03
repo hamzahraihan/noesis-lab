@@ -39,6 +39,8 @@ import {
   thermistorDefinition,
   tiltSwitchDefinition,
 } from './modules';
+import { relayDefinition } from './relay';
+import { encoderDefinition } from './encoder';
 
 export interface CatalogueEntry {
   readonly id: string;
@@ -200,6 +202,20 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Pin 2 throws to 1 or to 3 and never to both. How a mode selector is built.',
     make: slideSwitchDefinition,
+  },
+  {
+    id: 'relay-dpdt',
+    name: 'Relay (DPDT)',
+    group: 'input',
+    note: 'A coil-driven double switch: energize the coil and each pole throws from NC to NO.',
+    make: relayDefinition,
+  },
+  {
+    id: 'rotary-encoder',
+    name: 'Rotary Encoder (KY-040)',
+    group: 'input',
+    note: 'Turn the detents to walk CLK/DT through quadrature; press for SW. Reads with digitalRead.',
+    make: encoderDefinition,
   },
   {
     id: 'analog-joystick',
