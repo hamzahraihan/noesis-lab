@@ -20,10 +20,24 @@ export const SPI_CLOCK_HZ = 8_000_000;
 const MICROS_PER_BYTE = (1_000_000 * 8) / SPI_CLOCK_HZ;
 
 export interface SpiTransfer {
+  /** The bytes sent between the chip-select going low and high. */
+  readonly bytes: readonly SpiByte[];
   /** True when a device was selected and saw at least one byte. */
   readonly acknowledged: boolean;
   /** Simulated microseconds the transfer consumed on the bus. */
   readonly micros: number;
+}
+
+/**
+ * One byte on the wire.
+ *
+ * The D/C state travels with it because on this bench that state is the only
+ * thing distinguishing a display's command from its pixel data.
+ */
+export interface SpiByte {
+  readonly value: number;
+  /** True when the D/C pin was high: data rather than a command. */
+  readonly data: boolean;
 }
 
 /**
@@ -35,6 +49,7 @@ export interface SpiTransfer {
 export class SpiBus {
   private selected = false;
   private sawByte = false;
+  private payload: SpiByte[] = [];
 
   private readonly deliver: (
     byte: number,
@@ -42,20 +57,20 @@ export class SpiBus {
     chipSelected: boolean,
   ) => boolean;
 
-  constructor(
-    deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean,
-  ) {
+  constructor(deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean) {
     this.deliver = deliver;
   }
   /** Pulls chip-select low and begins a transfer. */
   begin(): void {
     this.selected = true;
     this.sawByte = false;
+    this.payload = [];
   }
 
   /** Sends one byte, returning the value read back on MISO. */
   transfer(byte: number, dataSelect: boolean): number {
     if (!this.selected) return 0;
+    this.payload.push({ value: byte & 0xff, data: dataSelect });
     if (this.deliver(byte & 0xff, dataSelect, true)) this.sawByte = true;
     return 0;
   }
@@ -68,11 +83,13 @@ export class SpiBus {
    */
   end(): SpiTransfer {
     const transfer: SpiTransfer = {
+      bytes: [...this.payload],
       acknowledged: this.sawByte,
-      micros: this.sawByte ? MICROS_PER_BYTE : 0,
+      micros: this.sawByte ? this.payload.length * MICROS_PER_BYTE : 0,
     };
     this.selected = false;
     this.sawByte = false;
+    this.payload = [];
     return transfer;
   }
 
