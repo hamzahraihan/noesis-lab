@@ -4,6 +4,7 @@ import { columnX, railRowY, stripRowY, breadboardDefinition } from '../breadboar
 import { esp32DevKitV1 } from '../boards';
 import { Engine } from '../engine';
 import { McuRuntime } from '../mcu';
+import type { LiquidCrystalPort, ServoPort } from '../firmware/interpreter';
 import { I2CBus } from '../bus/i2c';
 import { ssd1306Definition } from './part';
 import { Ssd1306 } from './ssd1306';
@@ -67,8 +68,9 @@ function buildDisplayBench(options: {
   const mcu = new McuRuntime(esp32.definition);
   const engine = new Engine({ bench: builder.build(), mcu });
   engine.rebuild();
-  const bus = new I2CBus((address, byte, isControl) =>
-    engine.deliverI2C(address, byte, isControl),
+  const bus = new I2CBus(
+    (address, byte, isControl) => engine.writeI2C(address, byte, isControl),
+    (address, count) => engine.requestI2C(address, count),
   );
   return { builder, esp32, display, engine, mcu, bus };
 }
@@ -117,10 +119,15 @@ function runSketch(sources: {
     analogRead: () => 0,
     serialBegin: () => {},
     serialWrite: () => {},
+    lcd: UNUSED_LCD,
+    servo: UNUSED_SERVO,
     wire: {
       begin: () => sources.bus.begin(21, 22),
       beginTransmission: (address) => sources.bus.beginTransmission(address),
       write: (value) => sources.bus.write(value),
+      requestFrom: (address, count) => sources.bus.requestFrom(address, count),
+      read: () => sources.bus.read(),
+      available: () => sources.bus.available(),
       endTransmission: () => {
         const transfer = sources.bus.endTransmission();
         sources.engine.settle();
@@ -145,6 +152,16 @@ function runSketch(sources: {
   }
   return runner;
 }
+
+/** The LCD and servo ports a display test never touches. */
+const UNUSED_LCD: LiquidCrystalPort = {
+  begin: () => 0, clear: () => {}, home: () => {}, setCursor: () => {},
+  print: () => {}, write: () => {}, createChar: () => {},
+  backlight: () => {}, noBacklight: () => {},
+};
+const UNUSED_SERVO: ServoPort = {
+  attach: () => {}, write: () => {}, read: () => 0, detach: () => {},
+};
 
 describe('display on the bench', () => {
   it('routes a byte to a display that is wired onto the I2C pins', () => {
@@ -237,7 +254,12 @@ describe('driving the display from firmware', () => {
         beginTransmission: (address) => bus.beginTransmission(address),
         write: (value) => bus.write(value),
         endTransmission: () => bus.endTransmission().micros,
+        requestFrom: (address, count) => bus.requestFrom(address, count),
+        read: () => bus.read(),
+        available: () => bus.available(),
       },
+      lcd: UNUSED_LCD,
+      servo: UNUSED_SERVO,
     };
 
     const runner = new FirmwareRunner(DRAW_SKETCH, services);
