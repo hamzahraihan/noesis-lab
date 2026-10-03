@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react';
 import { decodeUart, measureDutyCycle, measureFrequency, type TraceSample } from '../sim/probe';
 import type { BoardPin } from '../sim/catalog';
+import { ActivityLogIcon, Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
 
 const TRACE_HEIGHT_MM = 60;
 /** Simulated milliseconds shown across the trace. */
@@ -89,13 +90,15 @@ export function ScopePanel({
   return (
     <div className="flex flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
-        <h3 className="flex-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+        <h3 className="panel-title flex-1">
+          <ActivityLogIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Oscilloscope
         </h3>
         <select
           value={probePinId ?? ''}
           onChange={(event) => onProbe(event.target.value || null)}
-          className="rounded bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200"
+          aria-label="Probe pin"
+          className="ctl-select max-w-28"
         >
           <option value="">No probe</option>
           {pins.map((pin) => (
@@ -106,12 +109,23 @@ export function ScopePanel({
         </select>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={520}
-        height={TRACE_HEIGHT_MM}
-        className="w-full rounded border border-slate-800"
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={520}
+          height={TRACE_HEIGHT_MM}
+          className="w-full rounded border border-slate-800 bg-slate-950"
+        />
+        {!probePinId && (
+          // The trace area is a fixed 60 mm tall, so this is a single line that
+          // fits inside it. The earlier two-line copy overflowed and painted
+          // over the UART readout underneath.
+          <p className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 px-2 text-center text-[11px] text-slate-600">
+            <Crosshair1Icon className="icon-sm shrink-0" aria-hidden="true" />
+            Clip the probe onto a pin to capture its voltage.
+          </p>
+        )}
+      </div>
 
       {probePinId ? (
         <dl className="grid grid-cols-3 gap-1 text-[11px]">
@@ -119,18 +133,15 @@ export function ScopePanel({
           <Reading label="Duty" value={`${duty.toFixed(0)}%`} />
           <Reading label="Samples" value={String(samples.length)} />
         </dl>
-      ) : (
-        <p className="text-xs text-slate-500">
-          Clip the probe onto a pin to capture its voltage over time.
-        </p>
-      )}
+      ) : null}
 
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-slate-500">UART</span>
+        <StopwatchIcon className="icon-sm shrink-0 text-slate-500" aria-hidden="true" />
         <select
           value={baud}
           onChange={(event) => onBaud(Number(event.target.value))}
-          className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-200"
+          aria-label="UART baud rate"
+          className="ctl-select h-6 w-20 shrink-0 text-[11px]"
         >
           {BAUD_RATES.map((rate) => (
             <option key={rate} value={rate}>
