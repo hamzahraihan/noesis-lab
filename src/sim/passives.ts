@@ -5,8 +5,22 @@
  * diagram in a book matches what the user sees and clicks on.
  */
 
-import type { PartDefinition } from './catalog';
+import type { KnobSpec, PartDefinition } from './catalog';
 import { DIODE_PROFILES, type DiodeProfile } from './elements';
+/**
+ * The potentiometer's one control.
+ *
+ * Exported for the same reason the modules' controls are: the netlist reads it
+ * as well as the inspector writing it.
+ */
+export const WIPER_KNOB: KnobSpec = {
+  id: 'turn',
+  label: 'Wiper',
+  min: 0,
+  max: 1,
+  step: 0.01,
+  defaultValue: 0.5,
+};
 
 /** Through-hole resistor, 0.25 W axial, leads on a 10.16 mm body. */
 export function resistorDefinition(ohms: number): PartDefinition {
@@ -75,6 +89,7 @@ export function buttonDefinition(): PartDefinition {
       { id: 'a', label: '', x: 0, y: 3, net: 'side-a' },
       { id: 'b', label: '', x: 5.08, y: 3, net: 'side-b' },
     ],
+    momentary: true,
     bodyColour: '#111111',
     legendColour: '#e0e0e0',
   };
@@ -94,6 +109,7 @@ export function potentiometerDefinition(ohms: number): PartDefinition {
       { id: 'wiper', label: '2', x: 5.08, y: 4.5 },
       { id: 'endB', label: '3', x: 10.16, y: 4.5 },
     ],
+    knobs: [WIPER_KNOB],
     bodyColour: '#2b2f3a',
     legendColour: '#d8dde8',
   };
