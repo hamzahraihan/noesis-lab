@@ -21,7 +21,7 @@ function climateBench() {
 
 function readClimate(simulation: Simulation, gpio: number): string[] {
   simulation.loadFirmware(
-    `void setup() { float t = dht.temperature(${gpio}); float h = dht.humidity(${gpio}); Serial.println(t); Serial.println(h); } void loop() { delay(1000); }`,
+    `void setup() { dht.begin(${gpio}); float t = dht.temperature(${gpio}); float h = dht.humidity(${gpio}); Serial.println(t); Serial.println(h); } void loop() { delay(1000); }`,
   );
   simulation.start();
   for (let i = 0; i < 10; i++) simulation.tick(1);
