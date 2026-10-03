@@ -15,6 +15,11 @@ import {
 } from '../sim/catalogue';
 import type { PartDefinition } from '../sim/catalog';
 import { PartPreview } from './PartPreview';
+import {
+  Cross2Icon,
+  MagnifyingGlassIcon,
+  PlusIcon,
+} from '@radix-ui/react-icons';
 
 export interface ComponentBrowserProps {
   readonly onPlace: (definition: PartDefinition, entry: CatalogueEntry) => void;
@@ -60,7 +65,6 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
       })).filter((section) => section.entries.length > 0),
     [matches],
   );
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-6 backdrop-blur-sm"
@@ -76,33 +80,44 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
       >
         <header className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-100">Components</h2>
-          <input
-            ref={searchRef}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by name or by what it is for..."
-            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
-          />
+          <div className="relative min-w-0 flex-1">
+            <MagnifyingGlassIcon
+              className="icon-sm pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
+              aria-hidden="true"
+            />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by name or by what it is for..."
+              aria-label="Search components"
+              className="w-full rounded-md border border-slate-700 bg-slate-950 py-1.5 pr-3 pl-8 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
+            />
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            className="ctl ctl-quiet"
+            title="Close (Esc)"
+            aria-label="Close the component browser"
           >
-            Esc to close
+            <Cross2Icon className="icon" aria-hidden="true" />
           </button>
         </header>
 
-        <nav className="flex shrink-0 gap-1.5 border-b border-slate-800 px-4 py-2">
+        <nav
+          className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-slate-800 px-4 py-2"
+          aria-label="Component categories"
+        >
           {[{ id: 'all', label: 'All' }, ...CATALOGUE_GROUPS].map((option) => (
             <button
               key={option.id}
               type="button"
               onClick={() => setGroup(option.id)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                group === option.id
-                  ? 'bg-sky-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              aria-pressed={group === option.id}
+              className={`ctl rounded-full ${
+                group === option.id ? 'ctl-accent' : 'ctl-quiet'
               }`}
             >
               {option.label}
@@ -112,7 +127,15 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {sections.length === 0 && (
-            <p className="py-12 text-center text-sm text-slate-500">Nothing matches that.</p>
+            // Same rule as the sidebar: say what happened, show the way out.
+            <div className="empty py-16">
+              <MagnifyingGlassIcon className="icon text-slate-700" aria-hidden="true" />
+              <p>
+                Nothing matches “{query.trim()}”.
+                <br />
+                Try a part name, or clear the filters above.
+              </p>
+            </div>
           )}
           {sections.map((section) => (
             <section key={section.id} className="mb-6 last:mb-0">
@@ -149,14 +172,25 @@ function CatalogueCard({
       onClick={() => onPlace(definition, entry)}
       className="group flex flex-col rounded-lg border border-slate-800 bg-slate-950 p-3 text-left transition-colors hover:border-sky-600 hover:bg-slate-900"
     >
-      <div className="mb-2 flex h-20 items-center justify-center rounded bg-slate-900/60 p-2">
+      <div className="relative mb-2 flex h-20 items-center justify-center rounded bg-slate-900/60 p-2">
         <PartPreview definition={definition} className="h-full w-full" />
+        {/*
+         * Every card's whole job is "put this on the bench", and that was only
+         * discoverable by hovering. The badge says it before the pointer
+         * arrives, and stays out of the way once it does.
+         */}
+        <span
+          className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-slate-800 text-slate-400 transition-opacity group-hover:bg-sky-600 group-hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
+          aria-hidden="true"
+        >
+          <PlusIcon className="icon-sm" />
+        </span>
       </div>
       <span className="text-sm font-medium text-slate-100 group-hover:text-sky-300">
         {entry.name}
       </span>
       <span className="mt-0.5 text-xs leading-snug text-slate-500">{entry.note}</span>
-      <span className="mt-2 text-[10px] tracking-wide text-slate-600 uppercase">
+      <span className="num mt-2 text-[10px] tracking-wide text-slate-600 uppercase">
         {definition.pins.length} pins · {definition.widthMm.toFixed(0)}×
         {definition.heightMm.toFixed(0)} mm
       </span>
