@@ -7,6 +7,7 @@ import { DynamicState } from './catalog';
 import { buildNetlist } from './netlist';
 import { HUMIDITY_KNOB, dhtDefinition } from './dht';
 import { TEMPERATURE_KNOB } from './modules';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 describe('dht definition', () => {
   it('exposes VCC/SDA/NC/GND with climate knobs', () => {
@@ -15,7 +16,18 @@ describe('dht definition', () => {
     expect(def.knobs).toEqual([TEMPERATURE_KNOB, HUMIDITY_KNOB]);
     expect([def.widthMm, def.heightMm]).toEqual([15.1, 30.885]);
   });
+});
 
+describe('dht selection', () => {
+  it('selection box matches the dht artwork', () => {
+    const drawn = renderedSizeMm(dhtDefinition());
+    expect(drawn.widthMm).toBe(15.1);
+    expect(drawn.heightMm).toBe(30.885);
+    expect(wokwiPartFor(dhtDefinition())?.tag).toBe('wokwi-dht22');
+  });
+});
+
+describe('dht pull-up', () => {
   it('idles SDA high through its pull-up', () => {
     const builder = new BenchBuilder();
     const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);

@@ -88,6 +88,7 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   sonar: { tag: 'wokwi-hc-sr04', sizeMm: { w: 45, h: 25 } },
   stepper: { tag: 'wokwi-stepper-motor', sizeMm: { w: 42, h: 42 } },
   'biaxial-stepper': { tag: 'wokwi-biaxial-stepper', sizeMm: { w: 56, h: 67.5 } },
+  dht22: { tag: 'wokwi-dht22', sizeMm: { w: 15.1, h: 30.885 } },
   relay: { tag: 'wokwi-ks2e-m-dc5', sizeMm: { w: 21, h: 10 } },
   'rotary-encoder': { tag: 'wokwi-ky-040', sizeMm: { w: 30.815, h: 18.63 } },
   joystick: { tag: 'wokwi-analog-joystick', sizeMm: { w: 27.2, h: 31.8 } },
@@ -210,6 +211,8 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS.stepper;
     case 'biaxial-stepper':
       return WOKWI_PARTS['biaxial-stepper'];
+    case 'dht':
+      return WOKWI_PARTS.dht22;
     case 'joystick':
       return WOKWI_PARTS.joystick;
     case 'rgb-led':

@@ -42,6 +42,7 @@ import {
 import { relayDefinition } from './relay';
 import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
+import { dhtDefinition } from './dht';
 import { biaxialStepperDefinition, stepperDefinition } from './stepper';
 
 export interface CatalogueEntry {
@@ -239,6 +240,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'output',
     note: 'Two steppers in one frame: each axis sequences on its own four wires.',
     make: biaxialStepperDefinition,
+  },
+  {
+    id: 'dht22-temp-humidity',
+    name: 'DHT22 Temp/Humidity',
+    group: 'input',
+    note: 'Temp and humidity over one wire; read with dht.temperature/humidity. Turn the climate knobs to change the weather.',
+    make: dhtDefinition,
   },
   {
     id: 'analog-joystick',
