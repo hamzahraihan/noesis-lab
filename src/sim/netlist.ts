@@ -755,6 +755,11 @@ function elementsForPart(
       ];
     }
 
+    case 'dht':
+      // SDA pull-up lands in Task 2; resting stub keeps the switch
+      // exhaustive until then.
+      return [];
+
     case 'mcu':
     case 'breadboard':
     case 'display':
