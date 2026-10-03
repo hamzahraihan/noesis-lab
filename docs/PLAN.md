@@ -145,13 +145,15 @@ pin coordinates gives parts that look right and wire wrongly.
    element's own millimetre size drops into the bench's coordinate system with no
    conversion at all.
 
-2. **`pinInfo` is in an undocumented per-element unit.** Measured across eight
-   elements it is ~3.5x the view box for an Uno, 1x for an ESP32, 3.8x for a
-   resistor and 3.7x for a pushbutton -- there is no global mapping to derive.
-   Each adopted part therefore carries its own `mmPerPinUnit`, chosen so its pins
-   land where the real hardware's pins are, and asserted against the part's own
-   definition at render time so a mis-calibrated part falls back to the
-   hand-authored renderer instead of drawing a jumper onto the wrong hole.
+2. **`pinInfo` is in CSS pixels at 96 per inch.** The library says nothing about
+   the unit, but it is the same one for every element: `px * 25.4 / 96` puts the
+   Uno's and the ESP32's pins on the holes their artwork draws. Per-part
+   constants, derived before that was noticed, disagreed by as much as 3.5x.
+   What still needs saying is the *grid*: Wokwi's own header positions sit within
+   a fraction of a millimetre of the real thing but are not exactly on the 2.54 mm
+   pitch, so each part's header is snapped to the offset nearest the artwork. A
+   part whose pins fall between breadboard holes cannot be wired the way the
+   board in front of it works.
 
 3. **The library exposes no way to find where its pins were actually drawn.**
    The Uno declares 31 pins and renders 3 circles; the LED declares 2 and renders
@@ -168,10 +170,39 @@ pin coordinates gives parts that look right and wire wrongly.
   this bench drives the four-pin *I2C* breakout its sketches talk to. Two
   different parts, and the pin count alone rules out the swap.
 
+**Adopted beyond the two boards and the discrete parts.** The library carries
+fifty-odd elements; these are the ones this bench can also *solve*, because each
+is a circuit the existing solver vocabulary already has:
+
+| part | element | modelled as |
+| --- | --- | --- |
+| Photoresistor (LDR) module | `wokwi-photoresistor-sensor` | GL5528 over a fixed 10 k, plus the on-board comparator as an open-drain output behind a trimmer |
+| NTC thermistor module | `wokwi-ntc-temperature-sensor` | 10 k at 25 C, B = 3950, over a fixed 10 k |
+| Tilt switch module | `wokwi-tilt-switch` | a contact to ground with the board's pull-up |
+| Slide switch (SPDT) | `wokwi-slide-switch` | a common leg thrown to one end or the other |
+| Analog joystick | `wokwi-analog-joystick` | two 10 k axes and a momentary select, all of which the potentiometer and button models already were |
+| RGB LED (5 mm) | `wokwi-rgb-led` | three diodes on one common cathode, so `analogWrite` on each channel mixes the colour |
+| Piezo buzzer | `wokwi-buzzer` | a capacitor, which is what a piezo disc is: it passes the edge that starts it and draws nothing after |
+
+**Every part declares its own controls.** A wiper, a light level, a temperature, a
+switch thrown one way or the other and a momentary contact are all the same thing
+to the bench -- a knob with a range, a unit and a default -- so the part is the
+only thing that has to know what it can be turned to. The netlist reads a knob to
+work out its resistance, the artwork reads the same knob to move, and the
+inspector reads the specs to know what to draw.
+
+**Not adopted, and why.** The parts Wokwi ships that need a bus protocol this
+firmware does not implement -- the DHT22's single wire, the DS1307's registers,
+the MPU6050, the SD card, the keypad matrix -- would be parts a sketch could not
+read. Adding them means adding the API first, and an artwork-only version of one
+is a picture of a part that does nothing.
+
 **State is pushed by property, not attribute.** Several element properties are
 booleans where the attribute string `"false"` is truthy. `LED.brightness` takes
 the forward bias the solver reports, `ILI9341.canvas` is painted directly from
-the controller's framebuffer, and the Uno's L lamp follows digital 13.
+the controller's framebuffer, and every Arduino board's L lamp follows digital
+13 wherever its element draws one.
+
 
 ### 6.2b Rejected: freesvg.org
 
@@ -199,3 +230,103 @@ diagonal jumper from a header pin to a breadboard hole looks like a scratch on t
 screen; the same jumper routed across and down, with the corner eased off, looks
 like wire. This is the single largest visual difference between a plausible bench
 and a convincing one, and it costs about a hundred lines rather than a dependency.
+
+### 6.4 Boards, panels and what else is on the bench
+
+**Five boards, each with its own pin numbering and its own buses.** The ESP32
+DevKit V1 and the Arduino Uno came first; the Mega 2560, the Nano and the Nano
+RP2040 Connect joined them. They are not interchangeable, and the differences
+are the point -- A0 is pin 54 on a Mega and pin 14 on an Uno, the Mega's SPI
+sits on its own 50-53 block rather than the 10-13 an Uno sketch names, and the
+RP2040 runs at 3.3 V where everything else runs at 5. A sketch that moves
+between boards has to move with them, which is what a bench is for.
+
+**A board's own header aliases carry no pin number.** The Uno and the Mega both
+silkscreen an SDA and SCL beside the numbered 4/5 and 20/21 they duplicate.
+`McuRuntime` resolves a pin number to exactly one board pin, so a second pin
+claiming that number would overwrite the first in the map and quietly take its
+terminal with it. The alias holes are drawn and can be wired to; firmware
+reaches those pins through the numbers the datasheet gives them.
+
+**The bus pins are a table, not a rule.** Which nets carry I2C and SPI is
+per-board, so it is declared per-board in `mcu.ts` rather than inferred. A bus
+pin that names no header hole would make every display on that bus dark for a
+reason that looks like a wiring mistake and is not one.
+
+**The logic analyser answers "what level", the scope answers "what voltage".**
+Both read the same probe deck, so adding the analyser cost a panel and not a
+second capture path: pick up to eight pins, get a lane each, drawn as the
+square wave the solver actually produced rather than as the samples between
+edges. **The bus monitor** answers the question neither of them can -- what
+wrote what, to which device, and whether anything acknowledged. It reads the
+transactions the bus models already report, so it shows the byte sequence a
+sketch sends even when the device on the other end is unwired and every write
+goes nowhere.
+
+**Three firmware APIs, and what each one was missing.** The bench had no
+device drivers at all: the starter sketch drives the OLED by writing SSD1306
+command bytes over `Wire` by hand, and `WirePort` had no read half at all. So
+"which parts can be on the bench" was really "which parts can a sketch talk to",
+and the answer for eighteen of them was none.
+
+1. **`Wire.requestFrom` and `Wire.read`.** The half of Arduino's Wire library
+   that was missing, and the highest-leverage thing in this list: it is not an
+   invented API, it is the API every I2C sketch already uses. Adding it let the
+   DS1307, the MPU-6050 and the HX711 onto the bench without a single new piece
+   of syntax -- a sketch points at a register with a write and reads it back,
+   exactly as it would on hardware.
+2. **A character LCD.** `lcd.begin()`, `setCursor`, `print`, `createChar`, and
+   the six-wire header a library drives rather than two. The panel model is the
+   HD44780's own protocol and the *library* is the host's half, which is where
+   that split belongs: a display wired to the wrong pins stays blank, because the
+   engine decodes RS, D4-D7 and E back off the nets rather than being told what
+   the library meant.
+3. **Servos.** `servo.attach` / `write` / `read` by pin. The angle clamps at the
+   real end stops, 10 and 170 degrees, because that is where a servo's are and a
+   sketch asking for more gets the stop.
+
+The row addresses of a 20x4 are the panel's business, not the library's: the
+glass knows that its second half sits *above* the first, and a driver that
+guesses gets a correctly wired display showing one line.
+
+**An example is a sketch and the bench it expects.** Picking one from the
+editor rebuilds both, because a sketch that talks to a clock nobody wired reads
+nothing and looks exactly like a broken API -- which is the mistake worth
+spending a day on when you are the one who wrote it. The parts are placed beside
+the breadboard rather than in it, since every one of them is too large for a
+strip and a module straddling the board hides the holes the rest of the circuit
+uses.
+
+The character LCD found the limits of a static netlist fastest. It is a four-bit
+part: a byte goes out as two nibbles, the controller shifts the halves together,
+and the panel latches on the rising edge of enable. Every one of those is a
+decision about *when* a value changes, which is exactly what a netlist rebuilt
+from geometry cannot say. What the bench does is settle the circuit with the
+data lines written and enable still low, then again with enable high -- so the
+edge is observed rather than written, and the bytes arriving are the ones the
+pins actually carried. A display wired to the wrong header stays blank, which is
+the point.
+
+**Every element the library ships is browsable, not only the adopted ones.** The
+component browser carries a "Full library" tab: all fifty tags, each drawn by
+its own element, marked with whether it is on the bench, waiting on a firmware
+API, or a different part from the one this bench drives. A part you can see but
+cannot place -- with the reason on it -- is more use than one you cannot see,
+and it is the honest answer to "why is there no servo here".
+
+**The parts a bench carries are the parts the firmware can read.** Wokwi ships
+fifty-odd elements; the ones adopted here are the ones whose circuit the
+solver can solve with what it already has. A keypad matrix, an SD card or a
+stepper motor would each need a firmware API first, and an artwork-only
+version of one is a picture of a part that does nothing. The keypad is the
+exception that proves the rule: it is a matrix of switches and nothing else,
+so a sketch scans it the way real code does, and no API was invented for it.
+
+**The comparator sensor family is one part, not five.** A PIR, a sound, a
+heart-rate, a gas and a flame board are all the same LM393 with a trimmer
+across a sensor and a pull-up on the output, so they share a component kind, a
+model and the threshold knob; the variant chooses the element, the header and
+the stimulus. Two of the five bring no analogue tap out at all -- the PIR and
+the heart board are three-pin modules -- and those are declared three-pin,
+because a pin with no hole drawn is a terminal a jumper can reach but can never
+see.
