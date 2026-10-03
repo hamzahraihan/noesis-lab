@@ -50,6 +50,25 @@ const ARGUMENT_COUNTS: Readonly<Record<number, number>> = {
 export class Ssd1306 {
   readonly address: number;
 
+  /**
+   * Whether the panel is wired onto the firmware's I2C nets.
+   *
+   * Set by the engine on every rebuild. An OLED on the wrong pins is not a
+   * panel that happens to work anyway, which is the failure worth reproducing.
+   */
+  onBus = false;
+
+  /**
+   * The panel has no registers to read.
+   *
+   * An SSD1306 answers writes and nothing else, so a `requestFrom` at its
+   * address returns an empty response -- which is what a sketch asking a
+   * display for its memory map is told, on real hardware as much as here.
+   */
+  read(): readonly number[] {
+    return [];
+  }
+
   private readonly framebuffer = new Uint8Array(FRAMEBUFFER_BYTES);
 
   private displayOn = false;
@@ -86,9 +105,7 @@ export class Ssd1306 {
    * `0x00` argument -- such as the column start in `set column address` -- as
    * a stream selector and quietly desynchronise every command after it.
    */
-  receive(address: number, byte: number, isControlPosition = false): boolean {
-    if ((address & 0x7f) !== this.address) return false;
-
+  receive(byte: number, isControlPosition = false): boolean {
     if (isControlPosition) {
       this.dataStream = (byte & 0x40) !== 0;
       return true;
