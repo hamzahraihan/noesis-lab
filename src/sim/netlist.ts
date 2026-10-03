@@ -20,6 +20,7 @@ import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
 import type { DynamicState } from './catalog';
 import { RELAY_COIL_OHMS } from './relay';
 import { WIPER_KNOB } from './passives';
+import { DETENT_KNOB, quadratureAt } from './encoder';
 import {
   COMPARATOR_THRESHOLD_KNOB,
   DIP_WAY_KNOBS,
@@ -636,9 +637,57 @@ function elementsForPart(
       ];
     }
 
-    case 'rotary-encoder':
-      // Implemented in Task 3; resting stub keeps the switch exhaustive.
-      return [];
+    case 'rotary-encoder': {
+      // Board pull-ups hold CLK/DT high; the detent knob walks the Gray
+      // cycle so digitalRead sees valid quadrature. SW shorts to ground
+      // while held, same shape as the joystick select contact.
+      const [clk, dt] = quadratureAt(state.knob(part.id, DETENT_KNOB));
+      const pressed = state.isPressed(part.id);
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('CLK'),
+          b: nodeAt('GND'),
+          ohms: clk === 0 ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+          label: clk === 0 ? 'closed' : 'open',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('CLK'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('DT'),
+          b: nodeAt('GND'),
+          ohms: dt === 0 ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+          label: dt === 0 ? 'closed' : 'open',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('DT'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('SW'),
+          b: nodeAt('GND'),
+          ohms: pressed ? SWITCH_CLOSED_OHMS : SWITCH_OPEN_OHMS,
+          label: pressed ? 'closed' : 'open',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('SW'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+      ];
+    }
 
     case 'mcu':
     case 'breadboard':
