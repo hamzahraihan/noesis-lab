@@ -50,6 +50,18 @@ export interface FirmwareServices {
    */
   lcd?: LiquidCrystalPort;
   servo?: ServoPort;
+  /**
+   * Sonar echo measurement, split across the wait it reports.
+   *
+   * Optional for the same reason `lcd` and `servo` are: hosts without a
+   * sonar part have nothing to measure. `pulseInBegin` arms the echo line
+   * and reports its width in microseconds (0 on timeout or with nothing
+   * wired); the interpreter waits that long, then calls `pulseInEnd` to
+   * release the line. The split is what keeps ECHO high only while a
+   * measurement is actually running.
+   */
+  pulseInBegin?(pin: number, level: number, timeoutUs: number): number;
+  pulseInEnd?(): void;
 }
 
 /**
@@ -310,6 +322,17 @@ export class FirmwareRuntime {
         return 0;
       case 'analogRead':
         return services.analogRead(asNumber(args[0] ?? 0));
+      case 'pulseIn': {
+        const micros = services.pulseInBegin?.(
+          asNumber(args[0] ?? 0),
+          asNumber(args[1] ?? 0),
+          asNumber(args[2] ?? 1000000),
+        ) ?? 0;
+        if (micros <= 0) return 0;
+        yield micros / 1000;
+        services.pulseInEnd?.();
+        return micros;
+      }
       case 'random':
         return Math.floor(Math.random() * asNumber(args[0] ?? 1));
       case 'constrain':

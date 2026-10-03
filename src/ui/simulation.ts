@@ -26,6 +26,7 @@ import type { BoardPin, KnobSpec, PartDefinition } from '../sim/catalog';
 import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
 
 import { GROUND } from '../sim/elements';
+import { DISTANCE_KNOB, echoMicroseconds } from '../sim/sonar';
 import type { DisplayController } from '../sim/display/part';
 import { I2CBus } from '../sim/bus/i2c';
 import { SpiBus } from '../sim/bus/spi';
@@ -730,6 +731,22 @@ export class Simulation {
     return null;
   }
 
+  /** The sonar whose echo pin is wired to a board pin, if there is one. */
+  private sonarOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'sonar') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:ECHO`) === net) return part;
+    }
+    return null;
+  }
+
+  /** Sonar part armed by the running `pulseIn`, released when it returns. */
+  private sonarArmed: string | null = null;
+
   private services(): FirmwareServices {
     return {
       nowMs: () => this.engine.timeMs,
@@ -822,6 +839,25 @@ export class Simulation {
         },
         read: (pin) => this.servoOnPin(pin)?.angle ?? 0,
         detach: (pin) => this.servoOnPin(pin)?.detach(),
+      },
+      pulseInBegin: (pin, level, timeoutUs) => {
+        // ECHO idles low and only HIGH pulses are synthesized, so asking
+        // for a LOW pulse times out exactly as on hardware.
+        if (level === 0) return 0;
+        const sonar = this.sonarOnPin(pin);
+        if (!sonar) return 0;
+        const micros = echoMicroseconds(this.controls.knob(sonar.id, DISTANCE_KNOB));
+        if (micros > timeoutUs) return 0;
+        this.sonarArmed = sonar.id;
+        this.engine.setSonarMeasuring(sonar.id, true);
+        this.engine.settle();
+        return micros;
+      },
+      pulseInEnd: () => {
+        if (this.sonarArmed === null) return;
+        this.engine.setSonarMeasuring(this.sonarArmed, false);
+        this.sonarArmed = null;
+        this.engine.settle();
       },
       serialBegin: () => {},
       serialWrite: (text) => {

@@ -208,6 +208,7 @@ function elementsForPart(
   pinNode: ReadonlyMap<string, number>,
   state: DynamicState,
   relayEnergized: ReadonlyMap<string, boolean> = new Map(),
+  sonarMeasuring: ReadonlyMap<string, boolean> = new Map(),
 ): Element[] {
   const nodeAt = (pinId: string): number => pinNode.get(`${part.id}:${pinId}`) ?? GROUND;
   const component = part.definition.component;
@@ -689,10 +690,29 @@ function elementsForPart(
       ];
     }
 
-    case 'sonar':
-      // Full echo-line emission lands in Task 2; resting stub keeps the
-      // switch exhaustive until then.
-      return [];
+    case 'sonar': {
+      // TRIG is a high-impedance input and contributes nothing; ECHO is an
+      // open-drain line under a pull-up to VCC, held low unless a pulseIn
+      // measurement is running -- the same shape as the joystick select
+      // contact, driven by the engine's measuring map instead of a press.
+      const measuring = sonarMeasuring.get(part.id) ?? false;
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('ECHO'),
+          b: nodeAt('GND'),
+          ohms: measuring ? SWITCH_OPEN_OHMS : SWITCH_CLOSED_OHMS,
+          label: measuring ? 'open' : 'closed',
+        },
+        {
+          kind: 'resistor',
+          a: nodeAt('ECHO'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+      ];
+    }
 
     case 'mcu':
     case 'breadboard':
@@ -721,6 +741,7 @@ export function buildNetlist(
   bench: Bench,
   state: DynamicState,
   relayEnergized: ReadonlyMap<string, boolean> = new Map(),
+  sonarMeasuring: ReadonlyMap<string, boolean> = new Map(),
 ): Netlist {
   const sets = new DisjointSet(bench.terminals.length);
 
@@ -778,7 +799,7 @@ export function buildNetlist(
 
   const elements: Element[] = [];
   for (const part of bench.parts) {
-    for (const element of elementsForPart(part, pinNode, state, relayEnergized)) {
+    for (const element of elementsForPart(part, pinNode, state, relayEnergized, sonarMeasuring)) {
       if (!isDegenerate(element)) elements.push(element);
     }
   }
