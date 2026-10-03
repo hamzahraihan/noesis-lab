@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
 import { esp32DevKitV1 } from './boards';
+import { DynamicState } from './catalog';
+import { buildNetlist } from './netlist';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
-import { STEP_DEGREES, stepperDefinition, stepTransition } from './stepper';
+import { STEP_DEGREES, biaxialStepperDefinition, stepperDefinition, stepTransition } from './stepper';
 
 describe('stepper definition', () => {
   it('exposes four coil pins in a row', () => {
@@ -23,8 +25,7 @@ describe('step transition', () => {
   });
 });
 
-describe('stepper shaft', () => {
-  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5, bMinus: 12 };
+describe('stepper shaft', () => {  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5, bMinus: 12 };
 
   function shaftBench() {
     const builder = new BenchBuilder();
@@ -85,5 +86,65 @@ describe('stepper shaft', () => {
     mcu.writeDigital(PINS.aMinus, true, engine.timeMs);
     engine.settle();
     expect(engine.stepperAngle(stepper.id)).toBeCloseTo(armed, 6);
+  });
+});
+
+describe('biaxial stepper', () => {
+  it('exposes eight pins for two axes', () => {
+    const def = biaxialStepperDefinition();
+    expect(def.pins.map((p) => p.id)).toEqual(['A1-', 'A1+', 'B1+', 'B1-', 'A2-', 'A2+', 'B2+', 'B2-']);
+    expect([def.widthMm, def.heightMm]).toEqual([56, 67.5]);
+  });
+
+  it('stamps four winding resistors, two per axis', () => {
+    const builder = new BenchBuilder();
+    builder.addPart(biaxialStepperDefinition(), 200, 0);
+    const netlist = buildNetlist(builder.build(), new DynamicState());
+    expect(netlist.elements.filter((e) => e.kind === 'resistor' && e.label?.startsWith('winding')).length).toBe(4);
+  });
+
+  it('sequences one axis without disturbing the other', () => {
+    const builder = new BenchBuilder();
+    const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
+    const twin = builder.addPart(biaxialStepperDefinition(), 200, 0);
+    const at = (part: PartInstance, pinId: string) => {
+      const pin = part.definition.pins.find((p) => p.id === pinId)!;
+      return { x: part.x + pin.x, y: part.y + pin.y };
+    };
+    const gpioPin = (gpio: number) => {
+      const id = esp32.definition.boardPins!.find((p) => p.gpio === gpio)!.id;
+      const pin = esp32.definition.pins.find((p) => p.id === id)!;
+      return { x: pin.x, y: pin.y };
+    };
+    // Axis 1 coils on gpios 2/4/5/12; axis 2 parked with A2+ high, rest low.
+    const axis1: Array<[number, string]> = [[2, 'A1-'], [4, 'A1+'], [5, 'B1+'], [12, 'B1-']];
+    for (const [gpio, target] of axis1) {
+      const from = gpioPin(gpio);
+      const to = at(twin, target);
+      builder.addWire(from.x, from.y, to.x, to.y);
+    }
+    const park: Array<[number, string]> = [[25, 'A2-'], [26, 'A2+'], [27, 'B2+'], [33, 'B2-']];
+    for (const [gpio, target] of park) {
+      const from = gpioPin(gpio);
+      const to = at(twin, target);
+      builder.addWire(from.x, from.y, to.x, to.y);
+    }
+    const mcu = new McuRuntime(esp32.definition);
+    for (const gpio of [2, 4, 5, 12, 25, 26, 27, 33]) mcu.setDirection(gpio, 'output');
+    const engine = new Engine({ bench: builder.build(), mcu });
+    engine.rebuild();
+    const drive = (pA: number, pB: number) => {
+      mcu.writeDigital(4, pA > 0, engine.timeMs);
+      mcu.writeDigital(2, pA < 0, engine.timeMs);
+      mcu.writeDigital(5, pB > 0, engine.timeMs);
+      mcu.writeDigital(12, pB < 0, engine.timeMs);
+    };
+    mcu.writeDigital(26, true, engine.timeMs);
+    for (const [pA, pB] of [[1, 1], [-1, 1], [-1, -1], [1, -1], [1, 1]] as const) {
+      drive(pA, pB);
+      engine.settle();
+    }
+    expect(engine.stepperAngle(twin.id, 1)).toBeCloseTo(4 * STEP_DEGREES, 6);
+    expect(engine.stepperAngle(twin.id, 2)).toBeCloseTo(0, 6);
   });
 });
