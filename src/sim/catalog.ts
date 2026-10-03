@@ -83,6 +83,8 @@ export type ComponentSpec =
   | { readonly kind: 'thermistor' }
   | { readonly kind: 'tilt-switch' }
   | { readonly kind: 'slide-switch' }
+  | { readonly kind: 'relay' }
+  | { readonly kind: 'rotary-encoder' }
   | { readonly kind: 'joystick' }
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }

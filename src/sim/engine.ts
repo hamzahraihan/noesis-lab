@@ -14,6 +14,7 @@
  */
 import { createController, type DisplayController } from './display/part';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
+import { coilEnergized } from './relay';
 import { Servo } from './devices/servo';
 import { createLcd, type Lcd1602 } from './devices/lcd';
 import { Ili9341 } from './display/ili9341';
@@ -111,7 +112,7 @@ export class Engine {
 
     this.mcuPart =
       this.bench.parts.find((part) => part.definition.component.kind === 'mcu') ?? null;
-    this.netlist = buildNetlist(this.bench, this.dynamicState);
+    this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized);
     this.solution = null;
     this.previousVoltages = null;
     this.pinSourceIndex.clear();
@@ -138,6 +139,16 @@ export class Engine {
 
   /** Servo parts, keyed by part id, for the renderer and the firmware port. */
   private readonly servos = new Map<string, Servo>();
+
+  /**
+   * Relay armature state, keyed by part id.
+   *
+   * Updated from the solved coil volts after each solve; the next rebuild
+   * picks it up, so pull-in costs one tick -- the honest delay of a real
+   * armature, and what breaks the otherwise circular read of coil volts
+   * during the solve that decides the contacts.
+   */
+  private readonly relayEnergized = new Map<string, boolean>();
 
   /** Character LCD parts, keyed by part id. */
   private readonly lcds = new Map<string, Lcd1602>();
@@ -518,11 +529,31 @@ export class Engine {
     this.solution = solution;
     // Capacitor history only cares about real nets, so trim the internal rows.
     this.previousVoltages = solution.voltages.slice(0, netlist.nodeCount);
+    this.pumpRelays();
     // Capture last, so a probe sees the voltages this solve produced rather
     // than the previous step's.
     this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
     this.pumpLcds();
     return solution;
+  }
+
+  /**
+   * Refreshes relay armature state from the solved coil volts.
+   *
+   * Runs after the solve, so a change takes effect on the next rebuild --
+   * one tick of pull-in delay. Reads both coil ends through the pin map, so
+   * an unwired coil rests at 0 V and stays on NC.
+   */
+  private pumpRelays(): void {
+    const netlist = this.netlist;
+    if (!netlist) return;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'relay') continue;
+      const plus = netlist.pinNode.get(`${part.id}:COIL+`) ?? GROUND;
+      const minus = netlist.pinNode.get(`${part.id}:COIL-`) ?? GROUND;
+      const volts = this.voltageOfNet(plus) - this.voltageOfNet(minus);
+      this.relayEnergized.set(part.id, coilEnergized(volts));
+    }
   }
 
   /**
