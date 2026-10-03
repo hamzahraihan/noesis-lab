@@ -107,6 +107,9 @@ function harnessWithSketch(source: string, pin = 2): Harness {
       beginTransmission: () => {},
       write: () => 1,
       endTransmission: () => 0,
+      requestFrom: () => 0,
+      read: () => -1,
+      available: () => 0,
     },
   };
 
