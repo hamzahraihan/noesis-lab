@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isLargePart, type CatalogueEntry } from './sim/catalogue';
 import { ComponentBrowser } from './ui/ComponentBrowser';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from './sim/breadboard';
-import { arduinoUnoR3, esp32DevKitV1 } from './sim/boards';
+import { arduinoMega2560, arduinoNano, arduinoUnoR3, esp32DevKitV1, franzininhoBoard, nanoRp2040Connect } from './sim/boards';
 import { ledDefinition, resistorDefinition } from './sim/passives';
 import { DIODE_PROFILES } from './sim/elements';
 import type { PartDefinition } from './sim/catalog';
@@ -20,7 +20,8 @@ import type { BendPoint, PartInstance, Terminal } from './sim/bench';
 import { ili9341Definition, ssd1306Definition } from './sim/display/part';
 import { Workbench } from './ui/Workbench';
 import type { FootprintState } from './ui/footprints';
-import { BLINK_SKETCH, Simulation } from './ui/simulation';
+import { Simulation } from './ui/simulation';
+import { BLINK_EXAMPLE, EXAMPLES } from './ui/examples';
 import { PartSearch } from './ui/PartSearch';
 import {
   FirmwareEditor,
@@ -30,6 +31,8 @@ import {
 } from './ui/Panels';
 import { ScopePanel } from './ui/Scope';
 import { MultimeterPanel } from './ui/Multimeter';
+import { LogicAnalyser } from './ui/LogicAnalyser';
+import { BusMonitor } from './ui/BusMonitor';
 import {
   CaretLeftIcon,
   Component1Icon,
@@ -37,10 +40,25 @@ import {
   PlayIcon,
   PlusIcon,
   SwitchIcon,
-  UpdateIcon,
 } from '@radix-ui/react-icons';
 
-type BoardId = 'esp32' | 'uno';
+type BoardId = 'esp32' | 'uno' | 'mega' | 'nano' | 'rp2040' | 'franzininho';
+
+/**
+ * The boards the bench can be built around, in the order they are offered.
+ *
+ * A list rather than two entries so a swap is a choice rather than a coin
+ * toss, and so adding a board is one line here rather than a new branch in
+ * every place that has to know which board it is looking at.
+ */
+const BOARDS: ReadonlyArray<{ id: BoardId; name: string; make: () => PartDefinition }> = [
+  { id: 'esp32', name: 'ESP32 DevKit V1', make: esp32DevKitV1 },
+  { id: 'uno', name: 'Arduino Uno R3', make: arduinoUnoR3 },
+  { id: 'mega', name: 'Arduino Mega 2560', make: arduinoMega2560 },
+  { id: 'nano', name: 'Arduino Nano', make: arduinoNano },
+  { id: 'rp2040', name: 'Nano RP2040 Connect', make: nanoRp2040Connect },
+  { id: 'franzininho', name: 'Franzininho', make: franzininhoBoard },
+];
 
 /** Where the breadboard sits, clear of the board plugged in beside it. */
 const BREADBOARD_ORIGIN_X = 230;
@@ -48,30 +66,53 @@ const BREADBOARD_ORIGIN_X = 230;
 /** Column the starter LED circuit is wired onto. */
 const SIGNAL_COLUMN = 20;
 
-/** Which header pin drives the starter LED on each board. */
-const LED_PIN: Readonly<Record<BoardId, string>> = {
-  esp32: 'R_D2',
-  uno: 'J1_D13',
-};
+/**
+ * How the starter bench is wired onto each board.
+ *
+ * Every board here is wire-compatible with the Arduino pin numbers the sketch
+ * talks in, so the starter circuit is the same circuit -- what differs is which
+ * header pin carries it and which two carry I2C.
+ */
+interface StarterWiring {
+ /** Header pin the blink sketch drives. */
+ readonly led: string;
+  /** Any pin of the board's ground plane. */
+  readonly ground: string;
+  /** SDA then SCL. */
+ readonly i2c: readonly [string, string];
+  /** Chip-select, D/C, clock and MOSI, in that order. */
+  readonly spi: readonly [string, string, string, string];
+}
 
-/** Header pins carrying the TFT's four SPI signals on each board. */
-const SPI_PINS: Readonly<Record<BoardId, ReadonlyArray<[string, string]>>> = {
-  esp32: [
-    ['R_D5', 'CS'],
-    ['R_D15', 'DC'],
-    ['R_D18', 'SCK'],
-    ['R_D23', 'MOSI'],
-  ],
-  uno: [
-    ['J1_D10', 'CS'],
-    ['J1_D9', 'DC'],
-    ['J1_D13', 'SCK'],
-    ['J1_D11', 'MOSI'],
-  ],
+const STARTER_WIRING: Readonly<Record<BoardId, StarterWiring>> = {
+  esp32: { led: 'R_D2', ground: 'L_GND', i2c: ['R_D21', 'R_D22'], spi: ['R_D5', 'R_D15', 'R_D18', 'R_D23'] },
+  uno: { led: 'J1_D13', ground: 'J1_GND', i2c: ['J3_A4', 'J3_A5'], spi: ['J1_D10', 'J1_D9', 'J1_D13', 'J1_D11'] },
+  /*
+   * The Mega's SPI is the 50-53 block its own peripheral sits on, not the
+   * 10-13 an Uno sketch names, and its SDA and SCL holes are shadowed by the
+   * numbered 20 and 21 beside them -- so the bus is wired to the numbered
+   * pair, which is what a pin number resolves to.
+   */
+  mega: { led: 'J1_13', ground: 'J3_GND2', i2c: ['J1_20', 'J1_21'], spi: ['J2b_53', 'J1_9', 'J2a_52', 'J2b_51'] },
+  nano: { led: 'J2_13', ground: 'J1_GND', i2c: ['J3_A4', 'J3_A5'], spi: ['J1_10', 'J1_9', 'J2_13', 'J1_11'] },
+  /*
+   * The RP2040's analog block silkscreens A0-A3 on the GPIO its ADC samples,
+   * so that is what the I2C pair is wired to. A4 and A5 name those same two
+   * holes as their I2C aliases but carry no pin number of their own.
+   */
+  rp2040: { led: 'J2_D13', ground: 'J1_GND', i2c: ['J3_A0', 'J3_A1'], spi: ['J1_D10', 'J1_D9', 'J2_D13', 'J1_D11'] },
+  /*
+   * The Franzininho is an ATmega328P on a small carrier with no digital header
+   * of its own, so its buses sit on the port bits: PB2/PB3 are the USI's I2C,
+   * which is the pair the chip's own pins 2 and 3 already are.
+   */
+  franzininho: { led: 'J1_PB1', ground: 'J1_GND.1', i2c: ['J1_PB2', 'J1_PB3'], spi: ['J1_PB0', 'J1_PB5', 'J1_PB4', 'J1_PB3'] },
 };
 
 function boardDefinition(boardId: BoardId): PartDefinition {
-  return boardId === 'esp32' ? esp32DevKitV1() : arduinoUnoR3();
+  const board = BOARDS.find((candidate) => candidate.id === boardId);
+  if (!board) throw new Error(`unknown board ${boardId}`);
+  return board.make();
 }
 
 /** A terminal-shaped placeholder, for routing wires before a hole exists. */
@@ -88,6 +129,7 @@ function at(x: number, y: number): Terminal {
  * which is the whole reason they are both here.
  */
 function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
+  const wiring = STARTER_WIRING[boardId];
   const board = simulation.addPart(boardDefinition(boardId), 0, 0);
   simulation.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
 
@@ -101,7 +143,7 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
   const groundRailY = railRowY(2);
 
   // --- LED on the bench ---------------------------------------------------
-  const ledPin = pinAt(LED_PIN[boardId]);
+  const ledPin = pinAt(wiring.led);
   simulation.routeWire(at(ledPin.x, ledPin.y), at(holeX(SIGNAL_COLUMN), holeY(8)));
   simulation.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
   simulation.addPart(
@@ -113,7 +155,7 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
     at(holeX(SIGNAL_COLUMN + 5), holeY(8)),
     at(holeX(SIGNAL_COLUMN + 5), groundRailY),
   );
-  const ground = pinAt(boardId === 'esp32' ? 'L_GND' : 'J1_GND');
+  const ground = pinAt(wiring.ground);
   simulation.routeWire(at(ground.x, ground.y), at(holeX(10), groundRailY));
 
   /** Wires a display pin to a breadboard column, and the board pin to it too. */
@@ -139,9 +181,7 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
     at(holeX(oledColumn + 2), groundRailY),
     at(oled.x + oled.definition.pins[0].x, oled.y + oled.definition.pins[0].y),
   );
-  const i2cPins: readonly [string, string][] =
-    boardId === 'esp32' ? [['R_D21', 'SDA'], ['R_D22', 'SCL']] : [['J3_A4', 'SDA'], ['J3_A5', 'SCL']];
-  i2cPins.forEach(([boardPin, _signal], index) => {
+  [wiring.i2c[0], wiring.i2c[1]].forEach((boardPin, index) => {
     const pin = pinAt(boardPin);
     simulation.routeWire(at(pin.x, pin.y), at(holeX(oledColumn + index * 2), holeY(8)));
   });
@@ -149,9 +189,9 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
   // --- 2.4" TFT, on SPI ---------------------------------------------------
   const tft = simulation.addPart(ili9341Definition(), BREADBOARD_ORIGIN_X + 55, 150);
   const spiColumn = SIGNAL_COLUMN + 13;
-  SPI_PINS[boardId].forEach(([boardPin, signal], index) => {
+  ['CS', 'DC', 'SCK', 'MOSI'].forEach((signal, index) => {
     const column = spiColumn + index * 2;
-    const pin = pinAt(boardPin);
+    const pin = pinAt(wiring.spi[index]);
     simulation.routeWire(at(pin.x, pin.y), at(holeX(column), holeY(8)));
     connect(tft, signal, column, 8);
   });
@@ -191,7 +231,8 @@ function offsetOfFirstPin(definition: PartDefinition): [x: number, y: number] {
 }
 
 export default function App() {
-  const [firmware, setFirmware] = useState(BLINK_SKETCH);
+  const [firmware, setFirmware] = useState(BLINK_EXAMPLE.sketch);
+  const [exampleId, setExampleId] = useState<string | null>(BLINK_EXAMPLE.id);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [boardId, setBoardId] = useState<BoardId>('esp32');
@@ -206,7 +247,7 @@ export default function App() {
     () => {
       const created = new Simulation(boardDefinition(boardId));
       buildStartingBench(created, boardId);
-      created.loadFirmware(BLINK_SKETCH);
+      created.loadFirmware(BLINK_EXAMPLE.sketch);
       // Deliberately left stopped. The bench opens on a loaded sketch at
       // t=0 that the operator has to run themselves, which is the honest
       // initial state -- starting the moment the page loads ran the firmware
@@ -300,23 +341,26 @@ export default function App() {
 
   const bench = simulation.bench;
 
+  /*
+   * Rebuilt when the bench changes, not only when the simulation does, because
+   * an example adds its parts to a simulation that already exists: keyed on the
+   * simulation alone this map would never learn about a display that arrived
+   * later, and its artwork would sit on the bench showing whatever it was
+   * constructed with.
+   */
   const renderState = useMemo<FootprintState>(
     () => ({
       pinVolts: simulation.pinVoltages(),
       displays: simulation.displayControllers(),
-      pressedButtons: new Set(
-        bench.parts
-          .filter((part) => part.definition.component.kind === 'button')
-          .filter((part) => simulation.isButtonPressed(part.id))
-          .map((part) => part.id),
-      ),
-      potPositions: new Map(
-        bench.parts
-          .filter((part) => part.definition.component.kind === 'potentiometer')
-          .map((part) => [part.id, simulation.potPosition(part.id)]),
-      ),
+      servos: simulation.servoModels(),
+      lcds: simulation.lcdModels(),
+      controls: simulation.controls,
+      // Read here so the memo is honest about depending on the bench: the maps
+      // above are built from it, and an example changes it without touching
+      // the simulation.
+      parts: bench.parts.length,
     }),
-    [bench, simulation],
+    [simulation, bench],
   );
 
 
@@ -395,7 +439,29 @@ export default function App() {
   );
 
   const onTogglePressed = useCallback(
-    (partId: string, pressed: boolean) => simulation.setButtonPressed(partId, pressed),
+    (partId: string, pressed: boolean) => simulation.setPressed(partId, pressed),
+    [simulation],
+  );
+
+  /**
+   * Loads an example: the sketch, and the bench it expects to find.
+   *
+   * Both halves or neither. A sketch that talks to a clock nobody wired reads
+   * nothing and looks exactly like a broken API, so the parts go down first and
+   * the sketch is loaded onto them. The bench keeps the board and the breadboard
+   * and everything already wired to them, because the examples share the
+   * displays and the clock that one of them reads.
+   */
+  const loadExample = useCallback(
+    (id: string) => {
+      const example = EXAMPLES.find((candidate) => candidate.id === id);
+      if (!example) return;
+      example.wire(simulation);
+      setFirmware(example.sketch);
+      setExampleId(example.id);
+      simulation.loadFirmware(example.sketch);
+      forceRender((n) => n + 1);
+    },
     [simulation],
   );
 
@@ -446,16 +512,19 @@ export default function App() {
           <span className="text-slate-500" aria-hidden="true">
             <Component1Icon className="icon" />
           </span>
-          <span className="text-xs text-slate-300">{simulation.mcu.board.name}</span>
-          <button
-            type="button"
-            onClick={() => setBoardId((current) => (current === 'esp32' ? 'uno' : 'esp32'))}
-            className="ctl ctl-icon ctl-quiet ml-0.5"
+          <select
+            value={boardId}
+            onChange={(event) => setBoardId(event.target.value as BoardId)}
+            className="ctl-select"
+            aria-label="Board"
             title="Swap board"
-            aria-label="Swap board"
           >
-            <UpdateIcon className="icon" />
-          </button>
+            {BOARDS.map((board) => (
+              <option key={board.id} value={board.id}>
+                {board.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex items-center gap-1">
@@ -586,6 +655,9 @@ export default function App() {
                 forceRender((n) => n + 1);
               }}
               running={simulation.running}
+              examples={EXAMPLES}
+              activeExampleId={exampleId}
+              onLoadExample={loadExample}
             />
           </section>
         </main>
@@ -595,17 +667,16 @@ export default function App() {
             <Inspector
               part={selected}
               pinVoltages={renderState.pinVolts}
-              pressed={selected ? simulation.isButtonPressed(selected.id) : false}
-              potPosition={selected ? simulation.potPosition(selected.id) : 0.5}
+              controls={simulation.controls}
               onDelete={() => {
                 if (selected) simulation.removePart(selected.id);
                 setSelectedId(null);
               }}
-              onTogglePressed={(pressed) => {
-                if (selected) simulation.setButtonPressed(selected.id, pressed);
+              onSetPressed={(pressed) => {
+                if (selected) simulation.setPressed(selected.id, pressed);
               }}
-              onSetPot={(fraction) => {
-                if (selected) simulation.setPotPosition(selected.id, fraction);
+              onSetKnob={(spec, value) => {
+                if (selected) simulation.setKnob(selected.id, spec, value);
               }}
             />
           </div>
@@ -625,6 +696,14 @@ export default function App() {
             onProbe={(pinId: string | null) => simulation.setProbePin(pinId)}
             onBaud={setBaud}
           />
+          <LogicAnalyser
+            pins={probePins}
+            traces={simulation.analyserTraces()}
+            logicVolts={simulation.mcu.board.logicVolts}
+            onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
+            isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
+          />
+          <BusMonitor entries={simulation.busLines()} onClear={() => simulation.clearBusLog()} />
           <MultimeterPanel
             pins={meterPins}
             redPinId={meterRedPin}
