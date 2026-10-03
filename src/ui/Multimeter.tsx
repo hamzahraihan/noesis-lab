@@ -8,6 +8,7 @@
 import type { BoardPin } from '../sim/catalog';
 import { AMP_RANGES, OHM_RANGES, type MeterMode, type MeterReading } from '../sim/multimeter';
 import { formatAmps, formatOhms, formatVolts } from './format';
+import { ExclamationTriangleIcon, MixerHorizontalIcon } from '@radix-ui/react-icons';
 
 export interface MultimeterPanelProps {
   mode: MeterMode;
@@ -50,34 +51,48 @@ export function MultimeterPanel({
   return (
     <div className="flex flex-col gap-2 border-t border-slate-800 p-3">
       <div className="flex items-center gap-2">
-        <h3 className="flex-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+        <h3 className="panel-title flex-1">
+          <MixerHorizontalIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Multimeter
         </h3>
-        <div className="flex gap-1">
+        <div className="flex gap-0.5 rounded border border-slate-800 bg-slate-950 p-0.5">
           {(Object.keys(MODE_LABELS) as MeterMode[]).map((candidate) => (
             <button
               key={candidate}
               type="button"
               onClick={() => onMode(candidate)}
-              className={`rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                mode === candidate
-                  ? 'bg-amber-400 text-slate-900'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              aria-pressed={mode === candidate}
+              className={`ctl h-6 px-1.5 text-[11px] ${
+                mode === candidate ? 'ctl-quiet !bg-amber-400 !text-slate-900' : 'text-slate-400'
               }`}
+              title={`Measure ${MODE_LABELS[candidate] === 'V' ? 'voltage' : MODE_LABELS[candidate] === 'A' ? 'current' : 'resistance'}`}
             >
               {MODE_LABELS[candidate]}
             </button>
           ))}
-
         </div>
       </div>
 
-      <div className="rounded bg-slate-950 px-3 py-2 text-center font-mono text-2xl tabular-nums">
-        {reading.valid ? formatReading(reading) : '--'}
+      {/*
+       * The meter is the one panel whose job is a single number, so it is the
+       * one place a display face is warranted. It carries the unit inline and
+       * goes amber when the reading is not to be trusted.
+       */}
+      <div
+        className={`rounded-md border bg-slate-950 px-3 py-2 text-center ${
+          reading.valid ? 'border-slate-800' : 'border-amber-900/60'
+        }`}
+      >
+        <span className="num font-mono text-2xl leading-none text-slate-100">
+          {reading.valid ? formatReading(reading) : '--'}
+        </span>
       </div>
 
       {reading.note && (
-        <p className="text-[11px] text-amber-300">{reading.note}</p>
+        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-300">
+          <ExclamationTriangleIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
+          {reading.note}
+        </p>
       )}
 
       {ranges.length > 0 && (
@@ -86,7 +101,8 @@ export function MultimeterPanel({
           <select
             value={rangeId}
             onChange={(event) => onRange(event.target.value)}
-            className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-200"
+            aria-label="Meter range"
+            className="ctl-select h-6 flex-1 text-[11px]"
           >
             {ranges.map((range) => (
               <option key={range.id} value={range.id}>
@@ -106,7 +122,8 @@ export function MultimeterPanel({
         <select
           value={redPinId ?? ''}
           onChange={(event) => onRedPin(event.target.value || null)}
-          className="min-w-0 flex-1 rounded bg-slate-800 px-1 py-0.5 text-slate-200"
+          aria-label="Red probe pin"
+          className="ctl-select h-6 min-w-0 flex-1 text-[11px]"
         >
           <option value="">+ not clipped</option>
           {pins.map((pin) => (
@@ -116,7 +133,8 @@ export function MultimeterPanel({
         <select
           value={blackPinId ?? ''}
           onChange={(event) => onBlackPin(event.target.value || null)}
-          className="min-w-0 flex-1 rounded bg-slate-800 px-1 py-0.5 text-slate-200"
+          aria-label="Black probe pin"
+          className="ctl-select h-6 min-w-0 flex-1 text-[11px]"
         >
           <option value="">− ground</option>
           {pins.map((pin) => (
@@ -126,12 +144,14 @@ export function MultimeterPanel({
       </div>
 
       {mode === 'amps' && (
-        <p className="text-[11px] text-slate-600">
+        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-slate-600">
+          <ExclamationTriangleIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
           In series only. Across a rail this is a short circuit.
         </p>
       )}
       {mode === 'ohms' && (
-        <p className="text-[11px] text-slate-600">
+        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-slate-600">
+          <ExclamationTriangleIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
           Power the circuit down first, or the reading is meaningless.
         </p>
       )}
