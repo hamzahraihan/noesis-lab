@@ -128,3 +128,57 @@ export function routeWire(
 ): string {
   return roundedPath(routeWireCorners(from, to, lane), radius);
 }
+
+/**
+ * One straight leg, split into orthogonal runs when its ends do not line up.
+ *
+ * The automatic router and the operator's own bends are held to the same rule:
+ * no run ever moves on both axes at once. A jumper that takes a diagonal cut
+ * across the bench looks like a scratch, and two of them crossing cannot pass
+ * each other cleanly.
+ */
+function legCorners(from: Point, to: Point): readonly Point[] {
+  if (from.x === to.x || from.y === to.y) return [from, to];
+  const across = Math.abs(to.x - from.x);
+  const down = Math.abs(to.y - from.y);
+  return across >= down
+    ? [from, { x: to.x, y: from.y }, to]
+    : [from, { x: from.x, y: to.y }, to];
+}
+
+/**
+ * The corners of a jumper routed through bends the operator placed by hand.
+ *
+ * Deliberately takes no lane. A lane offset exists to stop two automatic
+ * routes resolving to the same line, and applying one here would pull the
+ * wire off the very point the operator clicked to move it somewhere else --
+ * the control would fight the hand. Once someone has said where the wire
+ * should go, that answer is the whole routing decision.
+ */
+export function routeWireViaCorners(
+  from: Point,
+  via: readonly Point[],
+  to: Point,
+): readonly Point[] {
+  const corners: Point[] = [from];
+  let previous = from;
+
+  for (const bend of via) {
+    if (bend.x === previous.x && bend.y === previous.y) continue;
+    for (const point of legCorners(previous, bend).slice(1)) corners.push(point);
+    previous = bend;
+  }
+  for (const point of legCorners(previous, to).slice(1)) corners.push(point);
+
+  return corners;
+}
+
+/** Routes a jumper along bends the operator placed, and rounds the turns. */
+export function routeWireVia(
+  from: Point,
+  via: readonly Point[],
+  to: Point,
+  radius = CORNER_MM,
+): string {
+  return roundedPath(routeWireViaCorners(from, via, to), radius);
+}
