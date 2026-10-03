@@ -88,6 +88,7 @@ export type ComponentSpec =
   | { readonly kind: 'sonar' }
   | { readonly kind: 'stepper' }
   | { readonly kind: 'biaxial-stepper' }
+  | { readonly kind: 'dht' }
   | { readonly kind: 'joystick' }
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }
