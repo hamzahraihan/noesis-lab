@@ -82,8 +82,7 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     tag: 'wokwi-dht22',
     name: 'DHT22 temperature/humidity',
     sizeMm: { w: 15.1, h: 30.885 },
-    status: 'needs-api',
-    note: 'A single-wire protocol the firmware has no way to clock out or clock in.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-microsd-card',
