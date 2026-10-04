@@ -89,6 +89,9 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   stepper: { tag: 'wokwi-stepper-motor', sizeMm: { w: 42, h: 42 } },
   'biaxial-stepper': { tag: 'wokwi-biaxial-stepper', sizeMm: { w: 56, h: 67.5 } },
   dht22: { tag: 'wokwi-dht22', sizeMm: { w: 15.1, h: 30.885 } },
+  neopixel: { tag: 'wokwi-neopixel', sizeMm: { w: 5.6631, h: 5 } },
+  'neopixel-matrix': { tag: 'wokwi-neopixel-matrix', sizeMm: { w: 52.28, h: 49 } },
+  'led-ring': { tag: 'wokwi-led-ring', sizeMm: { w: 37.46, h: 41 } },
   relay: { tag: 'wokwi-ks2e-m-dc5', sizeMm: { w: 21, h: 10 } },
   'rotary-encoder': { tag: 'wokwi-ky-040', sizeMm: { w: 30.815, h: 18.63 } },
   joystick: { tag: 'wokwi-analog-joystick', sizeMm: { w: 27.2, h: 31.8 } },
@@ -213,6 +216,12 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS['biaxial-stepper'];
     case 'dht':
       return WOKWI_PARTS.dht22;
+    case 'neopixel':
+      return WOKWI_PARTS.neopixel;
+    case 'neopixel-matrix':
+      return WOKWI_PARTS['neopixel-matrix'];
+    case 'led-ring':
+      return WOKWI_PARTS['led-ring'];
     case 'joystick':
       return WOKWI_PARTS.joystick;
     case 'rgb-led':

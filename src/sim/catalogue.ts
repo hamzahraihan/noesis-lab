@@ -43,6 +43,7 @@ import { relayDefinition } from './relay';
 import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
+import { ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition } from './pixels';
 import { biaxialStepperDefinition, stepperDefinition } from './stepper';
 
 export interface CatalogueEntry {
@@ -249,6 +250,27 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: dhtDefinition,
   },
   {
+    id: 'neopixel',
+    name: 'NeoPixel',
+    group: 'output',
+    note: 'One addressable LED: paint it with pixels.setColor. No timing to bit-bang.',
+    make: neopixelDefinition,
+  },
+  {
+    id: 'neopixel-matrix-8x8',
+    name: 'NeoPixel Matrix (8x8)',
+    group: 'output',
+    note: 'Sixty-four dice that place and wire but stay dark in v1: their colors are not settable from outside yet.',
+    make: neopixelMatrixDefinition,
+  },
+  {
+    id: 'led-ring-16',
+    name: 'NeoPixel Ring (16)',
+    group: 'output',
+    note: 'Sixteen dice in a circle, same honest limit as the matrix in v1.',
+    make: ledRingDefinition,
+  },
+  {
     id: 'analog-joystick',
     name: 'Analog Joystick',
     group: 'input',
@@ -378,6 +400,8 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   'slide-potentiometer': true,
   'membrane-keypad': true,
   'biaxial-stepper': true,
+  'neopixel-matrix-8x8': true,
+  'led-ring-16': true,
 };
 
 export function isLargePart(id: string): boolean {
