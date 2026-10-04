@@ -83,10 +83,44 @@ export function ili9341Definition(): PartDefinition {
   };
 }
 
+/**
+ * 0.96" 128x64 OLED, SPI, 8-pin breakout.
+ *
+ * The same glass and controller as the I2C breakout, on the 8-pin SPI
+ * module Wokwi draws: chip-select, data/command, and reset beside the
+ * data and clock lines. Pin positions are the element's `pinInfo` in
+ * CSS pixels at 96 per inch, converted to millimetres and snapped to
+ * the grid.
+ */
+export function ssd1306SpiDefinition(): PartDefinition {
+  return {
+    id: 'ssd1306-128x64-spi',
+    name: '128x64 OLED (SSD1306 SPI)',
+    category: 'output',
+    widthMm: 39.69,
+    heightMm: 30.69,
+    component: { kind: 'display', controller: 'ssd1306-spi', address: 0 },
+    pins: [
+      { id: 'VCC', label: '3V3', x: 22.09, y: 3.31, net: 'VCC' },
+      { id: 'GND', label: 'GND', x: 27.34, y: 3.18, net: 'GND' },
+      { id: 'CS', label: 'CS', x: 19.71, y: 3.31 },
+      { id: 'RESET', label: 'RST', x: 17.07, y: 3.31 },
+      { id: 'DC', label: 'D/C', x: 14.42, y: 3.31 },
+      { id: 'MOSI', label: 'DIN', x: 9.66, y: 3.31 },
+      { id: 'SCK', label: 'CLK', x: 12.04, y: 3.31 },
+      { id: 'VIN', label: 'VIN', x: 24.74, y: 3.31, net: 'VCC' },
+    ],
+    bodyColour: '#101418',
+    legendColour: '#7dd3fc',
+    displayPixels: { width: SSD1306_WIDTH, height: SSD1306_HEIGHT },
+  };
+}
+
 /** Instantiates the controller model a display part drives. */
 export function createController(definition: PartDefinition): DisplayController | null {
   const component = definition.component;
   if (component.kind !== 'display') return null;
+  if (component.controller === 'ssd1306-spi') return new Ssd1306();
   return component.controller === 'ssd1306'
     ? new Ssd1306(component.address)
     : new Ili9341();

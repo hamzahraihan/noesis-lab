@@ -116,6 +116,18 @@ export class Ssd1306 {
     return true;
   }
 
+  /**
+   * Accepts one byte over SPI, where D/C selects the stream instead of a
+   * control byte: low is a command, high is display data. Deselected bytes
+   * never arrive, so they change nothing -- a panel on the wrong CS stays
+   * exactly as it was.
+   */
+  receiveSpi(byte: number, dataSelect: boolean, chipSelected: boolean): void {
+    if (!chipSelected) return;
+    if (dataSelect) this.writeData(byte);
+    else this.executeCommand(byte);
+  }
+
   isLit(x: number, y: number): boolean {
     if (x < 0 || x >= SSD1306_WIDTH || y < 0 || y >= SSD1306_HEIGHT) return false;
     return (this.framebuffer[(y >> 3) * SSD1306_WIDTH + x] & (1 << (y & 7))) !== 0;

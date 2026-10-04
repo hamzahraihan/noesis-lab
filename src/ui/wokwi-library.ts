@@ -147,9 +147,8 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
   },
   {
     tag: 'wokwi-ssd1306',
-    name: '128x64 OLED (SSD1306)',
-    sizeMm: { w: mm('148', undefined), h: mm('114', undefined) },
-    status: 'other-part',
-    note: 'Wokwi draws the eight-pin SPI module; this bench drives the four-pin I2C breakout, which it draws itself.',
+    name: '128x64 OLED SPI module (SSD1306)',
+    sizeMm: { w: 39.69, h: 30.69 },
+    status: 'placed',
   },
 ];
