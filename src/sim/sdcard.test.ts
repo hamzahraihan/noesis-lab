@@ -78,4 +78,13 @@ describe('microsd file store', () => {
     engine.rebuild(builder.build());
     expect(engine.sdRead(card.id, 'log.txt')).toBe('');
   });
+
+  it('fails closed for unknown part ids', () => {
+    const { engine } = cardBench();
+    expect(engine.sdBegin('p999')).toBe(false);
+    expect(engine.sdWrite('p999', 'a.txt', 'x')).toBe(0);
+    expect(engine.sdRead('p999', 'a.txt')).toBe('');
+    expect(engine.sdExists('p999', 'a.txt')).toBe(0);
+    expect(engine.sdRemove('p999', 'a.txt')).toBe(0);
+  });
 });
