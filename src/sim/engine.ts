@@ -23,6 +23,7 @@ import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } f
 import { Servo } from './devices/servo';
 import { createLcd, type Lcd1602 } from './devices/lcd';
 import { Ili9341 } from './display/ili9341';
+import { Ssd1306 } from './display/ssd1306';
 
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
@@ -485,9 +486,9 @@ export class Engine {
    */
   deliverSpi(byte: number, dataSelect: boolean, chipSelected: boolean): void {
     for (const [partId, controller] of this.displays) {
-      if (!(controller instanceof Ili9341)) continue;
       if (!this.isOnSpiBus(partId)) continue;
-      controller.receive(byte, dataSelect, chipSelected);
+      if (controller instanceof Ili9341) controller.receive(byte, dataSelect, chipSelected);
+      else if (controller instanceof Ssd1306) controller.receiveSpi(byte, dataSelect, chipSelected);
     }
   }
 

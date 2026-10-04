@@ -19,7 +19,7 @@ import {
   potentiometerDefinition,
   resistorDefinition,
 } from './passives';
-import { ili9341Definition, ssd1306Definition } from './display/part';
+import { ili9341Definition, ssd1306Definition, ssd1306SpiDefinition } from './display/part';
 import { ds1307Definition, hx711Definition, mpu6050Definition } from './devices/sensors';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
@@ -398,6 +398,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: () => ssd1306Definition(),
   },
   {
+    id: 'ssd1306-128x64-spi',
+    name: '128x64 OLED SPI module (SSD1306)',
+    group: 'output',
+    note: 'SPI, eight wires. The same glass as the I2C breakout, on the module Wokwi draws.',
+    make: ssd1306SpiDefinition,
+  },
+  {
     id: 'ili9341-320x240',
     name: '2.4" TFT (ILI9341)',
     group: 'output',
@@ -420,6 +427,7 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   'lcd-1602': true,
   'lcd-2004': true,
   'ssd1306-128x64': true,
+  'ssd1306-128x64-spi': true,
   'ili9341-320x240': true,
   'slide-potentiometer': true,
   'membrane-keypad': true,

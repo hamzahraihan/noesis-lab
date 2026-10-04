@@ -76,7 +76,7 @@ export type ComponentSpec =
   | { readonly kind: 'breadboard' }
   | {
       readonly kind: 'display';
-      readonly controller: 'ssd1306' | 'ili9341';
+      readonly controller: 'ssd1306' | 'ssd1306-spi' | 'ili9341';
       readonly address: number;
     }
   | { readonly kind: 'photoresistor' }

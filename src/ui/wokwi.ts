@@ -27,6 +27,7 @@
 import type { PartInstance } from '../sim/bench';
 import type { PartDefinition, SensorVariant } from '../sim/catalog';
 import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from '../sim/display/ili9341';
+import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from '../sim/display/ssd1306';
 import { DIODE_PROFILES, type DiodeProfile } from '../sim/elements';
 import { WIPER_KNOB } from '../sim/passives';
 import {
@@ -82,6 +83,9 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   rp2040: { tag: 'wokwi-nano-rp2040-connect', sizeMm: { w: 44.573, h: 17.956 } },
   franzininho: { tag: 'wokwi-franzininho', sizeMm: { w: 64, h: 30 } },
   ili9341: { tag: 'wokwi-ili9341', sizeMm: { w: 46.5, h: 77.6 } },
+  // Bare pixels to millimetres (px * 25.4 / 96): the element states
+  // 150 x 116 with no unit.
+  ssd1306: { tag: 'wokwi-ssd1306', sizeMm: { w: 39.69, h: 30.69 } },
   photoresistor: { tag: 'wokwi-photoresistor-sensor', sizeMm: { w: 45.95, h: 16.267 } },
   thermistor: { tag: 'wokwi-ntc-temperature-sensor', sizeMm: { w: 35.826, h: 19 } },
   'tilt-switch': { tag: 'wokwi-tilt-switch', sizeMm: { w: 23.4, h: 14.7 } },
@@ -259,10 +263,11 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
     case 'servo':
       return WOKWI_PARTS.servo;
     case 'display':
-      // Only the TFT is adopted. Wokwi's OLED is an eight-pin SPI module, while
-      // this bench drives the four-pin I2C breakout its sketches talk to -- two
-      // different parts -- so the OLED keeps its own renderer.
-      return definition.component.controller === 'ili9341' ? WOKWI_PARTS.ili9341 : null;
+      if (definition.component.controller === 'ili9341') return WOKWI_PARTS.ili9341;
+      // The SPI OLED is the eight-pin module Wokwi draws; the four-pin I2C
+      // breakout keeps the hand-authored renderer.
+      if (definition.component.controller === 'ssd1306-spi') return WOKWI_PARTS.ssd1306;
+      return null;
     default:
       return null;
   }
@@ -509,6 +514,10 @@ export function pushWokwiState(
   if (kind === 'display' && definition.component.controller === 'ili9341') {
     blitFramebuffer(element, state.displays?.get(part.id));
   }
+
+  if (kind === 'display' && definition.component.controller === 'ssd1306-spi') {
+    blitMonoFramebuffer(element, state.displays?.get(part.id));
+  }
 }
 
 /**
@@ -562,6 +571,33 @@ function blitFramebuffer(element: HTMLElement, controller: DisplayController | u
   if (!context) return;
   const image = context.createImageData(ILI9341_WIDTH, ILI9341_HEIGHT);
   image.data.set(controller.toRgba());
+  context.putImageData(image, 0, 0);
+}
+
+/**
+ * Paints an SSD1306 framebuffer into the SPI module's own canvas.
+ *
+ * The glass is monochrome, so a lit pixel goes across white at full
+ * alpha and a dark one stays transparent black -- the element's own
+ * glass tints it from there.
+ */
+function blitMonoFramebuffer(element: HTMLElement, controller: DisplayController | undefined): void {
+  if (!(controller instanceof Ssd1306)) return;
+  const canvas: unknown = Reflect.get(element, 'canvas');
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  const image = context.createImageData(SSD1306_WIDTH, SSD1306_HEIGHT);
+  for (let y = 0; y < SSD1306_HEIGHT; y++) {
+    for (let x = 0; x < SSD1306_WIDTH; x++) {
+      const offset = (y * SSD1306_WIDTH + x) * 4;
+      const lit = controller.isLit(x, y) ? 255 : 0;
+      image.data[offset] = lit;
+      image.data[offset + 1] = lit;
+      image.data[offset + 2] = lit;
+      image.data[offset + 3] = 255;
+    }
+  }
   context.putImageData(image, 0, 0);
 }
 
