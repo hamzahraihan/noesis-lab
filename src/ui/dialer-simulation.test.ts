@@ -32,6 +32,11 @@ describe('dialer sketch', () => {
     expect(readDial(simulation, 2)).toEqual(['-1']);
   });
 
+  it('reads -1 on a pin with no dialer wired', () => {
+    const { simulation } = dialBench();
+    expect(readDial(simulation, 4)).toEqual(['-1']);
+  });
+
   it('latches the held digit and keeps it after release', () => {
     const { simulation, dialer } = dialBench();
     simulation.setKnob(dialer.id, DIGIT_KNOB, 7);
