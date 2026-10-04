@@ -137,7 +137,17 @@ export class Engine {
         this.pixelBuffers.delete(partId);
       }
     }
-    this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
+    // A rebuild restarts the world the transmission clock runs against
+    // (notably a firmware reload zeroes time), so a stranded window must
+    // go: a still-pressed remote re-arms on the next solve anyway.
+    this.irTransmitting = null;
+    this.netlist = buildNetlist(
+      this.bench,
+      this.dynamicState,
+      this.relayEnergized,
+      this.sonarMeasuring,
+      this.irTransmitting !== null,
+    );
     this.solution = null;
     this.previousVoltages = null;
     this.pinSourceIndex.clear();
@@ -604,7 +614,13 @@ export class Engine {
       // An armature moved: the contact elements above are stale, so rebuild
       // the netlist once and re-solve. The coil is an independent resistor,
       // so its volts barely move with the contacts and one pass converges.
-      netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
+      netlist = buildNetlist(
+        this.bench,
+        this.dynamicState,
+        this.relayEnergized,
+        this.sonarMeasuring,
+        this.irTransmitting !== null,
+      );
       this.netlist = netlist;
       const rebuilt = this.buildElements(netlist, timeMs);
       elements = rebuilt.elements;

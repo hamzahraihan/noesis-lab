@@ -782,6 +782,19 @@ export class Simulation {
     return null;
   }
 
+  /** The IR receiver whose data pin is wired to a board pin, if there is one. */
+  private irReceiverOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'ir-receiver') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:DAT`) === net) return part;
+    }
+    return null;
+  }
+
   /** The pixel part whose data-in pin is wired to a board pin, if any. */
   private pixelsOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -917,6 +930,12 @@ export class Simulation {
         humidity: (pin) => {
           const part = this.dhtOnPin(pin);
           return part ? this.controls.knob(part.id, HUMIDITY_KNOB) : 0;
+        },
+      },
+      ir: {
+        readCode: (pin) => {
+          const part = this.irReceiverOnPin(pin);
+          return part ? this.engine.irCode() : 0;
         },
       },
       pixels: {
