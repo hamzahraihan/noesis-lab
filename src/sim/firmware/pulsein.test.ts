@@ -55,4 +55,19 @@ describe('pulseIn', () => {
     );
     expect(serial.join('')).toContain('0');
   });
+
+  it('waits out the timeout instead of returning instantly', () => {
+    const runner = new FirmwareRunner(
+      'void setup() { int d = pulseIn(2, HIGH, 5000); } void loop() { delay(1000); }',
+      stubServices(),
+    );
+    const requested: Array<number | null> = [];
+    let guard = 0;
+    for (;;) {
+      const next = runner.step();
+      requested.push(next);
+      if (next === null || guard++ > 100_000) break;
+    }
+    expect(requested).toContain(5);
+  });
 });

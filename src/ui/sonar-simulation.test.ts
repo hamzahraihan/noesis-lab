@@ -18,12 +18,14 @@ function wiredBench(wireEcho: boolean, vccToGround = false) {
   return simulation;
 }
 
-function readPulse(simulation: Simulation, level: string): string {
+function readPulse(simulation: Simulation, level: string, ticks = 10): string {
   simulation.loadFirmware(
     `void setup() { int d = pulseIn(2, ${level}); Serial.println(d); } void loop() { delay(1000); }`,
   );
   simulation.start();
-  for (let i = 0; i < 10; i++) simulation.tick(1);
+  // Timeout paths wait out the full one-second default, so those cases
+  // need a tick budget past it; echoes return in milliseconds.
+  for (let i = 0; i < ticks; i++) simulation.tick(1);
   return simulation.serialLines().join('');
 }
 
@@ -33,11 +35,11 @@ describe('sonar sketch', () => {
   });
 
   it('reports 0 with nothing wired to the pin', () => {
-    expect(readPulse(wiredBench(false), 'HIGH')).toContain('0');
+    expect(readPulse(wiredBench(false), 'HIGH', 30)).toContain('0');
   });
 
   it('times out asking for a LOW pulse the line never makes', () => {
-    const output = readPulse(wiredBench(true), 'LOW');
+    const output = readPulse(wiredBench(true), 'LOW', 30);
     expect(output).not.toContain('5800');
     expect(output).toContain('0');
   });

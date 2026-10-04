@@ -68,4 +68,18 @@ describe('sd firmware', () => {
     );
     expect(output).toContain('0');
   });
+
+  it('normalizes truthy begin values to 1', () => {
+    const output = runSketch(
+      'void setup() { Serial.println(sd.begin(10)); } void loop() { delay(1000); }',
+      stubServices({
+        begin: () => 2,
+        write: () => 0,
+        read: () => '',
+        exists: () => 0,
+        remove: () => 0,
+      }),
+    );
+    expect(output.trim()).toBe('1');
+  });
 });

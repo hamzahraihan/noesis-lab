@@ -88,6 +88,23 @@ describe('stepper shaft', () => {  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5,
     engine.settle();
     expect(engine.stepperAngle(stepper.id)).toBeCloseTo(armed, 6);
   });
+
+  it('holds on a two-hop move through fully undriven windings', () => {
+    const { engine, mcu, stepper } = shaftBench();
+    driveCoils(mcu, engine.timeMs, 1, 1);
+    engine.settle();
+    const armed = engine.stepperAngle(stepper.id);
+    // Sleep both windings, then resume at the next Gray state: the dead
+    // intermediate breaks the edge, so nothing counts.
+    mcu.writeDigital(PINS.aPlus, false, engine.timeMs);
+    mcu.writeDigital(PINS.aMinus, false, engine.timeMs);
+    mcu.writeDigital(PINS.bPlus, false, engine.timeMs);
+    mcu.writeDigital(PINS.bMinus, false, engine.timeMs);
+    engine.settle();
+    driveCoils(mcu, engine.timeMs, -1, 1);
+    engine.settle();
+    expect(engine.stepperAngle(stepper.id)).toBeCloseTo(armed, 6);
+  });
 });
 
 describe('stepper selection', () => {

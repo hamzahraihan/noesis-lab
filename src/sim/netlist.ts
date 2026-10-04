@@ -622,7 +622,7 @@ function elementsForPart(
           a: nodeAt(poleId),
           b: nodeAt(energized ? noId : ncId),
           ohms: SWITCH_CLOSED_OHMS,
-          label: energized ? 'closed' : 'closed',
+          label: `${poleId}-${energized ? noId : ncId} closed`,
         },
         {
           kind: 'resistor',

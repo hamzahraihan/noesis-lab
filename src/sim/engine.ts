@@ -764,26 +764,33 @@ export class Engine {
       if (!axes) continue;
       let state = this.stepperState.get(part.id);
       if (!state || state.length !== axes.length) {
-        state = axes.map(() => ({ prevA: 0 as WindingPolarity, prevB: 0 as WindingPolarity, angle: state?.[0]?.angle ?? 0 }));
+        state = axes.map(
+          (_, index): { prevA: WindingPolarity; prevB: WindingPolarity; angle: number } => ({
+            prevA: 0,
+            prevB: 0,
+            angle: state?.[index]?.angle ?? 0,
+          }),
+        );
         this.stepperState.set(part.id, state);
       }
       axes.forEach(([a, b], index) => {
         const nextA = windingPolarity(level(part.id, `${a}+`), level(part.id, `${a}-`));
         const nextB = windingPolarity(level(part.id, `${b}+`), level(part.id, `${b}-`));
         const axis = state[index];
-        const step = stepTransition([axis.prevA, axis.prevB], [nextA, nextB]);
-        // First sighting only arms the tracker: with no previous levels
-        // there is no edge to count yet.
-        if (axis.prevA === 0 && axis.prevB === 0 && (nextA !== 0 || nextB !== 0)) {
+        // Before the first driven sighting there is no edge to count yet:
+        // arm the tracker and move on.
+        if (axis.prevA === 0 && axis.prevB === 0 && nextA === 0 && nextB === 0) return;
+        if (axis.prevA === 0 && axis.prevB === 0) {
           axis.prevA = nextA;
           axis.prevB = nextB;
           return;
         }
-        if (nextA !== 0 || nextB !== 0) {
-          axis.angle += step * STEP_DEGREES;
-          axis.prevA = nextA;
-          axis.prevB = nextB;
-        }
+        // The previous levels always advance, even across an undriven
+        // intermediate: a hop through zero breaks the edge it crossed, so
+        // the far side never counts as a continuation.
+        axis.angle += stepTransition([axis.prevA, axis.prevB], [nextA, nextB]) * STEP_DEGREES;
+        axis.prevA = nextA;
+        axis.prevB = nextB;
       });
     }
   }
@@ -855,16 +862,19 @@ export class Engine {
 
   /** Text under a name, or "" when missing or the card is gone. */
   sdRead(partId: string, name: string): string {
+    if (!this.sdBegin(partId)) return '';
     return this.sdFiles.get(partId)?.get(name) ?? '';
   }
 
   /** 1 when a name exists on the card, else 0. */
   sdExists(partId: string, name: string): number {
+    if (!this.sdBegin(partId)) return 0;
     return this.sdFiles.get(partId)?.has(name) ? 1 : 0;
   }
 
   /** Deletes a name; 1 when something was removed, else 0. */
   sdRemove(partId: string, name: string): number {
+    if (!this.sdBegin(partId)) return 0;
     return this.sdFiles.get(partId)?.delete(name) ? 1 : 0;
   }
 

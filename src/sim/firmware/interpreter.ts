@@ -437,12 +437,18 @@ export class FirmwareRuntime {
       case 'analogRead':
         return services.analogRead(asNumber(args[0] ?? 0));
       case 'pulseIn': {
+        const timeoutUs = asNumber(args[2] ?? 1000000);
         const micros = services.pulseInBegin?.(
           asNumber(args[0] ?? 0),
           asNumber(args[1] ?? 0),
-          asNumber(args[2] ?? 1000000),
+          timeoutUs,
         ) ?? 0;
-        if (micros <= 0) return 0;
+        // A timeout still costs the wait: hardware sits on the line for
+        // the whole window, so a sketch timing around the call observes it.
+        if (micros <= 0) {
+          if (timeoutUs > 0) yield timeoutUs / 1000;
+          return 0;
+        }
         yield micros / 1000;
         services.pulseInEnd?.();
         return micros;
@@ -948,7 +954,7 @@ export class FirmwareRuntime {
 
     switch (member) {
       case 'begin':
-        return sd ? sd.begin(pin) : 0;
+        return sd ? (sd.begin(pin) ? 1 : 0) : 0;
       case 'write':
         return sd ? sd.write(pin, text(1), text(2)) : 0;
       case 'read':
