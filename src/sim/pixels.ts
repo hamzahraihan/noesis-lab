@@ -24,6 +24,8 @@ export interface PixelColor {
 
 /** Rounds a channel into the 0-255 range a die actually takes. */
 export function clampChannel(value: number): number {
+  // NaN would poison the buffer and the element prop alike; park it at 0.
+  if (!Number.isFinite(value)) return value === Number.POSITIVE_INFINITY ? 255 : 0;
   return Math.min(255, Math.max(0, Math.round(value)));
 }
 
