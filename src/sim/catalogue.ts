@@ -45,6 +45,7 @@ import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
 import { remoteDefinition } from './remote';
 import { dialerDefinition } from './dialer';
+import { microsdDefinition } from './sdcard';
 import { ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition } from './pixels';
 import { biaxialStepperDefinition, stepperDefinition } from './stepper';
 
@@ -285,6 +286,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Dial a digit and read it back with dialer.read. The pulse train itself is not modeled.',
     make: dialerDefinition,
+  },
+  {
+    id: 'microsd-card',
+    name: 'MicroSD Card',
+    group: 'input',
+    note: 'Named text files over chip-select: sd.write then sd.read. Files survive a reflash; removing the card clears them.',
+    make: microsdDefinition,
   },
   {
     id: 'analog-joystick',

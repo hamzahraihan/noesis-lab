@@ -90,6 +90,7 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   stepper: { tag: 'wokwi-stepper-motor', sizeMm: { w: 42, h: 42 } },
   'biaxial-stepper': { tag: 'wokwi-biaxial-stepper', sizeMm: { w: 56, h: 67.5 } },
   dht22: { tag: 'wokwi-dht22', sizeMm: { w: 15.1, h: 30.885 } },
+  microsd: { tag: 'wokwi-microsd-card', sizeMm: { w: 21.6, h: 20.4 } },
   'ir-remote': { tag: 'wokwi-ir-remote', sizeMm: { w: 40, h: 83.653 } },
   'rotary-dialer': { tag: 'wokwi-rotary-dialer', sizeMm: { w: 70.4, h: 75.6 } },
   neopixel: { tag: 'wokwi-neopixel', sizeMm: { w: 5.6631, h: 5 } },
@@ -219,6 +220,8 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS['biaxial-stepper'];
     case 'dht':
       return WOKWI_PARTS.dht22;
+    case 'microsd':
+      return WOKWI_PARTS.microsd;
     case 'ir-remote':
       return WOKWI_PARTS['ir-remote'];
     case 'rotary-dialer':

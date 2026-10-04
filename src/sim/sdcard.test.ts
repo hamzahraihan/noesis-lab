@@ -4,6 +4,7 @@ import { esp32DevKitV1 } from './boards';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { SD_CARD_BYTES, microsdDefinition } from './sdcard';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 describe('microsd definition', () => {
   it('exposes the seven breakout pins', () => {
@@ -11,6 +12,13 @@ describe('microsd definition', () => {
     expect(def.pins.map((p) => p.id)).toEqual(['CD', 'DO', 'GND', 'SCK', 'VCC', 'DI', 'CS']);
     expect([def.widthMm, def.heightMm]).toEqual([21.6, 20.4]);
     expect(SD_CARD_BYTES).toBe(1048576);
+  });
+
+  it('selection box matches the card artwork', () => {
+    const drawn = renderedSizeMm(microsdDefinition());
+    expect(drawn.widthMm).toBe(21.6);
+    expect(drawn.heightMm).toBe(20.4);
+    expect(wokwiPartFor(microsdDefinition())?.tag).toBe('wokwi-microsd-card');
   });
 });
 
