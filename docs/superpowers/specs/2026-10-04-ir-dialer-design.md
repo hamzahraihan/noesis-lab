@@ -16,7 +16,7 @@ v1 -- acknowledged limits, recorded in code.
 
 New `ir-remote` kind with no pins (handheld, battery -- the first
 pinless part; `pins: []`, netlist contributes nothing). Size
-40x83.653. Controls: a `key` knob indexing the element's 21-key NEC
+40x83.653. Controls: a `key` knob indexing the element's 20-key NEC
 table (default 0) plus `momentary: true`, so press-and-hold transmits
 and release ends it through the existing `isPressed` mechanism. The
 engine holds `irTransmitting: { code, untilMs } | null`: set while any
