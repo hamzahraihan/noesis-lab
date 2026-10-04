@@ -28,6 +28,7 @@ import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
 import { GROUND } from '../sim/elements';
 import { DISTANCE_KNOB, echoMicroseconds } from '../sim/sonar';
 import { HUMIDITY_KNOB } from '../sim/dht';
+import { pixelCount, type PixelColor } from '../sim/pixels';
 import { TEMPERATURE_KNOB } from '../sim/modules';
 import type { DisplayController } from '../sim/display/part';
 import { I2CBus } from '../sim/bus/i2c';
@@ -439,6 +440,17 @@ export class Simulation {
     return this.engine.stepperAngles();
   }
 
+  /** Addressable LED colors by part, so the artwork can paint each die. */
+  pixelColors(): ReadonlyMap<string, ReadonlyArray<PixelColor>> {
+    const colors = new Map<string, ReadonlyArray<PixelColor>>();
+    for (const part of this.bench.parts) {
+      const kind = part.definition.component.kind;
+      if (kind !== 'neopixel' && kind !== 'neopixel-matrix' && kind !== 'led-ring') continue;
+      colors.set(part.id, this.engine.pixelColors(part.id));
+    }
+    return colors;
+  }
+
   /** Character LCD models, so the artwork can show what reached the glass. */
   lcdModels(): ReadonlyMap<string, Lcd1602> {
     const lcds = new Map<string, Lcd1602>();
@@ -770,6 +782,20 @@ export class Simulation {
     return null;
   }
 
+  /** The pixel part whose data-in pin is wired to a board pin, if any. */
+  private pixelsOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      const kind = part.definition.component.kind;
+      if (kind !== 'neopixel' && kind !== 'neopixel-matrix' && kind !== 'led-ring') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:DIN`) === net) return part;
+    }
+    return null;
+  }
+
   private services(): FirmwareServices {
     return {
       nowMs: () => this.engine.timeMs,
@@ -891,6 +917,18 @@ export class Simulation {
         humidity: (pin) => {
           const part = this.dhtOnPin(pin);
           return part ? this.controls.knob(part.id, HUMIDITY_KNOB) : 0;
+        },
+      },
+      pixels: {
+        count: (pin) => {
+          const part = this.pixelsOnPin(pin);
+          return part ? pixelCount(part.definition) : 0;
+        },
+        setColor: (pin, index, r, g, b) => {
+          const part = this.pixelsOnPin(pin);
+          if (!part) return;
+          this.engine.setPixel(part.id, index, { r, g, b });
+          this.engine.settle();
         },
       },
       serialBegin: () => {},

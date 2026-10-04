@@ -354,6 +354,7 @@ export default function App() {
       displays: simulation.displayControllers(),
       servos: simulation.servoModels(),
       steppers: simulation.stepperAngles(),
+      pixels: simulation.pixelColors(),
       lcds: simulation.lcdModels(),
       controls: simulation.controls,
       // Read here so the memo is honest about depending on the bench: the maps

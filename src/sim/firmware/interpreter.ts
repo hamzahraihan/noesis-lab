@@ -58,6 +58,13 @@ export interface FirmwareServices {
    */
   dht?: DhtPort;
   /**
+   * Addressable LEDs, by the pin their data line is wired to.
+   *
+   * Optional because a host with no such part on the bench has nothing to
+   * paint, for the same reason `dht` and `servo` are.
+   */
+  pixels?: PixelsPort;
+  /**
    * Sonar echo measurement, split across the wait it reports.
    *
    * Optional for the same reason `lcd` and `servo` are: hosts without a
@@ -165,6 +172,21 @@ export interface DhtPort {
   temperature(pin: number): number;
   /** Percent relative humidity from the part's humidity knob. */
   humidity(pin: number): number;
+}
+
+/**
+ * Addressable LEDs, by the pin their data line is wired to.
+ *
+ * Colors are facts about the part rather than about a bitstream, the same
+ * way climate is a fact about a DHT sensor: the sketch sets entries in a
+ * buffer and the artwork paints them. The WS2812 timing is deliberately
+ * not modeled.
+ */
+export interface PixelsPort {
+  /** LEDs on the part wired to a pin, or 0 with nothing there. */
+  count(pin: number): number;
+  /** Paints one LED; out-of-range indexes are ignored. */
+  setColor(pin: number, index: number, r: number, g: number, b: number): void;
 }
 
 export const PIN_INPUT = 0;
@@ -608,6 +630,9 @@ export class FirmwareRuntime {
           if (callee.target.name === 'dht' || callee.target.name === 'DHT') {
             return this.evaluateDhtCall(callee.member, args, services);
           }
+          if (callee.target.name === 'pixels' || callee.target.name === 'Pixels') {
+            return this.evaluatePixelsCall(callee.member, args, services);
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
@@ -785,6 +810,23 @@ export class FirmwareRuntime {
         return dht.temperature(pin);
       case 'humidity':
         return dht.humidity(pin);
+      default:
+        return 0;
+    }
+  }
+
+  /** Handles a `pixels.*` call, which addresses LED parts by their DIN pin. */
+  private evaluatePixelsCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const pixels = services.pixels;
+    if (!pixels) return 0;
+    const pin = asNumber(args[0] ?? -1);
+
+    switch (member) {
+      case 'count':
+        return pixels.count(pin);
+      case 'setColor':
+        pixels.setColor(pin, asNumber(args[1] ?? 0), asNumber(args[2] ?? 0), asNumber(args[3] ?? 0), asNumber(args[4] ?? 0));
+        return 0;
       default:
         return 0;
     }

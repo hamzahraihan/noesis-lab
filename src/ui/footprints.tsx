@@ -23,6 +23,7 @@ import { Ili9341 } from '../sim/display/ili9341';
 import { Ssd1306 } from '../sim/display/ssd1306';
 import type { DisplayController } from '../sim/display/part';
 import type { Servo } from '../sim/devices/servo';
+import type { PixelColor } from '../sim/pixels';
 import type { Lcd1602 } from '../sim/devices/lcd';
 import {
   AxialLeads,
@@ -59,6 +60,8 @@ export interface FootprintState {
   readonly servos?: ReadonlyMap<string, Servo>;
   /** Stepper shaft angles in degrees, so rotors draw turned. */
   readonly steppers?: ReadonlyMap<string, number>;
+  /** Addressable LED colors in DIN order, so dies draw painted. */
+  readonly pixels?: ReadonlyMap<string, ReadonlyArray<PixelColor>>;
   /** Character LCD parts, so their glass shows what reached it. */
   readonly lcds?: ReadonlyMap<string, Lcd1602>;
   /**
