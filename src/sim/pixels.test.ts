@@ -25,6 +25,12 @@ describe('channel clamp', () => {
     expect(clampChannel(-4)).toBe(0);
     expect(clampChannel(12.7)).toBe(13);
   });
+
+  it('maps non-finite channels instead of passing NaN through', () => {
+    expect(clampChannel(Number.NaN)).toBe(0);
+    expect(clampChannel(Number.POSITIVE_INFINITY)).toBe(255);
+    expect(clampChannel(Number.NEGATIVE_INFINITY)).toBe(0);
+  });
 });
 
 describe('pixel selection', () => {
