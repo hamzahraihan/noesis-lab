@@ -65,6 +65,13 @@ export interface FirmwareServices {
    */
   ir?: IrPort;
   /**
+   * Rotary dialer, by the pin its dial line is wired to.
+   *
+   * Optional because a host with no dialer on the bench has nothing to
+   * read back, for the same reason `ir` and `dht` are.
+   */
+  dialer?: DialerPort;
+  /**
    * Addressable LEDs, by the pin their data line is wired to.
    *
    * Optional because a host with no such part on the bench has nothing to
@@ -192,6 +199,20 @@ export interface DhtPort {
 export interface IrPort {
   /** Live NEC code on the pin, or 0 with nothing transmitting. */
   readCode(pin: number): number;
+}
+
+/**
+ * A rotary dialer, by the pin its dial line is wired to.
+ *
+ * The digit is a fact about the last dial rather than about a pulse
+ * train, the same way a code is a fact about the air: the operator
+ * dials, the engine latches the digit, and the sketch reads it here.
+ * Pulse trains are deliberately not modeled -- see the dialer netlist
+ * case.
+ */
+export interface DialerPort {
+  /** Last dialed digit on the pin, or -1 before the first dial. */
+  read(pin: number): number;
 }
 
 /**
@@ -656,6 +677,9 @@ export class FirmwareRuntime {
           if (callee.target.name === 'ir' || callee.target.name === 'IR') {
             return this.evaluateIrCall(callee.member, args, services);
           }
+          if (callee.target.name === 'dialer' || callee.target.name === 'Dialer') {
+            return this.evaluateDialerCall(callee.member, args, services);
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
@@ -864,6 +888,19 @@ export class FirmwareRuntime {
     switch (member) {
       case 'readCode':
         return ir.readCode(pin);
+      default:
+        return 0;
+    }
+  }
+
+  /** Handles a `dialer.*` call, which addresses dialers by their DIAL pin. */
+  private evaluateDialerCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const dialer = services.dialer;
+    const pin = asNumber(args[0] ?? -1);
+
+    switch (member) {
+      case 'read':
+        return dialer ? dialer.read(pin) : -1;
       default:
         return 0;
     }

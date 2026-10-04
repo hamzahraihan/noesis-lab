@@ -93,6 +93,7 @@ export type ComponentSpec =
   | { readonly kind: 'neopixel-matrix' }
   | { readonly kind: 'led-ring' }
   | { readonly kind: 'ir-remote' }
+  | { readonly kind: 'rotary-dialer' }
   | { readonly kind: 'joystick' }
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }
