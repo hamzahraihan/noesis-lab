@@ -781,6 +781,7 @@ function elementsForPart(
     case 'led-ring':
     case 'ir-remote':
     case 'rotary-dialer':
+    case 'microsd':
     case 'mcu':
     case 'breadboard':
     case 'display':

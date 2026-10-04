@@ -94,6 +94,7 @@ export type ComponentSpec =
   | { readonly kind: 'led-ring' }
   | { readonly kind: 'ir-remote' }
   | { readonly kind: 'rotary-dialer' }
+  | { readonly kind: 'microsd' }
   | { readonly kind: 'joystick' }
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }
