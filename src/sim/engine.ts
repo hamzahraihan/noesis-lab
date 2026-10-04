@@ -15,6 +15,7 @@
 import { createController, type DisplayController } from './display/part';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
 import { coilEnergized } from './relay';
+import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from './remote';
 import { clampChannel, pixelCount, type PixelColor } from './pixels';
 import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
 import { Servo } from './devices/servo';
@@ -172,6 +173,15 @@ export class Engine {
    * Pruned on rebuild so a removed relay leaves no stale entry behind.
    */
   private readonly relayEnergized = new Map<string, boolean>();
+
+  /**
+   * Live IR transmission, if any remote is being held.
+   *
+   * Set while a remote is pressed and held briefly past release for the
+   * decode window. One transmission at a time: lowest bench order wins,
+   * never a mix.
+   */
+  private irTransmitting: { code: number; untilMs: number } | null = null;
 
   /** Stepper shaft state: previous winding polarities plus angle, per axis. */
   private readonly stepperState = new Map<
@@ -586,7 +596,11 @@ export class Engine {
     });
 
     this.solution = solution;
-    if (this.pumpRelays()) {
+    // Both pumps run every solve: short-circuiting would starve one of them,
+    // and one shared re-solve covers armature and transmission changes alike.
+    const armaturesMoved = this.pumpRelays();
+    const transmissionMoved = this.pumpIr();
+    if (armaturesMoved || transmissionMoved) {
       // An armature moved: the contact elements above are stale, so rebuild
       // the netlist once and re-solve. The coil is an independent resistor,
       // so its volts barely move with the contacts and one pass converges.
@@ -727,6 +741,38 @@ export class Engine {
         changed = true;
       }
     }
+    return changed;
+  }
+
+  /** Live transmitted NEC code, or 0 with nothing in the air. */
+  irCode(): number {
+    return this.irTransmitting?.code ?? 0;
+  }
+
+  /**
+   * Refreshes IR transmission state from held remotes.
+   *
+   * Returns whether anything moved: a new code, a changed code, or an
+   * expiry. The key knob is read live while held, so turning it mid-hold
+   * follows the new key -- hold-time value wins, every solve.
+   */
+  private pumpIr(): boolean {
+    let transmitting: { code: number; untilMs: number } | null = null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'ir-remote') continue;
+      if (!this.dynamicState.isPressed(part.id)) continue;
+      const index = Math.round(this.dynamicState.knob(part.id, REMOTE_KEY_KNOB));
+      const key = NEC_CODES[Math.min(NEC_CODES.length - 1, Math.max(0, index))];
+      transmitting = { code: key.code, untilMs: this.timeMs + IR_RELEASE_MS };
+      break;
+    }
+    if (!transmitting && this.irTransmitting && this.timeMs < this.irTransmitting.untilMs) {
+      return false;
+    }
+    const changed =
+      (transmitting?.code ?? 0) !== (this.irTransmitting?.code ?? 0) ||
+      (transmitting === null) !== (this.irTransmitting === null);
+    this.irTransmitting = transmitting;
     return changed;
   }
 

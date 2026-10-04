@@ -773,6 +773,7 @@ function elementsForPart(
     case 'neopixel':
     case 'neopixel-matrix':
     case 'led-ring':
+    case 'ir-remote':
     case 'mcu':
     case 'breadboard':
     case 'display':
