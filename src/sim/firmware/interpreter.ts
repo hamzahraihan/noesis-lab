@@ -72,6 +72,13 @@ export interface FirmwareServices {
    */
   dialer?: DialerPort;
   /**
+   * MicroSD card, by the pin its chip-select line is wired to.
+   *
+   * Optional because a host with no card on the bench has nowhere to
+   * store, for the same reason `dialer` and `ir` are.
+   */
+  sd?: SdPort;
+  /**
    * Addressable LEDs, by the pin their data line is wired to.
    *
    * Optional because a host with no such part on the bench has nothing to
@@ -213,6 +220,27 @@ export interface IrPort {
 export interface DialerPort {
   /** Last dialed digit on the pin, or -1 before the first dial. */
   read(pin: number): number;
+}
+
+/**
+ * A MicroSD card, by the pin its chip-select line is wired to.
+ *
+ * Files are facts about the card rather than about a bus protocol,
+ * the same way a digit is a fact about the last dial: the sketch
+ * writes text and reads it back. FAT, the SPI command set, and binary
+ * files are deliberately not modeled -- see the `microsd` netlist case.
+ */
+export interface SdPort {
+  /** 1 when a card answers on the pin, else 0. */
+  begin(pin: number): number;
+  /** Stores text under a name; bytes stored, or 0 past the cap. */
+  write(pin: number, name: string, text: string): number;
+  /** Text under a name, or "" when missing. */
+  read(pin: number, name: string): string;
+  /** 1 when a name exists on the card, else 0. */
+  exists(pin: number, name: string): number;
+  /** Deletes a name; 1 when something was removed, else 0. */
+  remove(pin: number, name: string): number;
 }
 
 /**
@@ -680,6 +708,9 @@ export class FirmwareRuntime {
           if (callee.target.name === 'dialer' || callee.target.name === 'Dialer') {
             return this.evaluateDialerCall(callee.member, args, services);
           }
+          if (callee.target.name === 'sd' || callee.target.name === 'SD') {
+            return this.evaluateSdCall(callee.member, args, services);
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
@@ -901,6 +932,31 @@ export class FirmwareRuntime {
     switch (member) {
       case 'read':
         return dialer ? dialer.read(pin) : -1;
+      default:
+        return 0;
+    }
+  }
+
+  /** Handles an `sd.*` call, which addresses cards by their CS pin. */
+  private evaluateSdCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const sd = services.sd;
+    const pin = asNumber(args[0] ?? -1);
+    const text = (index: number): string => {
+      const arg = args[index];
+      return typeof arg === 'string' ? arg : String(asNumber(arg ?? 0));
+    };
+
+    switch (member) {
+      case 'begin':
+        return sd ? sd.begin(pin) : 0;
+      case 'write':
+        return sd ? sd.write(pin, text(1), text(2)) : 0;
+      case 'read':
+        return sd ? sd.read(pin, text(1)) : '';
+      case 'exists':
+        return sd ? sd.exists(pin, text(1)) : 0;
+      case 'remove':
+        return sd ? sd.remove(pin, text(1)) : 0;
       default:
         return 0;
     }

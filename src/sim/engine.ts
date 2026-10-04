@@ -17,6 +17,7 @@ import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
 import { coilEnergized } from './relay';
 import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from './remote';
 import { DIGIT_KNOB } from './dialer';
+import { SD_CARD_BYTES } from './sdcard';
 import { clampChannel, pixelCount, type PixelColor } from './pixels';
 import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
 import { Servo } from './devices/servo';
@@ -143,6 +144,11 @@ export class Engine {
         this.dialedDigits.delete(partId);
       }
     }
+    for (const partId of [...this.sdFiles.keys()]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.sdFiles.delete(partId);
+      }
+    }
     // A rebuild restarts the world the transmission clock runs against
     // (notably a firmware reload zeroes time), so a stranded window must
     // go: a still-pressed remote re-arms on the next solve anyway.
@@ -207,6 +213,16 @@ export class Engine {
    * else on rebuild. Absent means never dialed, which reads as -1.
    */
   private readonly dialedDigits = new Map<string, number>();
+
+  /**
+   * Named text files per card part: the card's whole filesystem.
+   *
+   * Created lazily on first write and pruned only when the part leaves
+   * the bench -- files survive rebuilds and firmware reloads the way a
+   * real card keeps bytes without power. Names are verbatim keys in one
+   * flat namespace; separators have no meaning.
+   */
+  private readonly sdFiles = new Map<string, Map<string, string>>();
 
   /** Stepper shaft state: previous winding polarities plus angle, per axis. */
   private readonly stepperState = new Map<
@@ -805,6 +821,51 @@ export class Engine {
   /** Last dialed digit on a dialer part, or -1 before the first dial. */
   dialedDigit(partId: string): number {
     return this.dialedDigits.get(partId) ?? -1;
+  }
+
+  /** Bytes stored on one card, for enforcing the capacity cap. */
+  sdBytes(partId: string): number {
+    let total = 0;
+    for (const text of this.sdFiles.get(partId)?.values() ?? []) total += text.length;
+    return total;
+  }
+
+  /** Whether a card part is on the bench and answering. */
+  sdBegin(partId: string): boolean {
+    return this.bench.parts.some(
+      (part) => part.id === partId && part.definition.component.kind === 'microsd',
+    );
+  }
+
+  /**
+   * Stores text under a name, replacing whatever was there.
+   *
+   * Returns the bytes stored, or 0 when the card is gone or the write
+   * would pass the cap -- the old text stays put in both cases.
+   */
+  sdWrite(partId: string, name: string, text: string): number {
+    if (!this.sdBegin(partId)) return 0;
+    const files = this.sdFiles.get(partId) ?? new Map<string, string>();
+    const usage = this.sdBytes(partId) - (files.get(name)?.length ?? 0) + text.length;
+    if (usage > SD_CARD_BYTES) return 0;
+    files.set(name, text);
+    this.sdFiles.set(partId, files);
+    return text.length;
+  }
+
+  /** Text under a name, or "" when missing or the card is gone. */
+  sdRead(partId: string, name: string): string {
+    return this.sdFiles.get(partId)?.get(name) ?? '';
+  }
+
+  /** 1 when a name exists on the card, else 0. */
+  sdExists(partId: string, name: string): number {
+    return this.sdFiles.get(partId)?.has(name) ? 1 : 0;
+  }
+
+  /** Deletes a name; 1 when something was removed, else 0. */
+  sdRemove(partId: string, name: string): number {
+    return this.sdFiles.get(partId)?.delete(name) ? 1 : 0;
   }
 
   /**

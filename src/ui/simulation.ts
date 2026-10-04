@@ -808,6 +808,19 @@ export class Simulation {
     return null;
   }
 
+  /** The card whose chip-select line is wired to a board pin, if any. */
+  private sdOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'microsd') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:CS`) === net) return part;
+    }
+    return null;
+  }
+
   /** The pixel part whose data-in pin is wired to a board pin, if any. */
   private pixelsOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -955,6 +968,25 @@ export class Simulation {
         read: (pin) => {
           const part = this.dialerOnPin(pin);
           return part ? this.engine.dialedDigit(part.id) : -1;
+        },
+      },
+      sd: {
+        begin: (pin) => (this.sdOnPin(pin) ? 1 : 0),
+        write: (pin, name, text) => {
+          const part = this.sdOnPin(pin);
+          return part ? this.engine.sdWrite(part.id, name, text) : 0;
+        },
+        read: (pin, name) => {
+          const part = this.sdOnPin(pin);
+          return part ? this.engine.sdRead(part.id, name) : '';
+        },
+        exists: (pin, name) => {
+          const part = this.sdOnPin(pin);
+          return part ? this.engine.sdExists(part.id, name) : 0;
+        },
+        remove: (pin, name) => {
+          const part = this.sdOnPin(pin);
+          return part ? this.engine.sdRemove(part.id, name) : 0;
         },
       },
       pixels: {
