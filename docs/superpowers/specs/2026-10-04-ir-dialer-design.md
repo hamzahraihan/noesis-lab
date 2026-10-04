@@ -53,7 +53,7 @@ marked large (below-bench: the remote is pinless, the dialer is
 70 mm wide). `WOKWI_PARTS` gains both tags with verified sizes and
 `wokwiPartFor` mappings; `wokwi-library.ts` flips both to `placed`.
 Selection and preview follow from `renderedSizeMm`. Tests: the
-21-code key table; end-to-end transmission (DAT low + right code,
+20-code key table; end-to-end transmission (DAT low + right code,
 release returns high + 0); receiver-knob behavior untouched; dialer
 latch, -1-before-dial, and `digit` state; unwired-pin ports return
 0/-1; `renderedSizeMm` and tag locks for both.

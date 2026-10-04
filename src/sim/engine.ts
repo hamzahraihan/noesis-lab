@@ -672,7 +672,13 @@ export class Engine {
     if ((this.sonarMeasuring.get(partId) ?? false) === measuring) return;
     if (measuring) this.sonarMeasuring.set(partId, true);
     else this.sonarMeasuring.delete(partId);
-    this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
+    this.netlist = buildNetlist(
+      this.bench,
+      this.dynamicState,
+      this.relayEnergized,
+      this.sonarMeasuring,
+      this.irTransmitting !== null,
+    );
     this.solution = null;
   }
   /** Shaft angle of a stepper part in degrees; axis 2 on a biaxial part. */

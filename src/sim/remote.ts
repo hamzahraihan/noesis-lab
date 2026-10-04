@@ -1,5 +1,5 @@
 /**
- * Handheld IR remote: twenty-one keys behind no pins at all.
+ * Handheld IR remote: twenty keys behind no pins at all.
  *
  * The part is battery-powered and pinless (`pins: []`) -- it reaches a
  * sketch through the air, not through copper. Holding any key (the whole
@@ -16,7 +16,7 @@ export interface RemoteKey {
   readonly code: number;
 }
 
-/** The element's 21 keys: function row, digits, and stragglers. */
+/** The element's 20 keys: function row, digits, and stragglers. */
 export const NEC_CODES: ReadonlyArray<RemoteKey> = [
   { name: 'power', code: 0xa2 },
   { name: 'menu', code: 0xe2 },
@@ -47,7 +47,7 @@ export const REMOTE_KEY_KNOB: KnobSpec = {
   min: 0,
   max: NEC_CODES.length - 1,
   step: 1,
-  defaultValue: 11,
+  defaultValue: 0,
 };
 
 /** How long past release a transmission stays live, for the decode window. */
