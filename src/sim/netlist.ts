@@ -770,6 +770,9 @@ function elementsForPart(
       ];
     }
 
+    case 'neopixel':
+    case 'neopixel-matrix':
+    case 'led-ring':
     case 'mcu':
     case 'breadboard':
     case 'display':
