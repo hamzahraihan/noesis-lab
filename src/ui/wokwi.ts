@@ -34,6 +34,7 @@ import {
   SLIDE_POSITION_KNOB,
   VERTICAL_KNOB,
 } from '../sim/modules';
+import { DIGIT_KNOB } from '../sim/dialer';
 import type { DisplayController } from '../sim/display/part';
 import type { FootprintState } from './footprints';
 
@@ -438,6 +439,13 @@ export function pushWokwiState(
 
   if (kind === 'slide-switch') {
     set(element, 'value', state.controls.knob(part.id, SLIDE_POSITION_KNOB) >= 0.5 ? 1 : 0);
+    return;
+  }
+
+  if (kind === 'rotary-dialer') {
+    // The operator's setting, not the latched value: the knob is what the
+    // finger turns, and the latch equals it whenever the dial is held.
+    set(element, 'digit', String(Math.round(state.controls.knob(part.id, DIGIT_KNOB))));
     return;
   }
 

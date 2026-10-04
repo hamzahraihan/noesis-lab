@@ -795,6 +795,19 @@ export class Simulation {
     return null;
   }
 
+  /** The dialer whose dial line is wired to a board pin, if there is one. */
+  private dialerOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'rotary-dialer') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:DIAL`) === net) return part;
+    }
+    return null;
+  }
+
   /** The pixel part whose data-in pin is wired to a board pin, if any. */
   private pixelsOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -936,6 +949,12 @@ export class Simulation {
         readCode: (pin) => {
           const part = this.irReceiverOnPin(pin);
           return part ? this.engine.irCode() : 0;
+        },
+      },
+      dialer: {
+        read: (pin) => {
+          const part = this.dialerOnPin(pin);
+          return part ? this.engine.dialedDigit(part.id) : -1;
         },
       },
       pixels: {

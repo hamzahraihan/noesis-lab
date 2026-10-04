@@ -16,6 +16,7 @@ import { createController, type DisplayController } from './display/part';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
 import { coilEnergized } from './relay';
 import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from './remote';
+import { DIGIT_KNOB } from './dialer';
 import { clampChannel, pixelCount, type PixelColor } from './pixels';
 import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
 import { Servo } from './devices/servo';
@@ -137,6 +138,11 @@ export class Engine {
         this.pixelBuffers.delete(partId);
       }
     }
+    for (const partId of [...this.dialedDigits.keys()]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.dialedDigits.delete(partId);
+      }
+    }
     // A rebuild restarts the world the transmission clock runs against
     // (notably a firmware reload zeroes time), so a stranded window must
     // go: a still-pressed remote re-arms on the next solve anyway.
@@ -192,6 +198,15 @@ export class Engine {
    * never a mix.
    */
   private irTransmitting: { code: number; untilMs: number } | null = null;
+
+  /**
+   * Last dialed digit per dialer part.
+   *
+   * Latched while the dial control is held and kept after release, the
+   * way a real dial leaves its number behind; pruned with everything
+   * else on rebuild. Absent means never dialed, which reads as -1.
+   */
+  private readonly dialedDigits = new Map<string, number>();
 
   /** Stepper shaft state: previous winding polarities plus angle, per axis. */
   private readonly stepperState = new Map<
@@ -636,6 +651,7 @@ export class Engine {
     // Shafts only move, never change topology, so one pump after the final
     // solve covers both paths above with no re-solve.
     this.pumpSteppers();
+    this.pumpDialer();
     // Capacitor history only cares about real nets, so trim the internal rows.
     this.previousVoltages = solution.voltages.slice(0, this.currentNetlist.nodeCount);
     // Capture last, so a probe sees the voltages this solve produced rather
@@ -662,6 +678,21 @@ export class Engine {
   /** Shaft angle of a stepper part in degrees; axis 2 on a biaxial part. */
   stepperAngle(partId: string, axis: 1 | 2 = 1): number {
     return this.stepperState.get(partId)?.[axis - 1]?.angle ?? 0;
+  }
+
+  /**
+   * Latches dialed digits from held dialers.
+   *
+   * While held the latch tracks the digit knob, so the hold-time value
+   * wins; after release the last value stays put. Display state only --
+   * no contacts move, so no re-solve is needed.
+   */
+  private pumpDialer(): void {
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'rotary-dialer') continue;
+      if (!this.dynamicState.isPressed(part.id)) continue;
+      this.dialedDigits.set(part.id, Math.round(this.dynamicState.knob(part.id, DIGIT_KNOB)));
+    }
   }
 
   /** LED colors on a pixel part, in DIN order; empty with nothing there. */
@@ -763,6 +794,11 @@ export class Engine {
   /** Live transmitted NEC code, or 0 with nothing in the air. */
   irCode(): number {
     return this.irTransmitting?.code ?? 0;
+  }
+
+  /** Last dialed digit on a dialer part, or -1 before the first dial. */
+  dialedDigit(partId: string): number {
+    return this.dialedDigits.get(partId) ?? -1;
   }
 
   /**

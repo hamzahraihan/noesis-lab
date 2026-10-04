@@ -780,6 +780,7 @@ function elementsForPart(
     case 'neopixel-matrix':
     case 'led-ring':
     case 'ir-remote':
+    case 'rotary-dialer':
     case 'mcu':
     case 'breadboard':
     case 'display':
