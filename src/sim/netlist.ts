@@ -210,6 +210,7 @@ function elementsForPart(
   state: DynamicState,
   relayEnergized: ReadonlyMap<string, boolean> = new Map(),
   sonarMeasuring: ReadonlyMap<string, boolean> = new Map(),
+  irTransmitting = false,
 ): Element[] {
   const nodeAt = (pinId: string): number => pinNode.get(`${part.id}:${pinId}`) ?? GROUND;
   const component = part.definition.component;
@@ -386,7 +387,12 @@ function elementsForPart(
       return openDrainOutput('OUT', state.knob(part.id, TILTED_KNOB) >= 0.5);
 
     case 'ir-receiver':
-      return openDrainOutput('DAT', state.knob(part.id, IR_CODE_KNOB) >= 0.5);
+      // The operator's code knob or a live transmission through the air:
+      // either pulls DAT low, and neither disturbs the other.
+      return openDrainOutput(
+        'DAT',
+        state.knob(part.id, IR_CODE_KNOB) >= 0.5 || irTransmitting,
+      );
 
     case 'slide-switch': {
       const thrownToOne = state.knob(part.id, SLIDE_POSITION_KNOB) >= 0.5;
@@ -802,6 +808,7 @@ export function buildNetlist(
   state: DynamicState,
   relayEnergized: ReadonlyMap<string, boolean> = new Map(),
   sonarMeasuring: ReadonlyMap<string, boolean> = new Map(),
+  irTransmitting = false,
 ): Netlist {
   const sets = new DisjointSet(bench.terminals.length);
 
@@ -859,7 +866,7 @@ export function buildNetlist(
 
   const elements: Element[] = [];
   for (const part of bench.parts) {
-    for (const element of elementsForPart(part, pinNode, state, relayEnergized, sonarMeasuring)) {
+    for (const element of elementsForPart(part, pinNode, state, relayEnergized, sonarMeasuring, irTransmitting)) {
       if (!isDegenerate(element)) elements.push(element);
     }
   }

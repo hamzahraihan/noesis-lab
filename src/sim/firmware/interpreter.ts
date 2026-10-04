@@ -58,6 +58,13 @@ export interface FirmwareServices {
    */
   dht?: DhtPort;
   /**
+   * IR receiver, by the pin its data line is wired to.
+   *
+   * Optional because a host with no receiver on the bench has nothing to
+   * decode, for the same reason `dht` and `servo` are.
+   */
+  ir?: IrPort;
+  /**
    * Addressable LEDs, by the pin their data line is wired to.
    *
    * Optional because a host with no such part on the bench has nothing to
@@ -172,6 +179,19 @@ export interface DhtPort {
   temperature(pin: number): number;
   /** Percent relative humidity from the part's humidity knob. */
   humidity(pin: number): number;
+}
+
+/**
+ * An IR receiver, by the pin its data line is wired to.
+ *
+ * The code is a fact about the air rather than about a carrier burst,
+ * the same way climate is a fact about a DHT sensor: a held remote
+ * transmits, the engine holds the code past release, and the sketch
+ * reads it here. Carrier modulation is deliberately not modeled.
+ */
+export interface IrPort {
+  /** Live NEC code on the pin, or 0 with nothing transmitting. */
+  readCode(pin: number): number;
 }
 
 /**
@@ -633,6 +653,9 @@ export class FirmwareRuntime {
           if (callee.target.name === 'pixels' || callee.target.name === 'Pixels') {
             return this.evaluatePixelsCall(callee.member, args, services);
           }
+          if (callee.target.name === 'ir' || callee.target.name === 'IR') {
+            return this.evaluateIrCall(callee.member, args, services);
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
@@ -827,6 +850,20 @@ export class FirmwareRuntime {
       case 'setColor':
         pixels.setColor(pin, asNumber(args[1] ?? 0), asNumber(args[2] ?? 0), asNumber(args[3] ?? 0), asNumber(args[4] ?? 0));
         return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /** Handles an `ir.*` call, which addresses receivers by their DAT pin. */
+  private evaluateIrCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const ir = services.ir;
+    if (!ir) return 0;
+    const pin = asNumber(args[0] ?? -1);
+
+    switch (member) {
+      case 'readCode':
+        return ir.readCode(pin);
       default:
         return 0;
     }
