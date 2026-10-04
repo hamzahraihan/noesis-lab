@@ -8,6 +8,7 @@ import { buildNetlist, type Netlist } from './netlist';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { clampChannel, ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition, pixelCount } from './pixels';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 describe('pixel definitions', () => {
   it('exposes the single, matrix, and ring pins', () => {
@@ -26,6 +27,22 @@ describe('channel clamp', () => {
   });
 });
 
+describe('pixel selection', () => {
+  it('selection boxes match the pixel artworks', () => {
+    const single = renderedSizeMm(neopixelDefinition());
+    expect(single.widthMm).toBe(5.6631);
+    expect(single.heightMm).toBe(5);
+    expect(wokwiPartFor(neopixelDefinition())?.tag).toBe('wokwi-neopixel');
+    const matrix = renderedSizeMm(neopixelMatrixDefinition());
+    expect(matrix.widthMm).toBe(52.28);
+    expect(matrix.heightMm).toBe(49);
+    expect(wokwiPartFor(neopixelMatrixDefinition())?.tag).toBe('wokwi-neopixel-matrix');
+    const ring = renderedSizeMm(ledRingDefinition());
+    expect(ring.widthMm).toBe(37.46);
+    expect(ring.heightMm).toBe(41);
+    expect(wokwiPartFor(ledRingDefinition())?.tag).toBe('wokwi-led-ring');
+  });
+});
 describe('pixel buffers', () => {
   function bufferBench() {
     const builder = new BenchBuilder();
