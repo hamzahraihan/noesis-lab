@@ -379,6 +379,16 @@ export function pushWokwiState(
     return;
   }
 
+  if (kind === 'neopixel') {
+    // Matrix and ring expose no per-pixel colors from outside, so only the
+    // single paints live; the rest fall through as stateless artwork.
+    const color = state.pixels?.get(part.id)?.[0];
+    set(element, 'r', color?.r ?? 0);
+    set(element, 'g', color?.g ?? 0);
+    set(element, 'b', color?.b ?? 0);
+    return;
+  }
+
   if (kind === 'lcd') {
     /*
      * The element draws a character LCD from the panel's text rather than from

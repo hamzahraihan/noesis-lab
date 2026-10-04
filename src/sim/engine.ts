@@ -15,6 +15,7 @@
 import { createController, type DisplayController } from './display/part';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
 import { coilEnergized } from './relay';
+import { clampChannel, pixelCount, type PixelColor } from './pixels';
 import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
 import { Servo } from './devices/servo';
 import { createLcd, type Lcd1602 } from './devices/lcd';
@@ -130,6 +131,11 @@ export class Engine {
         this.stepperState.delete(partId);
       }
     }
+    for (const partId of [...this.pixelBuffers.keys()]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.pixelBuffers.delete(partId);
+      }
+    }
     this.netlist = buildNetlist(this.bench, this.dynamicState, this.relayEnergized, this.sonarMeasuring);
     this.solution = null;
     this.previousVoltages = null;
@@ -172,6 +178,15 @@ export class Engine {
     string,
     Array<{ prevA: WindingPolarity; prevB: WindingPolarity; angle: number }>
   >();
+
+  /**
+   * Addressable LED buffers, keyed by part id.
+   *
+   * Fresh arrays on every bus rebuild, like the servo models: colors are
+   * display state the sketch rewrites, not circuit state the solver reads,
+   * so nothing here is stamped into any netlist.
+   */
+  private readonly pixelBuffers = new Map<string, PixelColor[]>();
 
   /**
    * Sonar parts with an echo measurement running, keyed by part id.
@@ -227,6 +242,17 @@ export class Engine {
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       const lcd = createLcd(part.definition);
       if (lcd) this.lcds.set(part.id, lcd);
+      if (
+        part.definition.component.kind === 'neopixel' ||
+        part.definition.component.kind === 'neopixel-matrix' ||
+        part.definition.component.kind === 'led-ring'
+      ) {
+        const count = pixelCount(part.definition);
+        this.pixelBuffers.set(
+          part.id,
+          Array.from({ length: count }, () => ({ r: 0, g: 0, b: 0 })),
+        );
+      }
     }
 
     if (!mcuPart) return;
@@ -606,6 +632,22 @@ export class Engine {
   /** Shaft angle of a stepper part in degrees; axis 2 on a biaxial part. */
   stepperAngle(partId: string, axis: 1 | 2 = 1): number {
     return this.stepperState.get(partId)?.[axis - 1]?.angle ?? 0;
+  }
+
+  /** LED colors on a pixel part, in DIN order; empty with nothing there. */
+  pixelColors(partId: string): ReadonlyArray<PixelColor> {
+    return this.pixelBuffers.get(partId) ?? [];
+  }
+
+  /** Paints one LED; out-of-range indexes are ignored, channels clamp. */
+  setPixel(partId: string, index: number, color: PixelColor): void {
+    const buffer = this.pixelBuffers.get(partId);
+    if (!buffer || !Number.isInteger(index) || index < 0 || index >= buffer.length) return;
+    buffer[index] = {
+      r: clampChannel(color.r),
+      g: clampChannel(color.g),
+      b: clampChannel(color.b),
+    };
   }
 
   /** Shaft angles of single steppers, so the artwork can draw each rotor. */
