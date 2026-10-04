@@ -84,13 +84,7 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     sizeMm: { w: 15.1, h: 30.885 },
     status: 'placed',
   },
-  {
-    tag: 'wokwi-microsd-card',
-    name: 'MicroSD breakout',
-    sizeMm: { w: 21.6, h: 20.4 },
-    status: 'needs-api',
-    note: 'A file system over SPI: there is no filesystem here to put on it.',
-  },
+  { tag: 'wokwi-microsd-card', name: 'MicroSD breakout', sizeMm: { w: 21.6, h: 20.4 }, status: 'placed' },
   {
     tag: 'wokwi-stepper-motor',
     name: 'Stepper motor',
