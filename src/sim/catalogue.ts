@@ -43,6 +43,8 @@ import { relayDefinition } from './relay';
 import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
+import { remoteDefinition } from './remote';
+import { dialerDefinition } from './dialer';
 import { ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition } from './pixels';
 import { biaxialStepperDefinition, stepperDefinition } from './stepper';
 
@@ -271,6 +273,20 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: ledRingDefinition,
   },
   {
+    id: 'ir-remote',
+    name: 'IR Remote',
+    group: 'input',
+    note: 'Hold a key to transmit its code through the air; an IR receiver on the bench hears it via ir.readCode.',
+    make: remoteDefinition,
+  },
+  {
+    id: 'rotary-dialer',
+    name: 'Rotary Dialer',
+    group: 'input',
+    note: 'Dial a digit and read it back with dialer.read. The pulse train itself is not modeled.',
+    make: dialerDefinition,
+  },
+  {
     id: 'analog-joystick',
     name: 'Analog Joystick',
     group: 'input',
@@ -402,6 +418,8 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   'biaxial-stepper': true,
   'neopixel-matrix-8x8': true,
   'led-ring-16': true,
+  'ir-remote': true,
+  'rotary-dialer': true,
 };
 
 export function isLargePart(id: string): boolean {

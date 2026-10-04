@@ -5,6 +5,7 @@ import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { DynamicState } from './catalog';
 import { NEC_CODES, REMOTE_KEY_KNOB, remoteDefinition } from './remote';
+import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
 
 describe('remote definition', () => {
   it('is pinless with a 20-key table', () => {
@@ -13,6 +14,15 @@ describe('remote definition', () => {
     expect(NEC_CODES).toHaveLength(20);
     expect(NEC_CODES[0]).toEqual({ name: 'power', code: 0xa2 });
     expect(def.knobs).toEqual([REMOTE_KEY_KNOB]);
+  });
+});
+
+describe('remote selection', () => {
+  it('selection box matches the remote artwork', () => {
+    const drawn = renderedSizeMm(remoteDefinition());
+    expect(drawn.widthMm).toBe(40);
+    expect(drawn.heightMm).toBe(83.653);
+    expect(wokwiPartFor(remoteDefinition())?.tag).toBe('wokwi-ir-remote');
   });
 });
 

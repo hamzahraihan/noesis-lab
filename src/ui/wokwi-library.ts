@@ -137,15 +137,13 @@ export const WOKWI_LIBRARY: readonly LibraryElement[] = [
     tag: 'wokwi-ir-remote',
     name: 'IR remote',
     sizeMm: { w: 40, h: 83.653 },
-    status: 'needs-api',
-    note: 'A carrier burst the sketch has no way to time.',
+    status: 'placed',
   },
   {
     tag: 'wokwi-rotary-dialer',
     name: 'Rotary dialer',
-    sizeMm: { w: mm('266', undefined), h: mm('286', undefined) },
-    status: 'needs-api',
-    note: 'Emits a burst of pulses whose count is the number dialled.',
+    sizeMm: { w: 70.4, h: 75.6 },
+    status: 'placed',
   },
   {
     tag: 'wokwi-ks2e-m-dc5',
