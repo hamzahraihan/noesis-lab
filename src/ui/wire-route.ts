@@ -27,9 +27,64 @@ const CORNER_MM = 1.6;
  *
  * Without this every wire between the same two headers would resolve to the
  * same dogleg and the bench would look like a handful of wires rather than
- * twenty.
+ * twenty. The width of the spread is set by how many wires actually run
+ * alongside each other -- see `wireLanes`.
  */
 const LANE_SPACING_MM = 2.2;
+
+/** A jumper as the router sees it: an id, and the two contacts it spans. */
+export interface RouteSpan {
+  readonly id: string;
+  readonly from: Point;
+  readonly to: Point;
+}
+
+/**
+ * The line a wire turns on, and so the group of wires it has to be kept clear
+ * of. A wire that runs mostly sideways turns on a vertical line and one that
+ * runs mostly down turns on a horizontal one, so where that line falls is the
+ * only thing that decides whether two of them come out on top of each other.
+ */
+function crossingLine(from: Point, to: Point): string {
+  return Math.abs(to.x - from.x) >= Math.abs(to.y - from.y) ? `x:${to.x}` : `y:${to.y}`;
+}
+
+/**
+ * The lane each automatic jumper should take, keyed by wire id.
+ *
+ * A lane only means anything against the wires a jumper runs alongside, so
+ * that is what the grouping is by: wires turning on the same line. Numbering
+ * the bench instead made a jumper's detour grow with every wire already on it
+ * -- wire nineteen sat forty millimetres off the line it belonged on, and
+ * adding a twentieth shoved all of them further out. A loaded example splayed
+ * its fans clean past their own contacts, which is what read as tangled. The
+ * detour now scales with the size of the group and nothing else.
+ *
+ * Each group is numbered from the middle outwards so it straddles the line it
+ * was crossing anyway. Numbering from the line pushes every wire the same way
+ * and fans the group off to one side, which is the same mess seen from
+ * further out.
+ */
+export function wireLanes(spans: readonly RouteSpan[]): ReadonlyMap<string, number> {
+  const groups = new Map<string, string[]>();
+  for (const span of spans) {
+    // A wire whose ends already line up is drawn on a straight run, which has
+    // no lane to take. It neither needs one nor may claim one, or it would
+    // push its neighbours off a line it is not drawn over.
+    if (span.from.x === span.to.x || span.from.y === span.to.y) continue;
+    const line = crossingLine(span.from, span.to);
+    const group = groups.get(line);
+    if (group) group.push(span.id);
+    else groups.set(line, [span.id]);
+  }
+
+  const lanes = new Map<string, number>();
+  for (const group of groups.values()) {
+    const middle = (group.length - 1) / 2;
+    group.forEach((id, rank) => lanes.set(id, rank - middle));
+  }
+  return lanes;
+}
 
 /** Corner radius of an SVG path, given in the path's own units. */
 export function roundedPath(points: readonly Point[], radius: number): string {
@@ -115,10 +170,10 @@ export function routeWireCorners(
 /**
  * Routes a jumper between two contacts.
  *
- * `lane` separates wires that would otherwise overlap; pass a stable index for
- * the wire so its lane does not jump about as the bench changes. `radius` is
- * in millimetres and exists so a preview at a different zoom keeps the same
- * shape as the wire on the bench.
+ * `lane` separates wires that would otherwise overlap; it is the wire's rank
+ * within the group of wires it turns alongside, as assigned by `wireLanes`.
+ * `radius` is in millimetres and exists so a preview at a different zoom keeps
+ * the same shape as the wire on the bench.
  */
 export function routeWire(
   from: Point,
