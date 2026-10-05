@@ -1,0 +1,240 @@
+import { describe, expect, it } from 'vitest';
+import { EXERCISES, EXERCISE_BOARD, exerciseById, firstExercise } from './exercises';
+import { Simulation } from './simulation';
+import { boardOption } from './boardRegistry';
+import { PART_CATALOGUE } from '../sim/catalogue';
+
+/**
+ * The curriculum has to be true, not just present.
+ *
+ * Nine exercises is a lot of hand-written content, and content drifts: a part
+ * gets renamed in the catalogue, a sketch reaches for a C++ construct the
+ * interpreter does not have, a wiring row names a pin that does not exist. Each
+ * of those is invisible until a learner hits it, which is the worst place to
+ * find out. These tests are what makes the drift a build failure instead.
+ */
+
+const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
+import { breadboardDefinition } from '../sim/breadboard';
+
+/**
+ * A bench with the board and breadboard already placed.
+ *
+ * Not decoration: `new Simulation(board)` builds the MCU but does not put the
+ * board on the bench. Without it, an exercise's `boardTerminal('D8')` resolves
+ * to a coordinate nothing occupies, every wire claims a loose contact of its
+ * own, and the circuit is drawn but electrically dead -- no LED lights and
+ * every input reads zero. These tests have to run against a real bench or they
+ * would have passed that for months.
+ */
+function freshBench() {
+  const simulation = new Simulation(boardOption(EXERCISE_BOARD).make());
+  simulation.addPart(boardOption(EXERCISE_BOARD).make(), 0, 0);
+  simulation.addPart(breadboardDefinition(), 230, 0);
+  return simulation;
+}
+
+/** Every contact that belongs to a part -- that is, one a wire can really join. */
+function partTerminals(simulation: Simulation): Set<number> {
+  const ids = new Set<number>();
+  for (const part of simulation.bench.parts) {
+    for (const id of Object.values(part.terminals)) ids.add(id);
+  }
+  return ids;
+}
+
+describe('the exercise curriculum', () => {
+  it('is not empty, and starts where a beginner can start', () => {
+    expect(EXERCISES.length).toBeGreaterThan(0);
+    expect(firstExercise().level).toBe(1);
+  });
+
+  it('numbers every exercise uniquely', () => {
+    const ids = EXERCISES.map((exercise) => exercise.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('keeps its ids in curriculum order, so the levels never go backwards', () => {
+    let previous = 0;
+    for (const exercise of EXERCISES) {
+      expect(exercise.level).toBeGreaterThanOrEqual(previous);
+      previous = exercise.level;
+    }
+  });
+
+  it('finds every exercise by the id its page is addressed with', () => {
+    for (const exercise of EXERCISES) {
+      expect(exerciseById(exercise.id)).toBe(exercise);
+    }
+    expect(exerciseById('nope')).toBeNull();
+  });
+
+  it('names only parts the catalogue actually stocks', () => {
+    for (const exercise of EXERCISES) {
+      for (const entry of exercise.parts) {
+        expect(CATALOGUE_NAMES.has(entry.name), `${exercise.id} part "${entry.name}"`).toBe(
+          true,
+        );
+      }
+      for (const row of exercise.wiring) {
+        expect(CATALOGUE_NAMES.has(row.part), `${exercise.id} wiring part "${row.part}"`).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  it('gives every exercise the guidance a stuck learner needs', () => {
+    for (const exercise of EXERCISES) {
+      // Three is the floor, not a target: a learner who is stuck on an exercise
+      // with one hint has run out of hints while still stuck.
+      expect(exercise.hints.length, `${exercise.id} hints`).toBeGreaterThanOrEqual(3);
+      expect(exercise.references.length, `${exercise.id} references`).toBeGreaterThanOrEqual(3);
+      expect(exercise.steps.length, `${exercise.id} steps`).toBeGreaterThan(0);
+      expect(exercise.concepts.length, `${exercise.id} concepts`).toBeGreaterThan(0);
+    }
+  });
+
+  it('loads every sketch through the real parser', () => {
+    for (const exercise of EXERCISES) {
+      const simulation = freshBench();
+      simulation.loadFirmware(exercise.sketch);
+      // A sketch the interpreter cannot parse reports here rather than silently
+      // doing nothing on the bench.
+      expect(simulation.firmwareError, `${exercise.id} sketch: ${simulation.firmwareError}`)
+        .toBeNull();
+    }
+  });
+
+  it('has every sketch define the two functions the runner calls', () => {
+    for (const exercise of EXERCISES) {
+      expect(exercise.sketch, `${exercise.id}`).toContain('void setup()');
+      expect(exercise.sketch, `${exercise.id}`).toContain('void loop()');
+    }
+  });
+
+  it('wires each exercise onto the bench without throwing', () => {
+    for (const exercise of EXERCISES) {
+      const simulation = freshBench();
+      // The setup is the one thing in the curriculum that touches the model, and
+      // it is the only part that can go wrong at runtime: a pin name that does
+      // not resolve, or a terminal the catalogue renamed.
+      expect(() => exercise.setup(simulation), `${exercise.id} setup`).not.toThrow();
+    }
+  });
+
+  it('puts the parts each exercise says it needs on the bench', () => {
+    for (const exercise of EXERCISES) {
+      const simulation = freshBench();
+      exercise.setup(simulation);
+      const placed = new Map(simulation.bench.parts.map((p) => [p.definition.name, 0]));
+      for (const p of simulation.bench.parts) {
+        placed.set(p.definition.name, (placed.get(p.definition.name) ?? 0) + 1);
+      }
+      for (const entry of exercise.parts) {
+        expect(placed.get(entry.name) ?? 0, `${exercise.id} "${entry.name}" qty`).toBeGreaterThanOrEqual(
+          entry.qty,
+        );
+      }
+    }
+  });
+
+  it('adds jumpers, because a circuit with no wires is not a circuit', () => {
+    for (const exercise of EXERCISES) {
+      const simulation = freshBench();
+      const before = simulation.bench.wires.length;
+      exercise.setup(simulation);
+      expect(simulation.bench.wires.length, `${exercise.id} wires`).toBeGreaterThan(before);
+    }
+  });
+
+  it('joins every jumper to a real part contact, not a loose one', () => {
+    for (const exercise of EXERCISES) {
+      const simulation = freshBench();
+      exercise.setup(simulation);
+      const real = partTerminals(simulation);
+      for (const wire of simulation.bench.wires) {
+        /*
+         * The bug this catches: with no board on the bench, every wire aimed at
+         * a board pin lands on a coordinate nothing occupies and quietly claims
+         * a terminal of its own. The wires are all there, every terminal
+         * exists, and the circuit is dead.
+         */
+        expect(real.has(wire.from), `${exercise.id} wire ${wire.id} from`).toBe(true);
+        expect(real.has(wire.to), `${exercise.id} wire ${wire.id} to`).toBe(true);
+      }
+    }
+  });
+
+  it('connects every part of the circuit back to the board', () => {
+    for (const exercise of EXERCISES) {
+      const simulation = freshBench();
+      exercise.setup(simulation);
+
+      /*
+       * Two kinds of union, then one rule.
+       *
+       * A part's pins are one node electrically -- the two legs of a resistor
+       * are joined by the resistor, not by a jumper -- so each part's contacts
+       * are collapsed together first. The jumpers are then collapsed on top.
+       * What comes out are the circuit's islands, and every one of them must
+       * reach the board.
+       *
+       * This is the check that catches a circuit drawn but not connected: a
+       * wire aimed at a board pin that lands on empty bench still exists, still
+       * has two terminals, and still satisfies every structural test above --
+       * but its island never reaches the board, so nothing in it is ever
+       * driven.
+       */
+      const boardTerminals = new Set<number>();
+      for (const part of simulation.bench.parts) {
+        const onBoard = part.definition.id === simulation.mcu.definition.id;
+        for (const id of Object.values(part.terminals)) {
+          if (onBoard) boardTerminals.add(id);
+        }
+      }
+
+      const parent = new Map<number, number>();
+      const find = (id: number): number => {
+        const known = parent.get(id);
+        if (known === undefined) {
+          parent.set(id, id);
+          return id;
+        }
+        if (known === id) return id;
+        const root = find(known);
+        parent.set(id, root);
+        return root;
+      };
+      const join = (a: number, b: number) => {
+        parent.set(find(a), find(b));
+      };
+
+      for (const part of simulation.bench.parts) {
+        const pins = Object.values(part.terminals);
+        for (let i = 1; i < pins.length; i++) join(pins[0], pins[i]);
+      }
+      for (const wire of simulation.bench.wires) join(wire.from, wire.to);
+
+      // Only contacts a jumper touches are worth an opinion. The breadboard has
+      // hundreds of holes nothing is wired to, and each of those is trivially an
+      // island the board cannot reach -- which says nothing about the circuit.
+      const wired = new Set<number>();
+      for (const wire of simulation.bench.wires) {
+        wired.add(wire.from);
+        wired.add(wire.to);
+      }
+      const islands = new Map<number, boolean>();
+      for (const terminal of wired) {
+        const root = find(terminal);
+        islands.set(root, (islands.get(root) ?? false) || boardTerminals.has(terminal));
+      }
+
+      for (const [root, touches] of islands) {
+        expect(touches, `${exercise.id} leaves island ${root} unreachable from the board`).toBe(
+          true,
+        );
+      }
+    }
+  });
+});
