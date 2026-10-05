@@ -101,7 +101,14 @@ export interface Wire {
   readonly gaugeAwg: number;
   /** Recomputed whenever the route changes; see `setWireBends`. */
   lengthMm: number;
-  readonly colour: string;
+  /**
+   * Insulation colour, as a hex string.
+   *
+   * Mutable because the operator picks it: a real bench has a drawer of
+   * coloured jumpers, and colour is how a person tells two otherwise identical
+   * wires apart -- which is the entire reason it is worth choosing.
+   */
+  colour: string;
   /**
    * Bends the operator placed by hand, in millimetres.
    *
@@ -113,6 +120,9 @@ export interface Wire {
   bends: readonly BendPoint[];
 }
 
+/** Which end of a jumper a gesture is holding. */
+export type WireEnd = 'from' | 'to';
+
 export interface Bench {
   readonly terminals: readonly Terminal[];
   readonly parts: readonly PartInstance[];
@@ -120,6 +130,44 @@ export interface Bench {
 }
 
 export const EMPTY_BENCH: Bench = { terminals: [], parts: [], wires: [] };
+
+/**
+ * The bench as it stood at one moment, deep enough to be put back exactly.
+ *
+ * Plain records rather than the live objects, because a snapshot that shares
+ * the objects it was taken from would be rewritten by the very next drag and
+ * would undo to wherever that drag ended up.
+ *
+ * Part *definitions* are kept by reference: they come from a catalogue of
+ * factories and nothing in the bench ever mutates one, so copying them would
+ * cost thousands of objects per history entry and record nothing.
+ */
+export interface BenchSnapshot {
+  readonly terminals: readonly { readonly id: number; readonly x: number; readonly y: number }[];
+  readonly parts: readonly {
+    readonly id: string;
+    readonly definition: PartDefinition;
+    readonly x: number;
+    readonly y: number;
+    readonly rotation: Rotation;
+    readonly terminals: Readonly<Record<string, number>>;
+  }[];
+  readonly wires: readonly {
+    readonly id: string;
+    readonly from: number;
+    readonly to: number;
+    readonly gaugeAwg: number;
+    readonly lengthMm: number;
+    readonly colour: string;
+    readonly bends: readonly BendPoint[];
+  }[];
+  /**
+   * The id counters, carried so a part added after an undo cannot be handed an
+   * id a restored part is already using.
+   */
+  readonly nextPartSerial: number;
+  readonly nextWireSerial: number;
+}
 
 /**
  * Accumulates a bench, handing every pin a contact and keeping it informed of
@@ -136,6 +184,89 @@ export class BenchBuilder {
   private readonly wires: Wire[] = [];
   private nextPartSerial = 1;
   private nextWireSerial = 1;
+
+
+  /**
+   * Records the bench as it is now.
+   *
+   * Taken before a change rather than after, so a history entry is "what the
+   * bench looked like before this edit" and undoing is a matter of putting the
+   * newest one back.
+   */
+  snapshot(): BenchSnapshot {
+    return {
+      terminals: this.terminals.map((terminal) => ({
+        id: terminal.id,
+        x: terminal.x,
+        y: terminal.y,
+      })),
+      parts: this.parts.map((part) => ({
+        id: part.id,
+        definition: part.definition,
+        x: part.x,
+        y: part.y,
+        rotation: part.rotation,
+        terminals: { ...part.terminals },
+      })),
+      wires: this.wires.map((wire) => ({
+        id: wire.id,
+        from: wire.from,
+        to: wire.to,
+        gaugeAwg: wire.gaugeAwg,
+        lengthMm: wire.lengthMm,
+        colour: wire.colour,
+        bends: wire.bends.map((bend) => ({ x: bend.x, y: bend.y })),
+      })),
+      nextPartSerial: this.nextPartSerial,
+      nextWireSerial: this.nextWireSerial,
+    };
+  }
+
+  /**
+   * Puts a snapshot back, replacing everything.
+   *
+   * The arrays are emptied and refilled rather than reassigned, because
+   * `build()` hands out the live arrays and every renderer is holding one.
+   * Reassigning would leave them looking at a bench that is no longer this
+   * builder's.
+   *
+   * A restore is not re-solved here: the caller owns the circuit, and it has to
+   * rebuild anyway to put the solver's nets back in step with the contacts.
+   */
+  restore(snapshot: BenchSnapshot): void {
+    this.terminals.length = 0;
+    for (const terminal of snapshot.terminals) {
+      this.terminals.push({ id: terminal.id, x: terminal.x, y: terminal.y });
+    }
+
+    this.parts.length = 0;
+    for (const part of snapshot.parts) {
+      this.parts.push({
+        id: part.id,
+        definition: part.definition,
+        x: part.x,
+        y: part.y,
+        rotation: part.rotation,
+        terminals: { ...part.terminals },
+      });
+    }
+
+    this.wires.length = 0;
+    for (const wire of snapshot.wires) {
+      this.wires.push({
+        id: wire.id,
+        from: wire.from,
+        to: wire.to,
+        gaugeAwg: wire.gaugeAwg,
+        lengthMm: wire.lengthMm,
+        colour: wire.colour,
+        bends: wire.bends.map((bend) => ({ x: bend.x, y: bend.y })),
+      });
+    }
+
+    this.nextPartSerial = snapshot.nextPartSerial;
+    this.nextWireSerial = snapshot.nextWireSerial;
+  }
 
   /** Places a part with its top-left corner at (x, y). */
   addPart(definition: PartDefinition, x: number, y: number, rotation: Rotation = 0): PartInstance {
@@ -209,6 +340,49 @@ export class BenchBuilder {
   }
 
   /**
+   * Re-clips one end of a placed jumper to another contact.
+   *
+   * The gesture Wokwi calls dragging a wire, and the one that matters most once
+   * a board is wired: moving an end from one pin to another is a correction,
+   * whereas cutting the wire and drawing a new one loses the bends the operator
+   * hand-placed and leaves a stray end on the bench.
+   *
+   * The contact is claimed the same way `addWire` claims one, so a wire dropped
+   * on bare bench ends at a loose contact rather than snapping to whatever hole
+   * happens to be nearby. Both ends being re-solved from the new terminals is the
+   * whole point: the netlist unions whatever the two ends now are.
+   */
+  moveWireEnd(id: string, end: WireEnd, x: number, y: number): void {
+    const wire = this.wires.find((candidate) => candidate.id === id);
+    if (!wire) return;
+    const terminal = this.terminalAt(x, y);
+    if (terminal === wire.from || terminal === wire.to) return;
+
+    if (end === 'from') wire.from = terminal;
+    else wire.to = terminal;
+
+    const from = this.terminals[wire.from];
+    const to = this.terminals[wire.to];
+    wire.lengthMm = routedLengthMm(from.x, from.y, wire.bends, to.x, to.y);
+    // The contact the end left is released, so a wire dragged off a breadboard
+    // hole does not leave a phantom pin behind in the netlist.
+    this.pruneTerminals();
+  }
+
+  /**
+   * Recolours a placed jumper.
+   *
+   * A drawing operation rather than an electrical one, which is why it does not
+   * re-solve: insulation colour carries no electrical meaning, so the panel
+   * reporting a measured net rather than a guess from the wire stays true.
+   */
+  setWireColour(id: string, colour: string): void {
+    const wire = this.wires.find((candidate) => candidate.id === id);
+    if (!wire) return;
+    wire.colour = colour;
+  }
+
+  /**
    * Replaces a jumper's bends wholesale, re-measuring its length.
    *
    * The one way to change a placed wire's shape. Setting an empty list hands
@@ -256,15 +430,27 @@ export class BenchBuilder {
   }
 
   /**
-   * Lifts a part off the bench, releasing the contacts nothing else holds.
+   * Lifts a part off the bench, taking its wires with it.
    *
    * A jumper clipped to one of its pins keeps its own contact where the pin
-   * used to be, which is what pulling a board off a jumper actually does.
+   * used to be, which is what pulling a board off a jumper actually does. But a
+   * wire with one end left dangling is not that: it is a wire to a hole that
+   * nothing holds any more, and the netlist would still count it. Removing the
+   * part therefore removes the wires it was holding.
    */
   removePart(id: string): void {
     const index = this.parts.findIndex((part) => part.id === id);
     if (index < 0) return;
+    const released = new Set(Object.values(this.parts[index].terminals));
     this.parts.splice(index, 1);
+
+    // Every wire clipped to a terminal the part owned goes with it, in one
+    // pass: filtering in a loop would renumber the indices under the cursor.
+    const keep = this.wires.filter(
+      (wire) => !released.has(wire.from) && !released.has(wire.to),
+    );
+    this.wires.length = 0;
+    this.wires.push(...keep);
     this.pruneTerminals();
   }
 

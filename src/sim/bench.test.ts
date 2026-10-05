@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
 import { esp32DevKitV1 } from './boards';
 import { breadboardDefinition, columnX, stripRowY } from './breadboard';
+import { buildNetlist } from './netlist';
+import { NO_DYNAMIC_STATE } from './catalog';
 
 /**
  * A bench holds one contact per pin and one per jumper end, and nothing else.
@@ -70,6 +72,46 @@ describe('dragging a part', () => {
   });
 });
 
+describe('lifting a part that was wired', () => {
+  /*
+   * A jumper clipped to a breadboard hole stays when a part is lifted, because
+   * the hole holds it -- that is the test above. But a jumper clipped to the
+   * *part's own pin* has nothing holding it once the part is gone, and leaving
+   * it behind is what made repeated example loads pile up wires: the modules
+   * vanished, the jumpers to their pins did not.
+   */
+  it('takes the wires clipped to the removed part with it', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    builder.addPart(breadboardDefinition(), 200, 0);
+    const holeX = 200 + columnX(2);
+    const holeY = stripRowY(2);
+    const pin = board.definition.pins.find((candidate) => candidate.id === 'R_D2')!;
+    builder.addWire(holeX, holeY, pin.x, pin.y);
+    expect(builder.build().wires).toHaveLength(1);
+
+    builder.removePart(board.id);
+
+    // The jumper's own contact survives at the hole; the jumper does not,
+    // because the pin it was clipped to has left the bench.
+    expect(builder.build().wires).toHaveLength(0);
+  });
+
+  it('leaves a wire whose both ends are still held', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    builder.addPart(breadboardDefinition(), 200, 0);
+    const holeX = 200 + columnX(2);
+    const holeY = stripRowY(2);
+    // Breadboard hole to open bench: neither end belongs to the board.
+    builder.addWire(holeX, holeY, 320, 60);
+
+    builder.removePart(board.id);
+
+    expect(builder.build().wires).toHaveLength(1);
+  });
+});
+
 describe('hand-placed bends', () => {
   it('defaults to none, so existing wires take the automatic route', () => {
     const { wire } = wiredBench();
@@ -127,6 +169,7 @@ describe('hand-placed bends', () => {
     expect(builder.build().wires[0].bends).toHaveLength(1);
   });
 });
+
 
 describe('reshaping a placed wire', () => {
   /**
@@ -227,5 +270,64 @@ describe('reshaping a placed wire', () => {
     // would drift every time a bend was tidied away.
     expect(after).toBeLessThan(before);
     expect(after).toBeCloseTo(60, 6);
+  });
+});
+
+
+describe('taking a jumper off the bench', () => {
+  it('removes only that wire', () => {
+    const builder = new BenchBuilder();
+    const doomed = builder.addWire(0, 0, 40, 20, { bends: [{ x: 20, y: 30 }] });
+    const kept = builder.addWire(0, 0, 10, 60);
+
+    builder.removeWire(doomed.id);
+
+    expect(builder.build().wires.map((wire) => wire.id)).toEqual([kept.id]);
+  });
+
+  it('breaks the connection the wire was making', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    const pin = board.definition.pins.find((candidate) => candidate.id === 'R_D2')!;
+    const wire = builder.addWire(pin.x, pin.y, 60, 40);
+
+    /** Every terminal sitting on the same net as the ESP32's pin. */
+    const bridgedTo = (): readonly number[] => {
+      const bench = builder.build();
+      const pinTerminal = board.terminals.R_D2;
+      const node = buildNetlist(bench, NO_DYNAMIC_STATE).nodeOfTerminal[pinTerminal];
+      return buildNetlist(bench, NO_DYNAMIC_STATE).nets.find((net) => net.index === node)
+        ?.terminals ?? [pinTerminal];
+    };
+
+    expect(bridgedTo().length).toBeGreaterThan(1);
+
+    builder.removeWire(wire.id);
+
+    /*
+     * Pulling a jumper is how an operator disconnects two things, so the pin
+     * has to end up bridged to nothing. Left linked, the solver would keep a
+     * phantom connection after the wire that made it was pulled off the bench.
+     */
+    expect(builder.build().wires).toHaveLength(0);
+    expect(bridgedTo()).toEqual([board.terminals.R_D2]);
+  });
+
+  it('releases the contacts only that wire was holding', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    const pin = board.definition.pins.find((candidate) => candidate.id === 'R_D2')!;
+    const loose = builder.addWire(0, 0, 60, 40);
+    const held = builder.addWire(pin.x, pin.y, 80, 40);
+    const terminalsBefore = builder.build().terminals.length;
+
+    builder.removeWire(loose.id);
+
+    const { wires, terminals } = builder.build();
+    // The loose jumper's own contacts go with it...
+    expect(terminals).toHaveLength(terminalsBefore - 2);
+    // ...and the pin the surviving wire is clipped to keeps its own.
+    expect(wires[0].id).toBe(held.id);
+    expect(terminals[wires[0].from]).toBeDefined();
   });
 });
