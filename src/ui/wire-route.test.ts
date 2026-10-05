@@ -1,143 +1,287 @@
 import { describe, expect, it } from 'vitest';
-import { roundedPath, routeWire, routeWireCorners, routeWireVia, routeWireViaCorners } from './wire-route';
+import {
+  routeWire,
+  routeWireCorners,
+  routeWireVia,
+  routeWireViaCorners,
+  wireLanes,
+  type Point,
+  type RouteSpan,
+} from './wire-route';
 
-describe('rounded corners', () => {
-  it('draws a straight run when there is nothing to turn', () => {
-    expect(roundedPath([{ x: 0, y: 5 }, { x: 20, y: 5 }], 1.6)).toBe('M 0 5 L 20 5');
+/**
+ * Orthogonal routing.
+ *
+ * Two rules carry everything here, and both exist because the alternative looked
+ * wrong on the bench: no run may move on both axes at once, and a wire the
+ * operator has shaped by hand is drawn exactly where they put it -- no lane
+ * offset, because a lane is a nudge the router invented and a hand-placed
+ * waypoint is a decision.
+ */
+describe('automatic routing', () => {
+  it('draws a straight run when the contacts already line up', () => {
+    // Same y: nothing to turn at, so no corner and no lane.
+    expect(routeWireCorners({ x: 0, y: 0 }, { x: 40, y: 0 })).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+    ]);
   });
 
-  it('eases the corner instead of pointing at it', () => {
-    const path = roundedPath([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], 2);
-    // The corner is named as a quadratic control point, and both straight runs
-    // stop short of it.
-    expect(path).toBe('M 0 0 L 8 0 Q 10 0 10 2 L 10 10');
-  });
-
-  it('never turns further out than the leg it is on', () => {
-    // A 1 mm leg cannot take a 5 mm bend without doubling back on itself.
-    const path = roundedPath([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 1 }], 5);
-    expect(path).toBe('M 0 0 L 9.5 0 Q 10 0 10 0.5 L 10 1');
-  });
-
-  it('drops a point that only repeats the direction it is already going', () => {
-    const path = roundedPath([{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], 1.6);
-    // The mid-run point at (5, 0) is not a turn, so no bend appears there.
-    expect(path).toBe('M 0 0 L 8.4 0 Q 10 0 10 1.6 L 10 10');
-  });
-});
-
-describe('routing a jumper', () => {
-  const from = { x: 26.67, y: 30.48 };
-  const to = { x: 285.88, y: 40.64 };
-
-  it('runs straight when the two contacts line up', () => {
-    expect(routeWire({ x: 0, y: 0 }, { x: 30, y: 0 }, 0)).toBe('M 0 0 L 30 0');
-    expect(routeWire({ x: 0, y: 0 }, { x: 0, y: 30 }, 0)).toBe('M 0 0 L 0 30');
-  });
-
-  it('only ever changes direction on one axis at a time', () => {
-    const corners = routeWireCorners({ x: 5, y: 10 }, { x: 60, y: 45 }, 0);
-    for (let i = 1; i < corners.length; i++) {
-      const dx = corners[i].x - corners[i - 1].x;
-      const dy = corners[i].y - corners[i - 1].y;
-      // Two wires crossing on the bench must not be able to take a diagonal
-      // shortcut past each other, so no run may move on both axes.
-      expect(dx === 0 || dy === 0, `run ${i} moved on both axes`).toBe(true);
+  it('keeps every run on one axis', () => {
+    const corners = routeWireCorners({ x: 0, y: 0 }, { x: 40, y: 25 });
+    for (let i = 0; i + 1 < corners.length; i++) {
+      const a = corners[i];
+      const b = corners[i + 1];
+      const movesOnBothAxes = a.x !== b.x && a.y !== b.y;
+      expect(movesOnBothAxes).toBe(false);
     }
   });
 
-  it('starts and ends exactly on the contacts it joins', () => {
-    const corners = routeWireCorners(from, to, 3);
-    expect(corners[0]).toEqual(from);
-    expect(corners[corners.length - 1]).toEqual(to);
+  it('separates wires that would otherwise overlap', () => {
+    const from = { x: 0, y: 0 };
+    const to = { x: 40, y: 25 };
+    const plain = routeWire(from, to, 0);
+    const offset = routeWire(from, to, 3);
+
+    // Same shape family, different line: the lane moves the dogleg sideways.
+    expect(offset).not.toBe(plain);
+    expect(routeWireCorners(from, to, 3)).not.toEqual(routeWireCorners(from, to, 0));
   });
 
-  it('keeps parallel wires off each other', () => {
-    const lanes = [0, 1, 2, 3].map((lane) => routeWire(from, to, lane));
-    // Each lane takes a different path, or a bundle of jumpers reads as one.
-    expect(new Set(lanes).size).toBe(4);
-  });
+  it('routes towards whichever axis dominates', () => {
+    const across = routeWireCorners({ x: 0, y: 0 }, { x: 90, y: 10 });
+    const down = routeWireCorners({ x: 0, y: 0 }, { x: 10, y: 90 });
 
-  it('runs across the board when it mostly travels sideways', () => {
-    // Far wider than it is tall: the long run is the horizontal one, so the
-    // wire does not climb the whole board to gain four millimetres.
-    const corners = routeWireCorners({ x: 0, y: 0 }, { x: 100, y: 4 }, 0);
-    const across = Math.abs(corners[1].x - corners[0].x);
-    const down = Math.abs(corners[2].y - corners[1].y);
-    expect(across).toBeCloseTo(100, 6);
-    expect(across).toBeGreaterThan(down * 10);
+    // Mostly sideways means the first run goes across; mostly down means it
+    // drops first. Forcing either into the other is what produced doglegs.
+    expect(across[1].y).toBe(0);
+    expect(down[1].x).toBe(0);
   });
 });
 
-describe('routing through hand-placed bends', () => {
-  const from = { x: 0, y: 0 };
-  const to = { x: 100, y: 50 };
+describe('lane assignment', () => {
+  /*
+   * The failure these guard against is a jumper's detour growing with the size
+   * of the bench rather than the size of its own bundle. Numbering lanes by the
+   * wire's place in the whole array put wire nineteen nearly forty millimetres
+   * past the line it belonged on, so a loaded example fanned its wires clean
+   * across the board and read as a tangle. The invariant is that a wire's lane
+   * depends only on the wires turning on its line, so the assertions below are
+   * all about that independence.
+   */
 
-  it('runs straight when there are no bends', () => {
-    // No waypoints must stay byte-identical to the automatic route, or every
-    // existing wire would redraw itself the moment the model gained the field.
-    expect(routeWireVia(from, [], to)).toBe(routeWire(from, to, 0));
-  });
+  /** The line a wire actually turns on, as drawn: its middle corner. */
+  const turnsAt = (span: RouteSpan, lane: number): Point =>
+    routeWireCorners(span.from, span.to, lane)[1];
 
-  it('visits every bend in the order it was placed', () => {
-    const bends = [
-      { x: 20, y: 0 },
-      { x: 20, y: 30 },
+  const sideways = (id: string, from: Point, to: Point): RouteSpan => ({ id, from, to });
+
+  it('keeps every wire in a bundle on its own line', () => {
+    // Four jumpers dropping into the same breadboard column from three
+    // different pins: all four turn on the same x, so all four need a lane.
+    const spans = [
+      sideways('a', { x: 30, y: 2 }, { x: 120, y: 40 }),
+      sideways('b', { x: 30, y: 5 }, { x: 120, y: 43 }),
+      sideways('c', { x: 20, y: 8 }, { x: 120, y: 46 }),
+      sideways('d', { x: 40, y: 11 }, { x: 120, y: 49 }),
     ];
-    const corners = routeWireViaCorners(from, bends, to);
-    // Each bend is a real corner of the path, not something the router smoothed
-    // away -- otherwise the wire would ignore where it was told to go.
-    for (const bend of bends) {
-      expect(corners).toContainEqual(bend);
+    const lanes = wireLanes(spans);
+
+    const turningOn = spans.map((span) => turnsAt(span, lanes.get(span.id) ?? 0).x);
+    expect(new Set(turningOn).size).toBe(spans.length);
+  });
+
+  it('leaves a wire alone when unrelated wires join the bench', () => {
+    const bundle = [
+      sideways('a', { x: 30, y: 2 }, { x: 120, y: 40 }),
+      sideways('b', { x: 30, y: 5 }, { x: 120, y: 43 }),
+    ];
+    const elsewhere = [
+      sideways('stray-1', { x: 10, y: 90 }, { x: 90, y: 96 }),
+      sideways('stray-2', { x: 10, y: 100 }, { x: 91, y: 106 }),
+      sideways('stray-3', { x: 10, y: 110 }, { x: 92, y: 116 }),
+    ];
+
+    const before = wireLanes(bundle);
+    const after = wireLanes([...bundle, ...elsewhere]);
+
+    for (const span of bundle) {
+      expect(after.get(span.id)).toBe(before.get(span.id));
     }
-    // And the ordering holds, so the wire does not visit them out of sequence.
-    const xs = corners.map((point) => point.x);
-    expect(xs.indexOf(20)).toBeLessThan(xs.lastIndexOf(20));
+    for (const span of elsewhere) expect(after.get(span.id)).toBe(0);
   });
 
-  it('starts and ends exactly on the contacts it joins', () => {
-    const corners = routeWireViaCorners(from, [{ x: 40, y: 10 }], to);
-    expect(corners[0]).toEqual(from);
-    expect(corners[corners.length - 1]).toEqual(to);
+  it('spreads a bundle either side of the line rather than off one side', () => {
+    const spans = [
+      sideways('a', { x: 30, y: 2 }, { x: 120, y: 40 }),
+      sideways('b', { x: 30, y: 5 }, { x: 120, y: 43 }),
+      sideways('c', { x: 30, y: 8 }, { x: 120, y: 46 }),
+    ];
+    const lanes = wireLanes(spans);
+
+    // Centred, so the group straddles the line: the middle wire takes it as it
+    // was, and its neighbours sit one spacing either side.
+    const offsets = spans.map((span) => (lanes.get(span.id) ?? 0) * 2.2);
+    expect(offsets.reduce((sum, offset) => sum + offset, 0)).toBeCloseTo(0);
+    expect(turnsAt(spans[1], lanes.get('b') ?? 0).x).toBe(120);
+    expect(turnsAt(spans[0], lanes.get('a') ?? 0).x).toBeLessThan(120);
+    expect(turnsAt(spans[2], lanes.get('c') ?? 0).x).toBeGreaterThan(120);
   });
 
-  it('keeps every run orthogonal even with bends', () => {
-    const corners = routeWireViaCorners(from, [{ x: 40, y: 10 }, { x: 40, y: 40 }], to);
-    for (let i = 1; i < corners.length; i++) {
-      const dx = corners[i].x - corners[i - 1].x;
-      const dy = corners[i].y - corners[i - 1].y;
-      // The same rule the automatic router holds to. A bend that let a leg cut
-      // diagonally would produce the scratchy wire this tool exists to avoid.
-      expect(dx === 0 || dy === 0, `run ${i} moved on both axes`).toBe(true);
-    }
+  it('separates wires that drop into the same row', () => {
+    // Mostly down, so each turns on the breadboard row instead of the column --
+    // the mirror of the sideways case, and a different line to separate on.
+    const spans = [
+      { id: 'a', from: { x: 30, y: 2 }, to: { x: 100, y: 90 } },
+      { id: 'b', from: { x: 33, y: 2 }, to: { x: 103, y: 90 } },
+    ];
+    const lanes = wireLanes(spans);
+    const rows = spans.map((span) => turnsAt(span, lanes.get(span.id) ?? 0).y);
+
+    expect(rows[0]).not.toBe(rows[1]);
   });
 
-  it('passes a bend through rather than offsetting it onto a lane', () => {
-    // A lane offset would drag the wire off the exact point the operator
-    // clicked, so a hand-placed route must ignore lanes entirely.
-    const corners = routeWireViaCorners(from, [{ x: 33, y: 0 }], to);
-    expect(corners).toContainEqual({ x: 33, y: 0 });
+  it('does not push wires off the line for one drawn as a straight run', () => {
+    // A wire whose ends already line up is drawn straight and has no lane to
+    // take. Counting it would shove its neighbours off a line nothing is on.
+    const straight = sideways('straight', { x: 60, y: 40 }, { x: 60, y: 90 });
+    const spans = [
+      sideways('a', { x: 30, y: 2 }, { x: 120, y: 40 }),
+      sideways('b', { x: 30, y: 5 }, { x: 120, y: 43 }),
+      straight,
+    ];
+
+    expect(wireLanes(spans).get('straight')).toBeUndefined();
+    expect(wireLanes(spans).get('a')).toBe(wireLanes(spans.slice(0, 2)).get('a'));
   });
 
-  it('drops a bend that repeats the point before it', () => {
-    const corners = routeWireViaCorners(from, [{ x: 0, y: 0 }], to);
-    expect(corners).toEqual(routeWireViaCorners(from, [], to));
-  });
-
-  it('rounds the turns it does draw', () => {
-    // A genuine Z: across, down, across. The two bends are real corners and
-    // both must be eased rather than pointed at.
-    const path = routeWireVia({ x: 0, y: 0 }, [{ x: 20, y: 0 }, { x: 20, y: 20 }], { x: 40, y: 20 }, 1.6);
-    expect(path).toBe('M 0 0 L 18.4 0 Q 20 0 20 1.6 L 20 18.4 Q 20 20 21.6 20 L 40 20');
-  });
-
-  it('drops a bend that only continues the run it is already on', () => {
-    // Three points in a line describe one straight wire, not two corners, so
-    // the middle ones must not survive as spurious bends.
-    const corners = routeWireViaCorners({ x: 0, y: 0 }, [{ x: 20, y: 0 }, { x: 20, y: 40 }], { x: 20, y: 40 });
-    expect(routeWireVia({ x: 0, y: 0 }, [{ x: 20, y: 0 }, { x: 20, y: 40 }], { x: 20, y: 40 }, 1.6)).toBe(
-      'M 0 0 L 18.4 0 Q 20 0 20 1.6 L 20 40',
+  it('holds a jumper within a lane spacing of the line its contacts put it on', () => {
+    // The whole point: whatever else is on the bench, the wire stays beside the
+    // line its own two contacts make rather than sailing off past them.
+    const bundle = [
+      sideways('a', { x: 30, y: 2 }, { x: 120, y: 40 }),
+      sideways('b', { x: 30, y: 5 }, { x: 120, y: 43 }),
+      sideways('c', { x: 20, y: 8 }, { x: 120, y: 46 }),
+    ];
+    const elsewhere = Array.from({ length: 20 }, (_, i) =>
+      sideways(`stray-${i}`, { x: 10, y: 90 + i }, { x: 90 + i, y: 96 + i }),
     );
-    expect(corners).toContainEqual({ x: 20, y: 0 });
+
+    /** How far the drawn path strays outside the box its contacts span. */
+    const stray = (span: RouteSpan, lanes: ReadonlyMap<string, number>): number => {
+      const corners = routeWireCorners(span.from, span.to, lanes.get(span.id) ?? 0);
+      const spread = (axis: 'x' | 'y'): number =>
+        Math.max(
+          ...corners.map((corner) =>
+            Math.max(
+              Math.min(span.from[axis], span.to[axis]) - corner[axis],
+              corner[axis] - Math.max(span.from[axis], span.to[axis]),
+            ),
+          ),
+        );
+      return Math.round(Math.max(spread('x'), spread('y')) * 1e6) / 1e6;
+    };
+
+    const alone = wireLanes(bundle);
+    const crowded = wireLanes([...bundle, ...elsewhere]);
+    for (const span of bundle) {
+      expect(stray(span, crowded)).toBeLessThanOrEqual(2.2);
+      expect(stray(span, crowded)).toBe(stray(span, alone));
+    }
+  });
+
+  it('redraws a wire only when its own group gains one', () => {
+    // End to end, through the path the bench actually draws. A jumper arriving
+    // elsewhere on the bench is none of this wire's business; one joining its
+    // group is, because that is the wire it would be drawn on top of.
+    const existing = [sideways('a', { x: 30, y: 2 }, { x: 120, y: 40 })];
+    const elsewhere = sideways('far', { x: 10, y: 90 }, { x: 90, y: 96 });
+    const alongside = sideways('b', { x: 30, y: 5 }, { x: 120, y: 43 });
+
+    const drawn = (spans: readonly RouteSpan[], id: string): string => {
+      const span = spans.find((candidate) => candidate.id === id)!;
+      return routeWire(span.from, span.to, wireLanes(spans).get(id) ?? 0);
+    };
+
+    const alone = drawn(existing, 'a');
+    expect(drawn([...existing, elsewhere], 'a')).toBe(alone);
+    expect(drawn([...existing, alongside], 'a')).not.toBe(alone);
+  });
+});
+
+describe('every bend lands on the wire', () => {
+  /*
+   * This is the invariant that makes a waypoint handle meaningful. A handle is
+   * drawn at the bend's own coordinates, so if the drawn path does not pass
+   * through that point the handle floats beside the wire -- which is exactly
+   * what the operator sees when a bend lands on the wrong leg.
+   */
+  const lies = (point: Point, path: readonly Point[], tolerance = 1e-6): boolean => {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i];
+      const b = path[i + 1];
+      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      if (length === 0) {
+        if (Math.hypot(point.x - a.x, point.y - a.y) <= tolerance) return true;
+        continue;
+      }
+      const offset =
+        Math.abs((b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)) / length;
+      if (offset > tolerance) continue;
+      const along =
+        point.x >= Math.min(a.x, b.x) - tolerance &&
+        point.x <= Math.max(a.x, b.x) + tolerance &&
+        point.y >= Math.min(a.y, b.y) - tolerance &&
+        point.y <= Math.max(a.y, b.y) + tolerance;
+      if (along) return true;
+    }
+    return false;
+  };
+
+  const routes: ReadonlyArray<{ name: string; from: Point; via: Point[]; to: Point }> = [
+    { name: 'an L', from: { x: 0, y: 0 }, via: [{ x: 40, y: 0 }], to: { x: 40, y: 60 } },
+    {
+      name: 'a Z',
+      from: { x: 0, y: 0 },
+      via: [{ x: 40, y: 0 }, { x: 40, y: 40 }],
+      to: { x: 90, y: 40 },
+    },
+    {
+      name: 'a diagonal waypoint',
+      from: { x: 0, y: 0 },
+      via: [{ x: 33, y: 21 }],
+      to: { x: 80, y: 70 },
+    },
+    {
+      name: 'collinear waypoints',
+      from: { x: 0, y: 0 },
+      via: [{ x: 20, y: 0 }, { x: 50, y: 0 }],
+      to: { x: 50, y: 40 },
+    },
+    {
+      name: 'a waypoint past the far contact',
+      from: { x: 0, y: 0 },
+      via: [{ x: 120, y: 40 }],
+      to: { x: 40, y: 10 },
+    },
+  ];
+
+  for (const route of routes) {
+    it(`passes through the waypoints on ${route.name}`, () => {
+      const corners = routeWireViaCorners(route.from, route.via, route.to);
+      for (const bend of route.via) {
+        expect(lies(bend, corners), `bend ${bend.x},${bend.y} is off the path`).toBe(true);
+      }
+    });
+  }
+
+  it('draws a hand-placed route without a lane offset', () => {
+    // The waypoints are exact positions. A lane would nudge them, so the handle
+    // the operator is holding would stop sitting on the wire.
+    const via = [{ x: 30, y: 30 }];
+    const corners = routeWireViaCorners({ x: 0, y: 0 }, via, { x: 60, y: 60 });
+
+    expect(corners).toContainEqual(via[0]);
+    expect(routeWireVia({ x: 0, y: 0 }, via, { x: 60, y: 60 })).toContain('M ');
   });
 });
