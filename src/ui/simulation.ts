@@ -1,6 +1,4 @@
 /**
- * Owns a bench, its circuit, and the firmware running on it.
- *
  * Deliberately a plain class rather than a hook. The bench holds a fully
  * populated breadboard of nearly a thousand terminals, and rebuilding that
  * through React state on every drag frame would be absurd; keeping the mutable
@@ -11,9 +9,11 @@
 import {
   BenchBuilder,
   type Bench,
+  type BenchSnapshot,
   type BendPoint,
   type PartInstance,
   type Terminal,
+  type WireEnd,
 } from '../sim/bench';
 import { Engine } from '../sim/engine';
 import { McuRuntime } from '../sim/mcu';
@@ -24,6 +24,7 @@ import {
 import { FirmwareSyntaxError } from '../sim/firmware/parser';
 import type { BoardPin, KnobSpec, PartDefinition } from '../sim/catalog';
 import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
+import { nextAutomaticWireColour } from './wire-colours';
 
 import { GROUND } from '../sim/elements';
 import { DISTANCE_KNOB, echoMicroseconds } from '../sim/sonar';
@@ -72,16 +73,44 @@ const TIME_SCALE = 1;
 /**
  * Real jumper colours, cycled so a populated board looks like a real one.
  *
- * Insulation colour carries no electrical meaning here, so it must not imply
- * any: the inspector reports the measured net, never a guess from the wire.
- */
-const WIRE_COLOURS = [
-  '#d94f4f', '#1f2937', '#eab308', '#22c55e',
-  '#3b82f6', '#e5e7eb', '#f97316',
-] as const;
+ * The palette itself lives in `wire-colours`; this is only the automatic
+ * assignment. Insulation colour carries no electrical meaning here, so it must
+ * not imply any: the inspector reports the measured net, never a guess from the
+ * wire.
 
-function pickWireColour(wireIndex: number): string {
-  return WIRE_COLOURS[wireIndex % WIRE_COLOURS.length];
+
+/**
+ * How many bench states are kept. Beyond this the oldest falls off the end.
+ *
+ * Sixty is a lot of steps for a wiring bench and still only a few thousand
+ * small records; the cap is there so an afternoon of nudging parts cannot grow
+ * the history without bound.
+ */
+const HISTORY_LIMIT = 60;
+
+/**
+ * How long a run of the same continuous edit collapses into one undo step.
+ *
+ * Drags call into the model on every animation frame, so a single nudge of a
+ * part across the bench is sixty calls. Without coalescing, one Ctrl+Z would
+ * step back through the drag a frame at a time and look like undo was broken.
+ * The window slides, so a drag lasting longer than this still collapses to one
+ * step rather than starting a second one halfway through.
+ */
+const EDIT_COALESCE_MS = 700;
+
+/**
+ * One undoable step: the bench, plus the bookkeeping that describes it.
+ *
+ * The extras are not decoration. `examplePartIds` decides which parts the next
+ * example load clears, and `lcdBoardPins` is how an LCD finds the board pins
+ * its lines were wired to; restoring the bench without them would leave the
+ * model describing a bench that is no longer there.
+ */
+interface BenchHistoryEntry {
+  readonly bench: BenchSnapshot;
+  readonly examplePartIds: string[];
+  readonly lcdPins: [string, number][];
 }
 
 export class Simulation {
@@ -107,6 +136,17 @@ export class Simulation {
    */
   private analysedPins: string[] = [];
   private readonly busLog = new BusLog();
+
+  /**
+   * Part ids the current example placed, so the next load can take them away.
+   *
+   * An example owns the parts it adds and nothing else. Without this, loading
+   * an example twice stacks a second LCD on top of the first at the same
+   * coordinates and doubles every wire -- which reads as the bench falling
+   * apart rather than as parts accumulating. The board, the breadboard and
+   * anything the operator placed by hand are untouched.
+   */
+  private examplePartIds: string[] = [];
   private serialDirty = true;
 
   constructor(board: PartDefinition) {
@@ -115,6 +155,97 @@ export class Simulation {
   }
   get bench(): Bench {
     return this.builder.build();
+  }
+
+  /*
+   * Undo history, as whole bench states.
+   *
+   * Snapshots rather than inverse operations. Every mutation would otherwise
+   * need a matching undo, including the ones that renumber contacts when a
+   * wire leaves a hole, and the tenth one added later would silently be the one
+   * nobody can undo. A state cannot drift out of step with the model because it
+   * *is* the model, frozen.
+   *
+   * The rest of the bench's bookkeeping travels with it. `examplePartIds` says
+   * which parts an example owns, and `lcdBoardPins` maps an LCD's lines to
+   * board pins; both are written and cleared by the same operations that place
+   * parts and wires, so restoring the bench without them would leave the bench
+   * claiming ownership of parts that are gone and an LCD wired to pins that no
+   * longer lead anywhere.
+   */
+  private undoStack: BenchHistoryEntry[] = [];
+  private redoStack: BenchHistoryEntry[] = [];
+  /** The continuous edit currently being coalesced, and when it started. */
+  private editRun: { kind: string; at: number } | null = null;
+
+  /** Records the bench as it is, before the caller changes it. */
+  private checkpoint(kind?: string): void {
+    const now = performance.now();
+    if (
+      kind !== undefined &&
+      this.editRun !== null &&
+      this.editRun.kind === kind &&
+      now - this.editRun.at < EDIT_COALESCE_MS
+    ) {
+      // Still the same drag: the first frame already recorded the state this
+      // run started from, and that is the state undo should return to.
+      this.editRun.at = now;
+      return;
+    }
+
+    this.undoStack.push(this.historyEntry());
+    if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
+    // Anything that was undone can no longer be redone: the future it pointed
+    // at has just been edited away.
+    this.redoStack.length = 0;
+    this.editRun = kind === undefined ? null : { kind, at: now };
+  }
+
+  /** The whole of the bench's restorable state, frozen. */
+  private historyEntry(): BenchHistoryEntry {
+    return {
+      bench: this.builder.snapshot(),
+      examplePartIds: [...this.examplePartIds],
+      lcdPins: [...this.lcdBoardPins],
+    };
+  }
+
+  /** Puts a history entry back into the live model. */
+  private applyHistory(entry: BenchHistoryEntry): void {
+    this.builder.restore(entry.bench);
+    this.examplePartIds = entry.examplePartIds;
+    this.lcdBoardPins.clear();
+    for (const [line, pin] of entry.lcdPins) this.lcdBoardPins.set(line, pin);
+    // The next edit starts a fresh run: coalescing into whatever was undone
+    // would swallow the edit into a history entry that no longer describes it.
+    this.editRun = null;
+    this.rebuild();
+  }
+
+  canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  /** Steps the bench back one edit. Returns whether there was one to step to. */
+  undo(): boolean {
+    const previous = this.undoStack.pop();
+    if (!previous) return false;
+    this.redoStack.push(this.historyEntry());
+    this.applyHistory(previous);
+    return true;
+  }
+
+  /** Steps the bench forward again. Returns whether there was one to step to. */
+  redo(): boolean {
+    const next = this.redoStack.pop();
+    if (!next) return false;
+    this.undoStack.push(this.historyEntry());
+    this.applyHistory(next);
+    return true;
   }
 
 
@@ -228,35 +359,106 @@ export class Simulation {
   }
 
   movePart(partId: string, x: number, y: number): void {
+    // One undo step per drag, not per frame: see `EDIT_COALESCE_MS`.
+    this.checkpoint('movePart');
     this.builder.movePart(partId, x, y);
     this.rebuild();
   }
 
-  routeWire(from: Terminal, to: Terminal, bends: readonly BendPoint[] = []): void {
+  /**
+   * Routes a jumper, in the colour the operator has chosen.
+   *
+   * The chosen colour is passed in rather than read from here, so the picker in
+   * the header and the wire it places cannot disagree about what colour "next"
+   * means.
+   */
+  routeWire(
+    from: Terminal,
+    to: Terminal,
+    bends: readonly BendPoint[] = [],
+    colour?: string,
+  ): void {
+    this.checkpoint();
     this.builder.addWire(from.x, from.y, to.x, to.y, {
-      colour: pickWireColour(this.bench.wires.length),
+      colour: colour ?? nextAutomaticWireColour(this.bench.wires.length),
       bends,
     });
     this.rebuild();
   }
 
+  /**
+   * Re-clips one end of a placed jumper, the way Wokwi lets a wire be dragged.
+   *
+   * Re-solved because this is an electrical change: the wire now joins whatever
+   * its two ends are, so every net it touched before may be different.
+   */
+  moveWireEnd(wireId: string, end: WireEnd, to: Terminal): void {
+    // One undo step per drag, not per frame: see `EDIT_COALESCE_MS`.
+    this.checkpoint('moveWireEnd');
+    this.builder.moveWireEnd(wireId, end, to.x, to.y);
+    this.rebuild();
+  }
+
+  /**
+   * Takes a jumper off the bench.
+   *
+   * Re-solved because removing a wire opens whatever net it was the only link
+   * in -- which is the point: pulling a jumper is how an operator disconnects
+   * two things.
+   */
+  removeWire(wireId: string): void {
+    this.checkpoint();
+    this.builder.removeWire(wireId);
+    this.rebuild();
+  }
+
+  /**
+   * Recolours a placed jumper.
+   *
+   * Deliberately no re-solve: insulation carries no electrical meaning, so
+   * nothing downstream can see this change and solving again would cost a full
+   * circuit pass to produce the same answer.
+   */
+  setWireColour(wireId: string, colour: string): void {
+    this.checkpoint();
+    this.builder.setWireColour(wireId, colour);
+  }
+
   /** Reshapes a placed jumper, re-measuring and re-solving it. */
   setWireBends(wireId: string, bends: readonly BendPoint[]): void {
+    // One undo step per drag, not per frame: see `EDIT_COALESCE_MS`.
+    this.checkpoint('setWireBends');
     this.builder.setWireBends(wireId, bends);
     this.rebuild();
   }
 
   removeWireBend(wireId: string, index: number): void {
+    this.checkpoint();
     this.builder.removeWireBend(wireId, index);
     this.rebuild();
   }
 
   insertWireBend(wireId: string, index: number, bend: BendPoint): void {
+    this.checkpoint();
     this.builder.insertWireBend(wireId, index, bend);
     this.rebuild();
   }
 
-  /** Which leg of a wire a world position sits nearest, as a bend index. */
+  /**
+   * Where a new waypoint belongs, as an index into the wire's *bends*.
+   *
+   * The two index spaces are different lengths and confusing them is the bug
+   * this shape exists to prevent. `routeWireViaCorners` returns every corner the
+   * wire turns at -- the two contacts, the operator's bends, and the extra
+   * corners the router adds to keep every run orthogonal. Its legs therefore
+   * outnumber the bends, and its last leg has no bend index at all because it
+   * ends at the far contact.
+   *
+   * So the chosen leg is translated back: the leg leaving bend `i` is the leg
+   * that a waypoint inserted *at* `i` would split, which is what makes the
+   * waypoint appear where the pointer was. The final leg clamps to the end,
+   * because a waypoint after the last bend is the last position in the list.
+   */
   bendIndexNear(wireId: string, x: number, y: number): number {
     const wire = this.bench.wires.find((candidate) => candidate.id === wireId);
     if (!wire) return 0;
@@ -277,10 +479,11 @@ export class Simulation {
         best = i;
       }
     }
-    return best;
+    return Math.min(best, wire.bends.length);
   }
 
   addPart(definition: PartDefinition, x: number, y: number): PartInstance {
+    this.checkpoint();
     const part = this.builder.addPart(definition, x, y);
     this.rebuild();
     return part;
@@ -299,8 +502,15 @@ export class Simulation {
    * the API being broken.
    */
   placeExampleDevice(what: ExampleDevice, x: number, y: number): PartInstance {
+    // One checkpoint for the whole device: the part and every wire it brings
+    // are a single action, and undoing half of an example would leave a module
+    // on the bench wired to nothing.
+    this.checkpoint();
     const definition = EXAMPLE_DEVICES[what]();
     const part = this.builder.addPart(definition, x, y);
+    // Recorded before the wiring so `clearExampleParts` can take the whole
+    // example away, however many parts it ends up owning.
+    this.examplePartIds.push(part.id);
     const bench = this.builder.build();
     const terminal = (pin: string): Terminal | undefined => {
       const id = part.terminals[pin];
@@ -376,9 +586,24 @@ export class Simulation {
   }
 
   /**
-
+   * Lifts every part the previous example placed.
+   *
+   * Called before an example wires itself, so the bench holds one example at a
+   * time. `removePart` takes each part's wires with it, which is what stops the
+   * net count from climbing every time the same example is loaded again -- the
+   * visible symptom of which is a bench that slowly fills with duplicate
+   * modules and twice as many jumpers.
+   */
+  clearExampleParts(): void {
+    if (this.examplePartIds.length === 0) return;
+    // Recorded before anything is lifted, so one undo brings the whole example
+    // back rather than only the parts after the first.
+    this.checkpoint();
+    for (const id of this.examplePartIds) this.builder.removePart(id);
+    this.examplePartIds = [];
+    // The LCD's line-to-pin map describes wiring that is no longer on the bench.
+    this.lcdBoardPins.clear();
     this.rebuild();
-    return part;
   }
 
   /** World position of a board pin by id, for wiring a part to the board. */
@@ -387,12 +612,49 @@ export class Simulation {
     return pin ? { id: -1, x: pin.x, y: pin.y } : null;
   }
 
+  /**
+   * World position of a board pin by its *silkscreen* name.
+   *
+   * The name on the board, not the internal id: `D8`, `A0`, `5V`, `GND`. An
+   * exercise has to be able to say "wire D8 to the LED" in the words the
+   * worksheet and the silkscreen both use, and the internal ids
+   * (`J1_D8`) are a drawing detail that would leak the board's own geometry
+   * into every lesson.
+   *
+   * A leading `D` is optional on the digital pins, because the silkscreen says
+   * `8` where a worksheet says `D8`. Anything that matches neither is null
+   * rather than a guess: a lesson that wired the wrong pin because a name
+   * nearly matched would be worse than one that says it cannot find it.
+   */
+  boardTerminal(name: string): Terminal | null {
+    const pin = this.mcu.definition.pins.find((candidate) => candidate.label === name);
+    if (pin) return { id: -1, x: pin.x, y: pin.y };
+    if (!name.startsWith('D')) return null;
+    const bare = name.slice(1);
+    const digital = this.mcu.definition.pins.find((candidate) => candidate.label === bare);
+    return digital ? { id: -1, x: digital.x, y: digital.y } : null;
+  }
+
+  /**
+   * World position of one of a placed part's own pins.
+   *
+   * Returns the *contact* rather than a bare coordinate, so a wire drawn to it
+   * shares the part's contact instead of claiming a loose terminal beside it --
+   * which is the difference between a wire that is connected to the LED and
+   * one that ends a pixel away from it.
+   */
+  pinAt(part: PartInstance, pinId: string): Terminal | null {
+    const id = part.terminals[pinId];
+    return id === undefined ? null : this.bench.terminals[id] ?? null;
+  }
+
   /** The first board pin matching a predicate, which is how a board is asked. */
   private firstGpio(match: (pin: BoardPin) => boolean): string {
     return this.mcu.pins().find(match)?.id ?? '';
   }
 
   removePart(id: string): void {
+    this.checkpoint();
     this.builder.removePart(id);
     this.rebuild();
   }
