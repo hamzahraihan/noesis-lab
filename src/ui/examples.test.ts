@@ -140,3 +140,95 @@ describe('the examples', () => {
     expect(swept).toContain(170);
   }, 30_000);
 });
+
+describe('loading one example replaces the last', () => {
+  /*
+   * Every example places its modules at the same handful of coordinates, so a
+   * load that does not clear the previous one first stacks a second LCD exactly
+   * on top of the first and doubles every jumper. The bench then fills with
+   * duplicates that all look live, and the net count climbs on each load --
+   * which reads as the simulator coming apart rather than as parts stacking.
+   */
+  it('leaves one of each module however often it is loaded', () => {
+    const simulation = bench();
+
+    for (let round = 0; round < 3; round++) {
+      simulation.clearExampleParts();
+      LCD_EXAMPLE.wire(simulation);
+    }
+
+    const countOf = (needle: string) =>
+      simulation.bench.parts.filter((part) => part.definition.name.includes(needle)).length;
+
+    expect(countOf('LCD 16x2')).toBe(1);
+    expect(countOf('DS1307')).toBe(1);
+  });
+
+  it('keeps the wire count stable across repeated loads', () => {
+    const simulation = bench();
+
+    simulation.clearExampleParts();
+    LCD_EXAMPLE.wire(simulation);
+    const first = simulation.bench.wires.length;
+    expect(first).toBeGreaterThan(0);
+
+    // The wires of the parts just lifted have to go with them, or the bench
+    // keeps jumpers to holes nothing holds any more.
+    for (let round = 0; round < 3; round++) {
+      simulation.clearExampleParts();
+      LCD_EXAMPLE.wire(simulation);
+      expect(simulation.bench.wires.length).toBe(first);
+    }
+  });
+
+  it('leaves the board, the breadboard and anything placed by hand', () => {
+    const simulation = bench();
+    // A part the operator dropped is not the example's to remove.
+    const mine = simulation.addPart(esp32DevKitV1(), 300, 300);
+
+    simulation.clearExampleParts();
+    LCD_EXAMPLE.wire(simulation);
+    simulation.clearExampleParts();
+
+    const ids = simulation.bench.parts.map((part) => part.id);
+    expect(ids).toContain(mine.id);
+    expect(partNamed(simulation, 'Solderless Breadboard')).toBeDefined();
+    expect(partNamed(simulation, 'LCD 16x2')).toBeUndefined();
+  });
+
+  it('leaves the bench holding only the example it last loaded', () => {
+    const simulation = bench();
+
+    // What each example is expected to have on the bench once loaded. Blink
+    // places nothing of its own -- it drives the LED and both displays the
+    // app already built -- so it expects the board and breadboard alone.
+    const expected: ReadonlyArray<readonly [string, readonly string[]]> = [
+      ['blink', []],
+      ['i2c-clock', ['DS1307']],
+      ['character-lcd', ['LCD 16x2', 'DS1307']],
+      ['servo', ['Servo']],
+    ];
+
+    const onBench = () => simulation.bench.parts
+      .map((part) => part.definition.name)
+      .filter((name) => name !== esp32DevKitV1().name && name !== breadboardDefinition().name);
+
+    // Twice round, so a leftover from the first pass would show up in the second.
+    for (const pass of [1, 2]) {
+      for (const [id, modules] of expected) {
+        const example = EXAMPLES.find((candidate) => candidate.id === id);
+        if (!example) throw new Error(`no example ${id}`);
+
+        simulation.clearExampleParts();
+        example.wire(simulation);
+
+        // Exactly the modules this example places: a survivor from an earlier
+        // load would make this list longer than it should ever be.
+        expect(onBench(), `pass ${pass}, after ${id}`).toHaveLength(modules.length);
+        for (const module of modules) {
+          expect(partNamed(simulation, module), `pass ${pass}, after ${id}`).toBeDefined();
+        }
+      }
+    }
+  });
+});
