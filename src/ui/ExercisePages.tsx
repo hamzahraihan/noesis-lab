@@ -1,0 +1,558 @@
+/**
+ * The Learn section: the curriculum as something you can work through.
+ *
+ * Two pages, and the split is the one the learner makes. The index answers
+ * "where do I start"; the exercise answers "what do I do now". Between them
+ * they carry the parts of a worksheet that a browser is better at than paper --
+ * the wiring table rendered from the same data the bench is built from, hints
+ * the learner reveals only when they are stuck, and references with the
+ * vocabulary explained rather than assumed.
+ *
+ * The prose in `docs/exercises/` stays the authority on *why*. This is the
+ * authority on *what to type*, and the two never disagree about a part name
+ * because both take it from the catalogue.
+ */
+
+import { useState } from 'react';
+import { Link, useParams } from 'react-router';
+import {
+  EXERCISE_BOARD,
+  EXERCISES,
+  STARTING_LEVEL,
+  exerciseById,
+  type Exercise,
+} from './exercises';
+import { GLOSSARY } from './glossary';
+
+/** The silkscreen names a wiring table may name, for a beginner's sanity check. */
+function isBoardPin(name: string): boolean {
+  return /^(D\d{1,2}|A\d|TX|RX|\dV3?|GND|AREF|RESET|IOREF)$/.test(name);
+}
+
+/**
+ * The index: every exercise, grouped by the level it belongs to.
+ *
+ * Levels, not a flat list, because the whole point of the ladder is that the
+ * order carries meaning: 1.2's sub-second state machine is the pattern 4.2's
+ * ping-pong loop needs. A flat list of nine would throw that away.
+ */
+export function ExercisesPage() {
+  const levels = [...new Set(EXERCISES.map((exercise) => exercise.level))].sort();
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200">
+      <header className="border-b border-slate-800">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
+          <Link to="/" className="ctl ctl-quiet">
+            Noesis Lab
+          </Link>
+          <span className="text-slate-600">/</span>
+          <h1 className="text-sm font-medium text-slate-300">Learn</h1>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-3xl px-6 py-10">
+        <p className="text-xs uppercase tracking-wider text-slate-500">
+          Arduino Uno R3 · the simulator
+        </p>
+        <h2 className="mt-2 text-2xl font-semibold text-slate-100">
+          Embedded systems, from a pin you can switch
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
+          Nine exercises in five levels. Each one is a circuit you build and a program you write;
+          every circuit also runs here, so you can do the whole track without hardware on the desk.
+          Start at level 1 unless you already know what a pull-up is.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to={`/bench/${EXERCISE_BOARD}`} className="ctl ctl-accent">
+            Open the bench
+          </Link>
+          <Link to="/learn/references" className="ctl">
+            Reference &amp; glossary
+          </Link>
+        </div>
+
+        {levels.map((level) => (
+          <section key={level} className="mt-10">
+            <div className="flex items-baseline gap-3 border-b border-slate-800 pb-2">
+              <h3 className="text-sm font-semibold text-slate-200">Level {level}</h3>
+              <span className="text-xs text-slate-500">
+                {level === STARTING_LEVEL ? 'start here' : `needs level ${level - 1}`}
+              </span>
+            </div>
+
+            <ul className="mt-3 space-y-2">
+              {EXERCISES.filter((exercise) => exercise.level === level).map((exercise) => (
+                <li key={exercise.id}>
+                  <Link
+                    to={`/learn/${exercise.id}`}
+                    className="block rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 transition-colors hover:border-slate-700 hover:bg-slate-900"
+                  >
+                    <div className="flex items-baseline gap-3">
+                      <span className="font-mono text-xs text-slate-500">{exercise.id}</span>
+                      <span className="font-medium text-slate-100">{exercise.title}</span>
+                      <span className="ml-auto shrink-0 text-xs text-slate-500">
+                        {exercise.minutes}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-400">
+                      {exercise.brief}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-400">
+                        {exercise.difficulty}
+                      </span>
+                      {exercise.concepts.slice(0, 2).map((concept) => (
+                        <span
+                          key={concept}
+                          className="rounded bg-slate-800/70 px-1.5 py-0.5 text-[11px] text-slate-500"
+                        >
+                          {concept}
+                        </span>
+                      ))}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </main>
+    </div>
+  );
+}
+
+/**
+ * One exercise, worked through.
+ *
+ * The hints are the point of this page. A worksheet that prints the answer
+ * teaches by transcription; one that prints the symptom and nothing else teaches
+ * by guessing, which is slower and is the actual skill. So each hint is behind
+ * a click, in the order that helps least-harm-first, and stays open once opened.
+ */
+export function ExercisePage() {
+  const { id } = useParams();
+  const exercise = id === undefined ? null : exerciseById(id);
+  const [revealed, setRevealed] = useState(0);
+
+  if (exercise === null) {
+    return (
+      <ExerciseShell title="No such exercise">
+        <p className="text-sm text-slate-400">
+          There is no exercise {id}. <Link to="/learn" className="text-sky-400 underline">Back to the list</Link>.
+        </p>
+      </ExerciseShell>
+    );
+  }
+
+  return (
+    <ExerciseShell title={exercise.title} crumb={exercise.id}>
+      <p className="text-xs uppercase tracking-wider text-slate-500">
+        {exercise.module} · {exercise.difficulty} · {exercise.minutes}
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-slate-300">{exercise.brief}</p>
+
+      <Concepts exercise={exercise} />
+      <PartsTable exercise={exercise} />
+      <WiringTable exercise={exercise} />
+      <Steps exercise={exercise} />
+      <SketchPanel exercise={exercise} />
+      {exercise.fault !== undefined && <FaultPanel exercise={exercise} />}
+      <Hints exercise={exercise} revealed={revealed} setRevealed={setRevealed} />
+      <References exercise={exercise} />
+
+      <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-6">
+        <Link to={`/bench/${EXERCISE_BOARD}?ex=${exercise.id}`} className="ctl ctl-accent">
+          Put it on the bench
+        </Link>
+        <Link to="/learn/references" className="ctl">
+          Reference &amp; glossary
+        </Link>
+      </div>
+    </ExerciseShell>
+  );
+}
+
+function ExerciseShell({
+  title,
+  crumb,
+  children,
+}: {
+  title: string;
+  crumb?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200">
+      <header className="border-b border-slate-800">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
+          <Link to="/" className="ctl ctl-quiet">
+            Noesis Lab
+          </Link>
+          <span className="text-slate-600">/</span>
+          <Link to="/learn" className="text-sm text-slate-400 hover:text-slate-200">
+            Learn
+          </Link>
+          {crumb !== undefined && (
+            <>
+              <span className="text-slate-600">/</span>
+              <span className="font-mono text-xs text-slate-500">{crumb}</span>
+            </>
+          )}
+        </div>
+      </header>
+      <main className="mx-auto max-w-3xl px-6 py-10">
+        <h1 className="text-2xl font-semibold text-slate-100">{title}</h1>
+        <div className="mt-6 space-y-8">{children}</div>
+      </main>
+    </div>
+  );
+}
+
+/** A titled block, so every section on the page reads as the same object. */
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="border-b border-slate-800 pb-2 text-sm font-semibold text-slate-200">{title}</h2>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function Concepts({ exercise }: { exercise: Exercise }) {
+  return (
+    <Section title="What this is the first time you meet">
+      <ul className="space-y-1.5">
+        {exercise.concepts.map((concept) => (
+          <li key={concept} className="flex gap-2 text-sm leading-relaxed text-slate-400">
+            <span className="text-sky-500">·</span>
+            {concept}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+function PartsTable({ exercise }: { exercise: Exercise }) {
+  return (
+    <Section title="What you need">
+      <table className="w-full text-sm">
+        <tbody>
+          {exercise.parts.map((entry) => (
+            <tr key={entry.name} className="border-b border-slate-800/60 last:border-0">
+              <td className="w-8 py-1.5 text-right font-mono text-xs text-slate-500">{entry.qty}×</td>
+              <td className="w-48 py-1.5 pr-4 text-slate-200">{entry.name}</td>
+              <td className="py-1.5 text-slate-400">{entry.why}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-slate-500">
+        Part names are the simulator's own, so what you read here is exactly what you will find in
+        the Components list. A 10 kΩ resistor is listed as <code>10k Resistor</code>.
+      </p>
+    </Section>
+  );
+}
+
+function WiringTable({ exercise }: { exercise: Exercise }) {
+  return (
+    <Section title="Wiring">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
+            <th className="py-1.5 pr-4 font-normal">Board pin</th>
+            <th className="py-1.5 pr-4 font-normal">Part</th>
+            <th className="py-1.5 pr-4 font-normal">Terminal</th>
+            <th className="py-1.5 font-normal">Connects to</th>
+          </tr>
+        </thead>
+        <tbody>
+          {exercise.wiring.map((row) => (
+            <tr key={`${row.pin}-${row.part}-${row.terminal}`} className="border-t border-slate-800/60">
+              <td
+                className={`py-1.5 pr-4 font-mono text-xs ${
+                  isBoardPin(row.pin) ? 'text-sky-400' : 'text-slate-500'
+                }`}
+              >
+                {row.pin}
+              </td>
+              <td className="py-1.5 pr-4 text-slate-200">{row.part}</td>
+              <td className="py-1.5 pr-4 font-mono text-xs text-slate-400">{row.terminal}</td>
+              <td className="py-1.5 text-slate-400">{row.goesTo}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Section>
+  );
+}
+
+function Steps({ exercise }: { exercise: Exercise }) {
+  return (
+    <Section title="Build order">
+      <ol className="space-y-2">
+        {exercise.steps.map((step, index) => (
+          <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-400">
+            <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-slate-600">
+              {index + 1}.
+            </span>
+            {step}
+          </li>
+        ))}
+      </ol>
+    </Section>
+  );
+}
+
+function SketchPanel({ exercise }: { exercise: Exercise }) {
+  return (
+    <Section title="The program">
+      <p className="mb-3 text-sm leading-relaxed text-slate-400">
+        Press <span className="text-slate-200">Put it on the bench</span> at the bottom: it wires the
+        circuit above onto the bench and loads this sketch into the editor. Then press Run.
+      </p>
+      <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900 p-4 text-xs leading-relaxed text-slate-300">
+        <code>{exercise.sketch}</code>
+      </pre>
+    </Section>
+  );
+}
+
+function FaultPanel({ exercise }: { exercise: Exercise }) {
+  if (exercise.fault === undefined) return null;
+  return (
+    <Section title="Break it on purpose">
+      <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
+        <p className="text-sm font-medium text-amber-200">{exercise.fault.break_}</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{exercise.fault.teaches}</p>
+      </div>
+    </Section>
+  );
+}
+
+function Hints({
+  exercise,
+  revealed,
+  setRevealed,
+}: {
+  exercise: Exercise;
+  revealed: number;
+  setRevealed: (count: number) => void;
+}) {
+  const available = exercise.hints.length;
+  return (
+    <Section title="Need a nudge?">
+      <p className="mb-3 text-sm leading-relaxed text-slate-400">
+        Try it yourself first — the guessing is the skill. If you are stuck, take the next one.
+      </p>
+      <div className="space-y-2">
+        {exercise.hints.slice(0, revealed).map((hint) => (
+          <div key={hint.when} className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+            <p className="text-sm font-medium text-slate-200">{hint.when}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{hint.answer}</p>
+          </div>
+        ))}
+      </div>
+      {revealed < available && (
+        <button
+          type="button"
+          onClick={() => setRevealed(revealed + 1)}
+          className="ctl mt-3"
+        >
+          {revealed === 0 ? 'Show a hint' : `Another hint (${available - revealed} left)`}
+        </button>
+      )}
+    </Section>
+  );
+}
+
+function References({ exercise }: { exercise: Exercise }) {
+  return (
+    <Section title="References">
+      <dl className="space-y-4">
+        {exercise.references.map((reference) => (
+          <div key={reference.term}>
+            <dt className="text-sm font-medium text-slate-200">{reference.term}</dt>
+            <dd className="mt-1 text-sm leading-relaxed text-slate-400">
+              {reference.what}{' '}
+              {reference.readMore !== undefined && (
+                <a
+                  href={reference.readMore}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sky-400 underline underline-offset-2"
+                >
+                  Arduino reference
+                </a>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-4 text-xs text-slate-500">
+        Full write-up: <code>{exercise.writeUp}</code> in the repository. More vocabulary on the{' '}
+        <Link to="/learn/references" className="text-sky-400 underline underline-offset-2">
+          reference page
+        </Link>
+        .
+      </p>
+    </Section>
+  );
+}
+
+/**
+ * The reference page: the vocabulary a beginner is assumed not to have.
+ *
+ * Separate from the exercises because it is read out of order, all at once,
+ * by someone who does not yet have a question to attach a word to. The exercises
+ * explain the terms they are about to use; this is where someone who meets
+ * "pull-up" for the first time goes to find out what it is.
+ */
+export function ReferencesPage() {
+  return (
+    <ExerciseShell title="Reference &amp; glossary">
+      <p className="text-sm leading-relaxed text-slate-400">
+        The words and numbers an embedded course assumes you already know. Nothing here is specific to
+        any one exercise — it is the vocabulary the exercises are written in.
+      </p>
+
+      <Section title="Reading a board">
+        <dl className="space-y-4">
+          <Term
+            term="VCC / 5V / 3V3"
+            what="The positive supply. On the Uno, 5V. A pin set HIGH drives this voltage; a pin set LOW drives 0V."
+          />
+          <Term
+            term="GND"
+            what="Ground: the return path. Every circuit is a loop, and GND is how it closes. A circuit with no wire back to GND has nowhere for current to go."
+          />
+          <Term
+            term="D0–D13"
+            what="Digital pins. Each is either an input (reading 0V or 5V) or an output (driving 0V or 5V). The Uno's D0 and D1 are also the serial link, so using them costs you the Serial monitor."
+          />
+          <Term
+            term="A0–A5"
+            what="Analog inputs. They read a voltage between 0V and VCC and report it as a number — 0–1023 on the Uno's 10-bit ADC."
+          />
+          <Term
+            term="Silkscreen"
+            what="The white printing on the board. It is the only thing telling you which pin is which, and it is what a wiring table refers to."
+          />
+        </dl>
+      </Section>
+
+      <Section title="Breadboard">
+        <dl className="space-y-4">
+          <Term
+            term="Rails"
+            what="The two long rows down each edge, one red (+) and one blue (−). Each rail is one continuous connection along its whole length, and they are not joined to each other or to anything in the middle."
+          />
+          <Term
+            term="The trench"
+            what="The channel down the centre of the board. It breaks every row in two: nothing joins across it. A leg left in the trench is the single commonest reason a first circuit does nothing."
+          />
+          <Term
+            term="A row of five"
+            what="The tie points between the rails are joined sideways in groups of five. Holes in the same row of five are connected; holes in neighbouring rows are not."
+          />
+        </dl>
+      </Section>
+
+      <Section title="The vocabulary of a program">
+        <dl className="space-y-4">
+          {GLOSSARY.map((entry) => (
+            <Term key={entry.term} term={entry.term} what={entry.what} readMore={entry.readMore} />
+          ))}
+        </dl>
+      </Section>
+
+      <Section title="Numbers worth knowing">
+        <dl className="space-y-4">
+          <Term
+            term="I = (Vsupply − Vforward) / R"
+            what="The one formula behind every current-limiting decision in this course. With a 5V supply, a red LED (Vforward ≈ 1.9V) and 220Ω, that is (5 − 1.9) / 220 ≈ 14mA."
+          />
+          <Term
+            term="40 mA per pin, 200 mA total"
+            what="The ATmega328P's limits. A pin may source or sink 40mA absolutely and 20mA as a recommendation; all the pins together may not exceed 200mA. Three LEDs at 14mA is comfortably inside both."
+          />
+          <Term
+            term="10-bit, so 1024 steps"
+            what="The Uno's ADC reports 0–1023 across 0–5V, so each count is about 4.9mV. That quantisation floor is visible in Module 3 and is a real constraint, not a rounding detail."
+          />
+          <Term
+            term="millis() wraps at ~49.7 days"
+            what="Why every non-blocking timer in this course compares with unsigned subtraction — `if (now - last >= INTERVAL)` — rather than `now >= last + INTERVAL`, which breaks once every 49.7 days."
+          />
+        </dl>
+      </Section>
+
+      <Section title="Where to read more">
+        <ul className="space-y-2 text-sm">
+          {[
+            ['Language reference', 'https://docs.arduino.cc/language-reference/'],
+            ['digitalRead / digitalWrite', 'https://docs.arduino.cc/language-reference/en/functions/digital/'],
+            ['analogRead / analogWrite', 'https://docs.arduino.cc/language-reference/en/functions/analog/'],
+            ['millis / micros / delay', 'https://docs.arduino.cc/language-reference/en/functions/time/'],
+            ['Wire (I²C)', 'https://docs.arduino.cc/language-reference/en/functions/comm/wire/'],
+            ['SPI', 'https://docs.arduino.cc/language-reference/en/functions/comm/spi/'],
+          ].map(([label, href]) => (
+            <li key={href}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-400 underline underline-offset-2"
+              >
+                {label}
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          Datasheets are where the real answers live, and they are free. The two worth having on hand
+          are the <strong>ATmega328P</strong> datasheet (every pin, register and electrical limit of
+          the Uno) and the datasheet for whichever sensor module you are using.
+        </p>
+      </Section>
+    </ExerciseShell>
+  );
+}
+
+function Term({
+  term,
+  what,
+  readMore,
+}: {
+  term: string;
+  what: string;
+  readMore?: string;
+}) {
+  return (
+    <div>
+      <dt className="text-sm font-medium text-slate-200">{term}</dt>
+      <dd className="mt-1 text-sm leading-relaxed text-slate-400">
+        {what}{' '}
+        {readMore !== undefined && (
+          <a
+            href={readMore}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sky-400 underline underline-offset-2"
+          >
+            Read more
+          </a>
+        )}
+      </dd>
+    </div>
+  );
+}
