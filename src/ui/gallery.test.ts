@@ -80,4 +80,8 @@ describe('the project gallery', () => {
   it('sweeps the dashboard horn', () => {
     expect(galleryById('dashboard')?.title).toBe('Servo Dashboard');
   });
+
+  it('beeps at the parking sensor', () => {
+    expect(galleryById('parking')?.title).toBe('Parking Sensor');
+  });
 });
