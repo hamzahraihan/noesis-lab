@@ -22,7 +22,17 @@ export const WIPER_KNOB: KnobSpec = {
   defaultValue: 0.5,
 };
 
-/** Through-hole resistor, 0.25 W axial, leads on a 10.16 mm body. */
+/**
+ * Through-hole resistor, 0.25 W axial, leads on a 10.16 mm body.
+ *
+ * The pins sit at the ends of the drawn leads, one grid step down, and that
+ * is the whole reason for the number. They used to sit at y = 1.6, the middle
+ * of the part's own 3.2 mm box, which is above where the lead visibly stops:
+ * a wire clipped to the pin met the body a millimetre higher than the metal it
+ * was supposed to be soldered to, so it read as floating against the resistor's
+ * waist. 2.54 is where `AxialLeads` terminates, and it is a whole 0.1" step, so
+ * a resistor dropped on the breadboard lands in a real row.
+ */
 export function resistorDefinition(ohms: number): PartDefinition {
   return {
     id: `resistor-${ohms}`,
@@ -32,26 +42,37 @@ export function resistorDefinition(ohms: number): PartDefinition {
     heightMm: 3.2,
     component: { kind: 'resistor', ohms },
     pins: [
-      { id: 'a', label: '', x: 0, y: 1.6 },
-      { id: 'b', label: '', x: 10.16, y: 1.6 },
+      { id: 'a', label: '', x: 0, y: 2.54 },
+      { id: 'b', label: '', x: 10.16, y: 2.54 },
     ],
     bodyColour: '#d8c9a3',
     legendColour: '#3a3222',
   };
 }
 
-/** 5 mm through-hole LED. The cathode is the shorter lead and the flat side. */
+/**
+ * 5 mm through-hole LED, drawn by the Wokwi element: dome, flange and long
+ * legs, tinted by the diode profile and lit by the solver's forward bias.
+ *
+ * The geometry is the element's own, converted from its `pinInfo` pixels at
+ * 96 per inch (`px * 25.4 / 96`): the legs land at x = 15 px (cathode) and
+ * 25 px (anode), both at y = 42 px, in a 40 x 50 px body. Defining the pins
+ * anywhere else puts the wires somewhere the visible legs are not, so they
+ * read as floating beside the part instead of soldered to it. The 2.64 mm
+ * leg spacing sits 0.1 mm off the breadboard pitch, well inside the 0.4 mm
+ * snap that joins a leg to its hole.
+ */
 export function ledDefinition(profile: DiodeProfile, colourName: string): PartDefinition {
   return {
     id: `led-${profile === DIODE_PROFILES.blue ? 'blue' : 'generic'}`,
     name: `${colourName} LED`,
     category: 'output',
-    widthMm: 6,
-    heightMm: 6,
+    widthMm: 10.583,
+    heightMm: 13.229,
     component: { kind: 'led', profile },
     pins: [
-      { id: 'anode', label: 'A', x: 0, y: 3 },
-      { id: 'cathode', label: 'K', x: 2.54, y: 3 },
+      { id: 'anode', label: 'A', x: 6.61, y: 11.11 },
+      { id: 'cathode', label: 'K', x: 3.97, y: 11.11 },
     ],
     bodyColour: profile === DIODE_PROFILES.blue ? '#2b4fd6' : '#d63b3b',
     legendColour: '#ffffff',
