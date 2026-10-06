@@ -24,7 +24,7 @@ import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardR
 import { PartPreview } from './PartPreview';
 
 /** A spec chip: a label and the value it describes, in the board's own units. */
-function Chip({ label, value }: { readonly label: string; readonly value: string }) {
+export function Chip({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <span className="inline-flex items-baseline gap-1.5 rounded-md bg-slate-800 px-2 py-1 text-xs">
       <span className="text-slate-500">{label}</span>
@@ -42,7 +42,7 @@ function Chip({ label, value }: { readonly label: string; readonly value: string
  * is the same artwork at the same millimetre size the bench opens on, so the
  * picture cannot drift from the board that gets built.
  */
-function BoardArt({ board, className }: { readonly board: BoardOption; readonly className: string }) {
+export function BoardArt({ board, className }: { readonly board: BoardOption; readonly className: string }) {
   // Every board's `make()` builds a fresh definition; memoised on the entry
   // itself, which is a module-level constant and so stable across renders.
   const definition = useMemo(() => board.make(), [board]);
