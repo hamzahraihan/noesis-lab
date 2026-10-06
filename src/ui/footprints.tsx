@@ -122,38 +122,6 @@ export function PartFootprint({
   );
 }
 
-function PinMark({
-  pin,
-  part,
-  state,
-}: {
-  pin: PinSpec;
-  part: PartInstance;
-  state: FootprintState;
-}) {
-  const volts = state.pinVolts.get(`${part.id}:${pin.id}`) ?? 0;
-  const energised = Math.abs(volts) > 0.5;
-  return (
-    <g>
-      <circle
-        cx={pin.x}
-        cy={pin.y}
-        r={PIN_RADIUS_MM + 0.5}
-        fill="#0f1115"
-        opacity={0.5}
-      />
-      <circle
-        cx={pin.x}
-        cy={pin.y}
-        r={PIN_RADIUS_MM}
-        fill={energised ? '#fbbf24' : '#3f4652'}
-        stroke="#111827"
-        strokeWidth={0.15}
-      />
-    </g>
-  );
-}
-
 function shapeFor(
   definition: PartDefinition,
   part: PartInstance,
@@ -190,6 +158,38 @@ function shapeFor(
     case 'display':
       return <DisplayBody definition={definition} state={state} part={part} />;
   }
+}
+
+function PinMark({
+  pin,
+  part,
+  state,
+}: {
+  pin: PinSpec;
+  part: PartInstance;
+  state: FootprintState;
+}) {
+  const volts = state.pinVolts.get(`${part.id}:${pin.id}`) ?? 0;
+  const energised = Math.abs(volts) > 0.5;
+  return (
+    <g>
+      <circle
+        cx={pin.x}
+        cy={pin.y}
+        r={PIN_RADIUS_MM + 0.5}
+        fill="#0f1115"
+        opacity={0.5}
+      />
+      <circle
+        cx={pin.x}
+        cy={pin.y}
+        r={PIN_RADIUS_MM}
+        fill={energised ? '#fbbf24' : '#3f4652'}
+        stroke="#111827"
+        strokeWidth={0.15}
+      />
+    </g>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +361,29 @@ interface BoardDressing {
     pin: string;
   }>;
   readonly module?: { x: number; y: number; width: number; height: number; label: string };
+  /** Chips drawn on the board, for one whose layout is not a USB variant. */
+  readonly chips?: ReadonlyArray<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    legs: number;
+    text: string;
+  }>;
+  /**
+   * That this board's header is one block rather than two runs down its edges.
+   *
+   * Nearly every board here splits down the midpoint and gets a header down
+   * each side, which is what they look like. A single-board computer carries a
+   * 2x20 block in the middle of a much wider board instead, and that split
+   * would cut its header in half and draw two strips down the far edges,
+   * nowhere near the holes.
+   *
+   * The runs are the pins grouped by their own column, which is what a header
+   * block is. Spelling them out again would be a second copy of the pin table
+   * to keep in step with the first.
+   */
+  readonly headerIsBlock?: boolean;
 }
 
 const BOARD_DRESSING: Readonly<Record<string, BoardDressing>> = {
@@ -388,6 +411,27 @@ const BOARD_DRESSING: Readonly<Record<string, BoardDressing>> = {
       { label: 'RX', x: 62.6, y: 5.6, colour: '#f0b429', pin: 'J1_D13' },
     ],
   },
+  /*
+   * A Pi carries its header as a 2x20 block near one edge rather than as two
+   * runs down the sides, so it is the board that says the header is one block.
+   *
+   * The processor and the memory beside it are most of what is on this board,
+   * and the only thing that tells it apart from a blank green rectangle on a
+   * card. A real Pi 4 shields its SoC under a metal can; there is no part here
+   * for one, so the chip is drawn bare and named rather than invented.
+   */
+  'raspberry-pi-4': {
+    usb: 'none',
+    barrelJack: false,
+    buttons: [],
+    indicators: [],
+    headerIsBlock: true,
+    chips: [
+      { x: 40, y: 20, width: 8, height: 8, legs: 7, text: 'BCM2711' },
+      { x: 53, y: 21, width: 6, height: 6, legs: 6, text: 'RAM' },
+      { x: 62, y: 22, width: 6, height: 5, legs: 6, text: '' },
+    ],
+  },
 };
 
 const BoardBody = staticBody(function BoardBody({
@@ -401,8 +445,19 @@ const BoardBody = staticBody(function BoardBody({
 }) {
   const { widthMm: width, heightMm: height } = definition;
   const dressing = BOARD_DRESSING[definition.id];
-  const left = definition.pins.filter((pin) => pin.x < width / 2);
-  const right = definition.pins.filter((pin) => pin.x >= width / 2);
+  /*
+   * Two runs down the edges is what nearly every board here is, and splitting
+   * on the midpoint gets it for free. A board whose header is one block gets
+   * its runs from the pins instead, grouped along the axis they run down.
+   */
+  const headerRuns: readonly PinSpec[][] = dressing?.headerIsBlock
+    ? [...new Set(definition.pins.map((pin) => pin.x))]
+        .sort((a, b) => a - b)
+        .map((x) => definition.pins.filter((pin) => pin.x === x))
+    : [
+        definition.pins.filter((pin) => pin.x < width / 2),
+        definition.pins.filter((pin) => pin.x >= width / 2),
+      ];
   const silk = definition.legendColour;
 
   return (
@@ -456,26 +511,33 @@ const BoardBody = staticBody(function BoardBody({
         </>
       )}
 
+      {/*
+       * Chips a board's own layout calls for, outside any USB variant. A
+       * single-board computer has no barrel jack and no USB-B, so its processor
+       * is placed by hand like everything else about it.
+       */}
+      {(dressing?.chips ?? []).map((chip) => (
+        <Chip key={`${chip.x}:${chip.y}`} {...chip} />
+      ))}
+
       {dressing?.buttons.map((button) => (
         <BoardButton key={button.label} x={button.x} y={button.y} label={button.label} labelColour={silk} />
       ))}
 
-      <PinHeader
-        pins={left}
-        x={left[0]?.x ?? 0}
-        from={left[0]?.y ?? 0}
-        to={left[left.length - 1]?.y ?? 0}
-        labelColour={silk}
-      />
-      <PinHeader
-        pins={right}
-        x={right[0]?.x ?? 0}
-        from={right[0]?.y ?? 0}
-        to={right[right.length - 1]?.y ?? 0}
-        labelColour={silk}
-      />
+      {headerRuns.map((pins) => (
+        <PinHeader key={pins[0] ? `${pins[0].x}:${pins[0].y}` : 'empty'} pins={pins} labelColour={silk} />
+      ))}
 
-      <HeaderSilkscreen definition={definition} left={left} right={right} />
+      {/*
+       * Per-pin silkscreen, only where the pins run down the edges. A 2x20 block
+       * puts forty labels two and a half millimetres apart, which at working
+       * zoom reads as a grey band -- worse than leaving the names to the
+       * datasheet, which is where a single-board computer's own silkscreen
+       * leaves them anyway.
+       */}
+      {!dressing?.headerIsBlock && (
+        <HeaderSilkscreen definition={definition} left={headerRuns[0]} right={headerRuns[1]} />
+      )}
 
       {dressing?.indicators.map((led) => (
         <IndicatorLed
@@ -883,10 +945,17 @@ function DisplayBody({
   const panel = definition.displayPixels;
   const isColour = controller instanceof Ili9341;
   const headerY = definition.pins[0]?.y ?? definition.heightMm - 6;
-  // The bezel is the glass on its carrier: 26 mm square on the OLED, 53 mm
-  // square on the TFT. Sizing both from the TFT left the OLED's outline
-  // hanging 20 mm past its own carrier, so clicks on the glass missed the part.
-  const bezelMm = isColour ? TFT_PANEL_MM : PANEL_MM;
+  /*
+   * The bezel is the glass on its carrier, taken from the panel's own declared
+   * size. A remembered 53 mm square suited the 2.4" and nothing else, and using
+   * it for the 3.2" left the outline hanging past the carrier so clicks on the
+   * glass missed the part entirely. Reading the definition rather than the
+   * controller is what keeps this right before a controller exists at all, and
+   * is why a portrait panel gets a portrait bezel.
+   */
+  const glass = definition.glassMm ?? (isColour
+    ? { width: TFT_PANEL_MM, height: TFT_PANEL_MM }
+    : { width: PANEL_MM, height: PANEL_MM });
 
   return (
     <g filter="url(#nz-lift)">
@@ -902,12 +971,10 @@ function DisplayBody({
       <rect width={definition.widthMm} height={definition.heightMm} rx={1.6} fill="url(#nz-mask)" />
       <MountingHole x={2.4} y={2.4} radius={1.1} />
       <MountingHole x={definition.widthMm - 2.4} y={2.4} radius={1.1} />
-
+      <rect x={0.7} y={0.7} width={glass.width} height={glass.height} rx={0.8} fill="#0a0d12" />
       {/* The black bezel the glass is bonded to. */}
-      <rect x={0.7} y={0.7} width={bezelMm} height={bezelMm} rx={0.8} fill="#0a0d12" />
-
       {isColour ? (
-        <ColourPanel controller={controller} panel={panel} />
+        <ColourPanel controller={controller} panel={panel} glass={glass} />
       ) : (
         <MonoPanel controller={controller} panel={panel} />
       )}
@@ -979,16 +1046,46 @@ function MonoPanel({
   );
 }
 
-/** The 320x240 TFT: blitted to a canvas, because 76800 rects is not a DOM. */
+/**
+ * The colour TFT: blitted to a canvas, because 76800 rects is not a DOM.
+ *
+ * Both the canvas and the glass it sits on take their shape from the panel
+ * rather than from a constant. That is what makes rotation work at all: when
+ * the sketch turns the panel, `width` and `height` swap, and a renderer with
+ * the old numbers hardcoded would draw a 480x320 picture into a 240x320 box.
+ * The bezel follows the glass for the same reason, so a portrait panel gets a
+ * portrait bezel instead of being squashed into a square one.
+ */
 function ColourPanel({
   controller,
   panel,
+  glass,
 }: {
   controller: DisplayController | undefined;
   panel: PartDefinition['displayPixels'];
+  glass: { readonly width: number; readonly height: number };
 }) {
   const tft = controller instanceof Ili9341 ? controller : undefined;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  /*
+   * What the panel is showing right now. The controller knows, and it is the
+   * only thing that does: the definition records the glass, the controller
+   * records how it is being read. Falling back to the definition means a panel
+ * whose controller has not been built yet still draws at its own size rather
+   * than at nothing.
+ */
+  const width = tft?.width ?? panel?.width ?? 0;
+  const height = tft?.height ?? panel?.height ?? 0;
+
+  /*
+   * The glass, in millimetres, comes from the part's own declared size. What
+   * a pixel measures depends on the panel -- a 3.2" has a wider pixel pitch
+   * than a 2.4" over fewer millimetres -- so deriving it from the pixel count
+   * would draw one of them at the wrong physical size.
+   */
+  const glassWidthMm = glass.width;
+  const glassHeightMm = glass.height;
 
   // Deliberately no dependency list. The framebuffer is mutated in place, so
   // the controller's identity never changes and a memoised effect would run
@@ -997,35 +1094,41 @@ function ColourPanel({
   // actually want.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !tft || !panel) return;
+    if (!canvas || !tft || width === 0 || height === 0) return;
     const context = canvas.getContext('2d');
     if (!context) return;
-    const image = context.createImageData(panel.width, panel.height);
+    // The image is the panel's own size, so the bitmap and the canvas agree and
+    // the browser is scaling one pixel to one pixel.
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const image = context.createImageData(width, height);
     image.data.set(tft.toRgba());
     context.putImageData(image, 0, 0);
   });
+
+  if (width === 0 || height === 0) return null;
 
   return (
     <g>
       <rect
         x={1.4}
         y={1.4}
-        width={TFT_PANEL_MM - 1.4}
-        height={TFT_PANEL_MM - 1.4}
+        width={glassWidthMm - 1.4}
+        height={glassHeightMm - 1.4}
         fill={tft?.isOn() ? '#050a12' : '#020408'}
       />
-      {tft && panel && (
-        <foreignObject x={1.4} y={1.4} width={TFT_PANEL_MM - 1.4} height={TFT_PANEL_MM - 1.4}>
+      {tft && (
+        <foreignObject x={1.4} y={1.4} width={glassWidthMm - 1.4} height={glassHeightMm - 1.4}>
           <canvas
             ref={canvasRef}
-            width={panel.width}
-            height={panel.height}
+            width={width}
+            height={height}
             style={{ width: '100%', height: '100%', display: 'block' }}
           />
         </foreignObject>
       )}
-      <rect x={1.4} y={1.4} width={TFT_PANEL_MM - 1.4} height={TFT_PANEL_MM - 1.4} fill="url(#nz-glass)" />
-      <rect x={0.7} y={0.7} width={TFT_PANEL_MM} height={TFT_PANEL_MM} rx={0.8} fill="none" stroke="#000" strokeWidth={0.5} />
+      <rect x={1.4} y={1.4} width={glassWidthMm - 1.4} height={glassHeightMm - 1.4} fill="url(#nz-glass)" />
+      <rect x={0.7} y={0.7} width={glassWidthMm} height={glassHeightMm} rx={0.8} fill="none" stroke="#000" strokeWidth={0.5} />
     </g>
   );
 }
