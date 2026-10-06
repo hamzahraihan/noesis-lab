@@ -25,6 +25,7 @@ import {
   type Exercise,
 } from './exercises';
 import { GLOSSARY } from './glossary';
+import { ExercisePreview } from './ExercisePreview';
 
 /**
  * The silkscreen names a wiring table may name, for a beginner's sanity check.
@@ -61,66 +62,74 @@ export function ExercisesPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <p className="text-xs uppercase tracking-wider text-slate-500">
-          Arduino Uno R3 · the simulator
-        </p>
-        <h2 className="mt-2 text-2xl font-semibold text-slate-100">
+        <h2 className="text-2xl font-semibold tracking-tight text-balance text-slate-100">
           Embedded systems, from a pin you can switch
         </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
-          Nine exercises in five levels. Each one is a circuit you build and a program you write;
-          every circuit also runs here, so you can do the whole track without hardware on the desk.
-          Start at level 1 unless you already know what a pull-up is.
+        <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-slate-400">
+          Nine exercises in five levels, written for the Arduino Uno R3. Each one is a circuit
+          you build and a program you write; every circuit also runs in the simulator, so you
+          can do the whole track without hardware on the desk. Start at level 1 unless you
+          already know what a pull-up is.
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2">
           <Link to={`/bench/${EXERCISE_BOARD}`} className="ctl ctl-accent">
             Open the bench
           </Link>
-          <Link to="/learn/references" className="ctl">
+          <Link to="/learn/references" className="ctl ctl-outline">
             Reference &amp; glossary
           </Link>
         </div>
 
         {levels.map((level) => (
-          <section key={level} className="mt-10">
-            <div className="flex items-baseline gap-3 border-b border-slate-800 pb-2">
-              <h3 className="text-sm font-semibold text-slate-200">Level {level}</h3>
-              <span className="text-xs text-slate-500">
+          <section key={level} className="mt-12">
+            <div className="flex items-baseline gap-3 border-b border-slate-800 pb-2.5">
+              <h3 className="text-sm font-semibold tracking-tight text-slate-100">Level {level}</h3>
+              <span className="text-xs text-slate-400">
                 {level === STARTING_LEVEL ? 'start here' : `needs level ${level - 1}`}
               </span>
             </div>
 
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-4 space-y-2.5">
               {EXERCISES.filter((exercise) => exercise.level === level).map((exercise) => (
                 <li key={exercise.id}>
                   <Link
                     to={`/learn/${exercise.id}`}
-                    className="block rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 transition-colors hover:border-slate-700 hover:bg-slate-900"
+                    className="group block overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
                   >
+                    {/*
+                     * The destination, up front: the finished wiring each
+                     * exercise builds toward, drawn by the bench's own
+                     * renderer rather than described.
+                     */}
+                    <span className="block h-28 border-b border-slate-800 bg-slate-950">
+                      <ExercisePreview exercise={exercise} fit="slice" className="h-full w-full" />
+                    </span>
+                    <span className="block px-4 py-3.5">
                     <div className="flex items-baseline gap-3">
-                      <span className="font-mono text-xs text-slate-500">{exercise.id}</span>
-                      <span className="font-medium text-slate-100">{exercise.title}</span>
-                      <span className="ml-auto shrink-0 text-xs text-slate-500">
+                      <span className="num font-mono text-xs text-sky-400/90">{exercise.id}</span>
+                      <span className="font-medium tracking-tight text-slate-100">{exercise.title}</span>
+                      <span className="num ml-auto shrink-0 text-xs text-slate-500">
                         {exercise.minutes}
                       </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-400">
+                    <p className="mt-1.5 line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-slate-400">
                       {exercise.brief}
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-400">
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium text-slate-300">
                         {exercise.difficulty}
                       </span>
                       {exercise.concepts.slice(0, 2).map((concept) => (
                         <span
                           key={concept}
-                          className="rounded bg-slate-800/70 px-1.5 py-0.5 text-[11px] text-slate-500"
+                          className="rounded-md bg-slate-800/70 px-1.5 py-0.5 text-[11px] text-slate-500"
                         >
                           {concept}
                         </span>
                       ))}
                     </div>
+                    </span>
                   </Link>
                 </li>
               ))}
@@ -157,10 +166,12 @@ export function ExercisePage() {
 
   return (
     <ExerciseShell title={exercise.title} crumb={exercise.id}>
-      <p className="text-xs uppercase tracking-wider text-slate-500">
+      <p className="text-xs text-slate-400">
         {exercise.module} · {exercise.difficulty} · {exercise.minutes}
       </p>
-      <p className="mt-3 text-sm leading-relaxed text-slate-300">{exercise.brief}</p>
+      <p className="mt-3 max-w-[65ch] text-[15px] leading-relaxed text-slate-300">{exercise.brief}</p>
+
+      <FinishedBuild exercise={exercise} />
 
       <Concepts exercise={exercise} />
       <PartsTable exercise={exercise} />
@@ -176,7 +187,11 @@ export function ExercisePage() {
         <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`} className="ctl ctl-accent">
           Put it on the bench
         </Link>
-        <Link to="/learn/references" className="ctl">
+        <span className="text-xs text-slate-500">
+          Opens the bench with wiring + code, and the guide walks you through it.
+        </span>
+        <span className="flex-1" />
+        <Link to="/learn/references" className="ctl ctl-outline">
           Reference &amp; glossary
         </Link>
       </div>
@@ -213,8 +228,8 @@ function ExerciseShell({
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold text-slate-100">{title}</h1>
-        <div className="mt-6 space-y-8">{children}</div>
+        <h1 className="text-2xl font-semibold tracking-tight text-balance text-slate-100">{title}</h1>
+        <div className="mt-8 space-y-10">{children}</div>
       </main>
     </div>
   );
@@ -230,9 +245,46 @@ function Section({
 }) {
   return (
     <section>
-      <h2 className="border-b border-slate-800 pb-2 text-sm font-semibold text-slate-200">{title}</h2>
-      <div className="mt-3">{children}</div>
+      <h2 className="border-b border-slate-800 pb-2.5 text-sm font-semibold tracking-tight text-slate-100">{title}</h2>
+      <div className="mt-3.5">{children}</div>
     </section>
+  );
+}
+
+/**
+ * The destination, before the work: the finished wiring this exercise builds
+ * toward, drawn by the bench's own renderer, plus what "working" looks like
+ * once it is running. A learner who can picture the end state reads every
+ * step that follows as getting closer to it.
+ */
+function FinishedBuild({ exercise }: { exercise: Exercise }) {
+  const working = exercise.solution?.working;
+  return (
+    <figure>
+      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
+        <ExercisePreview exercise={exercise} className="h-64 w-full" />
+      </div>
+      <figcaption className="mt-2 text-xs leading-relaxed text-slate-500">
+        The finished wiring, exactly as the bench loads it — unpowered here, so nothing is lit.
+        Put it on the bench and press Run to see it live.
+      </figcaption>
+      {working !== undefined && working.length > 0 && (
+        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <h3 className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
+            <CheckIcon className="icon-sm text-emerald-500" aria-hidden="true" />
+            When it is working
+          </h3>
+          <ul className="mt-2 space-y-1.5">
+            {working.map((sign) => (
+              <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-slate-400">
+                <CheckIcon className="icon-sm mt-0.5 shrink-0 text-emerald-500" aria-hidden="true" />
+                <span>{sign}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </figure>
   );
 }
 
@@ -334,11 +386,12 @@ function Steps({ exercise }: { exercise: Exercise }) {
 function SketchPanel({ exercise }: { exercise: Exercise }) {
   return (
     <Section title="The program">
-      <p className="mb-3 text-sm leading-relaxed text-slate-400">
-        Press <span className="text-slate-200">Put it on the bench</span> at the bottom: it wires the
-        circuit above onto the bench and loads this sketch into the editor. Then press Run.
+      <p className="mb-3 max-w-[65ch] text-sm leading-relaxed text-slate-400">
+        Press <span className="font-medium text-slate-200">Put it on the bench</span> below: it wires the
+        circuit above onto the bench, loads this sketch into the editor, and opens the guide
+        that walks you through it. Then press Run.
       </p>
-      <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900 p-4 text-xs leading-relaxed text-slate-300">
+      <pre className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs leading-relaxed text-slate-300 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
         <code>{exercise.sketch}</code>
       </pre>
     </Section>
@@ -384,7 +437,7 @@ function Hints({
         <button
           type="button"
           onClick={() => setRevealed(revealed + 1)}
-          className="ctl mt-3"
+          className="ctl ctl-outline mt-3"
         >
           {revealed === 0 ? 'Show a hint' : `Another hint (${available - revealed} left)`}
         </button>
@@ -420,7 +473,7 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
             The reasoning behind the wiring — why each pin is where it is, and what a finished
             circuit should be doing. Worth reading after you have tried it and read the hints.
           </p>
-          <button type="button" onClick={() => setOpen(true)} className="ctl">
+          <button type="button" onClick={() => setOpen(true)} className="ctl ctl-outline">
             Show the worked solution
           </button>
         </>
@@ -534,7 +587,7 @@ function References({ exercise }: { exercise: Exercise }) {
  */
 export function ReferencesPage() {
   return (
-    <ExerciseShell title="Reference &amp; glossary">
+    <ExerciseShell title="Reference & glossary">
       <p className="text-sm leading-relaxed text-slate-400">
         The words and numbers an embedded course assumes you already know. Nothing here is specific to
         any one exercise — it is the vocabulary the exercises are written in.
