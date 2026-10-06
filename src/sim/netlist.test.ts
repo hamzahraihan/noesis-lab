@@ -142,14 +142,17 @@ describe('end to end: an LED driven from an ESP32 pin', () => {
     builder.addWire(gpio2.x, gpio2.y, holeX(20), holeY(8));
 
     // Resistor across columns 20 to 24, both in the row-8 strip.
-    builder.addPart(resistorDefinition(resistorOhms), holeX(20), holeY(8) - 1.6);
+    builder.addPart(resistorDefinition(resistorOhms), holeX(20), holeY(8) - 2.54);
 
-    // LED anode shares column 24; the cathode steps one column along.
-    builder.addPart(ledDefinition(DIODE_PROFILES.red, 'Red'), holeX(24), holeY(8) - 3);
+    // LED anode shares column 24; the cathode sits one column back.
+    // Anode-anchored so the long leg lands on its hole.
+    const ledDef = ledDefinition(DIODE_PROFILES.red, 'Red');
+    const ledAnode = ledDef.pins.find((pin) => pin.id === 'anode')!;
+    builder.addPart(ledDef, holeX(24) - ledAnode.x, holeY(8) - ledAnode.y);
 
-    // LED cathode down to the bottom ground rail, and the board's own ground
-    // onto that same rail.
-    builder.addWire(holeX(25), holeY(8), holeX(25), railRowY(BOTTOM_NEGATIVE_RAIL));
+    // LED cathode (one column back from the anode) down to the bottom
+    // ground rail, and the board's own ground onto that same rail.
+    builder.addWire(holeX(23), holeY(8), holeX(23), railRowY(BOTTOM_NEGATIVE_RAIL));
     const ground = pinAt(esp32, 'L_GND');
     builder.addWire(ground.x, ground.y, holeX(10), railRowY(BOTTOM_NEGATIVE_RAIL));
 
