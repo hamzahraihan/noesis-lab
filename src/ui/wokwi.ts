@@ -25,7 +25,7 @@
  */
 
 import type { PartInstance } from '../sim/bench';
-import type { PartDefinition, SensorVariant } from '../sim/catalog';
+import type { PartDefinition, Rotation, SensorVariant } from '../sim/catalog';
 import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from '../sim/display/ili9341';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from '../sim/display/ssd1306';
 import { DIODE_PROFILES, type DiodeProfile } from '../sim/elements';
@@ -190,6 +190,33 @@ export function renderedSizeMm(definition: PartDefinition): { widthMm: number; h
   return wokwi ? { widthMm: wokwi.sizeMm.w, heightMm: wokwi.sizeMm.h } : definition;
 }
 
+/**
+ * Where a part's artwork actually paints, relative to the part's origin.
+ *
+ * The artwork is centred on the definition box, so the two share a centre and
+ * a rotation pivot: turning the part about the definition centre turns the
+ * artwork about its own. Where the boxes already match this is the origin
+ * itself and nothing moves; where they differ (the tactile button draws
+ * 7.413 mm wide in a 6 mm box) the artwork shifts half the difference rather
+ * than hanging off one side, which is what left presses on the visible body
+ * finding no part after a turn.
+ *
+ * The selection outline, the pointer hit test and the artwork all read this
+ * one answer, so the three can never disagree about where the part is.
+ */
+export function artworkBox(
+  definition: PartDefinition,
+  rotation: Rotation,
+): { dx: number; dy: number; widthMm: number; heightMm: number } {
+  const drawn = renderedSizeMm(definition);
+  const swapped = rotation === 90 || rotation === 270;
+  const defW = swapped ? definition.heightMm : definition.widthMm;
+  const defH = swapped ? definition.widthMm : definition.heightMm;
+  const artW = swapped ? drawn.heightMm : drawn.widthMm;
+  const artH = swapped ? drawn.widthMm : drawn.heightMm;
+  return { dx: (defW - artW) / 2, dy: (defH - artH) / 2, widthMm: artW, heightMm: artH };
+}
+
 /** The Wokwi part key for one of this bench's parts, or null if it has none. */
 export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
   switch (definition.component.kind) {
@@ -198,7 +225,11 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
     case 'led':
       return WOKWI_PARTS.led;
     case 'resistor':
-      return WOKWI_PARTS.resistor;
+      // Intentional fallback: the element spans 15.56 mm while the definition
+      // spans 10.16 mm on the breadboard grid, so the right-hand wire would
+      // land 5.4 mm inside the body. The hand-authored body draws its leads
+      // at the definition pins.
+      return null;
     case 'button':
       return WOKWI_PARTS['pushbutton-6mm'];
     case 'potentiometer':
