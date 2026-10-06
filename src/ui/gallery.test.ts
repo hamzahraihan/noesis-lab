@@ -3,6 +3,7 @@ import { PART_CATALOGUE } from '../sim/catalogue';
 import { breadboardDefinition } from '../sim/breadboard';
 import { boardOption } from './boardRegistry';
 import { GALLERY, galleryById } from './gallery';
+import { previewBench } from './exercise-preview-data';
 import { Simulation } from './simulation';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
@@ -87,5 +88,15 @@ describe('the project gallery', () => {
 
   it('logs the weather station', () => {
     expect(galleryById('weather')?.title).toBe('Weather Station');
+  });
+
+  it('frames every project preview on real content', () => {
+    for (const entry of GALLERY) {
+      const preview = previewBench(entry.boards[0], entry.setup, `gallery:${entry.id}`);
+      expect(preview.parts.length, `${entry.id} parts`).toBeGreaterThan(0);
+      expect(preview.frame.width, `${entry.id} width`).toBeGreaterThan(0);
+      expect(preview.frame.height, `${entry.id} height`).toBeGreaterThan(0);
+      expect(preview.paths.length, `${entry.id} paths`).toBeGreaterThan(0);
+    }
   });
 });

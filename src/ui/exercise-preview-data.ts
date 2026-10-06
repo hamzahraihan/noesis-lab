@@ -8,7 +8,7 @@
 
 import type { Bench, PartInstance } from '../sim/bench';
 import { breadboardDefinition } from '../sim/breadboard';
-import { boardOption } from './boardRegistry';
+import { boardOption, type BoardId } from './boardRegistry';
 import { exerciseBoard, type Exercise } from './exercises';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
@@ -37,24 +37,29 @@ export interface ExercisePreviewData {
 }
 
 /**
- * The finished bench for an exercise, built once and then kept.
+ * The finished bench for a board and a setup, built once and then kept.
  *
  * Simulations are cheap to hold but not free to build — each routed jumper
- * re-solves — and the Learn index shows every exercise at once. The cache
- * means each exercise pays that once per session, and the returned bench is
- * never mutated afterwards, so sharing it is safe.
+ * re-solves — and gallery and Learn pages show many builds at once. The
+ * cache means each build pays that once per session, and the returned bench
+ * is never mutated afterwards, so sharing it is safe. Keys are namespaced
+ * (`exercise:`, `gallery:`) so the two domains never collide.
  */
 const previewCache = new Map<string, ExercisePreviewData>();
 
-export function previewFor(exercise: Exercise): ExercisePreviewData {
-  const cached = previewCache.get(exercise.id);
+export function previewBench(
+  board: BoardId,
+  setup: (simulation: Simulation) => void,
+  cacheKey: string,
+): ExercisePreviewData {
+  const cached = previewCache.get(cacheKey);
   if (cached) return cached;
 
-  const board = boardOption(exerciseBoard(exercise)).make();
-  const simulation = new Simulation(board);
-  simulation.addPart(board, 0, 0);
+  const definition = boardOption(board).make();
+  const simulation = new Simulation(definition);
+  simulation.addPart(definition, 0, 0);
   simulation.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-  exercise.setup(simulation);
+  setup(simulation);
 
   const bench = simulation.bench;
   const parts = bench.parts.filter(
@@ -114,6 +119,10 @@ export function previewFor(exercise: Exercise): ExercisePreviewData {
         };
 
   const built: ExercisePreviewData = { bench, state, parts, frame, paths };
-  previewCache.set(exercise.id, built);
+  previewCache.set(cacheKey, built);
   return built;
+}
+
+export function previewFor(exercise: Exercise): ExercisePreviewData {
+  return previewBench(exerciseBoard(exercise), exercise.setup, `exercise:${exercise.id}`);
 }
