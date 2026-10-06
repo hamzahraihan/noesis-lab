@@ -309,7 +309,107 @@ void loop() {
   },
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE];
+/* ------------------------------------------------------------------ *
+ * Servo Dashboard — slide pot, hobby servo, three-LED bar
+ * ------------------------------------------------------------------ */
+
+const DASHBOARD: GalleryProject = {
+  id: 'dashboard',
+  title: 'Servo Dashboard',
+  blurb:
+    'A slide potentiometer becomes a steering wheel: the servo horn follows the knob and three LEDs show which third of the travel it is in.',
+  boards: ['uno'],
+  parts: [
+    { name: 'Slide Potentiometer', qty: 1 },
+    { name: 'Hobby Servo', qty: 1 },
+    { name: 'Green LED', qty: 1 },
+    { name: 'Yellow LED', qty: 1 },
+    { name: 'Red LED', qty: 1 },
+    { name: '220 Resistor', qty: 3 },
+  ],
+  sketch: `#include <Arduino.h>
+
+byte KNOB_PIN = 14;
+byte HORN_PIN = 19;
+byte LED_LOW = 6;
+byte LED_MID = 7;
+byte LED_HIGH = 8;
+
+void setup() {
+  servo.attach(HORN_PIN);
+  servo.write(HORN_PIN, 90);
+  pinMode(LED_LOW, OUTPUT);
+  pinMode(LED_MID, OUTPUT);
+  pinMode(LED_HIGH, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("dashboard up");
+}
+
+void loop() {
+  int raw = analogRead(KNOB_PIN);
+  int angle = map(raw, 0, 1023, 10, 170);
+  servo.write(HORN_PIN, angle);
+
+  digitalWrite(LED_LOW, raw < 341);
+  digitalWrite(LED_MID, raw >= 341 && raw < 682);
+  digitalWrite(LED_HIGH, raw >= 682);
+
+  Serial.print("knob ");
+  Serial.print(raw);
+  Serial.print(" horn ");
+  Serial.println(servo.read(HORN_PIN));
+  delay(200);
+}
+`,
+  working: [
+    'The horn tracks the knob from end stop to end stop, never asked past 10–170.',
+    'Exactly one of the three LEDs is lit, marking the third of the travel.',
+    'The serial monitor reports both numbers: the knob reading and the horn angle.',
+  ],
+  setup: (simulation) => {
+    simulation.clearExampleParts();
+    const supply = simulation.boardTerminal('5V');
+    const ground = simulation.boardTerminal('GND');
+    if (!supply || !ground) return;
+
+    simulation.placeExampleDevice('servo', PART_X, PART_Y);
+
+    const pot = simulation.addPart(part('Slide Potentiometer'), PART_X, PART_Y + PART_STEP);
+    const knob = simulation.boardTerminal('A0');
+    const endA = simulation.pinAt(pot, 'endA');
+    const wiper = simulation.pinAt(pot, 'wiper');
+    const endB = simulation.pinAt(pot, 'endB');
+    if (!knob || !endA || !wiper || !endB) return;
+    simulation.routeWire(supply, endA);
+    simulation.routeWire(endB, ground);
+    simulation.routeWire(wiper, knob);
+
+    const aspects = [
+      { led: 'Green LED', pin: 'D6' },
+      { led: 'Yellow LED', pin: 'D7' },
+      { led: 'Red LED', pin: 'D8' },
+    ];
+    aspects.forEach(({ led: ledName, pin }, index) => {
+      const led = simulation.addPart(part(ledName), PART_X, PART_Y + (2 + index) * PART_STEP);
+      const resistor = simulation.addPart(
+        part('220 Resistor'),
+        PART_X + 62,
+        PART_Y + (2 + index) * PART_STEP,
+      );
+      const boardPin = simulation.boardTerminal(pin);
+      const anode = simulation.pinAt(led, 'anode');
+      const cathode = simulation.pinAt(led, 'cathode');
+      const legA = simulation.pinAt(resistor, 'a');
+      const legB = simulation.pinAt(resistor, 'b');
+      if (!boardPin || !anode || !cathode || !legA || !legB) return;
+      simulation.routeWire(supply, anode);
+      simulation.routeWire(cathode, legA);
+      simulation.routeWire(legB, boardPin);
+    });
+  },
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
