@@ -27,10 +27,13 @@
  * learner.
  */
 
+import type { FirmwareLanguage } from '../sim/firmware/interpreter';
+import { boardOption, type BoardId } from './boardRegistry';
 import type { Simulation } from './simulation';
 import { EXERCISE_BOARD, PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
 import { MODULE_1 } from './exercises/module-1-gpio';
 import { MODULE_2 } from './exercises/module-2-analog';
+import { MODULE_5 } from './exercises/module-5-maps';
 import { MODULE_3 } from './exercises/module-3-bus-protocols';
 import { MODULE_4 } from './exercises/module-4-interrupts';
 
@@ -64,6 +67,54 @@ export interface ExerciseReference {
   readonly readMore?: string;
 }
 
+/**
+ * A worked answer to an exercise.
+ *
+ * The sketch is not this. The sketch is already printed in full on the exercise
+ * page, because a learner who cannot read the finished program will not be able
+ * to tell a wrong one from a right one. What a sketch cannot show is the part
+ * that actually transfers: why the wiring is shaped the way it is, which of two
+ * plausible wirings is the one that works, and what a finished circuit is
+ * supposed to do when you look at it.
+ *
+ * So a solution is reasoning rather than code. It is written to be read after a
+ * genuine attempt and before the last hint, which is the only point where it
+ * teaches anything -- read first it is transcription, and the exercise stops
+ * being worth doing.
+ */
+export interface ExerciseSolution {
+  /**
+   * How to get from the brief to a working circuit, in the order it happens.
+   *
+   * Each step is one decision, not one action. The order is the point: most of
+   * these exercises are finished the moment the reader decides what the pin
+   * numbers are for, and the wiring afterwards is transcription.
+   */
+  readonly approach: readonly string[];
+  /**
+   * The wiring, jumper by jumper, with the reason each one is where it is.
+   *
+   * Keyed on the same pin and terminal names as `Exercise.wiring` so the two
+   * tables can be read together, which is the whole point: the wiring table
+   * says what to connect, and this says what would happen if you connected
+   * something else there instead.
+   */
+  readonly wiring: readonly {
+    readonly pin: string;
+    readonly terminal: string;
+    readonly why: string;
+  }[];
+  /** What you should see when it is right, and what that proves. */
+  readonly working: readonly string[];
+  /**
+   * The mistakes that look like something other than a mistake.
+   *
+   * Every one of these produces a symptom a beginner reads as a broken part
+   * rather than a wrong wire, which is what makes them worth naming.
+   */
+  readonly traps: readonly string[];
+}
+
 export interface Exercise {
   /** Stable id, and the number the worksheet prints. */
   readonly id: string;
@@ -81,9 +132,30 @@ export interface Exercise {
     readonly qty: number;
     readonly why: string;
   }[];
+  /**
+   * The board this exercise is written for, when it is not the curriculum's.
+   *
+   * Almost every lesson here is an Uno lesson and leaves this unset. A lesson
+   * about a single-board computer has to say so, because the numbers in that
+   * lesson -- 3.3 V logic, no analogue input, BCM pin numbers -- are that
+   * board's, and an Uno's wiring put on a Pi would teach every one of them
+   * wrongly.
+   */
+  readonly board?: BoardId;
+  /** The grammar its sketch is written in, when the board's default is not it. */
+  readonly language?: FirmwareLanguage;
   readonly wiring: readonly ExerciseWiring[];
   /** The build order, so nobody has to work it out from the table. */
   readonly steps: readonly string[];
+  /**
+   * The worked answer, when there is one to give.
+   *
+   * Optional because an exercise with no solution is a legitimate state -- a
+   * work in progress, or one open-ended enough that a single answer would be a
+   * lie. Making the field required would mean inventing one rather than leaving
+   * it honestly absent.
+   */
+  readonly solution?: ExerciseSolution;
   /** The sketch the twin runs. Loaded by "Put it on the bench". */
   readonly sketch: string;
   /** What to try that should not work, and what it teaches. */
@@ -142,6 +214,109 @@ const FIRST_CIRCUIT: Exercise = {
     'Check every LED points the same way. An LED backwards does not light, and will not tell you why.',
     'Put the sketch in the editor and press Run. One LED should light.',
   ],
+  solution: {
+    approach: [
+      'The sketch writes to three different pins, so the circuit has to be three independent channels ' +
+        'rather than one LED the program moves around. One LED, one resistor, one pin — that is the ' +
+        'decision, and everything after it is placement.',
+      'Those pins are D8, D9 and D10, and the sketch already names them, so read the pin numbers off ' +
+        'the code rather than off the board. Not D13: it carries an LED and a resistor of its own, so ' +
+        'a correct build and a broken one look identical. D0 and D1 are the serial pins and stay free.',
+      'Each LED straddles the two rails rather than sitting on a pin: long leg (anode) to the 5V rail, ' +
+        'short leg (cathode) out to a 220 Ω resistor, and the far leg of that resistor to the pin. ' +
+        'Keeping the resistor on the cathode side leaves every long leg on one conductor, so a mistake ' +
+        'shows up as a single dark LED instead of three.',
+      'The pin is the switch, and the pin is the only thing the program ever touches — nothing reaches ' +
+        'a pin except through a resistor. A LED wired straight to a pin is the fault this exercise ' +
+        'asks you to break later, not the circuit you are building now.',
+      'The return path is one wire, not three. The blue − rail is a single conductor running the length ' +
+        'of the board, so one jumper to GND closes all three channels at the same time.',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'anode',
+        why:
+          'The anode is the long leg, and it is the side the current arrives at. Putting it on the 5V ' +
+          'rail rather than on a pin is what leaves the program in charge of whether this LED is lit; ' +
+          'an LED wired straight to a pin is lit by whatever else happens to be on that pin.',
+      },
+      {
+        pin: 'D8',
+        terminal: 'b',
+        why:
+          'This is the leg the sketch\'s `digitalWrite(RED, HIGH)` is aimed at, and the resistor in it ' +
+          'is the only thing limiting the current. Leave it out and the LED does not merely get ' +
+          'brighter — the pin pays for it, which is the fault this exercise ends with.',
+      },
+      {
+        pin: 'D9',
+        terminal: 'anode',
+        why:
+          'Same rule as red, and the reason the three stay tellable apart is that they sit on three ' +
+          'pins. Give two of them the same pin and they collapse into one channel that is on or off ' +
+          'together, which reads as a program bug rather than a wiring one.',
+      },
+      {
+        pin: 'D9',
+        terminal: 'b',
+        why:
+          'Each LED needs its own resistor; the three share the rails and nothing else. Two LEDs ' +
+          'sharing one means the second changes the first\'s brightness, and uneven or flickering light ' +
+          'is read as a failing LED rather than as a shared component.',
+      },
+      {
+        pin: 'D10',
+        terminal: 'anode',
+        why:
+          'Blue runs at a higher forward voltage than red, so on the same resistor it is always the ' +
+          'dimmer of the three — that is the part, not a fault. The anode still has to be the long leg ' +
+          'on the rail, or this channel never lights at all.',
+      },
+      {
+        pin: 'D10',
+        terminal: 'b',
+        why:
+          'The wiring here is identical to the other two by design, so the pin number is the only ' +
+          'thing keeping the third channel separate. Land this one on D9 as well and you get two LEDs ' +
+          'switching together, which looks like `loop()` is not doing what it says.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'a',
+        why:
+          'The blue − rail is one conductor, so this single jumper closes all three channels at once. ' +
+          'GND is not a spare terminal — it is the other end of every circuit, and a pin is only ever ' +
+          'driving a voltage relative to it. Without a path back, the pin is pushing into open air and ' +
+          'every LED stays dark at once, which looks like a dead board rather than a missing wire.',
+      },
+    ],
+    working: [
+      'Press Run and exactly one LED is lit at a time, stepping red, then green, then blue every 400 ms ' +
+        'and starting again. That is the proof each channel is complete on its own: a dark LED would ' +
+        'mean a gap in that one loop, not in the board.',
+      'No two LEDs ever come on together. If they do, two of the pin numbers in the sketch do not ' +
+        'match the wires, and the LEDs themselves are the last thing to suspect.',
+      'Red and green come out near equal brightness and blue is visibly dimmer. Same 220 Ω, same 5 V, ' +
+        'higher forward voltage — the difference is in the part, so the dim one is not a fault to chase.',
+      'Change a pin number in the sketch and the colour that answers changes while the breadboard stays ' +
+        'put. That is the LEDs responding to code, which is the whole idea of the exercise.',
+    ],
+    traps: [
+      'The LED is in backwards — long leg to the resistor, short leg to the rail. It then never lights ' +
+        'on any pin and in any sketch, which is indistinguishable from a dead LED. The long leg is the ' +
+        'anode, and the flat spot on the rim of the dome is on the cathode side.',
+      'A 10k Resistor where a 220 Resistor belongs. The LED does light, but at roughly 0.3 mA instead ' +
+        'of 14 mA, so in a bright room it reads as a failed part rather than as a resistor that is too ' +
+        'large. Check the colour bands before blaming the LED.',
+      'Both legs of one LED land in the same breadboard row. A row is five holes joined by a metal ' +
+        'strip, so the LED is shorted out around its resistor: that channel is dead while the other two ' +
+        'behave perfectly, and the arrangement looks entirely reasonable.',
+      'A leg sits in the trench down the middle of the board, or the − rail was never actually run down ' +
+        'to GND. Nothing at all lights, and on a first circuit the sensible conclusion — dead board, ' +
+        'dead LEDs — is the wrong one, because a single missing connection looks exactly the same.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 
 /*
@@ -299,6 +474,7 @@ export const EXERCISES: readonly Exercise[] = [
   ...MODULE_2,
   ...MODULE_3,
   ...MODULE_4,
+  ...MODULE_5,
 ];
 
 /** The level a new reader starts at, and the one the page offers first. */
@@ -311,4 +487,29 @@ export function firstExercise(): Exercise {
 
 export function exerciseById(id: string): Exercise | null {
   return EXERCISES.find((exercise) => exercise.id === id) ?? null;
+}
+
+/**
+ * The board an exercise is written for.
+ *
+ * The curriculum's board is the default rather than a field every one of the
+ * thirty exercises has to repeat, so a lesson about something else names its
+ * own and the rest stay as they were.
+ */
+export function exerciseBoard(exercise: Exercise): BoardId {
+  return exercise.board ?? (EXERCISE_BOARD as BoardId);
+}
+
+/**
+ * The grammar an exercise's sketch is in.
+ *
+ * An exercise says so itself when it needs to; otherwise it follows the board
+ * it was written for, because that is where the answer actually lives. It is
+ * not "is this a microcontroller or a single-board computer" -- a lesson on an
+ * ESP32 is a C++ lesson like any other, and reading a board name as a proxy for
+ * a language is the kind of shortcut that is right twice and wrong the third
+ * time.
+ */
+export function exerciseLanguage(exercise: Exercise): FirmwareLanguage {
+  return exercise.language ?? boardOption(exerciseBoard(exercise)).language;
 }
