@@ -159,6 +159,26 @@ export interface PartDefinition {
   readonly bodyColour: string;
   /** Panel resolution, for a display part. The pixels live in the controller. */
   readonly displayPixels?: { readonly width: number; readonly height: number };
+  /**
+   * The panel's own memory, for a display part, when it is not the same
+   * rectangle as `displayPixels`.
+   *
+   * A colour TFT reads its RAM out at whatever orientation it is held, so the
+   * two are the same shape twice over for a panel that only comes one way up
+   * and different for one that turns -- which is the only way the renderer can
+   * size a canvas correctly without assuming every panel is landscape.
+   */
+  readonly ramPixels?: { readonly width: number; readonly height: number };
+  /**
+   * The glass itself in millimetres, for a display part.
+   *
+   * Distinct from the carrier the part is drawn on: the active area is smaller
+   * than the board behind it, and it is the glass that has to be the right
+   * shape or the picture drawn on it comes out stretched. Both a colour panel
+   * that turns and a mono one at a fixed size need this to be stated rather
+   * than guessed from a pixel count.
+   */
+  readonly glassMm?: { readonly width: number; readonly height: number };
   /** Silkscreen / legend colour for the SVG renderer. */
   readonly legendColour: string;
 }
