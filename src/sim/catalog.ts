@@ -253,20 +253,57 @@ export class DynamicState {
 
 export const NO_DYNAMIC_STATE = new DynamicState();
 
-/** Rotates a pin offset by `rotation` quarters of a turn, clockwise. */
+/**
+ * Rotates a pin's offset from the part's origin, clockwise.
+ *
+ * `width` and `height` are the part's own dimensions, and they are the whole
+ * reason this function needs them: the pivot is the part's centre, not its top
+ * left corner. Pivoting on the corner is the usual shortcut and it is wrong --
+ * it swings the part out to the left of where it was, so a resistor turned a
+ * quarter turn lands in the wrong half of the breadboard and its pins claim
+ * holes that are not under it.
+ *
+ * Rotating about the centre leaves that centre where it was, which is what
+ * makes a rotated part sit in the same place as an unrotated one -- the pin
+ * ends up where the eye expects it, and the renderer can use a plain
+ * `rotate(deg, cx, cy)` transform to match exactly.
+ */
 export function rotateOffset(
   x: number,
   y: number,
   rotation: Rotation,
+  width: number,
+  height: number,
 ): { x: number; y: number } {
+  if (rotation === 0) return { x, y };
+
+  /*
+   * Quarter turns land inside the *turned* bounding box, and that is the whole
+   * subtlety. The shape is turned about its own centre, but a quarter turn of
+   * a 10x4 part is a 4x10 part -- so the centre it lands on is the middle of
+   * that new box, not the middle of the old one. Measuring from the old centre
+   * leaves every pin outside the part, which is how a rotated resistor ends up
+   * claiming holes several millimetres away from its own leads.
+   */
+  const swapped = rotation === 90 || rotation === 270;
+  const drawnWidth = swapped ? height : width;
+  const drawnHeight = swapped ? width : height;
+
+  // Origin of the old box relative to the new one, once turned about the middle.
+  const fromX = width / 2;
+  const fromY = height / 2;
+  const toX = drawnWidth / 2;
+  const toY = drawnHeight / 2;
+
   switch (rotation) {
-    case 0:
-      return { x, y };
     case 90:
-      return { x: -y, y: x };
+      // Clockwise on a screen whose y axis points down.
+      return { x: toX - (y - fromY), y: toY + (x - fromX) };
     case 180:
-      return { x: -x, y: -y };
+      return { x: toX - (x - fromX), y: toY - (y - fromY) };
     case 270:
-      return { x: y, y: -x };
+      return { x: toX + (y - fromY), y: toY - (x - fromX) };
+    default:
+      return { x, y };
   }
 }
