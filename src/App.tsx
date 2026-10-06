@@ -18,6 +18,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import Bench from './ui/Bench';
 import { HomePage } from './ui/HomePage';
 import { ExercisesPage, ExercisePage, ReferencesPage } from './ui/ExercisePages';
+import { ProjectPage } from './ui/ProjectPages';
 import { DEFAULT_BOARD_ID } from './ui/boardRegistry';
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/learn" element={<ExercisesPage />} />
         <Route path="/learn/references" element={<ReferencesPage />} />
         <Route path="/learn/:id" element={<ExercisePage />} />
+        <Route path="/projects/:boardId" element={<ProjectPage />} />
         <Route path="/" element={<HomePage />} />
         {/*
          * The bare `/bench` redirect exists so a hand-typed or stale link lands
