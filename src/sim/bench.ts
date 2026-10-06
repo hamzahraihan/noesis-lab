@@ -129,8 +129,6 @@ export interface Bench {
   readonly wires: readonly Wire[];
 }
 
-export const EMPTY_BENCH: Bench = { terminals: [], parts: [], wires: [] };
-
 /**
  * The bench as it stood at one moment, deep enough to be put back exactly.
  *
@@ -479,12 +477,25 @@ export class BenchBuilder {
     return this.terminalAtPosition(x, y);
   }
 
+  /**
+   * The bench, wrapped for the renderer.
+   *
+   * Built once and handed back every time, because the three collections are
+   * mutated in place rather than replaced: a part is pushed onto `parts` and
+   * the array it lands in is the same one the last caller is holding. So a
+   * fresh wrapper each call would be a different object describing exactly the
+   * same bench -- indistinguishable to everything except `===`, which is the
+   * one comparison that matters to React.
+   *
+   * Every memo keyed on `bench` in the UI was silently recomputing on every
+   * render for this reason: a miss does not look wrong, it just re-derives
+   * what it already had, several times a second, over a thousand terminals.
+   */
+  private built: Bench | null = null;
+
   build(): Bench {
-    return {
-      terminals: this.terminals,
-      parts: this.parts,
-      wires: this.wires,
-    };
+    this.built ??= { terminals: this.terminals, parts: this.parts, wires: this.wires };
+    return this.built;
   }
 
   /**
