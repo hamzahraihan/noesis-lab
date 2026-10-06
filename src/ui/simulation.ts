@@ -19,6 +19,7 @@ import { Engine } from '../sim/engine';
 import { McuRuntime } from '../sim/mcu';
 import {
   FirmwareRunner,
+  type FirmwareLanguage,
   type FirmwareServices,
 } from '../sim/firmware/interpreter';
 import { FirmwareSyntaxError } from '../sim/firmware/parser';
@@ -32,6 +33,10 @@ import { HUMIDITY_KNOB } from '../sim/dht';
 import { pixelCount, type PixelColor } from '../sim/pixels';
 import { TEMPERATURE_KNOB } from '../sim/modules';
 import type { DisplayController } from '../sim/display/part';
+import { Ili9341, type PanelRotation } from '../sim/display/ili9341';
+import { TileFetcher } from './map-fetcher';
+import { TILE_SIZE, TileStore } from './map-tiles';
+import type { MapPort, TftPort } from '../sim/firmware/interpreter';
 import { I2CBus } from '../sim/bus/i2c';
 import { SpiBus } from '../sim/bus/spi';
 import { BusLog, type BusEntry } from '../sim/bus/log';
@@ -126,6 +131,8 @@ export class Simulation {
   /** What the operator is doing to the parts, shared with the renderers. */
   readonly controls = new DynamicState();
   private firmwareSource = '';
+  /** Which grammar the loaded source is written in. */
+  firmwareLanguage: FirmwareLanguage = 'arduino-cpp';
   private serialSnapshot: string[] = [];
 
   /**
@@ -250,8 +257,9 @@ export class Simulation {
 
 
   /** Loads firmware, reporting a syntax error instead of throwing at the UI. */
-  loadFirmware(source: string): void {
+  loadFirmware(source: string, language: FirmwareLanguage = this.firmwareLanguage): void {
     this.firmwareSource = source;
+    this.firmwareLanguage = language;
     this.serial = [];
     this.serialDirty = true;
     this.engine.timeMs = 0;
@@ -261,7 +269,7 @@ export class Simulation {
     this.pendingDelayMs = 0;
 
     try {
-      this.runner = new FirmwareRunner(source, this.services());
+      this.runner = new FirmwareRunner(source, this.services(), language);
       this.firmwareError = null;
     } catch (error) {
       this.runner = null;
@@ -347,6 +355,22 @@ export class Simulation {
 
   stop(): void {
     this.running = false;
+  }
+
+  /**
+   * Whether the picture is expected to change from here on.
+   *
+   * The bench re-renders on every frame the simulation is moving and not
+   * otherwise. That distinction is the whole cost of the render loop: a bench
+   * at rest draws an identical tree, and drawing it sixty times a second is
+   * what starved a route change into taking tens of seconds.
+   *
+   * Anything that changes the bench without ticking -- wiring a part, picking
+   * an example, pressing Run -- asks for its own render, so nothing here has
+   * to know about it.
+   */
+  isAnimating(): boolean {
+    return this.running;
   }
 
   /** Rebuilds the circuit and restarts firmware from t=0. */
@@ -669,6 +693,33 @@ export class Simulation {
   setKnob(partId: string, spec: KnobSpec, value: number): void {
     this.controls.setKnob(partId, spec, value);
     this.rebuild();
+  }
+
+  /**
+   * Turns a display part a quarter turn, from the Inspector.
+   *
+   * Separate from `setKnob` because this changes nothing electrical. Turning a
+   * panel redraws the same pixels through a different pair of axes, so the
+   * circuit is exactly as it was and re-solving the netlist would be work with
+   * no result -- and doing it on every click made the bench stutter.
+   *
+   * A monochrome panel has no such axis to swap, so it is left alone.
+   */
+  rotateDisplay(partId: string): void {
+    const controller = this.engine.displayController(partId);
+    if (!(controller instanceof Ili9341)) return;
+    // Landscape to portrait and back. The two intermediate orientations turn
+    // the picture on its side rather than changing which axis is which, and for
+    // "show me the other shape" a quarter turn is the one that helps.
+    const next = controller.width > controller.height ? 0 : 1;
+    controller.setRotation(next);
+  }
+
+  /** A colour panel's current screen size, as `width × height`. */
+  displaySize(partId: string): string | undefined {
+    const controller = this.engine.displayController(partId);
+    if (!(controller instanceof Ili9341)) return undefined;
+    return `${controller.width} × ${controller.height}`;
   }
 
   /** Volts on each board pin's net, keyed for the footprint renderer. */
@@ -1097,8 +1148,97 @@ export class Simulation {
     return null;
   }
 
+  /**
+   * The map port a sketch talks to.
+   *
+   * The firmware has no radio, so this is the host standing in for one: it
+   * keeps what has arrived, starts fetching what a sketch asks for, and hands
+   * finished tiles to the panel. A program cannot tell which of those it is
+   * getting, which is the point -- the shape of the API is the shape of a real
+   * HTTP client, down to `request` answering "not yet".
+   */
+  private readonly tiles = new TileStore();
+
+  private readonly fetcher = new TileFetcher();
+
+  private readonly map: MapPort = {
+    request: (z, x, y) => {
+      const ready = this.tiles.request(z, x, y);
+      if (!ready) {
+        void this.fetcher.fetch({ z, x, y }).then((pixels) => {
+          if (pixels) {
+            this.tiles.put(z, x, y, pixels);
+            return;
+          }
+          // Say so. Leaving it wanted meant the sketch polled for arrival
+          // forever over a tile that was never coming, and a map with one hole
+          // in it never drew at all -- fourteen good tiles held hostage by one
+          // the server would not serve.
+          this.tiles.fail(z, x, y);
+        });
+      }
+      return ready;
+    },
+    blit: (z, x, y, destX, destY) => {
+      const pixels = this.tiles.get(z, x, y);
+      const panel = this.tft();
+      if (!pixels || !panel) return false;
+      panel.blit(destX, destY, pixels.length === 1 ? 1 : TILE_SIZE, TILE_SIZE, pixels);
+      return true;
+    },
+    ready: () => this.tiles.complete && !this.fetcher.busy,
+    reset: () => this.tiles.clearWanted(),
+  };
+
+  /** The colour TFT on the bench, which is where a map goes. */
+  private tft(): Ili9341 | undefined {
+    for (const controller of this.displayControllers().values()) {
+      if (controller instanceof Ili9341) return controller;
+    }
+    return undefined;
+  }
+
+  /**
+   * The colour panel as a sketch talks to it.
+   *
+   * The calls here are the library's convenience layer, not a second way to
+   * draw: pixels still go out over SPI exactly as the register writes do. What
+   * this adds is the one question SPI cannot answer -- how big the panel is
+   * right now -- which changes when it is turned, so a sketch that assumed
+   * 320x240 would be quietly wrong on a rotated one.
+   */
+  private readonly tftPort: TftPort = {
+    setRotation: (rotation) => {
+      const panel = this.tft();
+      if (!panel) return 0;
+      // The hardware clamps rather than refusing: an orientation outside 0..3
+      // is folded to a real one, and saying which is the useful part.
+      const target = Math.max(0, Math.min(3, Math.round(rotation))) as PanelRotation;
+      panel.setRotation(target);
+      return panel.rotation;
+    },
+    width: () => this.tft()?.width ?? 0,
+    height: () => this.tft()?.height ?? 0,
+    clear: () => {
+      this.tft()?.clear();
+      return 0;
+    },
+    fillRect: (x, y, width, height, colour) => {
+      this.tft()?.fill(x, y, width, height, colour);
+      return 0;
+    },
+    print: (text, x, y, colour) => {
+      this.tft()?.print(text, x, y, colour);
+      return 0;
+    },
+    textWidth: (text) => this.tft()?.textWidth(text) ?? 0,
+    textHeight: () => this.tft()?.textHeight() ?? 0,
+  };
+
   private services(): FirmwareServices {
     return {
+      tft: this.tftPort,
+      map: this.map,
       nowMs: () => this.engine.timeMs,
       pinMode: (pin, mode) => {
         this.mcu.setDirection(pin, mode === 0 ? 'input' : mode === 2 ? 'inputPullUp' : 'output');
