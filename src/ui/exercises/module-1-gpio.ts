@@ -56,6 +56,92 @@ const PUSH_BUTTON: Exercise = {
     'Clip the meter on D2 and GND before you write any code. Idle should read about 5 V; hold the button down and it should collapse to near 0 V. Seeing the two levels once makes the rest obvious.',
     'Run the sketch, open the Serial monitor, and press the button once — gently, then hard.',
   ],
+  solution: {
+    approach: [
+      'The LED needs a 220 Ω in series with it, and the current has to be sunk by a pin rather than ' +
+      'sourced by one — so the anode goes to the red + rail and the cathode, through the resistor, to ' +
+      'D7. Any GPIO pin would light it just as well; D7 is chosen so the button has D2 to itself.',
+      'The button\'s other leg goes to the blue − rail, so a held button pulls the pin to 0 V. On its ' +
+      'own that pin would float, so the pull-up has to be the internal one, set in code by ' +
+      '`pinMode(PIN_BUTTON, INPUT_PULLUP)` — which is why this exercise has no pull-up resistor among ' +
+      'its parts.',
+      'That inversion settles every comparison downstream: pressed reads LOW, so the LED is lit by ' +
+      'writing HIGH while the settled level is LOW. Swap the two button legs and the whole sketch has ' +
+      'to be inverted instead, which is the same circuit wearing the wrong trousers.',
+      'The debounce is a second pair of variables rather than a wait. `rawLevel` is what the pin says, ' +
+      '`settledLevel` is what the program is prepared to believe, and `rawChangedAt` restarts on every ' +
+      'raw edge. The window is 25 ms — long enough to outlast the worst bounce, short enough that a ' +
+      'press still feels instant.',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'anode',
+        why:
+          'The pin is the sink in this arrangement, so the LED has to be fed from the supply. Put the ' +
+          'anode on the pin and the sketch inverts rather than fails — the LED lights when the ' +
+          'program writes LOW, so it sits dark for the whole press and lit the whole time the button is ' +
+          'released.',
+      },
+      {
+        pin: 'D7',
+        terminal: 'b',
+        why:
+          'This is the leg that carries current down to the sink pin. Any other GPIO pin would light ' +
+          'the LED identically; landing it on a pin the sketch never names means the output stays at ' +
+          'its setup value and the LED never comes on, however correct the code is.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'a',
+        why:
+          'Without a return path there is no current, and an LED with no path is not a damaged LED — ' +
+          'it simply never lights. That is the version of this fault that reads as a broken part.',
+      },
+      {
+        pin: 'D2',
+        terminal: 'a',
+        why:
+          'The pin has to be the one the debounce reads, since `PIN_BUTTON` is 2 and the meter check in ' +
+          'the steps is taken on D2. Land the button on a neighbouring pin and nothing says so: the ' +
+          'serial log simply never prints a press.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'b',
+        why:
+          'This is the leg that pulls the pin down. Leave it unconnected and the internal pull-up holds ' +
+          'D2 at 5 V for ever, so the sketch reports a permanently released button with no fault to ' +
+          'see anywhere.',
+      },
+    ],
+    working: [
+      'The LED is dark while the button is untouched and lights while it is held, which is the pull-up ' +
+      'inverting the input and the sink arrangement being right.',
+      'The monitor prints `Ready. Press the button.` once, then one `press 1 at <ms>` line per press ' +
+      'and a `release` line when the finger comes off. The counter is the proof that the debounce is ' +
+      'filtering rather than merely delaying.',
+      'The count rises by exactly one per press, gently or hard. Three or four for one press means the ' +
+      'bounce is getting through; an LED still lit after you let go means the settled level has not ' +
+      'been believed yet.',
+      'A meter across D2 and GND sits near 5 V idle and collapses to about 0 V under the button, and the ' +
+      'LED occupies exactly those two intervals — the wire and the program agree about the same signal.',
+    ],
+    traps: [
+      'Both button legs in one breadboard row. The legs on each side of the body are already joined ' +
+      'inside the case, so the switch is shorted across nothing. It feels entirely normal under the ' +
+      'finger and the LED never changes, which is read as a dead switch rather than a mis-wire.',
+      'The pull-up left off — `pinMode` says plain `INPUT`. Nothing then holds the pin at a defined ' +
+      'level, its voltage wanders across the threshold, and the LED flickers and the counter creeps up ' +
+      'with nobody touching anything. It looks like noise on a long wire.',
+      'Believing the level as soon as it changes, without waiting for it to hold: the LED flickers and ' +
+      'the log shows `press 1`, `press 2`, `press 3` for one press, and pressing harder makes it worse. ' +
+      'Every one of those symptoms points at the button, not at the missing stability test.',
+      'A resistor fitted across the button rather than in series with the LED. It is the same two ' +
+      'components, the same row, and it does nothing visible at all — so the LED reads as unsoldered ' +
+      'or the wrong colour rather than as a current limit that is in the wrong place.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 
 /*
@@ -321,6 +407,128 @@ const TRAFFIC_SIGNAL: Exercise = {
     'Watch one full cycle go by without touching anything. The four timestamps should read 8000 ms of green, then 2500 of amber, then 12000 of red — and the amber line and the next green line are 14500 ms apart.',
     'Now press the button during a green phase. Amber comes early, and amber and red then run their full lengths — which is what a machine does when it is told to change its mind.',
   ],
+  solution: {
+    approach: [
+      'Three aspects means three pins and three resistors, and the sketch already names them: ' +
+      '`LED_GREEN` 6, `LED_AMBER` 7, `LED_RED` 8. So green goes to D6, amber to D7 and red to D8. The ' +
+      'amber pin is the one to decide carefully — it is the shortest phase and the aspect most often ' +
+      'left out, so a swap there still produces a machine that looks like it runs.',
+      'Every aspect is the sink arrangement from 1.1 repeated three times: anode to the red + rail, ' +
+      'cathode through its own 220 Ω to its pin, and all three resistor `a` legs to the blue − rail. ' +
+      'Sharing that rail is right; sharing one resistor between two aspects is not.',
+      'The button is 1.1\'s circuit unchanged — one leg to D2, one to the blue − rail, no resistor, and ' +
+      '`pinMode(PIN_CALL, INPUT_PULLUP)` in setup so a press reads LOW. Its only job here is to prove ' +
+      'the loop is awake, which is why the exercise bothers to include it at all.',
+      'The machine itself is two variables and a set of constants: a state, the millis() stamp of when ' +
+      'that state was entered, and 8000 / 2500 / 12000 ms for green / amber / red. Every change of ' +
+      'state goes through `enterState()`, which writes all three aspects and the timestamp together, ' +
+      'so no transition can forget to switch a light off.',
+      'Each phase ends in a comparison — `now - stateEntered >= span` — re-checked on every pass, and ' +
+      'never a `delay()`. Subtracting rather than adding the span is what keeps the machine running ' +
+      'past the 49.7-day rollover of millis().',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'anode',
+        why:
+          'The anode side is identical for all three aspects, and it is the one that makes each pin a ' +
+          'sink. Put an anode on its pin instead and that aspect lights when the program writes LOW — ' +
+          'so the signal runs while the crossing is stopped and stays dark while it is released.',
+      },
+      {
+        pin: '5V',
+        terminal: 'anode',
+        why:
+          'Same reasoning, and the shared + rail is what lets one 5V terminal feed all three aspects. ' +
+          'Wiring this anode to ground while the others go to the rail leaves one aspect that can only ' +
+          'ever be dark.',
+      },
+      {
+        pin: '5V',
+        terminal: 'anode',
+        why:
+          'Red is the aspect the machine starts and idles in, so it is lit longer than the other two ' +
+          'put together. A red anode on a different rail is invisible for the first eight seconds of ' +
+          'every cycle and then looks like a phase that hangs.',
+      },
+      {
+        pin: 'D6',
+        terminal: 'b',
+        why:
+          'This is the leg the sketch drives `LED_GREEN` on, and its number is chosen only because the ' +
+          'constants say so. Land it on a neighbouring pin and the green aspect never lights while the ' +
+          'state machine cheerfully prints GREEN for eight seconds at a time.',
+      },
+      {
+        pin: 'D7',
+        terminal: 'b',
+        why:
+          'Amber is the shortest phase and the one most easily transposed. Swap it with D8 and the ' +
+          'machine still cycles and the timestamps still look right — but the light shown for 12 ' +
+          'seconds is now the one the code calls red, so the fault presents as a timing bug.',
+      },
+      {
+        pin: 'D8',
+        terminal: 'b',
+        why:
+          'The stop aspect has to reach the pin the sketch drives `LED_RED`. On a pin the sketch never ' +
+          'writes, the red LED sits dark for the whole twelve seconds and the crossing reads as ' +
+          'uncontrolled rather than as one mis-placed resistor.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'a',
+        why:
+          'One resistor per aspect, all returning to the blue − rail — sharing the rail row is fine, ' +
+          'sharing a single resistor is not. Leave one `a` leg unconnected and that aspect has no ' +
+          'return path, so it never lights and looks like the failed LED rather than the loose leg.',
+      },
+      {
+        pin: 'D2',
+        terminal: 'a',
+        why:
+          '`PIN_CALL` is 2, and this is the only row the button can reach the program through. On any ' +
+          'other pin the phases still run on their own and the monitor still reports them, so the ' +
+          'button simply appears to be a part that does nothing.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'b',
+        why:
+          'The leg that pulls D2 down. Unconnected, the pull-up holds the pin at 5 V for ever, the ' +
+          'press is never accepted, and the cycle looks completely healthy while the button is inert.',
+      },
+    ],
+    working: [
+      'Exactly one aspect is lit at any moment and the other two are dark, and every move is announced ' +
+      'by a `-> AMBER at <ms>` line. The absence of two lit aspects is the proof that all three writes ' +
+      'went through `enterState()` rather than half of them from loop().',
+      'The twice-a-second report counts the phase down: 8 s left on green, 2 on amber, 12 on red, and ' +
+      'the amber line and the next green line are 14500 ms apart. Those numbers are the spans, and a ' +
+      'countdown rather than a freeze is the proof that nothing is sleeping.',
+      'A press during green brings amber forward at once, and amber and red then run their full lengths ' +
+      '— the loop was never blocked, so the request was read on the very next pass.',
+      'A held button advances the phase once and then nothing more, and the monitor stays quiet until ' +
+      'the button is released. A counter that climbs on every pass is the tell that the release is ' +
+      'being counted as a request too.',
+    ],
+    traps: [
+      'Amber on D8 and red on D7. The machine still cycles, still prints the right state names and ' +
+      'still uses the right spans, so nothing in the output is wrong — the aspect that lights for 2.5 ' +
+      'seconds is simply the one that ran for 12. It reads as a mistake in millis() rather than a swap ' +
+      'on the board.',
+      'Driving the aspects from loop() as well as from `enterState()`. Two writers, one pin, and the ' +
+      'last one to run wins, so an aspect can stay lit after the state has already moved on. The ' +
+      'symptom is a light stuck on, which is what a failed LED looks like.',
+      'Ending each phase with `delay(GREEN_MS)` instead of a comparison. Every timestamp is correct and ' +
+      'the cycle is perfect, so the sketch looks finished — and every press made during a phase is ' +
+      'lost, which is the entire point of the exercise and the one thing nothing on the bench reveals.',
+      'Treating the release as a request as well as the press. Two transitions per press, and a press ' +
+      'during green jumps straight to red. The state names in the log are all legal, so the fault ' +
+      'survives a whole evening of watching before anyone suspects the button.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 
 /*
