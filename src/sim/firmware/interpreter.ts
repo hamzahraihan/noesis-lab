@@ -12,6 +12,52 @@
  * propagates out of an arbitrarily deep call stack without a throw path.
  */
 
+import { parsePython } from './python';
+
+/**
+ * Which grammar a program is written in.
+ *
+ * Both front ends produce the same AST, so this chooses a parser and nothing
+ * else: the VM below cannot tell the two languages apart.
+ */
+export type FirmwareLanguage = 'arduino-cpp' | 'python';
+
+/** What kind of GPIO device a name in a Python program is holding. */
+type DeviceKind = 'led' | 'switch' | 'output' | 'input' | 'pwm';
+
+/**
+ * A GPIO device a Python program built with `LED(17)` and kept in a name.
+ *
+ * gpiozero objects are objects: which pin they drive, and whether they drive it
+ * at all, is settled when they are constructed rather than when a method is
+ * called. Holding them in a table keyed by name is what lets `led.on()` find the
+ * pin behind whatever the programmer called the variable. Dispatching on the
+ * name alone, as the C side does for `Serial` and `Wire`, cannot work here --
+ * in Python the name is theirs to choose.
+ */
+interface Device {
+  readonly pin: number;
+  readonly kind: DeviceKind;
+}
+
+/** The gpiozero constructors, and the kind of device each one makes. */
+const DEVICE_CONSTRUCTORS: Readonly<Record<string, DeviceKind>> = {
+  LED: 'led',
+  Button: 'switch',
+  OutputDevice: 'output',
+  InputDevice: 'input',
+  PWMOutputDevice: 'pwm',
+};
+
+/**
+ * The polarity a `Button` reads.
+ *
+ * gpiozero's button is active low: the pin is pulled up and a press pulls it
+ * down, which is how a button on a breadboard behaves. Inverting here is what
+ * makes `button.is_pressed` mean the same thing here as it does there.
+ */
+const SWITCH_ACTIVE_LOW = true;
+
 import {
   type Expr,
   type FunctionDecl,
@@ -49,7 +95,24 @@ export interface FirmwareServices {
    * itself always supplies both.
    */
   lcd?: LiquidCrystalPort;
+  /**
+   * Map tiles, which a program asks for and polls for.
+   *
+   * Optional for the same reason `lcd` and `servo` are: a host with no display
+   * on the bench has nothing to draw a map on, and a sketch about blinking an
+   * LED has no business fetching one.
+   */
+  map?: MapPort;
   servo?: ServoPort;
+  /**
+   * A colour TFT, for the calls that are about the panel rather than its
+   * protocol: turning it, and asking how big it currently is.
+   *
+   * Optional for the same reason as every other port here. The sketch still
+   * talks to the panel over SPI for anything to do with pixels -- this is the
+   * library's convenience layer, not a second way to draw.
+   */
+  tft?: TftPort;
   /**
    * Temperature/humidity sensor, by the pin its data line is wired to.
    *
@@ -97,6 +160,33 @@ export interface FirmwareServices {
    */
   pulseInBegin?(pin: number, level: number, timeoutUs: number): number;
   pulseInEnd?(): void;
+}
+
+/**
+ * A slippy map, as firmware sees it.
+ *
+ * Two calls, and the shape between them is the whole lesson: ask for a tile,
+ * find out whether it has arrived, draw it if it has. `request` returning
+ * false means "not yet, ask again" rather than "no such tile" -- which is what a
+ * real fetch of a real picture over a real radio looks like, and the reason a
+ * map program has a loop in it that a drawing program does not.
+ */
+export interface MapPort {
+  /**
+   * Asks for the tile at a zoom and grid position, and reports whether it is
+   * already here to be drawn.
+   */
+  request(z: number, x: number, y: number): boolean;
+  /**
+   * Copies a tile onto the panel at a position, in pixels. Returns false when
+   * the tile has not arrived, so a program can leave a hole rather than draw
+   * something wrong.
+   */
+  blit(z: number, x: number, y: number, destX: number, destY: number): boolean;
+  /** True once everything asked for has arrived. */
+ ready(): boolean;
+  /** Forgets outstanding requests, so a new region starts from nothing. */
+  reset(): void;
 }
 
 /**
@@ -162,6 +252,56 @@ export interface LiquidCrystalPort {
   createChar(slot: number, bitmap: readonly number[]): void;
   backlight(): void;
   noBacklight(): void;
+}
+
+/**
+ * A colour TFT, as the TFT_eSPI library presents it.
+ *
+ * A different shape of display from `LiquidCrystalPort`, and worth being a
+ * separate interface for it: an LCD is a grid of characters addressed by row
+ * and column, while a TFT is a rectangle of pixels addressed in whatever
+ * orientation it happens to be held. `setRotation` is the whole difference in
+ * one call, and it changes both the size the sketch thinks it is drawing into
+ * and the direction the pixels come out.
+ *
+ * Optional like the other ports, because a host with no colour panel on the
+ * bench has nothing for these calls to act on.
+ */
+export interface TftPort {
+  /**
+   * Turns the panel to orientation `rotation`, 0 to 3, and reports the
+   * orientation it ended up in.
+   *
+   * Returning the orientation rather than nothing is what lets a sketch read
+   * back what it asked for: the ILI9341 clamps an out-of-range value to a real
+   * orientation instead of failing, exactly as the hardware does.
+   */
+  setRotation(rotation: number): number;
+  /** Visible width after the current orientation. */
+  width(): number;
+  /** Visible height after the current orientation. */
+  height(): number;
+  /** Wipes the panel to black. */
+  clear(): number;
+  /** Fills a rectangle, which is what a status bar or a header actually is. */
+  fillRect(x: number, y: number, width: number, height: number, colour: number): number;
+  /**
+   * Draws text at a position, in the panel's own 5x7 font.
+   *
+   * Here because the map lesson cannot get on properly without it: the
+   * OpenStreetMap tile policy asks any client to say where its data came from,
+   * and a sketch that draws somebody else's map and credits nobody is not the
+   * example this curriculum wants to set. A credit line is also the smallest
+   * genuinely useful thing to put on a display, so it earns the method twice.
+   *
+   * Text is measured in the same font rather than guessed at, so a sketch can
+   * place a line without hard-coding a width that only suits one string.
+   */
+  print(text: string, x: number, y: number, colour: number): number;
+  /** The width in pixels a string will occupy, gaps included. */
+  textWidth(text: string): number;
+  /** The font's cap height in pixels. */
+  textHeight(): number;
 }
 
 /**
@@ -276,6 +416,8 @@ const NORMAL: Flow = { kind: 'normal' };
 
 class Scope {
   readonly values = new Map<string, Value>();
+  /** GPIO devices built by a Python program, kept beside the values. */
+  readonly devices = new Map<string, Device>();
   /** Arrays keep their own store so `data[i] = x` writes through. */
   readonly arrays = new Map<string, number[]>();
   readonly parent: Scope | null;
@@ -308,6 +450,32 @@ class Scope {
     }
     return undefined;
   }
+
+  /**
+   * The GPIO device a name is holding, searched the way values are.
+   *
+   * A Python function assigns into the nearest scope that already declares a
+   * name, so a device built in a function and used after it has to be found by
+   * the same walk that finds the value itself.
+   */
+  deviceFor(name: string): Device | undefined {
+    for (const scope of chainFrom(this)) {
+      const device = scope.devices.get(name);
+      if (device) return device;
+    }
+    return undefined;
+  }
+
+  /** Binds a name to a device, or shadows an outer binding with a new one. */
+  bindDevice(name: string, device: Device): void {
+    for (const scope of chainFrom(this)) {
+      if (scope.devices.has(name) || scope.values.has(name)) {
+        scope.devices.set(name, device);
+        return;
+      }
+    }
+    this.devices.set(name, device);
+  }
 }
 
 /** Yields a scope and each of its enclosing scopes, innermost first. */
@@ -327,15 +495,23 @@ function asNumber(value: Value): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+
+/** Renders a value the way `print` and an f-string would write it. */
+function formatValue(value: Value): string {
+  return typeof value === 'string' ? value : formatPrintValue(asNumber(value));
+}
+
 export class FirmwareRuntime {
   readonly program: Program;
   readonly defines: Map<string, number>;
 
   private readonly globals = new Scope();
   private readonly functions = new Map<string, FunctionDecl>();
+  private readonly language: FirmwareLanguage;
 
-  constructor(source: string) {
-    this.program = parseFirmware(source);
+  constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
+    this.program = language === 'python' ? parsePython(source) : parseFirmware(source);
+    this.language = language;
     this.defines = new Map(this.program.defines);
 
     for (const declaration of this.program.functions.values()) {
@@ -358,7 +534,13 @@ export class FirmwareRuntime {
     for (const declaration of this.program.globals) {
       yield* this.execute(declaration, this.globals, services);
     }
-
+    /*
+     * Arduino has two entry points the board calls in turn. Python has
+     * neither: the module body above is the whole program, and calling a
+     * function the programmer happened to name `setup` would invent an entry
+     * point they never wrote.
+     */
+    if (this.language === 'python') return;
     if (this.functions.has('setup')) {
       yield* this.callFunction('setup', [], this.globals, services);
     }
@@ -380,6 +562,18 @@ export class FirmwareRuntime {
     parent: Scope,
     services: FirmwareServices,
   ): Generator<DelayRequest, Value, void> {
+    /*
+     * `len` needs the scope to find what it is measuring, so it cannot live
+     * with the other pure arithmetic builtins.
+     */
+    if (name === 'len') {
+      const key = String(args[0] ?? '');
+      const array = parent.arrayFor(key);
+      const value = parent.lookup(key);
+      if (array) return array.length;
+      return typeof value === 'string' ? value.length : 0;
+    }
+
     const builtin = BUILTINS[name];
     if (builtin) return builtin(args.map(asNumber));
 
@@ -399,6 +593,46 @@ export class FirmwareRuntime {
     return flow.kind === 'return' ? flow.value : 0;
   }
 
+  /**
+   * Binds a name to a GPIO device when its initialiser builds one.
+   *
+   * `led = LED(17)` is a constructor call whose result is an object rather than
+   * a number, so the name has to be told what it is holding. Settling that here,
+   * where the name itself is bound, is what keeps the two in step: a
+   * constructor reaching `callFunction` would have no way to know which name it
+   * was being stored under.
+   *
+   * Returns whether it bound one. The pin has to be a literal, because that is
+   * the only thing it could be read from without evaluating the initialiser
+   * twice.
+   */
+  private bindDeviceFrom(
+    name: string,
+    expression: Expr,
+    scope: Scope,
+    services: FirmwareServices,
+  ): boolean {
+    if (expression.kind !== 'call' || expression.callee.kind !== 'identifier') return false;
+    const kind = DEVICE_CONSTRUCTORS[expression.callee.name];
+    const pin = expression.args[0];
+    if (!kind || pin?.kind !== 'number') return false;
+
+    const device: Device = { pin: pin.value, kind };
+    scope.bindDevice(name, device);
+    /*
+     * gpiozero's inputs are pulled up by default -- `Button(pin)` means
+     * `pull_up=True` -- which is what makes a button on a pin and a leg to
+     * ground read as a press rather than as a floating line. Leaving them as
+     * plain inputs would have the pin sit at whatever the solver thinks an
+     * undriven net is, and the button would report presses nobody made.
+     */
+    services.pinMode(
+      device.pin,
+      kind === 'switch' || kind === 'input' ? PIN_INPUT_PULLUP : PIN_OUTPUT,
+    );
+    return true;
+  }
+
   /** Builtins the VM does not implement itself delegate to the host services. */
   private *evaluateCall(
     name: string,
@@ -406,6 +640,31 @@ export class FirmwareRuntime {
     services: FirmwareServices,
   ): Generator<DelayRequest, Value, void> {
     switch (name) {
+      /*
+       * Python's `print`, which is where a Pi program writes. It goes to the
+       * same serial sink as `Serial.print` rather than to the page console,
+       * because the serial monitor is the one place this bench shows a
+       * program talking to something.
+       */
+      case 'print': {
+        const separator = args.length > 1 ? ' ' : '';
+        services.serialWrite(args.map(formatValue).join(separator) + '\n');
+        return 0;
+      }
+
+      /*
+       * The conversions a Python program uses to put a number into a string.
+       * Without `str` there is no way to build text from a value at all, which
+       * makes every `"pin " + something` quietly produce a zero.
+       */
+      case 'str':
+        return formatValue(args[0] ?? 0);
+      case 'int':
+        return Math.trunc(asNumber(args[0] ?? 0));
+      case 'float':
+        return asNumber(args[0] ?? 0);
+      case 'bool':
+        return isTruthy(args[0] ?? 0) ? 1 : 0;
       case 'delay': {
         const ms = Math.max(0, asNumber(args[0] ?? 0));
         if (ms > 0) yield ms;
@@ -485,7 +744,24 @@ export class FirmwareRuntime {
         return NORMAL;
       }
 
+      /*
+       * A Python suite, which is a block of statements and not a scope. Only
+       * `def` opens one, so running this in a fresh scope would bind every
+       * name in a loop body somewhere the rest of the program cannot see --
+       * and `n = n + 1` inside a `while` would silently count nothing.
+       */
+      case 'suite': {
+        for (const child of statement.statements) {
+          const flow = yield* this.execute(child, scope, services);
+          if (flow.kind !== 'normal') return flow;
+        }
+        return NORMAL;
+      }
+
       case 'varDecl': {
+        if (statement.init && this.bindDeviceFrom(statement.name, statement.init, scope, services)) {
+          return NORMAL;
+        }
         const value = statement.init
           ? ((yield* this.evaluate(statement.init, scope, services)) as Value)
           : 0;
@@ -625,9 +901,23 @@ export class FirmwareRuntime {
           return isTruthy((yield* this.evaluate(expression.right, scope, services)) as Value) ? 1 : 0;
         }
 
-        const left = asNumber((yield* this.evaluate(expression.left, scope, services)) as Value);
-        const right = asNumber((yield* this.evaluate(expression.right, scope, services)) as Value);
-        return applyBinary(expression.operator, left, right);
+        const leftValue = (yield* this.evaluate(expression.left, scope, services)) as Value;
+        const rightValue = (yield* this.evaluate(expression.right, scope, services)) as Value;
+
+        /*
+         * String joining. A Python f-string is parsed into a `+` chain of
+         * fragments, so this is what turns one back into text. No C sketch
+         * reaches here -- in C, `+` on strings is pointer arithmetic this VM
+         * has never modelled, and it answered zero.
+         */
+        if (
+          expression.operator === '+' &&
+          (typeof leftValue === 'string' || typeof rightValue === 'string')
+        ) {
+          return `${formatValue(leftValue)}${formatValue(rightValue)}`;
+        }
+
+        return applyBinary(expression.operator, asNumber(leftValue), asNumber(rightValue));
       }
 
       case 'ternary': {
@@ -642,6 +932,26 @@ export class FirmwareRuntime {
       case 'assign': {
         const value = (yield* this.evaluate(expression.value, scope, services)) as Value;
 
+        if (
+          expression.target.kind === 'identifier' &&
+          expression.operator === '=' &&
+          this.bindDeviceFrom(expression.target.name, expression.value, scope, services)
+        ) {
+          return 0;
+        }
+
+        // `led.value = 0.5` and `pwm.value = 1` drive the pin directly.
+        if (
+          expression.target.kind === 'member' &&
+          expression.target.target.kind === 'identifier' &&
+          expression.operator === '='
+        ) {
+          const device = scope.deviceFor(expression.target.target.name);
+          if (device) {
+            this.writeDevice(device, expression.target.member, value, services);
+            return value;
+          }
+        }
         if (expression.target.kind === 'identifier') {
           const name = expression.target.name;
           if (expression.operator !== '=') {
@@ -677,6 +987,11 @@ export class FirmwareRuntime {
       }
 
       case 'member': {
+        // `button.is_pressed` is a reading of the pin, not a call.
+        if (expression.target.kind === 'identifier') {
+          const device = scope.deviceFor(expression.target.name);
+          if (device) return this.readDevice(device, expression.member, services);
+        }
         // A bare `Serial`, `Wire` or `SPI` on the right of a dot has no value
         // of its own; their methods are reached through the `call` branch.
         return 0;
@@ -695,6 +1010,17 @@ export class FirmwareRuntime {
           const args: Value[] = [];
           for (const argument of expression.args) {
             args.push((yield* this.evaluate(argument, scope, services)) as Value);
+          }
+
+          /*
+           * A method on a device the program built. Checked before the
+           * name-based dispatch below, because in Python the name holding a
+           * device is the programmer's to choose and `led` collides with
+           * nothing the C side assumes.
+           */
+          const device = scope.deviceFor(callee.target.name);
+          if (device) {
+            return (yield* this.callDevice(device, callee.member, services)) as Value;
           }
           if (callee.target.name === 'lcd' || callee.target.name === 'LiquidCrystal') {
             return this.evaluateLcdCall(callee.member, args, services);
@@ -717,9 +1043,28 @@ export class FirmwareRuntime {
           if (callee.target.name === 'sd' || callee.target.name === 'SD') {
             return this.evaluateSdCall(callee.member, args, services);
           }
+
+          /*
+           * `time.sleep`, which waits in seconds where `delay` waits in
+           * milliseconds. Reading `0.5` as half a millisecond would make every
+           * gpiozero blink five hundred times too fast, and the difference is
+           * exactly the kind of thing that only shows up as "why is this
+           * wrong" rather than as an error.
+           */
+          if (callee.target.name === 'time') {
+            const seconds = Math.max(0, asNumber(args[0] ?? 0));
+            if (seconds > 0) yield seconds * 1000;
+            return 0;
+          }
           if (callee.target.name === 'Wire') {
             yield* this.evaluateWireCall(callee.member, args, services);
             return 0;
+          }
+          if (callee.target.name === 'map' || callee.target.name === 'Map') {
+            return this.evaluateMapCall(callee.member, args, services);
+          }
+          if (callee.target.name === 'tft' || callee.target.name === 'TFT') {
+            return this.evaluateTftCall(callee.member, args, services);
           }
           if (callee.target.name === 'SPI') {
             yield* this.evaluateSpiCall(callee.member, args, services);
@@ -735,6 +1080,193 @@ export class FirmwareRuntime {
   private resolveArray(expression: Expr, scope: Scope): number[] | undefined {
     if (expression.kind !== 'identifier') return undefined;
     return scope.arrayFor(expression.name);
+  }
+
+  /**
+   * Drives a device from a method call: `on()`, `off()`, `toggle()`, `close()`.
+   *
+   * `toggle` reads the pin back rather than keeping its own copy of the last
+   * level written. A wire can pull a pin away from what was asked for -- a
+   * short to ground drives it low whatever the program believes -- and reading
+   * the line is what makes a toggle behave the way the circuit is actually
+   * behaving rather than the way the program intended.
+   */
+  private *callDevice(
+    device: Device,
+    member: string,
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    switch (member) {
+      /*
+       * A press waits the way the real call does: by not returning until the
+       * line says so. Polling a millisecond at a time is what keeps the rest
+       * of the simulation moving while the program sits inside it.
+       */
+      case 'wait_for_press':
+      case 'wait_for_release': {
+        const wanted = member === 'wait_for_press';
+        for (;;) {
+          const pressed = asNumber(this.readDevice(device, 'is_pressed', services)) !== 0;
+          if (pressed === wanted) return 0;
+          yield 1;
+        }
+      }
+      case 'on':
+        this.writeLevel(device, LEVEL_HIGH, services);
+        return 0;
+      case 'off':
+        this.writeLevel(device, LEVEL_LOW, services);
+        return 0;
+      case 'toggle': {
+        const level = this.readDevice(device, 'value', services);
+        this.writeLevel(device, asNumber(level) !== 0 ? LEVEL_LOW : LEVEL_HIGH, services);
+        return 0;
+      }
+      case 'close':
+        this.writeLevel(device, LEVEL_LOW, services);
+        return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles a `map.*` call: asking for a tile, and drawing one.
+   *
+   * Dispatched by name like `Wire` and `SPI`, so it reaches the same code from
+   * a C++ sketch and a Python one -- which is the point of the VM having one
+   * AST rather than two.
+   */
+  private evaluateMapCall(
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Value {
+    const map = services.map;
+    if (!map) return 0;
+
+    switch (member) {
+      case 'request':
+        return map.request(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0), asNumber(args[2] ?? 0))
+          ? 1
+          : 0;
+      case 'blit':
+        return map.blit(
+          asNumber(args[0] ?? 0),
+          asNumber(args[1] ?? 0),
+          asNumber(args[2] ?? 0),
+          asNumber(args[3] ?? 0),
+          asNumber(args[4] ?? 0),
+        )
+          ? 1
+          : 0;
+      case 'ready':
+        return map.ready() ? 1 : 0;
+      case 'reset':
+        map.reset();
+        return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles a `tft.*` call: turning the panel, and asking how big it is.
+   *
+   * Dispatched by name like `map`, so a C++ sketch and a Python one reach the
+   * same code. Every method reports what the panel actually did rather than
+   * echoing the argument, which is what makes `setRotation` worth having: a
+   * sketch that asks for an orientation it cannot have learns that from the
+   * return value instead of carrying on with the wrong idea about the screen.
+   */
+  private evaluateTftCall(
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Value {
+    const tft = services.tft;
+    if (!tft) return 0;
+
+    switch (member) {
+      case 'setRotation':
+        return tft.setRotation(asNumber(args[0] ?? 0));
+      case 'width':
+        return tft.width();
+      case 'height':
+        return tft.height();
+      case 'clear':
+      case 'fillScreen':
+        return tft.clear();
+      case 'fillRect':
+        return tft.fillRect(
+          asNumber(args[0] ?? 0),
+          asNumber(args[1] ?? 0),
+          asNumber(args[2] ?? 0),
+          asNumber(args[3] ?? 0),
+          asNumber(args[4] ?? 0),
+        );
+      /*
+       * Text arrives as one Value rather than as several numbers, so it is
+       * stringified rather than indexed. `drawString` is accepted alongside
+       * `print` because a library that has a fill call has a draw call too, and
+       * a sketch should not have to be rewritten over which word it uses.
+       */
+      case 'print':
+      case 'drawString':
+        return tft.print(
+          String(args[0] ?? ''),
+          asNumber(args[1] ?? 0),
+          asNumber(args[2] ?? 0),
+          asNumber(args[3] ?? 0),
+        );
+      case 'textWidth':
+        return tft.textWidth(String(args[0] ?? ''));
+      case 'textHeight':
+        return tft.textHeight();
+      default:
+        return 0;
+    }
+  }
+
+
+  /** Writes a `0`/`1` or `0..1` value to a device's pin. */
+  private writeDevice(device: Device, member: string, value: Value, services: FirmwareServices): void {
+    if (member !== 'value') return;
+    if (device.kind === 'pwm') {
+      services.analogWrite(device.pin, asNumber(value));
+      return;
+    }
+    if (device.kind === 'input' || device.kind === 'switch') return;
+    this.writeLevel(device, isTruthy(value) ? LEVEL_HIGH : LEVEL_LOW, services);
+  }
+
+  /** Reads a device's pin as `value` is written, or as its switch reads. */
+  private readDevice(device: Device, member: string, services: FirmwareServices): Value {
+    const raw = services.digitalRead(device.pin);
+    const level = device.kind === 'switch' && SWITCH_ACTIVE_LOW
+      ? (raw ? 0 : 1)
+      : raw ? 1 : 0;
+
+    switch (member) {
+      case 'value':
+      case 'is_pressed':
+      case 'is_active':
+        return level;
+      case 'is_inactive':
+      case 'is_released':
+        return level ? 0 : 1;
+      default:
+        return 0;
+    }
+  }
+
+  private writeLevel(device: Device, level: number, services: FirmwareServices): void {
+    if (device.kind === 'input' || device.kind === 'switch') return;
+    if (device.kind === 'pwm') {
+      services.analogWrite(device.pin, level ? 1 : 0);
+      return;
+    }
+    services.digitalWrite(device.pin, level);
   }
 
   private evaluateSerialCall(member: string, args: Value[], services: FirmwareServices): Value {
@@ -1022,7 +1554,35 @@ const BUILTINS: Readonly<
   min: (args) => Math.min(...args),
   max: (args) => Math.max(...args),
   sq: (args) => (args[0] ?? 0) ** 2,
+  sqrt: (args) => Math.sqrt(args[0] ?? 0),
+  /*
+   * Trigonometry and logarithms.
+   *
+   * Here because any lesson that places something on a curved surface needs
+   * them: the projection behind every slippy map is a sine and a natural
+   * logarithm, and a VM that can do neither cannot draw one.
+   */
+  sin: (args) => Math.sin(args[0] ?? 0),
+  cos: (args) => Math.cos(args[0] ?? 0),
+  tan: (args) => Math.tan(args[0] ?? 0),
+  log: (args) => Math.log(args[0] ?? 0),
+  exp: (args) => Math.exp(args[0] ?? 0),
+  /*
+   * Rounding. `(int)` truncates towards zero, which is not what casting a
+   * negative number to a whole one usually means -- hence the separate floor.
+   */
+  floor: (args) => Math.floor(args[0] ?? 0),
+  ceil: (args) => Math.ceil(args[0] ?? 0),
+  round: (args) => Math.round(args[0] ?? 0),
   pow: (args) => (args[0] ?? 0) ** (args[1] ?? 0),
+  /*
+   * Integer division, truncating toward zero.
+   *
+   * Spelled out rather than folded into `/`, because `/` is floating-point
+   * division and C only truncates when it knows both sides are whole numbers --
+   * which a VM that carries no types cannot know.
+   */
+  idiv: (args) => (args[1] === 0 ? 0 : Math.trunc(args[0] / args[1])),
   map: (args) => {
     const [value, inLow, inHigh, outLow, outHigh] = args;
     if (inHigh === inLow) return outLow ?? 0;
@@ -1042,9 +1602,21 @@ function applyBinary(operator: string, left: number, right: number): number {
     case '*':
       return left * right;
     case '/':
-      // C integer division truncates toward zero; JS rounds. Matching C here
-      // matters because sketches divide loop counters by 2 constantly.
-      return right === 0 ? 0 : Math.trunc(left / right);
+      /*
+       * True division.
+       *
+       * This used to truncate toward zero on the grounds that C integer
+       * division does. But C only truncates when *both* operands are integral,
+       * and this VM does not carry types, so truncating unconditionally made
+       * every expression involving a `float` or a `double` wrong -- silently,
+       * and worst for the expressions that depend on it most: a latitude in
+       * degrees divided by 360 came out as zero, and the map it was placing a
+       * point on drew the point at the edge of the world.
+       *
+       * Sketches that want the old behaviour want it explicitly, which is what
+       * `idiv` is for.
+       */
+      return right === 0 ? 0 : left / right;
     case '%':
       return right === 0 ? 0 : Math.trunc(left % right);
     case '<':
@@ -1103,8 +1675,12 @@ export class FirmwareRunner {
 
   private readonly generator: Generator<DelayRequest, void, void>;
   private finished = false;
-  constructor(source: string, services: FirmwareServices) {
-    this.runtime = new FirmwareRuntime(source);
+  constructor(
+    source: string,
+    services: FirmwareServices,
+    language: FirmwareLanguage = 'arduino-cpp',
+  ) {
+    this.runtime = new FirmwareRuntime(source, language);
     this.generator = this.runtime.main(this.withSerialSink(services));
   }
 
