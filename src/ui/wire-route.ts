@@ -87,7 +87,11 @@ export function wireLanes(spans: readonly RouteSpan[]): ReadonlyMap<string, numb
 }
 
 /** Corner radius of an SVG path, given in the path's own units. */
-export function roundedPath(points: readonly Point[], radius: number): string {
+export function roundedPath(
+  points: readonly Point[],
+  radius: number,
+  exact: readonly Point[] = [],
+): string {
   const corners = dropCollinear(points);
   if (corners.length === 0) return '';
   if (corners.length === 1) return `M ${corners[0].x} ${corners[0].y}`;
@@ -97,6 +101,15 @@ export function roundedPath(points: readonly Point[], radius: number): string {
     const previous = corners[i - 1];
     const corner = corners[i];
     const next = corners[i + 1];
+
+    // A point the operator placed is drawn exact: easing it would cut the
+    // painted wire off the waypoint dot sitting at the apex, which reads as
+    // the dot floating beside the wire. Only the router's own intermediate
+    // corners keep their easing.
+    if (exact.some((point) => point.x === corner.x && point.y === corner.y)) {
+      d += ` L ${corner.x} ${corner.y}`;
+      continue;
+    }
 
     // Ease off the corner by at most half of each leg, so a short leg gets a
     // proportionally smaller bend rather than a kink.
@@ -235,5 +248,5 @@ export function routeWireVia(
   to: Point,
   radius = CORNER_MM,
 ): string {
-  return roundedPath(routeWireViaCorners(from, via, to), radius);
+  return roundedPath(routeWireViaCorners(from, via, to), radius, via);
 }
