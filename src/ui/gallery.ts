@@ -409,7 +409,130 @@ void loop() {
   },
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD];
+/* ------------------------------------------------------------------ *
+ * Parking Sensor — sonar, buzzer, three-LED distance bar
+ * ------------------------------------------------------------------ */
+
+const PARKING: GalleryProject = {
+  id: 'parking',
+  title: 'Parking Sensor',
+  blurb:
+    'An ultrasonic ranger watches the bench: LEDs mark far, near, and too close, and the buzzer complains inside 30 cm. Turn the distance knob to drive closer.',
+  boards: ['uno'],
+  parts: [
+    { name: 'Ultrasonic Sensor (HC-SR04)', qty: 1 },
+    { name: 'Piezo Buzzer', qty: 1 },
+    { name: 'Green LED', qty: 1 },
+    { name: 'Yellow LED', qty: 1 },
+    { name: 'Red LED', qty: 1 },
+    { name: '220 Resistor', qty: 3 },
+  ],
+  sketch: `#include <Arduino.h>
+
+byte PIN_TRIG = 6;
+byte PIN_ECHO = 7;
+byte BUZZER = 9;
+byte LED_FAR = 10;
+byte LED_MID = 11;
+byte LED_NEAR = 12;
+
+long ECHO_TIMEOUT_US = 25000;
+
+void setup() {
+  pinMode(PIN_TRIG, OUTPUT);
+  digitalWrite(PIN_TRIG, LOW);
+  pinMode(PIN_ECHO, INPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED_FAR, OUTPUT);
+  pinMode(LED_MID, OUTPUT);
+  pinMode(LED_NEAR, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("parking up");
+}
+
+void loop() {
+  digitalWrite(PIN_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PIN_TRIG, LOW);
+
+  long us = pulseIn(PIN_ECHO, HIGH, ECHO_TIMEOUT_US);
+  long cm = us / 58;
+
+  Serial.print("cm ");
+  Serial.println(cm);
+
+  digitalWrite(LED_FAR, us != 0);
+  digitalWrite(LED_MID, us != 0 && cm < 100);
+  digitalWrite(LED_NEAR, us != 0 && cm < 30);
+
+  if (us != 0 && cm < 30) {
+    digitalWrite(BUZZER, HIGH);
+    delay(120);
+    digitalWrite(BUZZER, LOW);
+    delay(120);
+  } else {
+    delay(240);
+  }
+}
+`,
+  working: [
+    'The serial monitor reports centimetres that follow the distance knob.',
+    'Green means something is out there, yellow inside a metre, red inside 30 cm.',
+    'Inside 30 cm the buzzer beeps twice a second; a timed-out echo reads 0 and lights nothing.',
+  ],
+  setup: (simulation) => {
+    simulation.clearExampleParts();
+    const supply = simulation.boardTerminal('5V');
+    const ground = simulation.boardTerminal('GND');
+    if (!supply || !ground) return;
+
+    const sonar = simulation.addPart(part('Ultrasonic Sensor (HC-SR04)'), PART_X, PART_Y);
+    const sonarVcc = simulation.pinAt(sonar, 'VCC');
+    const sonarTrig = simulation.pinAt(sonar, 'TRIG');
+    const sonarEcho = simulation.pinAt(sonar, 'ECHO');
+    const sonarGnd = simulation.pinAt(sonar, 'GND');
+    const trig = simulation.boardTerminal('D6');
+    const echo = simulation.boardTerminal('D7');
+    if (!sonarVcc || !sonarTrig || !sonarEcho || !sonarGnd || !trig || !echo) return;
+    simulation.routeWire(supply, sonarVcc);
+    simulation.routeWire(ground, sonarGnd);
+    simulation.routeWire(trig, sonarTrig);
+    simulation.routeWire(echo, sonarEcho);
+
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), PART_X, PART_Y + PART_STEP);
+    const buzzPin = simulation.boardTerminal('D9');
+    const positive = simulation.pinAt(buzzer, 'positive');
+    const negative = simulation.pinAt(buzzer, 'negative');
+    if (!buzzPin || !positive || !negative) return;
+    simulation.routeWire(buzzPin, positive);
+    simulation.routeWire(negative, ground);
+
+    const aspects = [
+      { led: 'Green LED', pin: 'D10' },
+      { led: 'Yellow LED', pin: 'D11' },
+      { led: 'Red LED', pin: 'D12' },
+    ];
+    aspects.forEach(({ led: ledName, pin }, index) => {
+      const led = simulation.addPart(part(ledName), PART_X, PART_Y + (2 + index) * PART_STEP);
+      const resistor = simulation.addPart(
+        part('220 Resistor'),
+        PART_X + 62,
+        PART_Y + (2 + index) * PART_STEP,
+      );
+      const boardPin = simulation.boardTerminal(pin);
+      const anode = simulation.pinAt(led, 'anode');
+      const cathode = simulation.pinAt(led, 'cathode');
+      const legA = simulation.pinAt(resistor, 'a');
+      const legB = simulation.pinAt(resistor, 'b');
+      if (!boardPin || !anode || !cathode || !legA || !legB) return;
+      simulation.routeWire(supply, anode);
+      simulation.routeWire(cathode, legA);
+      simulation.routeWire(legB, boardPin);
+    });
+  },
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
