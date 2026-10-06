@@ -117,7 +117,199 @@ void loop() {
   },
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK];
+/* ------------------------------------------------------------------ *
+ * Electronic Safe — three buttons, two LEDs, one buzzer
+ *
+ * No keypad reads exist in the firmware, so the code is three buttons in
+ * order (A, C, B) rather than a 4x4 matrix. Each button gets the Module 1
+ * debounce — a level is believed only once it holds still — because a safe
+ * that counts bounce counts wrong codes.
+ * ------------------------------------------------------------------ */
+
+const SAFE: GalleryProject = {
+  id: 'safe',
+  title: 'Electronic Safe',
+  blurb:
+    'Three buttons are the combination dial: enter A, C, B in order to unlock. A wrong digit buzzes and the attempt resets.',
+  boards: ['uno'],
+  parts: [
+    { name: 'Tactile Button', qty: 3 },
+    { name: 'Red LED', qty: 1 },
+    { name: 'Green LED', qty: 1 },
+    { name: '220 Resistor', qty: 2 },
+    { name: 'Piezo Buzzer', qty: 1 },
+  ],
+  sketch: `#include <Arduino.h>
+
+byte BTN_A = 2;
+byte BTN_B = 3;
+byte BTN_C = 4;
+byte LED_RED = 7;
+byte LED_GREEN = 8;
+byte BUZZER = 9;
+
+byte FIRST = 2;
+byte SECOND = 4;
+byte THIRD = 3;
+
+int pos = 0;
+
+byte rawA = HIGH;
+byte settledA = HIGH;
+unsigned long changedA = 0;
+byte rawB = HIGH;
+byte settledB = HIGH;
+unsigned long changedB = 0;
+byte rawC = HIGH;
+byte settledC = HIGH;
+unsigned long changedC = 0;
+
+unsigned long DEBOUNCE_MS = 25;
+unsigned long UNLOCK_MS = 2000;
+unsigned long unlockedAt = 0;
+
+byte expected() {
+  if (pos == 0) { return FIRST; }
+  if (pos == 1) { return SECOND; }
+  return THIRD;
+}
+
+void buzz() {
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(BUZZER, HIGH);
+    delay(120);
+    digitalWrite(BUZZER, LOW);
+    delay(120);
+  }
+}
+
+void unlock() {
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, HIGH);
+  unlockedAt = millis();
+  Serial.println("unlocked");
+}
+
+void press(byte pin) {
+  if (unlockedAt != 0) { return; }
+  if (pin == expected()) {
+    pos = pos + 1;
+    Serial.print("digit ok ");
+    Serial.println(pos);
+    if (pos >= 3) {
+      pos = 0;
+      unlock();
+    }
+  } else {
+    Serial.println("wrong");
+    buzz();
+    pos = 0;
+  }
+}
+
+void setup() {
+  pinMode(BTN_A, INPUT_PULLUP);
+  pinMode(BTN_B, INPUT_PULLUP);
+  pinMode(BTN_C, INPUT_PULLUP);
+  pinMode(LED_RED, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  digitalWrite(LED_RED, HIGH);
+  digitalWrite(LED_GREEN, LOW);
+  Serial.begin(115200);
+  Serial.println("locked");
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  if (unlockedAt != 0 && now - unlockedAt >= UNLOCK_MS) {
+    unlockedAt = 0;
+    digitalWrite(LED_RED, HIGH);
+    digitalWrite(LED_GREEN, LOW);
+    Serial.println("locked");
+  }
+
+  byte raw = digitalRead(BTN_A);
+  if (raw != rawA) { rawA = raw; changedA = now; }
+  if (raw != settledA && now - changedA >= DEBOUNCE_MS) {
+    settledA = raw;
+    if (settledA == LOW) { press(BTN_A); }
+  }
+
+  raw = digitalRead(BTN_B);
+  if (raw != rawB) { rawB = raw; changedB = now; }
+  if (raw != settledB && now - changedB >= DEBOUNCE_MS) {
+    settledB = raw;
+    if (settledB == LOW) { press(BTN_B); }
+  }
+
+  raw = digitalRead(BTN_C);
+  if (raw != rawC) { rawC = raw; changedC = now; }
+  if (raw != settledC && now - changedC >= DEBOUNCE_MS) {
+    settledC = raw;
+    if (settledC == LOW) { press(BTN_C); }
+  }
+}
+`,
+  working: [
+    'The red LED is lit while locked; nothing else happens until three digits land.',
+    'A, then C, then B turns the green LED on for two seconds and prints "unlocked".',
+    'Any wrong digit buzzes three times and the attempt starts over.',
+  ],
+  setup: (simulation) => {
+    simulation.clearExampleParts();
+    const supply = simulation.boardTerminal('5V');
+    const ground = simulation.boardTerminal('GND');
+    if (!supply || !ground) return;
+
+    // The three code buttons, each: one leg to its pin, one to ground. The
+    // sketch uses the internal pull-ups, so a held button reads LOW.
+    const codePins = ['D2', 'D3', 'D4'];
+    codePins.forEach((pin, index) => {
+      const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + index * PART_STEP);
+      const boardPin = simulation.boardTerminal(pin);
+      const legA = simulation.pinAt(button, 'a');
+      const legB = simulation.pinAt(button, 'b');
+      if (!boardPin || !legA || !legB) return;
+      simulation.routeWire(boardPin, legA);
+      simulation.routeWire(legB, ground);
+    });
+
+    // Locked/unlocked indicators, sink-wired like every exercise LED.
+    const aspects = [
+      { led: 'Red LED', pin: 'D7' },
+      { led: 'Green LED', pin: 'D8' },
+    ];
+    aspects.forEach(({ led: ledName, pin }, index) => {
+      const led = simulation.addPart(part(ledName), PART_X, PART_Y + (3 + index) * PART_STEP);
+      const resistor = simulation.addPart(
+        part('220 Resistor'),
+        PART_X + 62,
+        PART_Y + (3 + index) * PART_STEP,
+      );
+      const boardPin = simulation.boardTerminal(pin);
+      const anode = simulation.pinAt(led, 'anode');
+      const cathode = simulation.pinAt(led, 'cathode');
+      const legA = simulation.pinAt(resistor, 'a');
+      const legB = simulation.pinAt(resistor, 'b');
+      if (!boardPin || !anode || !cathode || !legA || !legB) return;
+      simulation.routeWire(supply, anode);
+      simulation.routeWire(cathode, legA);
+      simulation.routeWire(legB, boardPin);
+    });
+
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), PART_X, PART_Y + 5 * PART_STEP);
+    const buzzPin = simulation.boardTerminal('D9');
+    const positive = simulation.pinAt(buzzer, 'positive');
+    const negative = simulation.pinAt(buzzer, 'negative');
+    if (!buzzPin || !positive || !negative) return;
+    simulation.routeWire(buzzPin, positive);
+    simulation.routeWire(negative, ground);
+  },
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;

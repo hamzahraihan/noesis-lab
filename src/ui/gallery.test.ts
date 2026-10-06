@@ -72,4 +72,8 @@ describe('the project gallery', () => {
   it('opens with the alarm clock', () => {
     expect(galleryById('alarm-clock')?.title).toBe('Alarm Clock with RTC');
   });
+
+  it('locks digits behind the safe', () => {
+    expect(galleryById('safe')?.title).toBe('Electronic Safe');
+  });
 });
