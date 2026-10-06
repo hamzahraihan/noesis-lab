@@ -19,7 +19,12 @@ import {
   potentiometerDefinition,
   resistorDefinition,
 } from './passives';
-import { ili9341Definition, ssd1306Definition, ssd1306SpiDefinition } from './display/part';
+import {
+  ili9341Definition,
+  ili9341LargeDefinition,
+  ssd1306Definition,
+  ssd1306SpiDefinition,
+} from './display/part';
 import { ds1307Definition, hx711Definition, mpu6050Definition } from './devices/sensors';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
@@ -412,6 +417,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: ili9341Definition,
   },
   {
+    id: 'ili9341-480x320',
+    name: '3.2" TFT (ILI9341)',
+    group: 'output',
+    note: '480×320 behind the same eight wires. Bigger glass, and it turns.',
+    make: ili9341LargeDefinition,
+  },
+  {
     id: 'breadboard',
     name: 'Breadboard (830 point)',
     group: 'breadboard',
@@ -429,6 +441,7 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   'ssd1306-128x64': true,
   'ssd1306-128x64-spi': true,
   'ili9341-320x240': true,
+  'ili9341-480x320': true,
   'slide-potentiometer': true,
   'membrane-keypad': true,
   'biaxial-stepper': true,
