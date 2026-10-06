@@ -284,4 +284,17 @@ describe('every bend lands on the wire', () => {
     expect(corners).toContainEqual(via[0]);
     expect(routeWireVia({ x: 0, y: 0 }, via, { x: 60, y: 60 })).toContain('M ');
   });
+
+  it('draws the painted wire through each waypoint, not around it', () => {
+    // Corner easing cuts up to 1.6 mm off a sharp turn while the waypoint dot
+    // sits at the apex, so the dot reads as floating beside the wire. A bend
+    // the operator placed is drawn exact; only the router's own intermediate
+    // corners keep their easing.
+    const path = routeWireVia({ x: 0, y: 0 }, [{ x: 40, y: 0 }], { x: 40, y: 60 });
+
+    // The waypoint is a line-to vertex of the painted path...
+    expect(path).toContain('L 40 0');
+    // ...never the control point of a curve cutting past it.
+    expect(path).not.toContain('Q 40 0');
+  });
 });
