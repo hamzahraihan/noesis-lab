@@ -15,7 +15,7 @@ import { useEffect, useRef } from 'react';
 import type { PartInstance } from '../sim/bench';
 
 import type { FootprintState } from './footprints';
-import { pushWokwiState, type WokwiPart } from './wokwi';
+import { artworkBox, pushWokwiState, type WokwiPart } from './wokwi';
 
 export function WokwiFootprint({
   part,
@@ -91,8 +91,14 @@ export function WokwiFootprint({
     };
   }, [onTogglePressed, part.id]);
 
+  /*
+   * Centred on the definition box (see `artworkBox`), so the artwork turns
+   * about its own centre and the selection below follows it there.
+   */
+  const art = artworkBox(definition, 0);
+
   return (
-    <foreignObject x={0} y={0} width={entry.sizeMm.w} height={entry.sizeMm.h} overflow="visible">
+    <foreignObject x={art.dx} y={art.dy} width={entry.sizeMm.w} height={entry.sizeMm.h} overflow="visible">
       <div
         ref={host}
         className="cursor-inherit"
