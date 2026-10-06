@@ -24,7 +24,8 @@ import { ili9341Definition, ssd1306Definition } from '../sim/display/part';
 import { Workbench } from './Workbench';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
-import { BLINK_EXAMPLE, EXAMPLES } from './examples';
+import { BLINK_EXAMPLE, EXAMPLES, PI_BLINK_SKETCH } from './examples';
+import type { FirmwareLanguage } from '../sim/firmware/interpreter';
 import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
@@ -57,7 +58,7 @@ import {
   PlusIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { EXERCISE_BOARD, exerciseById } from './exercises';
+import { exerciseBoard, exerciseById, exerciseLanguage } from './exercises';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -208,28 +209,39 @@ export default function Bench() {
    * anything first renders it -- an effect would paint the starter bench and
    * then visibly rebuild it underneath the reader.
    *
-   * Only honoured on the board the exercise was written for. Every exercise is
-   * an Uno lesson, and re-applying its wiring to an ESP32 would put a 5 V
-   * circuit on 3.3 V pins, which is the mistake Module 3 exists to warn about.
+   * Only honoured on the board the exercise was written for. Every lesson is
+   * an Uno lesson unless it says otherwise, and re-applying an Uno's wiring to
+   * an ESP32 would put a 5 V circuit on 3.3 V pins -- the mistake Module 3
+   * exists to warn about. A lesson that names its own board is only ever
+   * applied on that board.
    */
   const [search] = useSearchParams();
   const requestedExercise = search.get('ex');
+  const found = requestedExercise === null ? null : exerciseById(requestedExercise);
   const exercise =
-    boardId === EXERCISE_BOARD && requestedExercise !== null
-      ? exerciseById(requestedExercise)
-      : null;
+    found !== null && boardId === exerciseBoard(found) ? found : null;
 
   /*
-   * The editor's text and the simulation's copy of it have to agree.
+   * The editor's text, the simulation's copy of it and the grammar they are in
+   * all have to agree with each other and with the board.
    *
-   * Seeded from the same exercise the bench is wired for, because a reader who
-   * pressed "Put it on the bench" and landed on Blink is being told to press Run
-   * on a program that is not the one they were just handed.
+   * Seeded from the exercise when there is one -- a Pi lesson hands over a
+   * Python program and opens the editor in Python, an Uno lesson the same in
+   * C++ -- because a reader who pressed "Put it on the bench" and landed on
+   * Blink is being told to press Run on a program that is not the one they
+   * were just handed.
    */
+  const [language, setLanguage] = useState<FirmwareLanguage>(
+    exercise ? exerciseLanguage(exercise) : boardOption(boardId).language,
+  );
+
+  // A board that does not run sketches opens on one it can run. Handing a Pi
+  // the C++ blink would put a syntax error on screen before anyone had touched
+  // anything, which reads as a broken simulator rather than a board that speaks
+  // a different language.
   const [firmware, setFirmware] = useState(
-    requestedExercise !== null
-      ? (exerciseById(requestedExercise)?.sketch ?? BLINK_EXAMPLE.sketch)
-      : BLINK_EXAMPLE.sketch,
+    exercise?.sketch ??
+      (boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch),
   );
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -268,10 +280,16 @@ export default function Bench() {
 
       if (exercise) {
         exercise.setup(created);
-        created.loadFirmware(exercise.sketch);
+        // In the language the exercise is written in, not the board's default.
+        // A Pi lesson hands over Python, and handing that to the C++ parser
+        // reports "expected a type" on the first `from` and stops there.
+        created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       } else {
         buildStartingBench(created, boardId);
-        created.loadFirmware(BLINK_EXAMPLE.sketch);
+        created.loadFirmware(
+          boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
+          boardOption(boardId).language,
+        );
       }
       // Deliberately left stopped. The bench opens on a loaded sketch at
       // t=0 that the operator has to run themselves, which is the honest
@@ -296,17 +314,54 @@ export default function Bench() {
   // would advance as fast as the solver could go, not as fast as real time.
   useEffect(() => {
     let frame = 0;
+    let running = true;
     let previous = performance.now();
     const tick = () => {
       const now = performance.now();
       const deltaSeconds = Math.min((now - previous) / 1000, 0.25);
       previous = now;
       simulation.tick(deltaSeconds);
-      forceRender((n) => n + 1);
-      frame = requestAnimationFrame(tick);
+
+      /*
+       * Re-render only when the bench actually changed.
+       *
+       * This used to force a render every frame unconditionally, on the
+       * reasoning that the frame rate drove the simulation. It does not: the
+       * wall-clock delta does, and a stopped simulation returns immediately
+       * from `tick` without touching anything.
+       *
+       * So a parked bench was re-rendering its whole tree -- nearly a thousand
+       * breadboard terminals, two canvas-backed panels -- sixty times a second
+       * to draw an identical picture. That is not merely wasteful, it is what
+       * made leaving the bench unusably slow: React Router performs a
+       * navigation in a transition, which is a lower-priority lane than the
+       * one these renders are written to. Sixty urgent renders a second starve
+       * the transition, so the new page could not commit until the bench gave
+       * up the main thread -- tens of seconds -- while arriving at the bench
+       * had nothing queued behind it and was immediate.
+       *
+       * The bench still animates whenever it is running, which is the only
+       * time anything is moving.
+       */
+      if (running && simulation.isAnimating()) {
+        forceRender((n) => n + 1);
+      }
+
+      /*
+       * Stop before asking for another frame, not after cancelling one.
+       *
+       * `cancelAnimationFrame` alone is a race: if the cleanup ran while this
+       * callback was mid-execution, the reschedule below landed *after* the
+       * cancel and the loop carried on with nothing holding its handle. A flag
+       * cannot lose that race -- in either order the loop stops.
+       */
+      if (running) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      running = false;
+      cancelAnimationFrame(frame);
+    };
   }, [simulation]);
 
   /*
@@ -944,8 +999,10 @@ export default function Bench() {
               expanded={firmwareOpen}
               onToggle={() => setFirmwareOpen((open) => !open)}
               onChange={setFirmware}
+              language={language}
+              onChangeLanguage={setLanguage}
               onRun={() => {
-                simulation.loadFirmware(firmware);
+                simulation.loadFirmware(firmware, language);
                 simulation.start();
                 forceRender((n) => n + 1);
               }}
@@ -977,6 +1034,10 @@ export default function Bench() {
               onSetKnob={(spec, value) => {
                 if (selected) simulation.setKnob(selected.id, spec, value);
               }}
+              onRotate={() => {
+                if (selected) simulation.rotateDisplay(selected.id);
+              }}
+              panelSize={selected ? simulation.displaySize(selected.id) : undefined}
             />
           </div>
 
