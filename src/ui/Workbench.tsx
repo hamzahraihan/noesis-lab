@@ -13,9 +13,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bench, Terminal, Wire, WireEnd } from '../sim/bench';
 import { PartFootprint, type FootprintState } from './footprints';
-import { HardwareDefs } from './hardware';
+import { HardwareDefs, SILKSCREEN_FONT } from './hardware';
 import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from './wire-route';
-import { renderedSizeMm } from './wokwi';
+import { artworkBox } from './wokwi';
+import { partTransform } from './part-transform';
+import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from './hit-test';
 
 /**
  * Name for the jumper that is only half drawn. It lives in a map of its own
@@ -67,6 +69,16 @@ const CLICK_SLOP_PX = 4;
 
 /** How close a click must land to a hole to count as hitting it. */
 const HOLE_PICK_RADIUS_MM = 2;
+/**
+ * How close a press on a wire must be to a hole to count as aiming at the
+ * pin rather than the wire.
+ *
+ * Hole proximity (above) starts wires from bare holes, but a fat wire-hit
+ * area overlaps pin zones constantly on a dense board. Inside this tighter
+ * core the press is on the metal and means the pin; outside it the wire body
+ * wins, so clicking a segment to split it is not swallowed by a nearby hole.
+ */
+const PIN_CORE_RADIUS_MM = 1;
 /** Zoom applied per millimetre of wheel travel, before the per-device scaling. */
 const ZOOM_PER_WHEEL_MM = 0.0015;
 /**
@@ -165,6 +177,66 @@ function RemoveDot({
         fill="none"
         pointerEvents="none"
       />
+    </g>
+  );
+}
+
+/**
+ * The tag naming the socket under the cursor (`uno:AREF`).
+ *
+ * White card, green frame and green lettering, set in the silkscreen face so
+ * it reads as bench furniture rather than UI chrome. Sized against `scale`
+ * so it stays legible at any zoom, and parked above the pin -- below it when
+ * the top of the view leaves no room -- clamped sideways so a pin at the
+ * edge never pushes it off the canvas.
+ */
+function PinTag({
+  label,
+  x,
+  y,
+  scale,
+  view,
+  viewHeight,
+}: {
+  label: string;
+  x: number;
+  y: number;
+  scale: number;
+  view: ViewBox;
+  viewHeight: number;
+}) {
+  const fontSize = 13 / scale;
+  const padX = 8 / scale;
+  const padY = 6 / scale;
+  const width = label.length * 7.6 / scale + padX * 2;
+  const height = fontSize + padY * 2;
+  const left = Math.min(Math.max(x - width / 2, view.x + 1), view.x + view.width - width - 1);
+  const above = y - 3 - height;
+  const belowFits = y + 3 + height <= view.y + viewHeight - 1;
+  const top = above < view.y + 1 && belowFits ? y + 3 : above;
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={left}
+        y={top}
+        width={width}
+        height={height}
+        rx={2.2 / scale + 0.4}
+        fill="#f8fafc"
+        stroke="#16a34a"
+        strokeWidth={1.8 / scale}
+      />
+      <text
+        x={left + width / 2}
+        y={top + height / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={fontSize}
+        fontFamily={SILKSCREEN_FONT}
+        fill="#15803d"
+      >
+        {label}
+      </text>
     </g>
   );
 }
@@ -272,6 +344,13 @@ export function Workbench({
    * wire that was actually under the cursor is unrecoverable.
    */
   const pressedWireRef = useRef<string | null>(null);
+  /**
+   * Whether the press began on a waypoint dot or a wire-end handle; see
+   * `onPointerDown`. A click there must never split the wire -- grabbing a
+   * node is how it is moved, and splitting under it would duplicate the very
+   * handle being held.
+   */
+  const pressedHandleRef = useRef<'bend' | 'end' | null>(null);
   /*
    * Set when a waypoint's remove button is pressed, cleared by the next canvas
    * click.
@@ -332,12 +411,34 @@ export function Workbench({
      * to the capturing `<svg>` by setPointerCapture. Pointer-down hit-testing
      * still sees the real target, so this is the one moment it can be read.
      */
-    const partId = (event.target as Element)
-      .closest('[data-part-id]')
-      ?.getAttribute('data-part-id');
-    pressedPartRef.current = partId ?? null;
+    /*
+     * Which part was pressed, found by geometry rather than by walking up the
+     * DOM.
+     *
+     * `closest('[data-part-id]')` was the obvious way and it was wrong for
+     * exactly the parts that needed it most: a jumper's hit path sits in a
+     * sibling layer *above* every part, so walking up from it reaches the `<svg>`
+     * and finds no part at all. A press on a lead-mounted resistor -- which is
+     * 3.2 mm tall and entirely covered by a 3.2 mm hit path -- therefore read as
+     * "no part here", the drag fell through to panning, and the part could not
+     * be moved or picked up at all once a wire was attached.
+     *
+     * The pointer's position is the question, so the position is what is
+     * asked. `nearestHole` already snaps within a known radius; this asks the
+     * same question about the part's own body.
+     */
+    const partUnderPointer = rotatedPartAt(bench, world);
+    const partId = partUnderPointer?.id ?? null;
+    pressedPartRef.current = partId;
     pressedWireRef.current =
       (event.target as Element).closest('[data-wire-id]')?.getAttribute('data-wire-id') ?? null;
+    const pressedTarget = event.target as Element;
+    pressedHandleRef.current =
+      pressedTarget.closest('[data-bend-index]') !== null
+        ? 'bend'
+        : pressedTarget.closest('[data-wire-end]') !== null
+          ? 'end'
+          : null;
 
 
     /*
@@ -392,10 +493,46 @@ export function Workbench({
        * Nothing is selected here. Selecting now would re-render before the
        * click arrives, and the click is what opens the colour palette.
        */
-      if (wireId !== null && wireId !== undefined) {
-        dragRef.current = { kind: 'bend-new', wireId };
-        (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-        return;
+      /*
+       * A part under the pointer beats the wire body.
+       *
+       * Order matters here and it was the wrong way round. A jumper's hit path
+       * is deliberately fat -- 3.2 mm, because a drawn wire is a couple of
+       * pixels and impossible to grab -- and it starts *at* the pin. On a
+       * resistor that is 3.2 mm tall as well, so the wire covered the part from
+       * end to end along the row: pressing anywhere on the body hit the wire,
+       * the press became a wire drag, and the part could not be picked up at
+       * all. Small parts were unusable the moment anything was wired to them.
+       *
+       * A waypoint or an end still wins, because those are small, deliberate
+       * targets sitting exactly where the operator aimed. A part is what a press
+       * in open space means, so it takes what is left.
+       */
+      // Not `return`: that would leave no drag started at all, and the press
+      // would fall through to the pan branch below and slide the whole bench
+      // sideways instead. The part has to keep going to reach the move-drag
+      // setup further down, which is where a press on a part belongs.
+      //
+      // Only the wire body gives way. A waypoint or an end has already returned
+      // above, because those are small deliberate targets the operator aimed
+      // at, while a part under the pointer is what a press on open space means.
+      if (partId === null) {
+        /*
+         * Dragging a segment is how a wire is rerouted around whatever is in
+         * the way: the drag drops a waypoint where the pointer went down and
+         * shapes it from there, which is the same thing as grabbing an existing
+         * waypoint except that this one does not exist yet. A press that never
+         * moves is a click instead, and the click handler picks the wire rather
+         * than bending it -- so grabbing a wire to look at it costs nothing.
+         *
+         * Nothing is selected here. Selecting now would re-render before the
+         * click arrives, and the click is what opens the colour palette.
+         */
+        if (wireId !== null && wireId !== undefined) {
+          dragRef.current = { kind: 'bend-new', wireId };
+          (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+          return;
+        }
       }
     }
 
@@ -621,24 +758,64 @@ export function Workbench({
       return;
     }
 
-    if (terminal !== null) {
-      setWireAnchor(terminal);
-      setWireBends([]);
+    /*
+     * Picking and splitting, with pins taking precedence only in their core.
+     *
+     * A press on a wire body means the wire -- even next to a hole, because
+     * on a dense board hole proximity alone would swallow every segment click
+     * before splitting ever fires. Only inside a pin's own 1 mm core does the
+     * press still start a wire there. Parts keep their say via the own-lead
+     * rule and the tie-break below.
+     */
+    const partId = pressedPartRef.current;
+    const wireId = pressedWireRef.current;
+    const nearPin =
+      terminal !== null &&
+      Math.hypot(terminal.x - world.x, terminal.y - world.y) <= PIN_CORE_RADIUS_MM;
+    const action = wireClickAction(partId, wireId, selectedWireId, pressedHandleRef.current !== null, nearPin);
+    if (action === 'select-part' && partId !== null) {
+      onSelectWire(null);
+      onSelect(partId);
+      return;
+    }
+    if (action === 'split' && wireId !== null) {
+      // Unsnapped: the node must sit on the run that was clicked, and an
+      // automatic lane can sit off the grid -- snapping here would visibly
+      // shunt the wire sideways. Dragging the node afterwards still snaps.
+      onInsertWireBend(wireId, bendIndexNear(wireId, world.x, world.y), { x: world.x, y: world.y });
+      onSelectWire(wireId);
+      return;
+    }
+    if (action === 'palette' && wireId !== null) {
+      // The second click on a picked wire (or any click that began on one of
+      // its handles): the palette, never another bend.
+      onSelectWire(wireId);
+      onWirePicked(wireId, event.clientX, event.clientY);
       return;
     }
 
-    /*
-     * Clicking a wire picks it and opens its colour palette.
-     *
-     * Picking rather than bending is what makes the palette reachable at all:
-     * the drag is how a wire is rerouted, so a click that also bent would
-     * leave a corner behind every time the operator wanted to look at a wire
-     * or change its colour.
-     */
-    const wireId = pressedWireRef.current;
-    if (wireId !== null) {
-      onSelectWire(wireId);
-      onWirePicked(wireId, event.clientX, event.clientY);
+    if (terminal !== null) {
+      /*
+       * A press on the part's own lead starts a jumper from it; a press on
+       * the part anywhere else selects the part, even when a neighbouring
+       * hole is nearer than the lead. Without this, clicking a component
+       * sitting on the breadboard almost always starts a wire from an
+       * adjacent hole instead of selecting what was clicked.
+       */
+      const pressedPart =
+        pressedPartRef.current === null
+          ? null
+          : (bench.parts.find((candidate) => candidate.id === pressedPartRef.current) ?? null);
+      if (
+        pressedPart !== null &&
+        !pressHitsOwnPin(pressedPart, bench.terminals, world, HOLE_PICK_RADIUS_MM)
+      ) {
+        onSelectWire(null);
+        onSelect(pressedPart.id);
+        return;
+      }
+      setWireAnchor(terminal);
+      setWireBends([]);
       return;
     }
 
@@ -655,10 +832,51 @@ export function Workbench({
     onSelect(pressedPartRef.current);
   };
 
+  /*
+   * How much of the bench has changed, which is not the same question as which
+   * bench it is.
+   *
+   * The collections are mutated in place, so a part turning leaves `bench`
+   * itself untouched -- same object, same arrays -- while every contact under
+   * that part has moved. Anything derived from where things *are* rather than
+   * what is on the bench has to key on this, or it keeps drawing the last
+   * answer it worked out.
+   *
+   * Bound to a name rather than written as `bench.revision` in each dependency
+   * list, because the lint rule reads a property access as part of `bench` and
+   * reports the extra entry as redundant. It is not: it is the only signal here
+   * that a pin moved.
+   */
+  const benchRevision = bench.revision;
+
+  /**
+   * Every contact, indexed by id.
+   *
+   * `revision` is a parameter rather than a dependency list entry, which is the
+   * only way to make it load-bearing: the lint rule follows a memo's own reads
+   * and reports a variable it cannot connect to the mutation as redundant, and
+   * it is right that nothing here *reads* the count -- the mutation happens
+   * elsewhere, in place. Passing it in says what the value is for.
+   */
   /** The hole under the cursor, which is what a click would pick. */
   const hovered = useMemo(
     () => (pointerMm ? nearestHole(bench, pointerMm.x, pointerMm.y) : null),
-    [bench, pointerMm],
+    /*
+     * `benchRevision` is not read in the body, and deliberately so.
+     *
+     * The terminals are mutable objects reached through `bench`, so a part
+     * turning leaves the bench object and all three arrays identical to last
+     * frame while every contact under that part is somewhere else. Nothing in
+     * here can *read* the change; it happens in place, elsewhere. The count is
+     * the only signal that it happened, and without it these memos keep
+     * answering with where things used to be -- wires drawn to a header the
+     * panel no longer has.
+     *
+     * The lint rule reports it as redundant because it follows reads rather
+     * than mutations, which is the one thing it cannot see here.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bench, benchRevision, pointerMm],
   );
 
   /**
@@ -675,7 +893,18 @@ export function Workbench({
       if (netOfTerminal.get(terminal.id) === net) ids.push(terminal.id);
     }
     return ids;
-  }, [bench, netOfTerminal, hovered]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bench, benchRevision, netOfTerminal, hovered]);
+
+  /**
+   * What the socket under the cursor is called (`uno:AREF`, `E20`), for the
+   * hover tag. Null on a contact no part owns, where there is nothing to say.
+   */
+  const hoverLabel = useMemo(
+    () => (hovered ? hoverPinLabel(hovered.id, bench) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bench, benchRevision, hovered],
+  );
 
   const scale = 900 / view.width;
 
@@ -690,7 +919,22 @@ export function Workbench({
         from: bench.terminals[wire.from],
         to: bench.terminals[wire.to],
       })),
-    [bench],
+    /*
+     * `benchRevision` is not read in the body, and deliberately so.
+     *
+     * The terminals are mutable objects reached through `bench`, so a part
+     * turning leaves the bench object and all three arrays identical to last
+     * frame while every contact under that part is somewhere else. Nothing in
+     * here can *read* the change; it happens in place, elsewhere. The count is
+     * the only signal that it happened, and without it these memos keep
+     * answering with where things used to be -- wires drawn to a header the
+     * panel no longer has.
+     *
+     * The lint rule reports it as redundant because it follows reads rather
+     * than mutations, which is the one thing it cannot see here.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bench, benchRevision],
   );
   const lanes = useMemo(() => wireLanes(spans), [spans]);
 
@@ -750,25 +994,35 @@ export function Workbench({
         {bench.parts.map((part) => {
           const selected = part.id === selectedId;
           /*
-           * The outline has to bound what is actually drawn, which for a part
-           * Wokwi covers is the element's own size rather than the size its
-           * definition declares. Sizing it from the definition left the box
-           * floating beside the artwork on the smaller parts and cutting through
-           * it on the larger ones.
+           * The outline bounds the artwork in the group's own local frame, so
+           * it takes the *unrotated* artwork box: the group transform applies
+           * the turn. Sizing it from the rotated box instead draws a wide flat
+           * outline over a tall part (or the reverse) after every quarter turn.
            */
-          const drawn = renderedSizeMm(part.definition);
+          const art = artworkBox(part.definition, 0);
           return (
             <g
               key={part.id}
               data-part-id={part.id}
-              transform={`translate(${part.x} ${part.y})`}
+              /*
+               * Turned about the definition box's own middle, matching
+               * `rotateOffset` exactly, with the switched box re-centred onto
+               * it (see `partTransform`).
+               *
+               * The renderer and the pin resolver have to agree about where a
+               * turned part's pins are, down to the millimetre: the artwork is
+               * what the eye reads the pins as, so a hole that does not land
+               * under the pin drawn above it looks like the bench is broken
+               * rather than like it is mid-turn.
+               */
+              transform={partTransform(part)}
             >
               {selected && (
                 <rect
-                  x={-1.5}
-                  y={-1.5}
-                  width={drawn.widthMm + 3}
-                  height={drawn.heightMm + 3}
+                  x={art.dx - 1.5}
+                  y={art.dy - 1.5}
+                  width={art.widthMm + 3}
+                  height={art.heightMm + 3}
                   rx={2}
                   fill="none"
                   stroke="#38bdf8"
@@ -782,17 +1036,6 @@ export function Workbench({
         })}
       </g>
 
-      {/*
-       * Each jumper is drawn twice: a dark casing that reads as the shadow the
-       * wire casts, and the coloured insulation over it. Both take the same
-       * route, so the corner radius stays put at any zoom.
-       *
-       * Drawn *after* the parts, not before. A jumper runs over the top of
-       * whatever it crosses -- that is what a wire plugged into a breadboard
-       * looks like from above -- and drawing it underneath let the opaque
-       * breadboard paint straight over it, so a wire crossing the board simply
-       * disappeared and read as broken.
-       */}
       {/*
        * Each jumper is drawn twice: a dark casing that reads as the shadow the
        * wire casts on the board, and the coloured insulation over it. Both take
@@ -1027,23 +1270,51 @@ export function Workbench({
         ))}
       </g>
 
+      {/*
+       * The net under the cursor, with the socket itself called out: a green
+       * ring where the pointer is, and a tag naming the socket (`uno:AREF`)
+       * so a header pin is never a guessing game. The rest of the net stays
+       * quiet sky-blue.
+       */}
       <g data-layer="net-trace" pointerEvents="none">
         {traced.map((terminalId) => {
           const terminal = bench.terminals[terminalId];
           const isHovered = terminal.id === hovered?.id;
+          if (isHovered) {
+            // The socket itself, squared to fit one 2.54 mm socket: a small
+            // rounded square over the hole beneath it, green fill and frame.
+            const side = 2.6;
+            return (
+              <rect
+                key={terminal.id}
+                x={terminal.x - side / 2}
+                y={terminal.y - side / 2}
+                width={side}
+                height={side}
+                rx={0.5}
+                fill="#22c55e"
+                fillOpacity={0.3}
+                stroke="#4ade80"
+                strokeWidth={0.4}
+              />
+            );
+          }
           return (
             <circle
               key={terminal.id}
               cx={terminal.x}
               cy={terminal.y}
-              r={isHovered ? 2.1 : 1.7}
-              fill={isHovered ? '#38bdf8' : 'none'}
+              r={1.7}
+              fill="none"
               stroke="#38bdf8"
-              strokeWidth={isHovered ? 0.2 : 0.28}
-              opacity={isHovered ? 1 : 0.8}
+              strokeWidth={0.28}
+              opacity={0.8}
             />
           );
         })}
+        {hovered && hoverLabel && (
+          <PinTag label={hoverLabel} x={hovered.x} y={hovered.y} scale={scale} view={view} viewHeight={viewHeight} />
+        )}
       </g>
     </svg>
   );
