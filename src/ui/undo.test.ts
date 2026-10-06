@@ -44,21 +44,26 @@ describe('undo and redo', () => {
   it('steps forward again to where it was', () => {
     const simulation = bench();
     simulation.routeWire({ id: -1, x: 20, y: 20 }, { id: -1, x: 60, y: 20 });
-    const before = JSON.stringify(simulation.bench);
+    // The bench's contents, without its change counter. `revision` counts
+    // mutations rather than describing the bench, and an undo *is* a mutation,
+    // so comparing it would assert that undo changes nothing at all -- which is
+    // the opposite of what an undo is for.
+    const contents = () => JSON.stringify({ ...simulation.bench, revision: 0 });
+    const before = contents();
 
     simulation.removeWire(newestWire(simulation));
-    const afterEdit = JSON.stringify(simulation.bench);
+    const afterEdit = contents();
 
     simulation.undo();
     // Not merely "a wire is back" -- the bench as it was, field for field. If
     // the snapshot lost something, a wire's measured length or a contact's
     // position, this is where it would show.
-    expect(JSON.stringify(simulation.bench)).toBe(before);
+    expect(contents()).toBe(before);
 
     expect(simulation.redo()).toBe(true);
     // And forward again to the state the deletion left behind, which is a
     // different bench: the loose contacts the wire was holding are released.
-    expect(JSON.stringify(simulation.bench)).toBe(afterEdit);
+    expect(contents()).toBe(afterEdit);
   });
 
   it('steps a drag back to where it started, not to a frame of it', () => {
