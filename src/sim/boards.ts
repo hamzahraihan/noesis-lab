@@ -974,12 +974,172 @@ function franzininhoDefinition(): PartDefinition {
   };
 }
 
+/*
+ * Raspberry Pi 4 Model B, by its 40-pin J8 header.
+ *
+ * Three facts about this one are the reason it is not a microcontroller board
+ * with a different label, and each is load-bearing:
+ *
+ *   - It has no ADC. Not a weak one, not a 10-bit one -- none. Reading an
+ *     analogue input needs an MCP3008 on the SPI pins, which is a lesson the
+ *     bench can now teach rather than one it has to hide.
+ *   - Its GPIO numbering is BCM, not physical. A program names GPIO 17, not
+ *     "pin 11", so the firmware number and the silkscreen are different
+ *     numbers here exactly as they are on an ESP32.
+ *   - Its outputs are weak. The BCM2711 drives 8 mA at most, which is about
+ *     400 ohm of output impedance against the Uno's 25. A jumper that lights
+ *     an LED on an Uno barely registers on a Pi, and that is the board's
+ *     answer rather than a fault.
+ *
+ * The header is the standard 40-pin block, identical on every Pi with a J8,
+ * taken from the pinout reference and cross-checked against the Foundation's
+ * own table of alternate functions.
+ */
+
+/**
+ * The header, in physical pin order: odd pins down the left column, even down
+ * the right, which is how it is numbered and how the board is laid out.
+ */
+const PI_J8: ReadonlyArray<readonly [physical: number, label: string]> = [
+  [1, '3V3'],
+  [2, '5V'],
+  [3, 'GPIO2'],
+  [4, '5V'],
+  [5, 'GPIO3'],
+  [6, 'GND'],
+  [7, 'GPIO4'],
+  [8, 'GPIO14'],
+  [9, 'GND'],
+  [10, 'GPIO15'],
+  [11, 'GPIO17'],
+  [12, 'GPIO18'],
+  [13, 'GPIO27'],
+  [14, 'GND'],
+  [15, 'GPIO22'],
+  [16, 'GPIO23'],
+  [17, '3V3'],
+  [18, 'GPIO24'],
+  [19, 'GPIO10'],
+  [20, 'GND'],
+  [21, 'GPIO9'],
+  [22, 'GPIO25'],
+  [23, 'GPIO11'],
+  [24, 'GPIO8'],
+  [25, 'GND'],
+  [26, 'GPIO7'],
+  [27, 'GPIO0'],
+  [28, 'GPIO1'],
+  [29, 'GPIO5'],
+  [30, 'GND'],
+  [31, 'GPIO6'],
+  [32, 'GPIO12'],
+  [33, 'GPIO13'],
+  [34, 'GND'],
+  [35, 'GPIO19'],
+  [36, 'GPIO16'],
+  [37, 'GPIO26'],
+  [38, 'GPIO20'],
+  [39, 'GND'],
+  [40, 'GPIO21'],
+];
+
+/** Where the header sits on an 85 x 56 mm board, and where each column runs. */
+const PI_HEADER_X = 24.0;
+const PI_HEADER_Y = 7.5;
+const PI_HEADER_PITCH = 2.54;
+
+function raspberryPiBoardPin(
+  id: string,
+  label: string,
+  physical: number,
+): BoardPin {
+  const gpio = label.startsWith('GPIO') ? Number(label.slice(4)) : undefined;
+  const isGround = label === 'GND';
+  const isPower = label === '3V3' || label === '5V';
+
+  /*
+   * GPIO0 and GPIO1 are on the header but reserved for the board's own HAT ID
+ * EEPROM lines. gpiozero will happily construct a device on them and nothing
+ * will happen, which is exactly what happens on real hardware -- so they are
+ * declared as what they are rather than quietly left out of the count.
+   */
+  const reserved = physical === 27 || physical === 28;
+
+  return {
+    id,
+    label,
+    role: isGround ? 'ground' : isPower ? 'power' : 'gpio',
+    gpio,
+    canDrive: !reserved,
+  };
+}
+
+function raspberryPiDefinition(): PartDefinition {
+  const pins: PinSpec[] = [];
+  const boardPins: BoardPin[] = [];
+  const odd: PinSpec[] = [];
+  const even: PinSpec[] = [];
+
+  for (const [physical, label] of PI_J8) {
+    const row = Math.floor((physical - 1) / 2);
+    const column = physical % 2 === 0 ? 1 : 0;
+    const id = `J8_${physical}`;
+    const pin: PinSpec = {
+      id,
+      label,
+      x: PI_HEADER_X + column * PI_HEADER_PITCH,
+      y: PI_HEADER_Y + row * PI_HEADER_PITCH,
+      net: label === 'GND' ? 'GND' : label === '5V' ? '5V' : label === '3V3' ? '3V3' : undefined,
+    };
+    pins.push(pin);
+    (column === 0 ? odd : even).push(pin);
+    boardPins.push(raspberryPiBoardPin(id, label, physical));
+  }
+
+  return {
+    id: 'raspberry-pi-4',
+    name: 'Raspberry Pi 4',
+    category: 'board',
+    widthMm: 85,
+    heightMm: 56,
+    component: {
+      kind: 'mcu',
+      board: {
+        id: 'raspberry-pi-4',
+        name: 'Raspberry Pi 4',
+        logicVolts: 3.3,
+        serialPrefix: 'Raspberry Pi',
+        /*
+         * The BCM2711 drives 4 mA by default and 8 mA at its maximum, into 3.3 V.
+         * That is the number that makes a jumper that works on an Uno fail
+         * here, so it is modelled rather than rounded away.
+         */
+        sourceOhms: 412,
+        sinkOhms: 412,
+        /*
+         * Hardware PWM is only on GPIO12 and GPIO13 of the header, and only the
+         * pigpio library can reach it -- there is no register a sketch could set.
+         * The bench's figure is pigpio's own default.
+         */
+        pwmHz: 100,
+        // There is no converter on this board to sample. Zero says so.
+        adcBits: 0,
+      },
+    },
+    pins,
+    boardPins,
+    bodyColour: '#1d7042',
+    legendColour: '#ffffff',
+  };
+}
+
 let esp32: PartDefinition | null = null;
 let uno: PartDefinition | null = null;
 let mega: PartDefinition | null = null;
 let nano: PartDefinition | null = null;
 let rp2040: PartDefinition | null = null;
 let franzininho: PartDefinition | null = null;
+let raspberryPi: PartDefinition | null = null;
 
 export function esp32DevKitV1(): PartDefinition {
   return (esp32 ??= esp32Definition());
@@ -1003,4 +1163,8 @@ export function nanoRp2040Connect(): PartDefinition {
 
 export function franzininhoBoard(): PartDefinition {
   return (franzininho ??= franzininhoDefinition());
+}
+
+export function raspberryPi4(): PartDefinition {
+  return (raspberryPi ??= raspberryPiDefinition());
 }
