@@ -174,42 +174,49 @@ export function RadialLeads({
  *
  * The plastic strip is drawn first and the pins over it, because on a real
  * board the pins pass through and stand proud of the body.
+ *
+ * The strip is read off the pins themselves rather than from a pair of numbers
+ * the caller worked out. A header is a rectangle drawn around a run of pins,
+ * and taking it from the pins is what lets one piece draw the edge headers
+ * every other board here has and the 2x20 block in the middle of a Pi.
  */
 export function PinHeader({
   pins,
-  x,
-  from,
-  to,
   label,
   labelColour,
 }: {
   pins: readonly { readonly x: number; readonly y: number }[];
-  x: number;
-  from: number;
-  to: number;
   label?: string;
   labelColour: string;
 }) {
+  if (pins.length === 0) return null;
+
+  const xs = pins.map((pin) => pin.x);
+  const ys = pins.map((pin) => pin.y);
+  /*
+   * Padding is deliberately different on each axis: the strip is a shade wider
+   * than the pin pitch across and taller along it. Taking the same number both
+   * ways would quietly shrink every header on every board by a fraction of a
+   * millimetre for no reason anyone asked for.
+   */
+  const left = Math.min(...xs) - 1.27;
+  const top = Math.min(...ys) - 1.4;
+  const width = Math.max(...xs) - Math.min(...xs) + 2.54;
+  const height = Math.max(...ys) - Math.min(...ys) + 2.8;
+
   return (
     <g>
       <rect
-        x={x - 1.27}
-        y={from - 1.4}
-        width={2.54}
-        height={to - from + 2.8}
+        x={left}
+        y={top}
+        width={width}
+        height={height}
         rx={0.3}
         fill="#15161a"
         stroke="#000000"
         strokeWidth={0.15}
       />
-      <rect
-        x={x - 1.27}
-        y={from - 1.4}
-        width={2.54}
-        height={to - from + 2.8}
-        rx={0.3}
-        fill="url(#nz-body)"
-      />
+      <rect x={left} y={top} width={width} height={height} rx={0.3} fill="url(#nz-body)" />
       {pins.map((pin) => (
         <rect
           key={`${pin.x}:${pin.y}`}
@@ -225,8 +232,8 @@ export function PinHeader({
       ))}
       {label && (
         <text
-          x={x}
-          y={from - 2.2}
+          x={left + width / 2}
+          y={top - 1.4}
           fontSize={1.5}
           textAnchor="middle"
           fill={labelColour}
