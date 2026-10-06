@@ -109,10 +109,20 @@ export function AxialLeads({
   bendRight: number;
   width?: number;
 }) {
+  /*
+   * The stub drops *down to* the row it is given and ends there, rather than
+   * starting at the row and bending away above it.
+   *
+   * The second reading looks fine in isolation and is wrong in place: the row
+   * handed in is where the lead meets the board, and the leg's visible end is
+   * the contact a wire clips to. Drawing upward from it put the end of the metal
+   * 0.85 mm above the contact, so the wire met the leg partway along and looked
+   * like it stopped short of the part it was plugged into.
+   */
   return (
     <g>
       <path
-        d={`M ${bendLeft} ${y + 0.85} L ${bendLeft} ${y} L ${left} ${y}`}
+        d={`M ${bendLeft} ${y - 0.85} L ${bendLeft} ${y} L ${left} ${y}`}
         fill="none"
         stroke="url(#nz-lead)"
         strokeWidth={width}
@@ -120,7 +130,7 @@ export function AxialLeads({
         strokeLinejoin="round"
       />
       <path
-        d={`M ${right} ${y} L ${bendRight} ${y} L ${bendRight} ${y + 0.85}`}
+        d={`M ${right} ${y} L ${bendRight} ${y} L ${bendRight} ${y - 0.85}`}
         fill="none"
         stroke="url(#nz-lead)"
         strokeWidth={width}
