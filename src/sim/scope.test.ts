@@ -33,13 +33,16 @@ function ledBench() {
   const railY = railRowY(2);
 
   link(builder, pinAt('R_D2'), { x: holeX(SIGNAL_COLUMN), y: holeY(8) });
-  builder.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
+  builder.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 2.54);
+  // Anode-anchored: the long leg lands on its hole, cathode one column along.
+  const scopeLed = ledDefinition(DIODE_PROFILES.red, 'Red');
+  const scopeAnode = scopeLed.pins.find((pin) => pin.id === 'anode')!;
   builder.addPart(
-    ledDefinition(DIODE_PROFILES.red, 'Red'),
-    holeX(SIGNAL_COLUMN + 4),
-    holeY(8) - 3,
+    scopeLed,
+    holeX(SIGNAL_COLUMN + 4) - scopeAnode.x,
+    holeY(8) - scopeAnode.y,
   );
-  link(builder, { x: holeX(SIGNAL_COLUMN + 5), y: holeY(8) }, { x: holeX(SIGNAL_COLUMN + 5), y: railY });
+  link(builder, { x: holeX(SIGNAL_COLUMN + 3), y: holeY(8) }, { x: holeX(SIGNAL_COLUMN + 3), y: railY });
   link(builder, pinAt('L_GND'), { x: holeX(10), y: railY });
 
   const mcu = new McuRuntime(esp32.definition);
