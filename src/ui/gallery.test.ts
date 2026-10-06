@@ -84,4 +84,8 @@ describe('the project gallery', () => {
   it('beeps at the parking sensor', () => {
     expect(galleryById('parking')?.title).toBe('Parking Sensor');
   });
+
+  it('logs the weather station', () => {
+    expect(galleryById('weather')?.title).toBe('Weather Station');
+  });
 });

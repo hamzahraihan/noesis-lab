@@ -532,7 +532,83 @@ void loop() {
   },
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING];
+/* ------------------------------------------------------------------ *
+ * Weather Station — DHT22 + LCD1602
+ * ------------------------------------------------------------------ */
+
+const WEATHER: GalleryProject = {
+  id: 'weather',
+  title: 'Weather Station',
+  blurb:
+    'A temperature-humidity sensor reports to a character LCD and the serial log. Turn the knobs on the part — or warm it with a fingertip on the bench — and watch both numbers move.',
+  boards: ['uno'],
+  parts: [
+    { name: 'DHT22 Temp/Humidity', qty: 1 },
+    { name: 'LCD 16x2 (HD44780)', qty: 1 },
+  ],
+  sketch: `#include <Arduino.h>
+
+byte SENSOR_PIN = 2;
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin(SENSOR_PIN);
+  lcd.begin(16, 2);
+  lcd.backlight();
+  Serial.println("weather up");
+}
+
+void loop() {
+  float temperature = dht.temperature(SENSOR_PIN);
+  float humidity = dht.humidity(SENSOR_PIN);
+
+  int percent = humidity;
+  if (percent < 0) { percent = 0; }
+  if (percent > 100) { percent = 100; }
+
+  lcd.setCursor(0, 0);
+  lcd.print("t ");
+  lcd.print(temperature);
+  lcd.print("C");
+  lcd.setCursor(0, 1);
+  lcd.print("rh ");
+  lcd.print(percent);
+  lcd.print("%");
+
+  Serial.print("t ");
+  Serial.print(temperature);
+  Serial.print(" C rh ");
+  Serial.print(percent);
+  Serial.println(" %");
+  delay(2000);
+}
+`,
+  working: [
+    'The LCD shows temperature on line one and humidity on line two.',
+    'Turning the part knobs moves both numbers within a couple of seconds.',
+    'The serial monitor logs one line per reading, never a scroll of repeats.',
+  ],
+  setup: (simulation) => {
+    simulation.clearExampleParts();
+    const supply = simulation.boardTerminal('5V');
+    const ground = simulation.boardTerminal('GND');
+    if (!supply || !ground) return;
+
+    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y);
+
+    const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), PART_X, PART_Y + PART_STEP);
+    const data = simulation.boardTerminal('D2');
+    const vcc = simulation.pinAt(sensor, 'VCC');
+    const sda = simulation.pinAt(sensor, 'SDA');
+    const gnd = simulation.pinAt(sensor, 'GND');
+    if (!data || !vcc || !sda || !gnd) return;
+    simulation.routeWire(supply, vcc);
+    simulation.routeWire(ground, gnd);
+    simulation.routeWire(data, sda);
+  },
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
