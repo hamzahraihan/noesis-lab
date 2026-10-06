@@ -271,6 +271,16 @@ export class Engine {
    * an unwired sensor reads nothing, instead of both mysteriously working.
    */
   private rebuildBus(): void {
+    /*
+     * Whatever was already on the bench keeps its controller.
+     *
+     * A controller's framebuffer is what the firmware has drawn so far, and a
+     * rebuild is a re-solve of the circuit, not a reset of the hardware. Making
+     * new ones here -- which this did, on every rebuild -- meant the renderer
+     * kept a reference to one panel while the bus wrote its bytes into another,
+     * and the screen stayed black on a bench that was wired correctly.
+     */
+    const previousDisplays = new Map(this.displays);
     this.displays.clear();
     this.devices.clear();
     this.servos.clear();
@@ -282,7 +292,8 @@ export class Engine {
     const mcuPart = this.mcuPart;
 
     for (const part of this.bench.parts) {
-      const controller = createController(part.definition);
+      const carried = previousDisplays.get(part.id);
+      const controller = carried ?? createController(part.definition);
       if (controller) this.displays.set(part.id, controller);
       /*
        * A display that speaks I2C is one model, not two. Registering a second
