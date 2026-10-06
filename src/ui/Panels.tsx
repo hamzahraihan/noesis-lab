@@ -11,7 +11,8 @@ import { useEffect, useRef } from 'react';
 import type { PartInstance } from '../sim/bench';
 import { DynamicState, type KnobSpec } from '../sim/catalog';
 import { formatOhms, formatVolts } from './format';
-import { FIRMWARE_LANGUAGE, FIRMWARE_THEME } from './monaco-setup';
+import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
+import type { FirmwareLanguage } from '../sim/firmware/interpreter';
 import type { Example } from './examples';
 import {
   CaretRightIcon,
@@ -21,6 +22,7 @@ import {
   PlayIcon,
   ReaderIcon,
   ResetIcon,
+  ResetIcon as RotateIcon,
   TargetIcon,
   TrashIcon,
   ValueIcon,
@@ -38,13 +40,31 @@ export interface InspectorProps {
   onDelete(): void;
   onSetPressed(pressed: boolean): void;
   onSetKnob(spec: KnobSpec, value: number): void;
+  /**
+   * Turns the panel a quarter turn, on a colour display.
+   *
+   * Not a knob, and deliberately so: turning a screen changes nothing about the
+   * circuit, so routing it through one would re-solve the whole netlist on
+   * every click for an operation that is purely about how the glass is read.
+   */
+  onRotate(): void;
+  /**
+   * The screen's size right now, as `width × height`, or undefined for a part
+   * with no colour panel to turn.
+   *
+   * Read from the controller rather than the definition because a panel that
+   * has been turned is a different shape than the one it was defined as.
+   */
+  panelSize?: string;
 }
 
 export function Inspector({
   part,
   pinVoltages,
   controls,
+  panelSize,
   onDelete,
+  onRotate,
   onSetPressed,
   onSetKnob,
 }: InspectorProps) {
@@ -131,6 +151,31 @@ export function Inspector({
             onChange={(value) => onSetKnob(spec, value)}
           />
         ))}
+
+        {/*
+         * Turning the glass is an operation on the panel rather than on its
+         * wiring, so it sits with the other direct actions rather than among
+         * the knobs. The readout is the useful half of it: an orientation that
+         * swaps the axes changes the size the screen is, and a learner who
+         * cannot see that is left guessing why their map stopped fitting.
+         */}
+        {panelSize && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={onRotate}
+              className="ctl ctl-quiet h-8 w-full text-xs"
+              title="Turn the panel a quarter turn"
+            >
+              <RotateIcon className="icon" aria-hidden="true" />
+              Rotate panel
+            </button>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Screen</span>
+              <span className="num text-slate-200">{panelSize}</span>
+            </div>
+          </div>
+        )}
 
         <button type="button" onClick={onDelete} className="ctl ctl-danger mt-1 w-full">
           <TrashIcon className="icon" aria-hidden="true" />
@@ -263,9 +308,11 @@ export function SerialMonitor({ lines }: { lines: readonly string[] }) {
 export function FirmwareEditor({
   value,
   error,
+  language,
   expanded,
   onToggle,
   onChange,
+  onChangeLanguage,
   onRun,
   onReset,
   running,
@@ -275,10 +322,13 @@ export function FirmwareEditor({
 }: {
   value: string;
   error: string | null;
+  /** Which grammar the text in the editor is written in. */
+  language: FirmwareLanguage;
   /** Whether the editor body is showing under its header. */
   expanded: boolean;
   onToggle(): void;
   onChange(next: string): void;
+  onChangeLanguage(language: FirmwareLanguage): void;
   onRun(): void;
   onReset(): void;
   running: boolean;
@@ -305,6 +355,30 @@ export function FirmwareEditor({
           </span>
           Firmware
         </button>
+
+        {/*
+         * Which grammar, stated rather than inferred. The two are not
+         * interchangeable and neither is a subset of the other, so the editor
+         * cannot pick one from the text and the bench cannot switch the board
+         * under a sketch without saying so.
+         */}
+        <label className="flex items-center gap-1.5">
+          <span className="sr-only">Firmware language</span>
+          <select
+            value={language}
+            onChange={(event) => onChangeLanguage(event.target.value as FirmwareLanguage)}
+            className="ctl-select"
+            aria-label="Firmware language"
+            title={
+              language === 'python'
+                ? 'Python, with the gpiozero API. A Raspberry Pi runs this.'
+                : 'An Arduino sketch. Runs on every microcontroller here.'
+            }
+          >
+            <option value="arduino-cpp">C++</option>
+            <option value="python">Python</option>
+          </select>
+        </label>
         {/*
          * An example carries its own wiring, so picking one replaces the
          * sketch *and* rebuilds the bench around it. Loading a sketch onto a
@@ -351,7 +425,7 @@ export function FirmwareEditor({
       {expanded && (
         <Editor
           height="100%"
-          language={FIRMWARE_LANGUAGE}
+          language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
           theme={FIRMWARE_THEME}
           value={value}
           onChange={(next) => onChange(next ?? '')}
