@@ -23,7 +23,7 @@ import {
   type FirmwareServices,
 } from '../sim/firmware/interpreter';
 import { FirmwareSyntaxError } from '../sim/firmware/parser';
-import type { BoardPin, KnobSpec, PartDefinition } from '../sim/catalog';
+import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '../sim/catalog';
 import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
 import { nextAutomaticWireColour } from './wire-colours';
 
@@ -736,6 +736,29 @@ export class Simulation {
       }
     }
     return volts;
+  }
+
+  /**
+   * Turns a placed part a quarter turn, clockwise.
+   *
+   * The circuit follows: a pin that moves carries its contacts with it, so a
+   * jumper clipped into a part stays clipped to that part rather than to the
+   * hole the lead happened to be sitting in. Turning a part is a change to the
+   * circuit and not only to the picture, so the netlist is re-solved after it --
+   * a resistor on its side reaches different contacts, and leaving the old
+   * ones solved would show the circuit the part had before it was turned.
+   */
+  rotatePart(partId: string): void {
+    const part = this.bench.parts.find((candidate) => candidate.id === partId);
+    if (!part) return;
+    this.builder.rotatePart(partId, (part.rotation + 90) as Rotation);
+    this.rebuild();
+  }
+
+  /** Which way up a part is, for the readout in the inspector. */
+  partRotation(partId: string): Rotation {
+    const part = this.bench.parts.find((candidate) => candidate.id === partId);
+    return part?.rotation ?? 0;
   }
 
   /** Servo models, so the artwork can draw each horn where it was told to. */
