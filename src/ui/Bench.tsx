@@ -51,14 +51,18 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CaretLeftIcon,
+  CaretRightIcon,
   Component1Icon,
   Cross2Icon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { exerciseBoard, exerciseById, exerciseLanguage } from './exercises';
+import { ExerciseGuide } from './ExerciseGuide';
+import { isGuideDismissed } from './guide-dismissal';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -104,15 +108,28 @@ function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
   // --- LED on the bench ---------------------------------------------------
   const ledPin = pinAt(wiring.led);
   simulation.routeWire(at(ledPin.x, ledPin.y), at(holeX(SIGNAL_COLUMN), holeY(8)));
-  simulation.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
+  // Landed by its own leads rather than by a remembered number: the resistor's
+  // pins sit 2.54 mm down inside its footprint, which is a whole breadboard
+  // row. Hardcoding that offset is what put a part half a row out when the pin
+  // moved, and the wire then reached the pin instead of the visible lead.
+  const [resistorDx, resistorDy] = offsetOfFirstPin(resistorDefinition(330));
   simulation.addPart(
-    ledDefinition(DIODE_PROFILES.red, 'Red'),
-    holeX(SIGNAL_COLUMN + 4),
-    holeY(8) - 3,
+    resistorDefinition(330),
+    holeX(SIGNAL_COLUMN) - resistorDx,
+    holeY(8) - resistorDy,
+  );
+  // Anchored by the anode, so the long leg lands on its hole and the cathode
+  // steps one column along; the cathode sits 0.1 mm off pitch, inside snap.
+  const ledDef = ledDefinition(DIODE_PROFILES.red, 'Red');
+  const ledAnode = ledDef.pins.find((pin) => pin.id === 'anode')!;
+  simulation.addPart(
+    ledDef,
+    holeX(SIGNAL_COLUMN + 4) - ledAnode.x,
+    holeY(8) - ledAnode.y,
   );
   simulation.routeWire(
-    at(holeX(SIGNAL_COLUMN + 5), holeY(8)),
-    at(holeX(SIGNAL_COLUMN + 5), groundRailY),
+    at(holeX(SIGNAL_COLUMN + 3), holeY(8)),
+    at(holeX(SIGNAL_COLUMN + 3), groundRailY),
   );
   const ground = pinAt(wiring.ground);
   simulation.routeWire(at(ground.x, ground.y), at(holeX(10), groundRailY));
@@ -245,6 +262,13 @@ export default function Bench() {
   );
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  /*
+   * The right-hand rails — Inspector + Serial, and Scope + Logic + Bus +
+   * Multimeter — collapse together under one toggle, mirroring the parts rail
+   * on the left. They keep separate breakpoints (lg vs xl) but one piece of
+   * state, so there is a single "instruments" question rather than two.
+   */
+  const [instrumentsOpen, setInstrumentsOpen] = useState(true);
   const [, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
@@ -258,6 +282,20 @@ export default function Bench() {
    */
   const [wireColour, setWireColour] = useState(DEFAULT_WIRE_COLOUR);
   const [firmwareOpen, setFirmwareOpen] = useState(true);
+
+  /*
+   * The exercise guide: popup instructions for the bench the learner just
+   * opened through `?ex=:id`.
+   *
+   * Auto-opens on arrival unless dismissed for this exercise, and reopens
+   * from the header's Guide button. Reset on exercise change so a second
+   * exercise never inherits the first one's dismissal in this session.
+   */
+  const [guideOpen, setGuideOpen] = useState(false);
+  useEffect(() => {
+    if (exercise && !isGuideDismissed(exercise.id)) setGuideOpen(true);
+    else setGuideOpen(false);
+  }, [exercise]);
 
   // Rebuilt on board change only: a sketch's pin numbers mean something
   // different on each board, so carrying one across would silently misfire.
@@ -470,11 +508,23 @@ export default function Bench() {
           else simulation.start();
           forceRender((n) => n + 1);
           break;
+        case 'r':
+          // Turning a part is only meaningful with one selected, and the key is
+          // left alone otherwise for the same reason Delete is: swallowing it
+          // would take the letter from anything else that wants it.
+          if (selectedId === null) return;
+          event.preventDefault();
+          simulation.rotatePart(selectedId);
+          forceRender((n) => n + 1);
+          break;
         case 'b':
           setSidebarOpen((open) => !open);
           break;
         case 'c':
           setBrowserOpen(true);
+          break;
+        case 'i':
+          setInstrumentsOpen((open) => !open);
           break;
         case 'Delete':
         case 'Backspace':
@@ -548,8 +598,29 @@ export default function Bench() {
 
   const meterRedLabel = meterPins.find((pin) => pin.id === meterRedPin)?.label ?? null;
   const meterBlackLabel = meterPins.find((pin) => pin.id === meterBlackPin)?.label ?? null;
+  /*
+   * How much of the bench has changed, which is not the same question as which
+   * bench it is: turning a part moves its contacts in place, so the bench
+   * object is unchanged while every terminal under that part is somewhere else.
+   * Anything derived from where things are has to key on this.
+   */
+  const benchRevision = bench.revision;
 
-
+  /*
+   * Which net each contact belongs to, for the highlight and the probes.
+   *
+   * `benchRevision` is in the dependency list without being read in the body,
+   * and cannot be read there. The solver assigns nets to contacts by id, so
+   * this map is right whenever the solver has been re-run -- which every
+   * mutator does. What the body cannot detect is that a contact *moved*:
+   * terminals are mutated in place, so the bench object and its arrays are
+   * identical to the previous render and nothing read here shows the
+   * difference. Without the count, turning a part leaves the highlight on the
+   * nets its pins belonged to before the turn.
+   *
+   * The rule calls the entry redundant because it follows reads rather than
+   * mutations, which is the one thing it cannot see from in here.
+   */
   const netOfTerminal = useMemo(() => {
     const netlist = simulation.engine.currentNetlist;
     const map = new Map<number, number>();
@@ -557,13 +628,19 @@ export default function Bench() {
       map.set(terminal.id, netlist.nodeOfTerminal[terminal.id]);
     }
     return map;
-  }, [bench, simulation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bench, benchRevision, simulation]);
 
   const selected = bench.parts.find((part) => part.id === selectedId) ?? null;
 
   const onMovePart = useCallback(
     (partId: string, x: number, y: number) => {
       simulation.movePart(partId, Math.round(x), Math.round(y));
+      // Asked for explicitly, because the animation loop only re-renders while
+      // the simulation is running. A stopped bench relied on that loop drawing
+      // every frame for everything to update -- which is why dragging a part
+      // moved it in the model and left it exactly where it was on screen.
+      forceRender((n) => n + 1);
     },
     [simulation],
   );
@@ -864,6 +941,18 @@ export default function Bench() {
             <PlusIcon className="icon" aria-hidden="true" />
             Components
           </button>
+
+          {exercise && (
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="ctl ctl-outline"
+              title={`Open the guide for ${exercise.id} ${exercise.title}`}
+            >
+              <ReaderIcon className="icon" aria-hidden="true" />
+              Guide {exercise.id}
+            </button>
+          )}
         </div>
       </header>
 
@@ -1018,7 +1107,21 @@ export default function Bench() {
           </section>
         </main>
 
-        <aside className="hidden w-60 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
+        <aside
+          className={`shrink-0 flex-col border-l border-slate-800 bg-slate-900 ${
+            instrumentsOpen ? 'hidden w-60 lg:flex' : 'hidden'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setInstrumentsOpen(false)}
+            aria-expanded={true}
+            aria-label="Collapse the instruments sidebar"
+            title="Collapse instruments (I)"
+            className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          >
+            <CaretRightIcon className="icon" aria-hidden="true" />
+          </button>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <Inspector
               part={selected}
@@ -1035,9 +1138,14 @@ export default function Bench() {
                 if (selected) simulation.setKnob(selected.id, spec, value);
               }}
               onRotate={() => {
-                if (selected) simulation.rotateDisplay(selected.id);
+                // Physical, not electronic: this turns the part on the bench.
+                // A colour panel has a second rotation of its own, the one a
+                // sketch asks for through `tft.setRotation`, and the two are
+                // independent -- turning the panel does not tell the sketch.
+                if (selected) simulation.rotatePart(selected.id);
               }}
               panelSize={selected ? simulation.displaySize(selected.id) : undefined}
+              rotation={selected ? simulation.partRotation(selected.id) : 0}
             />
           </div>
 
@@ -1046,7 +1154,11 @@ export default function Bench() {
           </div>
         </aside>
 
-        <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-slate-800 bg-slate-900 xl:block">
+        <aside
+          className={`shrink-0 overflow-y-auto border-l border-slate-800 bg-slate-900 ${
+            instrumentsOpen ? 'hidden w-72 xl:block' : 'hidden'
+          }`}
+        >
           <ScopePanel
             pins={probePins}
             baud={baud}
@@ -1087,6 +1199,30 @@ export default function Bench() {
             setBrowserOpen(false);
           }}
           onClose={() => setBrowserOpen(false)}
+        />
+      )}
+
+      {!instrumentsOpen && (
+        <aside className="hidden w-9 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
+          <button
+            type="button"
+            onClick={() => setInstrumentsOpen(true)}
+            aria-expanded={false}
+            aria-label="Expand the instruments sidebar"
+            title="Expand instruments (I)"
+            className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          >
+            <CaretLeftIcon className="icon" aria-hidden="true" />
+          </button>
+        </aside>
+      )}
+
+      {exercise && (
+        <ExerciseGuide
+          key={exercise.id}
+          exercise={exercise}
+          open={guideOpen}
+          onClose={() => setGuideOpen(false)}
         />
       )}
 
