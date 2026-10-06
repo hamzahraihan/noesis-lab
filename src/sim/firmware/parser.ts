@@ -239,7 +239,16 @@ export type Stmt =
   | { kind: 'break'; location: SourceLocation }
   | { kind: 'continue'; location: SourceLocation }
   | { kind: 'block'; statements: Stmt[]; location: SourceLocation }
-  | { kind: 'empty'; location: SourceLocation };
+  | { kind: 'empty'; location: SourceLocation }
+  /**
+   * A run of statements that is not a scope.
+   *
+   * C's braces open a scope and Python's indentation does not -- only `def`
+   * does -- so the two grammars need different nodes here. A Python `while` or
+   * `if` body that opened a scope would lose every assignment it made, because
+   * the name would be bound somewhere the rest of the program cannot see.
+   */
+  | { kind: 'suite'; statements: Stmt[]; location: SourceLocation };
 
 export interface FunctionDecl {
   readonly name: string;
@@ -452,8 +461,19 @@ class Parser {
           return this.readFor();
         case 'return': {
           this.next();
-          const value = this.acceptPunctuation(';') ? null : this.readExpression();
-          if (!this.acceptPunctuation(';')) throw new FirmwareSyntaxError("expected ';'", token.location);
+          /*
+           * `return;` and `return x;` are both ordinary C, and the semicolon of
+           * a bare return has to be consumed exactly once. Peeking for it and
+           * then demanding it again made the simplest return statement in the
+           * language a syntax error.
+           */
+          if (this.acceptPunctuation(';')) {
+            return { kind: 'return', value: null, location: token.location };
+          }
+          const value = this.readExpression();
+          if (!this.acceptPunctuation(';')) {
+            throw new FirmwareSyntaxError("expected ';'", token.location);
+          }
           return { kind: 'return', value, location: token.location };
         }
         case 'break':
