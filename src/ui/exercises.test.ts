@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EXERCISES, EXERCISE_BOARD, exerciseById, firstExercise } from './exercises';
+import {
+  EXERCISES,
+  exerciseBoard,
+  exerciseById,
+  exerciseLanguage,
+  firstExercise,
+  type Exercise,
+} from './exercises';
 import { Simulation } from './simulation';
 import { boardOption } from './boardRegistry';
 import { PART_CATALOGUE } from '../sim/catalogue';
@@ -27,9 +34,16 @@ import { breadboardDefinition } from '../sim/breadboard';
  * every input reads zero. These tests have to run against a real bench or they
  * would have passed that for months.
  */
-function freshBench() {
-  const simulation = new Simulation(boardOption(EXERCISE_BOARD).make());
-  simulation.addPart(boardOption(EXERCISE_BOARD).make(), 0, 0);
+function freshBench(exercise?: Exercise) {
+  /*
+   * On the board the exercise is written for. Most of the curriculum is Uno
+   * lessons and `exerciseBoard` says so for them; the one that is not gets its
+   * own board, because running its wiring against an Uno would resolve every
+   * `boardTerminal('GPIO11')` to nothing and leave the circuit drawn and dead.
+   */
+  const board = boardOption(exercise ? exerciseBoard(exercise) : 'uno').make();
+  const simulation = new Simulation(board);
+  simulation.addPart(board, 0, 0);
   simulation.addPart(breadboardDefinition(), 230, 0);
   return simulation;
 }
@@ -97,8 +111,8 @@ describe('the exercise curriculum', () => {
 
   it('loads every sketch through the real parser', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench();
-      simulation.loadFirmware(exercise.sketch);
+      const simulation = freshBench(exercise);
+      simulation.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       // A sketch the interpreter cannot parse reports here rather than silently
       // doing nothing on the bench.
       expect(simulation.firmwareError, `${exercise.id} sketch: ${simulation.firmwareError}`)
@@ -106,8 +120,18 @@ describe('the exercise curriculum', () => {
     }
   });
 
-  it('has every sketch define the two functions the runner calls', () => {
+  it('gives every sketch the entry point its language needs', () => {
+    /*
+     * A C++ sketch is entered twice: `setup()` then `loop()`, over and over. A
+     * Python one is not -- the module body runs from top to bottom and never
+     * returns -- so the check is that a Python sketch ends in a loop it will
+     * stay in, rather than that it defines two functions it has no way to name.
+     */
     for (const exercise of EXERCISES) {
+      if (exerciseLanguage(exercise) === 'python') {
+        expect(exercise.sketch, `${exercise.id}`).toContain('while True:');
+        continue;
+      }
       expect(exercise.sketch, `${exercise.id}`).toContain('void setup()');
       expect(exercise.sketch, `${exercise.id}`).toContain('void loop()');
     }
@@ -115,7 +139,7 @@ describe('the exercise curriculum', () => {
 
   it('wires each exercise onto the bench without throwing', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench();
+      const simulation = freshBench(exercise);
       // The setup is the one thing in the curriculum that touches the model, and
       // it is the only part that can go wrong at runtime: a pin name that does
       // not resolve, or a terminal the catalogue renamed.
@@ -125,7 +149,7 @@ describe('the exercise curriculum', () => {
 
   it('puts the parts each exercise says it needs on the bench', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench();
+      const simulation = freshBench(exercise);
       exercise.setup(simulation);
       const placed = new Map(simulation.bench.parts.map((p) => [p.definition.name, 0]));
       for (const p of simulation.bench.parts) {
@@ -141,7 +165,7 @@ describe('the exercise curriculum', () => {
 
   it('adds jumpers, because a circuit with no wires is not a circuit', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench();
+      const simulation = freshBench(exercise);
       const before = simulation.bench.wires.length;
       exercise.setup(simulation);
       expect(simulation.bench.wires.length, `${exercise.id} wires`).toBeGreaterThan(before);
@@ -150,7 +174,7 @@ describe('the exercise curriculum', () => {
 
   it('joins every jumper to a real part contact, not a loose one', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench();
+      const simulation = freshBench(exercise);
       exercise.setup(simulation);
       const real = partTerminals(simulation);
       for (const wire of simulation.bench.wires) {
@@ -168,7 +192,7 @@ describe('the exercise curriculum', () => {
 
   it('connects every part of the circuit back to the board', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench();
+      const simulation = freshBench(exercise);
       exercise.setup(simulation);
 
       /*
