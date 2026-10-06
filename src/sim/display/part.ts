@@ -8,7 +8,13 @@
  */
 
 import type { PartDefinition } from '../catalog';
-import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from './ili9341';
+import {
+  Ili9341,
+  ILI9341_HEIGHT,
+  ILI9341_LARGE_HEIGHT,
+  ILI9341_LARGE_WIDTH,
+  ILI9341_WIDTH,
+} from './ili9341';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from './ssd1306';
 
 /** Either controller model a display part can be driving. */
@@ -80,6 +86,49 @@ export function ili9341Definition(): PartDefinition {
     bodyColour: '#0b1220',
     legendColour: '#93c5fd',
     displayPixels: { width: ILI9341_WIDTH, height: ILI9341_HEIGHT },
+    glassMm: { width: 53.0, height: 39.8 },
+  };
+}
+
+/**
+ * 3.2" TFT, ILI9341, on the 8-pin SPI breakout with a socket for a card.
+ *
+ * The same controller as the 2.4" and the same eight wires, on a carrier about
+ * half again as big. What changes is the RAM behind it: 320x480 rather than
+ * 320x240, which is why this panel reads out as 480x320 when it is held the
+ * way a map wants to be held and 320x480 when it is not.
+ *
+ * The card socket is decoration on the artwork rather than a part with pins.
+ * Drawing a socket that accepted wires would be worse than not drawing one: a
+ * hole a jumper could reach but not do anything with teaches the wrong lesson.
+ */
+export function ili9341LargeDefinition(): PartDefinition {
+  const headerX = 12.78;
+  const headerY = 96.0;
+  const pitch = 2.54;
+
+  return {
+    id: 'ili9341-480x320',
+    name: '3.2" TFT (ILI9341)',
+    category: 'output',
+    widthMm: 57.2,
+    heightMm: 109.0,
+    component: { kind: 'display', controller: 'ili9341', address: 0 },
+    pins: [
+      { id: 'VCC', label: 'VCC', x: headerX, y: headerY, net: 'VCC' },
+      { id: 'GND', label: 'GND', x: headerX + pitch, y: headerY, net: 'GND' },
+      { id: 'CS', label: 'CS', x: headerX + 2 * pitch, y: headerY },
+      { id: 'RESET', label: 'RST', x: headerX + 3 * pitch, y: headerY },
+      { id: 'DC', label: 'D/C', x: headerX + 4 * pitch, y: headerY },
+      { id: 'MOSI', label: 'DIN', x: headerX + 5 * pitch, y: headerY },
+      { id: 'SCK', label: 'CLK', x: headerX + 6 * pitch, y: headerY },
+      { id: 'LED', label: 'LED', x: headerX + 7 * pitch, y: headerY },
+    ],
+    bodyColour: '#0b1220',
+    legendColour: '#93c5fd',
+    displayPixels: { width: ILI9341_LARGE_WIDTH, height: ILI9341_LARGE_HEIGHT },
+    ramPixels: { width: ILI9341_LARGE_HEIGHT, height: ILI9341_LARGE_WIDTH },
+    glassMm: { width: 73.4, height: 48.9 },
   };
 }
 
@@ -116,12 +165,35 @@ export function ssd1306SpiDefinition(): PartDefinition {
   };
 }
 
-/** Instantiates the controller model a display part drives. */
+/**
+ * Instantiates the controller model a display part drives.
+ *
+ * The colour panel is sized from its own RAM rather than assumed, because the
+ * 2.4" and the 3.2" are the same chip on different glass: 320x240 against
+ * 320x480.
+ *
+ * Note which way round that is. `ramPixels` is the panel's memory and
+ * `displayPixels` is what a user sees, and for the 3.2" they are the same
+ * rectangle the other way up -- the RAM is portrait and the module is fitted
+ * landscape. So the controller is built portrait and then *turned* to match the
+ * glass, rather than being told the answer twice and expected to keep them
+ * consistent. One of the two numbers is the truth about the hardware and the
+ * other is a fact about how it is mounted, and starting in the wrong one means
+ * a map drawn before the first rotation lands on the wrong screen.
+ */
 export function createController(definition: PartDefinition): DisplayController | null {
   const component = definition.component;
   if (component.kind !== 'display') return null;
   if (component.controller === 'ssd1306-spi') return new Ssd1306();
-  return component.controller === 'ssd1306'
-    ? new Ssd1306(component.address)
-    : new Ili9341();
+  if (component.controller === 'ssd1306') return new Ssd1306(component.address);
+
+  const ram = definition.ramPixels;
+  const panel = new Ili9341(ram?.width ?? ILI9341_WIDTH, ram?.height ?? ILI9341_HEIGHT);
+
+  const visible = definition.displayPixels;
+  if (visible && visible.width > panel.width) {
+    panel.setRotation(1);
+  }
+
+  return panel;
 }
