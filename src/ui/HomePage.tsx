@@ -24,7 +24,7 @@ import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardR
 import { PartPreview } from './PartPreview';
 
 /** A spec chip: a label and the value it describes, in the board's own units. */
-function Chip({ label, value }: { readonly label: string; readonly value: string }) {
+export function Chip({ label, value }: { readonly label: string; readonly value: string }) {
   return (
     <span className="inline-flex items-baseline gap-1.5 rounded-md bg-slate-800 px-2 py-1 text-xs">
       <span className="text-slate-500">{label}</span>
@@ -42,7 +42,7 @@ function Chip({ label, value }: { readonly label: string; readonly value: string
  * is the same artwork at the same millimetre size the bench opens on, so the
  * picture cannot drift from the board that gets built.
  */
-function BoardArt({ board, className }: { readonly board: BoardOption; readonly className: string }) {
+export function BoardArt({ board, className }: { readonly board: BoardOption; readonly className: string }) {
   // Every board's `make()` builds a fresh definition; memoised on the entry
   // itself, which is a module-level constant and so stable across renders.
   const definition = useMemo(() => board.make(), [board]);
@@ -107,7 +107,7 @@ export function HomePage() {
                  * click handler would have had to reimplement badly.
                  */}
                 <Link
-                  to={`/bench/${board.id}`}
+                  to={`/projects/${board.id}`}
                   className="group flex h-full w-full flex-col items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900"
                 >
                   {/*
@@ -164,7 +164,7 @@ export function HomePage() {
                   </span>
 
                   <span className="mt-auto inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-sky-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                    Open the bench
+                    See the featured project
                     <ArrowRightIcon className="icon-sm" aria-hidden="true" />
                   </span>
                 </Link>
