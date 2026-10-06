@@ -62,7 +62,15 @@ const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
   nano: [18, 19],
   mega: [20, 21],
   rp2040: [26, 27],
+  /*
+   * A single-board computer's I2C is the pair its bus sits on by default: data
+   * on GPIO2 and clock on GPIO3, which are physical pins 3 and 5. Those two
+   * carry a fixed pull-up on the board, which is why a Pi needs no external
+   * resistors for the bus the way an Uno does.
+   */
+  'raspberry-pi-4': [2, 3],
 };
+
 
 /**
  * Where each board's SPI peripheral sits, as [chipSelect, clock, mosi], with
@@ -79,7 +87,19 @@ const SPI_PINS: Readonly<Record<string, readonly number[]>> = {
   nano: [10, 9, 13, 11],
   mega: [53, 9, 52, 51],
   rp2040: [10, 9, 13, 11],
+  /*
+   * The Pi's SPI0, in the same shape as the rows above: chip-select, the
+   * data/command line, the clock, and MOSI.
+   *
+   * CE0 is GPIO8, the clock is GPIO11 and MOSI is GPIO10 -- the block the
+   * Foundation documents for SPI0. The data/command line is GPIO24, which is
+   * worth noticing: it is not a hardware pin at all, it is an ordinary GPIO the
+   * program drives by hand, exactly as the Uno's D9 is. Only the other three
+   * come out of the peripheral.
+   */
+  'raspberry-pi-4': [8, 24, 11, 10],
 };
+
 
 export class McuRuntime {
   readonly definition: PartDefinition;
