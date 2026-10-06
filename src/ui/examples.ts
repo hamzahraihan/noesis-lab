@@ -341,3 +341,29 @@ export const EXAMPLES: readonly Example[] = [
   LCD_EXAMPLE,
   SERVO_EXAMPLE,
 ];
+
+/**
+ * The sketch a Raspberry Pi bench opens on.
+ *
+ * A Pi runs Linux rather than a sketch, so the C++ that ships for every other
+ * board cannot be what its bench starts with -- it would fail on the first line
+ * for a reason that has nothing to do with the wiring. This is the gpiozero
+ * version of the same blink: the same circuit, in the language the board
+ * actually speaks.
+ *
+ * The LED is on GPIO 17 rather than GPIO 2. On every microcontroller here the
+ * starter LED answers to pin 2, but a Pi's GPIO2 is the I2C data line, and the
+ * starter bench already has a display on that bus.
+ */
+export const PI_BLINK_SKETCH = `from gpiozero import LED
+import time
+
+# GPIO 17, not GPIO 2: on this board pin 2 is the I2C data line.
+led = LED(17)
+
+while True:
+    led.on()
+    time.sleep(0.5)
+    led.off()
+    time.sleep(0.5)
+`;
