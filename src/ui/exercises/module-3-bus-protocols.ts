@@ -68,6 +68,143 @@ const I2C_MONITOR: Exercise = {
     'Turn the DHT22’s temperature and humidity knobs on the part, or warm it with a fingertip on the bench, and watch the trend on the panel and the numbers on the Serial monitor.',
     'Count the transfers for one redraw in the Bus Monitor: sixteen, not 1024. One transaction points the panel at a page, the next delivers that page’s 128 bytes.',
   ],
+  solution: {
+    approach: [
+      'Decide what is on the bus and what is not. The panel is an I²C device and wants two wires shared ' +
+        'with everything else on the bus; the DHT22 has a single data wire and joins no bus at all, so ' +
+        'its terminal is called SDA because the package is shared with other sensors, not because the ' +
+        'part speaks I²C. Wiring it onto SDA is the first mistake this exercise invites.',
+      'Decide which pins those two wires get, and the answer is fixed rather than chosen: A4 is SDA and ' +
+        'A5 is SCL because those are the only two pins the Uno’s TWI peripheral reaches. They are not ' +
+        'interchangeable, and they are also the USB-serial lines, which is why the Serial monitor blanks ' +
+        'for a second on every upload.',
+      'Decide the pull-up question before fitting anything. Measure SDA against 5 V: infinity means no ' +
+        'pull-up exists on the module and the 10 kΩ pair is yours to fit; a few kΩ means the module ' +
+        'brought its own, and adding a second pair gives 5 kΩ — twice the sink current for no gain.',
+      'Decide what the panel answers to, and let the scan tell you rather than the datasheet. The ' +
+        'address is seven bits, so the sketch expects 0x3C where the datasheet prints 0x78; the wire ' +
+        'carries eight and the datasheet has already included the read bit. Trust the acknowledged ' +
+        'column in the Bus Monitor, not the return value of `endTransmission()`.',
+      'Decide the framing, which is the whole difficulty of this bus: the first byte after the address ' +
+        'is a stream selector and never data. 0x00 says commands follow and 0x40 says pixels follow, so a ' +
+        'command and its arguments have to share one transaction, and a redraw is eight page writes — ' +
+        'sixteen transfers — rather than 1024 round trips.',
+    ],
+    wiring: [
+      {
+        pin: 'A4',
+        terminal: 'SDA',
+        why:
+          'Data and clock are not interchangeable, and A5 is the only clock the TWI peripheral drives. ' +
+          'Swapped, both lines still sit at the pull-up voltage and the Bus Monitor shows a hundred ' +
+          'transfers with not one acknowledged — which reads as a dead module rather than a crossed pair.',
+      },
+      {
+        pin: 'A5',
+        terminal: 'SCL',
+        why:
+          'Nothing clocks the transfer from this wire, so every byte arrives unacknowledged even with ' +
+          'the panel powered and addressed correctly. The scan is the check: it is a clock problem when ' +
+          'the lines look perfect and the acknowledged column is still empty.',
+      },
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The 0x8D/0x14 charge-pump pair gives the panel an internal supply from the rail you give it. ' +
+          'With no VCC the module still sits on the bus and still acknowledges at 0x3C, so the scan ' +
+          'looks perfect and the screen stays black however many bytes you send.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'A panel referenced to nothing else has no defined LOW to pull the bus down to, so the ' +
+          'open-drain lines never resolve and the acknowledge is intermittent rather than simply absent.',
+      },
+      {
+        pin: '5V',
+        terminal: 'a',
+        why:
+          'This is the top of the SDA pull-up, and no device on the bus ever drives HIGH — the resistor ' +
+          'is what charges the line. Without it there is no HIGH on SDA at all; with a second pair ' +
+          'fitted in parallel it becomes 5 kΩ and every edge gets faster than the module was built for.',
+      },
+      {
+        pin: 'A4',
+        terminal: 'b',
+        why:
+          'The bottom of that pull-up belongs to the SDA net and nowhere else. Left off the net the ' +
+          'resistor pulls nothing, and fitted to A5 instead it weakens the clock line while leaving ' +
+          'SDA with no HIGH — a fault that clears when you touch the wires and reappears when you do not.',
+      },
+      {
+        pin: '5V',
+        terminal: 'a',
+        why:
+          'The clock line needs its own pull-up, separate from the data one, for the same open-drain ' +
+          'reason. Too large a value on SCL gives a slow rounded edge and a timing error long before it ' +
+          'gives a dead wire, which is why a marginal bus misbehaves intermittently rather than not at all.',
+      },
+      {
+        pin: 'A5',
+        terminal: 'b',
+        why:
+          'This closes the SCL pull-up onto the clock net. On the wrong net the resistor is doing nothing ' +
+          'useful and SCL is left relying on leakage, so the bus works when the panels are warm and fails ' +
+          'once they are cold.',
+      },
+      {
+        pin: 'D2',
+        terminal: 'SDA',
+        why:
+          'The DHT22 is a single-wire sensor, so this is its only data wire and no address is involved. ' +
+          'On the shared SDA net instead, `dht.temperature(SENSOR_PIN)` reads exactly 0.00 — a reading ' +
+          'that looks like a cold sensor rather than a sensor that was never on that pin.',
+      },
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The sensor needs its own supply, and it does not take it from the bus. Unpowered it presents ' +
+          'no valid response at all, so the knobs turn and the panel keeps redrawing the same number.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'With VCC connected and no ground the sensor is referenced to nothing, and the symptom is a ' +
+          'reading that is not obviously electrical at all — it simply never moves.',
+      },
+    ],
+    working: [
+      'The Bus Monitor shows exactly one line carrying the acknowledged flag out of the whole 0x08 to ' +
+        '0x77 scan, and it is at 0x3C. One device on the bus, found by asking rather than by assuming.',
+      'The Serial monitor prints “3.1 ready” once, then a line a second: `t 21.40 C   rh 48 %   frames 3`. ' +
+        'The numbers move as you turn the knobs or warm the sensor with a fingertip, which proves the ' +
+        'single-wire read and not just the bus.',
+      'The OLED shows a trend in its bottom 32 pixels with one new column a second, oldest at the left. ' +
+        'Anything at all on the glass proves the control byte was right, because pixels sent without ' +
+        '0x40 in front are consumed as commands.',
+      'A full redraw costs sixteen transactions — eight short ones to point the panel at a page and ' +
+        'eight of 128 bytes to fill it — and not the 1024 a beginner expects. Counting them in the Bus ' +
+        'Monitor is how you see that the page addressing is doing the work.',
+    ],
+    traps: [
+      'Sending pixel data without the 0x40 control byte in front of it. The panel files every pixel as ' +
+        'a command and its arguments, so the screen stays black while the Bus Monitor fills with healthy ' +
+        '128-byte transfers. That reads as a dead display, not as a framing error.',
+      'Fitting the 10 kΩ pair because the meter read “a few kΩ” rather than infinity. The module brought ' +
+        'its own pull-ups, so you have built 5 kΩ: the bus still works, which is what makes it convincing, ' +
+        'and the edges are now faster than the panel was designed for.',
+      'Expecting 0x3D because the panel’s SA0 strap is high, or because a second module answers at 0x3C. ' +
+        'The sketch sends to one address and the glass is at another, so the scan confirms a device and ' +
+        'the screen stays dark — the shape of a hardware fault with none of the hardware fault in it.',
+      'Declaring a second 1024-byte frame buffer. It compiles, it uploads, and the board resets before it ' +
+        'reaches the first print, so the Serial monitor shows nothing at all. Every observable symptom ' +
+        'points at the sketch failing to run rather than at running out of SRAM.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 #include <Wire.h>
 
@@ -465,6 +602,156 @@ const SPI_DISPLAYS: Exercise = {
     'Take the TFT’s CS off D8 and put it on D10 instead. It now wakes up and lights, which is the alarm: that panel has been handed every byte meant for the other one. The Bus Monitor does not change by a single line, because SPI has no acknowledge bit and no address to report a mistake through. That is what a select left asserted looks like, and why nothing warns you before the hardware does.',
     'Move it back to D8 before you go any further. Then add your own frame — fill pages 0 to 3, draw a shape into the buffer by hand, and watch the Bus Monitor stay at eight 131-byte transfers per full redraw however complicated the picture got: 1024 bytes of pixels and eight bytes of addressing, and nothing else.',
   ],
+  solution: {
+    approach: [
+      'Decide which wires may be shared and which may not, before you pick a single pin number. SCK, MOSI ' +
+        'and D/C are one net each for the whole bus — D13, D11, D9 — and sharing them is safe precisely ' +
+        'because of the fourth wire. CS is the one that must not be shared, because it is the only thing ' +
+        'on SPI that says who a byte belongs to: there are no addresses to do it instead.',
+      'Give the OLED the hardware select on D10, and take that pin back as an ordinary output driving HIGH. ' +
+        'SPI.begin() leaves the hardware SS pin low, so a panel whose select idles LOW is deselected the ' +
+        'instant you stop driving it — a dark display on a bus that logged every transfer perfectly.',
+      'Give the TFT a select of its own on D8 and drive it with `digitalWrite` around its own transfers ' +
+        'only, asserting it low to send and releasing it high again immediately. That is the whole ' +
+        'discipline of the exercise: three shared lines, one private wire per panel, and the timing of the ' +
+        'private wire is the only timing in the sketch that matters.',
+      'Decide the framing, because SPI has no control byte to do it for you. `SPI.beginTransaction()` opens ' +
+        'the window and `SPI.end()` closes it, so a command and its arguments must sit inside one pair — ' +
+        'and whether a byte is a command or a pixel travels with it as the second argument to ' +
+        '`SPI.transfer`, rather than in the byte itself.',
+      'Decide what the frame costs before drawing anything. The buffer is 1024 bytes and the page in ' +
+        'flight another 128, so the image alone is half of the Uno’s 2048; what you do not draw is memory ' +
+        'you still have. The redraw itself is eight transfers of 131 bytes however complicated the picture ' +
+        'got, because 1024 bytes of pixels plus eight bytes of addressing is the entire cost.',
+    ],
+    wiring: [
+      {
+        pin: 'D13',
+        terminal: 'SCK',
+        why:
+          'Nothing clocks the bytes, so the panel never sees a bit edge and stays dark however many you ' +
+          'send. This is the wire the Bus Monitor cannot tell you about — the transfers are logged with ' +
+          'real byte counts and durations while nothing on the glass responds at all.',
+      },
+      {
+        pin: 'D11',
+        terminal: 'MOSI',
+        why:
+          'MOSI is the only wire the panel can be written down; MISO is for reads and the OLED has none. ' +
+          'On any other pin the commands land somewhere the controller never sees, which fills the Bus ' +
+          'Monitor with transfers and leaves the panel showing its power-on state.',
+      },
+      {
+        pin: 'D9',
+        terminal: 'DC',
+        why:
+          'One pin, two meanings: HIGH says the bytes behind it are pixels, LOW says they are commands ' +
+          'and arguments. On the wrong pin the flag never travels with the data, so the panel cannot tell ' +
+          'which is which and fills with what looks like random pixels.',
+      },
+      {
+        pin: 'D10',
+        terminal: 'CS',
+        why:
+          'The OLED’s select must be a pin of its own, and it idles HIGH — a select held LOW means a ' +
+          'device permanently addressed, which is not the same thing as a shared select but produces the ' +
+          'same confusion. Sharing this pin with the TFT is the fault this exercise is built around.',
+      },
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The 0x8D/0x14 charge-pump pair needs a rail to charge against. Without it the controller is ' +
+          'alive on the bus and still dark on the glass, so the transfers look correct and the panel does ' +
+          'not.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'A panel with no common reference has no defined LOW for the controller to write against, so ' +
+          'the bus is full of plausible-looking transfers and the glass never changes.',
+      },
+      {
+        pin: 'D13',
+        terminal: 'SCK',
+        why:
+          'The TFT joins the same clock rather than getting one of its own, and that is the point of the ' +
+          'exercise: a second clock would mean a second bus and no sharing at all. Sharing it is safe only ' +
+          'because this panel’s own select is not asserted while the OLED’s bytes are going past.',
+      },
+      {
+        pin: 'D11',
+        terminal: 'MOSI',
+        why:
+          'Both panels must sit on the one data line, or the second controller is never written at all. ' +
+          'The line is shared; the traffic is not — which is the entire reason CS has to be separate.',
+      },
+      {
+        pin: 'D9',
+        terminal: 'DC',
+        why:
+          'The command/data line is shared too, and the TFT accepts its command parameters with the data ' +
+          'flag set, which is its own convention rather than a mistake. Put it on a private pin and the ' +
+          'two panels disagree about the same bytes instead of simply ignoring them.',
+      },
+      {
+        pin: 'D8',
+        terminal: 'CS',
+        why:
+          'The single most important wire here. On the OLED’s D10 both panels are selected by every byte, ' +
+          'which is one stream arriving at two controllers reading it in different dialects: the TFT wakes, ' +
+          'lights, and changes nothing in the Bus Monitor, because SPI has no acknowledge bit to complain ' +
+          'through. A select left asserted looks like a working fix.',
+      },
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'Each panel is powered from the rail in its own right; a shared supply wire is fine, a shared ' +
+          'select is not. Unpowered, this controller still listens on the clock and still captures the ' +
+          'OLED’s bytes without ever acting on them.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'Both panels share the ground rail and must, or the two halves of the bus disagree about what ' +
+          'zero volts is. On a shared clock that disagreement is intermittent, which is worse to diagnose ' +
+          'than a panel that never lights.',
+      },
+    ],
+    working: [
+      'The OLED lights and a bar scrolls through the middle of it once every 50 ms, while the Serial ' +
+        'monitor’s frame counter climbs. The TFT stays dark — that is the bench recognising one select, ' +
+        'stated rather than hidden, and the wiring above is the correct circuit.',
+      'The Bus Monitor logs every transfer with a byte count and a duration and an address column that ' +
+        'reads null. That empty cell is the lesson: SPI has no addresses, so nothing in the log can ever ' +
+        'tell you which device a byte was meant for.',
+      'A full redraw is eight transfers of 131 bytes however complicated the picture got — 1024 bytes of ' +
+        'pixels and eight bytes of addressing, and nothing else. Count them yourself after drawing a ' +
+        'shape into the buffer and the count will not move.',
+      'Moving the TFT’s CS from D8 onto D10 lights the second panel, and the Bus Monitor does not change ' +
+        'by a single line. Nothing warns you before the hardware does, which is the thing worth taking ' +
+        'away from the exercise.',
+    ],
+    traps: [
+      'Two panels sharing one select. The TFT wakes and lights, so the bench looks better rather than ' +
+        'worse — it is drawing out of the OLED’s byte stream, and the log is unchanged because there is ' +
+        'no acknowledge bit to report it through. The natural reading is that the second panel was the ' +
+        'thing that needed fixing.',
+      'A command sequence split across two `beginTransaction()`/`end()` pairs. The trailing bytes become ' +
+        'the start of the next command, and the fault only appears once you add a second command to a ' +
+        'sequence — so it looks like the new command is wrong rather than the window.',
+      'The command/data flag swapped on a single transfer. A missing 0 in front of an address command, or ' +
+        'a stray 1 on the page bytes, fills the panel with noise, and since the byte values in the Bus ' +
+        'Monitor are identical either way, the only evidence is the flag on each line.',
+      'A second 1024-byte buffer beside the frame buffer. It compiles and uploads, and the board resets ' +
+        'before it reaches the first print, so the Serial monitor stays empty and the frame counter never ' +
+        'moves — every symptom pointing at a sketch that is not running rather than at half the SRAM ' +
+        'already spent.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 #include <SPI.h>
 
