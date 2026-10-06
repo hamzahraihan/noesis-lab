@@ -76,4 +76,8 @@ describe('the project gallery', () => {
   it('locks digits behind the safe', () => {
     expect(galleryById('safe')?.title).toBe('Electronic Safe');
   });
+
+  it('sweeps the dashboard horn', () => {
+    expect(galleryById('dashboard')?.title).toBe('Servo Dashboard');
+  });
 });
