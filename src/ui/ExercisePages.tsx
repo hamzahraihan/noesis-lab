@@ -14,19 +14,28 @@
  */
 
 import { useState } from 'react';
+import { CheckIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { Link, useParams } from 'react-router';
 import {
-  EXERCISE_BOARD,
   EXERCISES,
+  EXERCISE_BOARD,
   STARTING_LEVEL,
+  exerciseBoard,
   exerciseById,
   type Exercise,
 } from './exercises';
 import { GLOSSARY } from './glossary';
 
-/** The silkscreen names a wiring table may name, for a beginner's sanity check. */
+/**
+ * The silkscreen names a wiring table may name, for a beginner's sanity check.
+ *
+ * Colour only, and no worse than that: it marks the cells that name a place
+ * on the board so a reader can find them again on the silkscreen. `GPIO\d+` is
+ * in there for the single-board-computer lessons, whose header is numbered BCM
+ * and whose pins carry no other name at all.
+ */
 function isBoardPin(name: string): boolean {
-  return /^(D\d{1,2}|A\d|TX|RX|\dV3?|GND|AREF|RESET|IOREF)$/.test(name);
+  return /^(D\d{1,2}|A\d|TX|RX|GPIO\d{1,2}|\dV3?|GND|AREF|RESET|IOREF)$/.test(name);
 }
 
 /**
@@ -160,10 +169,11 @@ export function ExercisePage() {
       <SketchPanel exercise={exercise} />
       {exercise.fault !== undefined && <FaultPanel exercise={exercise} />}
       <Hints exercise={exercise} revealed={revealed} setRevealed={setRevealed} />
+      <SolutionPanel exercise={exercise} />
       <References exercise={exercise} />
 
       <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-6">
-        <Link to={`/bench/${EXERCISE_BOARD}?ex=${exercise.id}`} className="ctl ctl-accent">
+        <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`} className="ctl ctl-accent">
           Put it on the bench
         </Link>
         <Link to="/learn/references" className="ctl">
@@ -276,8 +286,16 @@ function WiringTable({ exercise }: { exercise: Exercise }) {
           </tr>
         </thead>
         <tbody>
-          {exercise.wiring.map((row) => (
-            <tr key={`${row.pin}-${row.part}-${row.terminal}`} className="border-t border-slate-800/60">
+          {/*
+           * Keyed by position, not by content, and the reason is the map
+           * exercise: it has three buttons and all three return leg b to GND,
+           * so `pin-part-terminal` repeats exactly. A row is only ever
+           * identified by where it sits in the table anyway -- the three
+           * identical rows are distinct rows precisely because they come
+           * from three different buttons.
+           */}
+          {exercise.wiring.map((row, index) => (
+            <tr key={`${row.pin}-${row.part}-${row.terminal}-${index}`} className="border-t border-slate-800/60">
               <td
                 className={`py-1.5 pr-4 font-mono text-xs ${
                   isBoardPin(row.pin) ? 'text-sky-400' : 'text-slate-500'
@@ -370,6 +388,103 @@ function Hints({
         >
           {revealed === 0 ? 'Show a hint' : `Another hint (${available - revealed} left)`}
         </button>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * The worked answer, behind a deliberate click.
+ *
+ * Placed after the hints rather than beside them because of when it is useful.
+ * A worksheet that offers the answer first teaches by transcription; one that
+ * never offers it teaches by despair. This is the third thing: try it, take
+ * hints if you are stuck, and only then read how someone else did it -- at
+ * which point the reasoning is worth more than the answer.
+ *
+ * It is a disclosure rather than a link because the whole point is that most
+ * readers never open it, and a solution that greets every visitor teaches
+ * nothing to the ones who get stuck and spoils it for the ones who do not.
+ */
+function SolutionPanel({ exercise }: { exercise: Exercise }) {
+  const solution = exercise.solution;
+  const [open, setOpen] = useState(false);
+
+  if (solution === undefined) return null;
+
+  return (
+    <Section title="How it goes together">
+      {!open ? (
+        <>
+          <p className="mb-3 text-sm leading-relaxed text-slate-400">
+            The reasoning behind the wiring — why each pin is where it is, and what a finished
+            circuit should be doing. Worth reading after you have tried it and read the hints.
+          </p>
+          <button type="button" onClick={() => setOpen(true)} className="ctl">
+            Show the worked solution
+          </button>
+        </>
+      ) : (
+        <div className="space-y-5">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-200">Where to start</h3>
+            <ol className="space-y-2">
+              {solution.approach.map((step, index) => (
+                <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-400">
+                  <span className="num shrink-0 text-slate-600">{index + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-200">Why each wire is where it is</h3>
+            <dl className="space-y-3">
+              {/*
+               * Keyed by position for the same reason as the wiring table: the
+               * map exercise explains three identical GND/b jumpers, one per
+               * button, and only their order tells them apart.
+               */}
+              {solution.wiring.map((wire, index) => (
+                <div key={`${wire.pin}:${wire.terminal}:${index}`}>
+                  <dt className="num text-xs text-slate-300">
+                    {wire.pin} → {wire.terminal}
+                  </dt>
+                  <dd className="mt-0.5 text-sm leading-relaxed text-slate-400">{wire.why}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-200">When it is working</h3>
+            <ul className="space-y-2">
+              {solution.working.map((sign) => (
+                <li key={sign} className="flex gap-3 text-sm leading-relaxed text-slate-400">
+                  <CheckIcon className="icon-sm mt-0.5 shrink-0 text-emerald-500" aria-hidden="true" />
+                  <span>{sign}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-200">What usually goes wrong</h3>
+            <ul className="space-y-2">
+              {solution.traps.map((trap) => (
+                <li key={trap} className="flex gap-3 text-sm leading-relaxed text-slate-400">
+                  <Cross2Icon className="icon-sm mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />
+                  <span>{trap}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <button type="button" onClick={() => setOpen(false)} className="ctl ctl-quiet">
+            Hide the solution
+          </button>
+        </div>
       )}
     </Section>
   );
