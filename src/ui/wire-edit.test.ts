@@ -124,6 +124,40 @@ describe('dragging a wire end to another hole', () => {
     expect(stranded()).toHaveLength(0);
   });
 
+  it('carries its bends along when an end moves', () => {
+    // Bends are absolute bench positions from the old shape: leaving them
+    // behind while the end travels re-threads the wire through stale points
+    // and strands nodes in empty space. The shape follows the drag instead,
+    // rubber-band style, with the far end pinned.
+    const builder = new BenchBuilder();
+    const wire = builder.addWire(0, 0, 60, 0, {
+      bends: [
+        { x: 20, y: 0 },
+        { x: 20, y: 20 },
+      ],
+    });
+
+    builder.moveWireEnd(wire.id, 'to', 80, 0);
+    const moved = builder.build().wires[0];
+
+    expect(moved.bends).toEqual([
+      { x: 40, y: 0 },
+      { x: 40, y: 20 },
+    ]);
+  });
+
+  it('leaves bends alone when the end stays where it was', () => {
+    const builder = new BenchBuilder();
+    const wire = builder.addWire(0, 0, 60, 0, {
+      bends: [{ x: 20, y: 0 }],
+    });
+
+    builder.moveWireEnd(wire.id, 'to', 60, 0);
+    const kept = builder.build().wires[0];
+
+    expect(kept.bends).toEqual([{ x: 20, y: 0 }]);
+  });
+
   it('re-solves the circuit, because what the wire joins changed', () => {
     const simulation = new Simulation(esp32DevKitV1());
     simulation.addPart(esp32DevKitV1(), 0, 0);
