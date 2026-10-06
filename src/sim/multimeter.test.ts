@@ -44,8 +44,8 @@ function dividerBench(options: { openFeed?: boolean } = {}) {
     link(builder, { x: holeX(10), y: holeY(8) }, { x: holeX(12), y: holeY(8) });
   }
 
-  builder.addPart(resistorDefinition(OHM), holeX(12), holeY(8) - 1.6);
-  builder.addPart(resistorDefinition(OHM), holeX(16), holeY(8) - 1.6);
+  builder.addPart(resistorDefinition(OHM), holeX(12), holeY(8) - 2.54);
+  builder.addPart(resistorDefinition(OHM), holeX(16), holeY(8) - 2.54);
   link(builder, { x: holeX(20), y: holeY(8) }, { x: holeX(20), y: railY });
   link(builder, { x: holeX(8), y: railY }, pinAt('L_GND'));
 
