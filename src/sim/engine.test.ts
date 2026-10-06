@@ -38,12 +38,15 @@ function ledBench() {
   const gpio2 = esp32.definition.pins.find((pin) => pin.id === 'R_D2')!;
   builder.addWire(gpio2.x, gpio2.y, holeX(SIGNAL_COLUMN), holeY(8));
 
-  builder.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
-  builder.addPart(ledDefinition(DIODE_PROFILES.red, 'Red'), holeX(SIGNAL_COLUMN + 4), holeY(8) - 3);
+  builder.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 2.54);
+  // Anode-anchored: the long leg lands on its hole, cathode one column along.
+  const ledDef = ledDefinition(DIODE_PROFILES.red, 'Red');
+  const ledAnode = ledDef.pins.find((pin) => pin.id === 'anode')!;
+  builder.addPart(ledDef, holeX(SIGNAL_COLUMN + 4) - ledAnode.x, holeY(8) - ledAnode.y);
   builder.addWire(
-    holeX(SIGNAL_COLUMN + 5),
+    holeX(SIGNAL_COLUMN + 3),
     holeY(8),
-    holeX(SIGNAL_COLUMN + 5),
+    holeX(SIGNAL_COLUMN + 3),
     railRowY(BOTTOM_NEGATIVE_RAIL),
   );
   wireBoardGround(builder, esp32, 10);
@@ -80,7 +83,7 @@ function buttonBench(withPullDown: boolean) {
   builder.addWire(holeX(12), holeY(8), holeX(12), railRowY(BOTTOM_NEGATIVE_RAIL));
 
   if (withPullDown) {
-    builder.addPart(resistorDefinition(10_000), holeX(10), holeY(8) - 1.6);
+    builder.addPart(resistorDefinition(10_000), holeX(10), holeY(8) - 2.54);
     builder.addWire(holeX(14), holeY(8), holeX(14), railRowY(BOTTOM_NEGATIVE_RAIL));
   }
 
@@ -312,10 +315,10 @@ describe('readAnalog', () => {
     const adcPin = esp32.definition.pins.find((pin) => pin.id === 'L_GPIO34')!;
 
     builder.addWire(rail.x, rail.y, holeX(5), holeY(8));
-    builder.addPart(resistorDefinition(10_000), holeX(5), holeY(8) - 1.6);
+    builder.addPart(resistorDefinition(10_000), holeX(5), holeY(8) - 2.54);
 
     builder.addWire(holeX(9), holeY(8), adcPin.x, adcPin.y);
-    builder.addPart(resistorDefinition(10_000), holeX(9), holeY(8) - 1.6);
+    builder.addPart(resistorDefinition(10_000), holeX(9), holeY(8) - 2.54);
     builder.addWire(holeX(13), holeY(8), holeX(13), railRowY(BOTTOM_NEGATIVE_RAIL));
 
     wireBoardGround(builder, esp32, 16);
