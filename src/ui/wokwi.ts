@@ -263,11 +263,24 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
     case 'servo':
       return WOKWI_PARTS.servo;
     case 'display':
-      if (definition.component.controller === 'ili9341') return WOKWI_PARTS.ili9341;
-      // The SPI OLED is the eight-pin module Wokwi draws; the four-pin I2C
-      // breakout keeps the hand-authored renderer.
-      if (definition.component.controller === 'ssd1306-spi') return WOKWI_PARTS.ssd1306;
-      return null;
+      /*
+       * The colour TFT keeps the hand-authored renderer, like the I2C OLED.
+       *
+       * Wokwi has an element for it, but that element draws a 240x320 glass --
+       * the panel rotated a quarter turn, which is how it sits on a desk -- and
+       * nothing here knows how to transpose a framebuffer into it. Feeding it
+       * nothing leaves it permanently black, which is how a TFT a sketch had
+       * plainly filled with colour came to draw as a blank rectangle.
+       *
+       * The hand-authored path blits the framebuffer onto a canvas of exactly
+       * the panel's own 320x240, so it is both the one that works and the one
+       * with nothing to get wrong.
+       */
+      // The SPI OLED is the eight-pin module Wokwi does draw, and it draws it
+      // from its own text buffer rather than a canvas, so it keeps that path.
+      return definition.component.controller === 'ssd1306-spi'
+        ? WOKWI_PARTS.ssd1306
+        : null;
     default:
       return null;
   }
