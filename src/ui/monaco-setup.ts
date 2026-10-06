@@ -34,6 +34,137 @@ loader.config({ monaco });
 /** Arduino sketch files have no extension in the wild, so name the language. */
 export const FIRMWARE_LANGUAGE = 'arduino-cpp';
 
+/**
+ * The Python the Pi runs.
+ *
+ * Monaco ships a Python tokenizer of its own, but it is aimed at CPython's
+ * grammar -- `import`, `def`, classes, decorators -- most of which this VM
+ * refuses. A name that highlights is a name that looks supported, so the
+ * language is registered here against what actually runs: gpiozero's
+ * constructors, and the handful of builtins the interpreter answers.
+ */
+export const PYTHON_LANGUAGE = 'gpiozero-python';
+
+const PYTHON_KEYWORDS = [
+  'and', 'as', 'break', 'class', 'continue', 'def', 'elif', 'else', 'except',
+  'finally', 'for', 'from', 'if', 'import', 'in', 'is', 'not', 'or', 'pass',
+  'raise', 'return', 'try', 'while', 'with', 'yield',
+  'True', 'False', 'None',
+];
+
+const PYTHON_BUILTINS: ReadonlyArray<[name: string, detail: string, doc: string]> = [
+  ['LED', 'LED(pin)', 'A gpiozero LED on a board pin.'],
+  ['Button', 'Button(pin)', 'A gpiozero button. Reads a press on a pin pulled up.'],
+  ['OutputDevice', 'OutputDevice(pin)', 'A plain gpiozero output.'],
+  ['InputDevice', 'InputDevice(pin)', 'A plain gpiozero input.'],
+  ['PWMOutputDevice', 'PWMOutputDevice(pin)', 'An output you can set to a fraction with .value.'],
+  ['print', 'print(value)', 'Writes to the serial monitor.'],
+  ['len', 'len(items)', 'How many items something holds.'],
+  ['range', 'range(stop)', 'The iterable a for loop walks: range(start, stop, step).'],
+  ['abs', 'abs(value)', 'Magnitude of a number.'],
+  ['min', 'min(a, b)', 'The smaller of two numbers.'],
+  ['max', 'max(a, b)', 'The larger of two numbers.'],
+  ['round', 'round(value)', 'Nearest whole number.'],
+  ['int', 'int(value)', 'Truncates to a whole number.'],
+  ['float', 'float(value)', 'Reads a value as a number.'],
+];
+
+function registerPythonLanguage(): void {
+  if (monaco.languages.getLanguages().some((language) => language.id === PYTHON_LANGUAGE)) {
+    return;
+  }
+
+  monaco.languages.register({
+    id: PYTHON_LANGUAGE,
+    extensions: ['.py'],
+    aliases: ['Python', 'gpiozero'],
+  });
+  monaco.languages.setLanguageConfiguration(PYTHON_LANGUAGE, {
+    comments: { lineComment: '#' },
+    brackets: [['(', ')'], ['[', ']'], ['{', '}']],
+    autoClosingPairs: [
+      { open: '(', close: ')' },
+      { open: '[', close: ']' },
+      { open: '{', close: '}' },
+      { open: '"', close: '"' },
+      { open: "'", close: "'" },
+    ],
+    indentationRules: {
+      increaseIndentPattern: /^.*(:|\b(else|elif|except|finally)\b)\s*$/,
+      decreaseIndentPattern: /^\s*(return|pass|break|continue)\b.*$/,
+    },
+  });
+
+  monaco.languages.setMonarchTokensProvider(PYTHON_LANGUAGE, {
+    keywords: PYTHON_KEYWORDS,
+    tokenizer: {
+      root: [
+        [/\b(?:LED|Button|OutputDevice|InputDevice|PWMOutputDevice)\b/, 'type'],
+        [/\b\d+\.\d*(?:[eE][+-]?\d+)?\b|\b\.\d+\b/, 'number.float'],
+        [/0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+/, 'number.hex'],
+        [/\d[\d_]*/, 'number'],
+        [/[fFrRbB]?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/, 'string'],
+        [/#.*$/, 'comment'],
+        [/[A-Za-z_]\w*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+        [/[+\-*/%&|^~<>=!]=?/, 'operator'],
+        [/[{}()[\]]/, '@brackets'],
+      ],
+    },
+  });
+
+  void monaco.languages.registerCompletionItemProvider(PYTHON_LANGUAGE, {
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position);
+      const range = {
+        startLineNumber: position.lineNumber,
+        endLineNumber: position.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn,
+      };
+      return {
+        suggestions: PYTHON_BUILTINS.map(([label, detail, doc]) => ({
+          label,
+          kind: monaco.languages.CompletionItemKind.Function,
+          insertText: `${label}($0)`,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          documentation: doc,
+          detail,
+          range,
+        })),
+      };
+    },
+  });
+
+  monaco.languages.registerDocumentFormattingEditProvider(PYTHON_LANGUAGE, {
+    provideDocumentFormattingEdits(model) {
+      /*
+       * Re-indenting a Python file by counting colons is how the whole language
+       * is nested, so a formatter that only looks at braces would flatten a
+       * file on save. Blank lines and comment lines carry no structure and are
+       * left exactly as written.
+       */
+      const lines = model.getLinesContent();
+      const edits: monaco.languages.TextEdit[] = [];
+      let indent = 0;
+      lines.forEach((line, index) => {
+        const trimmed = line.trim();
+        const opensSuite = trimmed.length > 0 && trimmed.endsWith(':');
+        const closesSuite = /^\s*(return|pass|break|raise)\b/.test(trimmed);
+        if (closesSuite) indent = Math.max(0, indent - 1);
+        const wanted = '\t'.repeat(indent) + trimmed;
+        if (wanted !== line) {
+          edits.push({
+            range: new monaco.Range(index + 1, 1, index + 1, line.length + 1),
+            text: wanted,
+          });
+        }
+        if (opensSuite) indent += 1;
+      });
+      return edits;
+    },
+  });
+}
+
 const ARDUINO_CONSTANTS: ReadonlyArray<[name: string, detail: string, doc: string]> = [
   ['HIGH', '1', 'Logic level for a pin driving the supply rail.'],
   ['LOW', '0', 'Logic level for a pin pulling to ground.'],
@@ -265,6 +396,8 @@ function registerArduinoLanguage(): void {
 }
 
 registerArduinoLanguage();
+
+registerPythonLanguage();
 
 /** Editor theme, so the code pane matches the rest of the bench. */
 export const FIRMWARE_THEME = 'noesis-dark';
