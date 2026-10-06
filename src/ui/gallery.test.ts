@@ -58,14 +58,42 @@ describe('the project gallery', () => {
   });
 
   it('wires each project onto the bench without throwing', () => {
+    // Exact counts, measured from the setups: deterministic wiring means a
+    // skipped leg changes the number, and the number is what catches it.
+    const wireFloors: Record<string, number> = {
+      'alarm-clock': 16,
+      safe: 14,
+      dashboard: 14,
+      parking: 15,
+      weather: 12,
+    };
     for (const entry of GALLERY) {
       const simulation = freshBench();
       expect(() => entry.setup(simulation), `${entry.id} setup`).not.toThrow();
-      expect(simulation.bench.wires.length, `${entry.id} wires`).toBeGreaterThan(0);
+      expect(simulation.bench.wires.length, `${entry.id} wires`).toBeGreaterThanOrEqual(
+        wireFloors[entry.id] ?? 1,
+      );
       const real = partTerminals(simulation);
+      const touched = new Set<number>();
       for (const wire of simulation.bench.wires) {
         expect(real.has(wire.from), `${entry.id} wire from`).toBe(true);
         expect(real.has(wire.to), `${entry.id} wire to`).toBe(true);
+        touched.add(wire.from);
+        touched.add(wire.to);
+      }
+      // Every listed part made it onto the bench, in the listed quantity.
+      for (const part of entry.parts) {
+        const placed = simulation.bench.parts.filter((p) => p.definition.name === part.name).length;
+        expect(placed, `${entry.id} "${part.name}" qty`).toBeGreaterThanOrEqual(part.qty);
+      }
+      // Every placed project part is touched by at least one jumper: a
+      // misspelled pin skips its leg silently (setups return early rather
+      // than throw), and an untouched part is what that looks like.
+      for (const part of simulation.bench.parts) {
+        const kind = part.definition.component.kind;
+        if (kind === 'mcu' || kind === 'breadboard') continue;
+        const wired = Object.values(part.terminals).some((id) => touched.has(id));
+        expect(wired, `${entry.id} "${part.definition.name}" wired`).toBe(true);
       }
     }
   });

@@ -39,13 +39,13 @@ board pages' copy.
 
 ## The five projects (all Uno-tagged for v1)
 
-1. **Alarm Clock with RTC** — DS1307 + LCD1602 + two set buttons.
+1. **Alarm Clock with RTC** — DS1307 + LCD1602 + heartbeat LED on D2.
    Proven: Wire reads and LCD writes both exist as bench examples.
 2. **Electronic Safe** — membrane keypad + LCD + servo lock. Keypad
    readability from firmware must be verified during build; the fallback
    is a 3-button code lock with LEDs, no keypad.
-3. **Servo Dashboard** — potentiometer + servo + OLED readout.
-   Proven: ADC reads, servo writes, hand-driven display commands.
+3. **Servo Dashboard** — potentiometer + servo + three-LED position bar.
+   Proven: ADC reads, servo writes, plain GPIO.
 4. **Parking Sensor** — sonar + buzzer + LED bar. Proven: `pulseIn` + GPIO.
    Buzzer sounds come from GPIO switching, not `tone()`.
 5. **Weather Station** — DHT22 + LCD + serial log. Proven: DHT port exists.
