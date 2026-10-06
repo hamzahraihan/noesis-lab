@@ -62,10 +62,13 @@ function harnessWithSketch(source: string, pin = 2): Harness {
     esp32.definition.pins[0];
   builder.addWire(pinSpec.x, pinSpec.y, holeX(SIGNAL_COLUMN), holeY(8));
   builder.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
-  builder.addPart(ledDefinition(DIODE_PROFILES.red, 'Red'), holeX(SIGNAL_COLUMN + 4), holeY(8) - 3);
+  // Anode-anchored: the long leg lands on its hole, cathode one column along.
+  const fwLed = ledDefinition(DIODE_PROFILES.red, 'Red');
+  const fwAnode = fwLed.pins.find((pin) => pin.id === 'anode')!;
+  builder.addPart(fwLed, holeX(SIGNAL_COLUMN + 4) - fwAnode.x, holeY(8) - fwAnode.y);
   builder.addWire(
-    holeX(SIGNAL_COLUMN + 5), holeY(8),
-    holeX(SIGNAL_COLUMN + 5), railRowY(BOTTOM_NEGATIVE_RAIL),
+    holeX(SIGNAL_COLUMN + 3), holeY(8),
+    holeX(SIGNAL_COLUMN + 3), railRowY(BOTTOM_NEGATIVE_RAIL),
   );
   const ground = esp32.definition.pins.find((candidate) => candidate.id === 'L_GND')!;
   builder.addWire(ground.x, ground.y, holeX(10), railRowY(BOTTOM_NEGATIVE_RAIL));
