@@ -104,15 +104,21 @@ export function ili9341Definition(): PartDefinition {
  */
 export function ili9341LargeDefinition(): PartDefinition {
   const headerX = 12.78;
-  const headerY = 96.0;
+  // Along the bottom edge of a 56 mm carrier, on the usual 0.1" grid.
+  const headerY = 51.0;
   const pitch = 2.54;
 
   return {
     id: 'ili9341-480x320',
     name: '3.2" TFT (ILI9341)',
     category: 'output',
-    widthMm: 57.2,
-    heightMm: 109.0,
+    // A 3.2" module is wider than it is tall: the glass sits across the top of
+    // the carrier with the header along the bottom edge. Sizing it portrait --
+    // 57 x 109, the shape of a 2.4" -- left the 73 mm glass hanging 16 mm out
+    // past the side of its own board, which is what a panel drawn off the end
+    // of its carrier looks like.
+    widthMm: 78.0,
+    heightMm: 56.0,
     component: { kind: 'display', controller: 'ili9341', address: 0 },
     pins: [
       { id: 'VCC', label: 'VCC', x: headerX, y: headerY, net: 'VCC' },
@@ -128,7 +134,9 @@ export function ili9341LargeDefinition(): PartDefinition {
     legendColour: '#93c5fd',
     displayPixels: { width: ILI9341_LARGE_WIDTH, height: ILI9341_LARGE_HEIGHT },
     ramPixels: { width: ILI9341_LARGE_HEIGHT, height: ILI9341_LARGE_WIDTH },
-    glassMm: { width: 73.4, height: 48.9 },
+    // The active area of a 3.2" panel, measured to fit the carrier above: the
+    // glass has to end above the header strip or it is drawn over its own pins.
+    glassMm: { width: 69.0, height: 46.0 },
   };
 }
 
