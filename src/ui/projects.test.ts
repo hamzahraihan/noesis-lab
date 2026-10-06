@@ -18,6 +18,7 @@ describe('board projects', () => {
     for (const board of BOARDS) {
       expect(projectFor(board.id)?.board).toBe(board.id);
     }
+    expect(projectFor('banana' as BoardId)).toBeNull();
   });
 
   it('names only examples that exist, and always says what running shows', () => {
