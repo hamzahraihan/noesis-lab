@@ -67,13 +67,17 @@ function starterLedBench(boardId: BoardId): { simulation: Simulation; led: PartI
 
   const ledPin = pinAt(wiring.led);
   simulation.routeWire(at(ledPin.x, ledPin.y), at(holeX(20), holeY(8)));
-  simulation.addPart(resistorDefinition(330), holeX(20), holeY(8) - 1.6);
+  simulation.addPart(resistorDefinition(330), holeX(20), holeY(8) - 2.54);
+  // Anode-anchored: the long leg lands on its hole, cathode one column along.
+  const starterLedDef = ledDefinition(DIODE_PROFILES.red, 'Red');
+  const starterAnode = starterLedDef.pins.find((pin) => pin.id === 'anode')!;
   const led = simulation.addPart(
-    ledDefinition(DIODE_PROFILES.red, 'Red'),
-    holeX(24),
-    holeY(8) - 3,
+    starterLedDef,
+    holeX(24) - starterAnode.x,
+    holeY(8) - starterAnode.y,
   );
-  simulation.routeWire(at(holeX(25), holeY(8)), at(holeX(25), railY));
+  // The cathode sits one column back from the anode; return it to ground.
+  simulation.routeWire(at(holeX(23), holeY(8)), at(holeX(23), railY));
   const ground = pinAt(wiring.ground);
   simulation.routeWire(at(ground.x, ground.y), at(holeX(10), railY));
 
