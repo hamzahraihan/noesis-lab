@@ -77,6 +77,101 @@ const ROTARY_ENCODER: Exercise = {
     'Turn the Detents knob one step at a time and watch counts move by exactly 1 while rejected stays at 0.',
     'Now break it on purpose: pull the VCC jumper and turn the knob again. Read the references below before you decide what the fix is.',
   ],
+  solution: {
+    approach: [
+      'The pin numbers here are chosen by what the Uno can do with them, not by convenience. ' +
+        'CLK and DT are the quadrature pair and D2 and D3 are the only two pins with external ' +
+        'interrupt vectors, so those two pins go to those two lines and nothing else does.',
+      'The decoder is a lookup, not a change test: index the table by previous * 4 + current, ' +
+        'with the state packed as (CLK ? 2 : 0) + (DT ? 1 : 0). Four states and sixteen moves, of ' +
+        'which eight are illegal — and CLK has to be the high bit, because that is what makes one ' +
+        'walk round the whole cycle come out +1 every step.',
+      'Illegal does not mean ignore, it means count it and carry on. Bounce crosses the same edge ' +
+        'twice, so `state` is written on every transition, legal or not: that is what makes the ' +
+        'second bounce compare against the truth and get rejected rather than becoming a second count.',
+      'The state has to be seeded from the pins in `setup()` rather than from zero, because the ' +
+        'encoder has already been turned by the time the sketch runs. A zero seed invents a ' +
+        'transition the mechanism never made, and the first detent pays for it.',
+      'SW goes to D4 and stays there. A push is slow enough to poll and edge-detect in software, ' +
+        'which keeps both interrupt vectors for the pair of lines that genuinely needs them.',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The encoder\'s three outputs are open-collector with 10 kΩ pull-ups to VCC, so this is ' +
+          'the wire that gives CLK, DT and SW defined levels. Leave it off and they float: ' +
+          '`digitalRead` returns whatever the bench has, and counts and rejected both climb with ' +
+          'nobody touching the knob — which reads as contact bounce rather than as a missing supply.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'Without a return path the pull-ups have nothing to pull against, so all three lines sit ' +
+          'at an undefined level. That is the version of the fault that looks like a dead encoder: ' +
+          'the module is fine and the board simply has no reference for it.',
+      },
+      {
+        pin: 'D2',
+        terminal: 'CLK',
+        why:
+          'CLK carries the high bit of the packed state, and D2 is INT0 — one of the two vectors ' +
+          'that can catch this line changing. Land it on any other pin and the bench build loses ' +
+          'every edge that falls between two polls, which is the failure this whole module exists ' +
+          'to explain.',
+      },
+      {
+        pin: 'D3',
+        terminal: 'DT',
+        why:
+          'DT carries the low bit, so the two lines are interchangeable to the hardware and not to ' +
+          'the table. Swapped, the decoder still moves one count per detent — it just reads every ' +
+          'direction the other way round, which looks like a knob wired backwards rather than like ' +
+          'two jumpers crossed.',
+      },
+      {
+        pin: 'D4',
+        terminal: 'SW',
+        why:
+          'The press contact is active-LOW and already pulled up inside the module, so `INPUT_PULLUP` ' +
+          'here is belt and braces and the pin number is free — but it must not be D2 or D3, or the ' +
+          'pair lose an interrupt vector to something that could have been polled. On a pin the ' +
+          'sketch never reads, the serial line simply never prints a press.',
+      },
+    ],
+    working: [
+      'One detent moves the count by exactly 1 anticlockwise or clockwise, and `rejected` stays at ' +
+        '0. That is the table agreeing with itself round the whole Gray cycle, not merely counting ' +
+        'changes.',
+      'Pressing SW prints one `press,counts,rejected` line, and the count in it is the count at ' +
+        'that press — the press being edge-detected against the previous reading, because the ' +
+        'contact reads LOW rather than HIGH.',
+      'A `counts=… rejected=…` line every half second shows the loop alive with nothing turning. A ' +
+        'count that creeps on its own is the fault and not the result: the same line is how you ' +
+        'catch a floating input before you touch the table.',
+      'Turning fast enough that the polling misses edges — `rejected` climbing and the count lagging ' +
+        'behind the knob — is the symptom interrupts exist to cure. The twin polls, so it can show ' +
+        'the problem and never the cure; the sketch header says so, and the transition table it is ' +
+        'proving is the part that is identical either way.',
+    ],
+    traps: [
+      'VCC left off, which is the fault this exercise is built around. The lines float, so the count ' +
+        'and the rejection counter both climb with the knob untouched — and because rejection is ' +
+        'supposed to mean bounce, that reads as a worn encoder rather than as an unpowered module.',
+      'Reading CLK and DT in two separate `digitalRead` calls. An edge can fall between them, the ' +
+        'pair then disagree about which state it is in, and the decoder invents a move that never ' +
+        'happened: the count drifts by ±1 with nobody turning anything.',
+      'Treating the eight zero rows as "nothing happened" instead of as rejections. Bounce is then ' +
+        'applied as motion and one detent counts four, which reads as having written an x1 decoder ' +
+        'against an x4 encoder rather than as having dropped the illegal rows.',
+      'Seeding `state` to 0 instead of reading the pins in `setup()`. The first detent then compares ' +
+        'the encoder\'s real resting state against a state it was never in, so `rejected` jumps by ' +
+        'one the instant you start turning — a first-movement fault that looks like the very first ' +
+        'detent being a bad one.',
+    ],
+  },
   sketch: `/*
  * Noesis Lab twin for 4.1 -- the quadrature transition table, driven by polling.
  *
@@ -384,6 +479,169 @@ const ULTRASONIC_RADAR: Exercise = {
     'Set the sensor\'s Distance knob to 100 cm. raw_us should read 5800 and the distance about 100.',
     'Drop it to 2 cm and back to 400 cm, and watch the lit count step 5, 4, 3, 2 across each band edge.',
   ],
+  solution: {
+    approach: [
+      'The two sensor pins are decided by direction before anything else. TRIG is driven — ' +
+        '`PIN_TRIG` is 6, and the burst is a HIGH held for 10 µs — and ECHO is listened to, on ' +
+        'D7, because the high time on that line is the measurement. Swapped, the sketch pulses a ' +
+        'pin nothing watches and reads a pin it drives itself.',
+      'ECHO is open-drain: it pulls the line low and does nothing else, so it needs the 10 kΩ back ' +
+        'to 5 V before the first reading is taken. A floating line is not a reading, and this ' +
+        'sketch will publish the noise as a distance.',
+      'The divide-by-two is already in the constant. ECHO rises when the burst leaves and falls ' +
+        'when the first reflection returns, so 58.1 µs is the round trip for one centimetre at ' +
+        '20 °C and `CM_PER_US` is that reciprocal. Halving it a second time gives exactly double ' +
+        'the real distance, which is the shape of a calibration fault and is not one.',
+      'The measurement is spread across iterations — one state per pass, each entered and left on ' +
+        'a `micros()` or `millis()` comparison — because the echo can run 23 ms and the bar has to ' +
+        'keep updating through it. `millis()` is far too coarse for the 10 µs burst, which is the ' +
+        'only reason `micros()` is here at all.',
+      'The remaining windows belong to the module, not to the sketch: 60 ms between bursts or ' +
+        'echoes start going missing as noise, and 25 ms as the ceiling or 400 cm could not be ' +
+        'reported at all. The bands are cumulative, so a close wall lights four LEDs and the count ' +
+        'falls one at a time as it retreats, which is what says how close rather than that something ' +
+        'is there.',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The module needs the full 5 V, and it shares the board\'s ground reference with the ' +
+          'ECHO pull-up. On 3V3 the burst is short and the echo comes back weak, so the sketch ' +
+          'measures a module that is barely switched on — which reads as a tired transducer rather ' +
+          'than an underpowered one.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'Without a shared reference the 10 µs burst and the echo it produces are measured against ' +
+          'nothing, and ECHO sits at an undefined level. Nearly every "the sensor is dead" report ' +
+          'starts here rather than at the part.',
+      },
+      {
+        pin: 'D6',
+        terminal: 'TRIG',
+        why:
+          'This is the line the sketch drives, and the pin number is only the sketch\'s choice of ' +
+          'which pin to write HIGH for 10 µs. Land it on a pin `setup()` never puts in `OUTPUT` and ' +
+          'no burst is ever transmitted, so every reading comes back as no target however good the ' +
+          'code is.',
+      },
+      {
+        pin: 'D7',
+        terminal: 'ECHO',
+        why:
+          '`PIN_ECHO` is 7 and the high time on this line is the whole measurement. On a pin the ' +
+          'module is not driving, the sketch times whatever its own last `digitalWrite` left behind — ' +
+          'and with D6 and D7 crossed, that is a zero on every line for ever.',
+      },
+      {
+        pin: '5V',
+        terminal: 'a',
+        why:
+          'This leg is the top of the pull-up that makes ECHO a logic high at all, since the module ' +
+          'only ever pulls the line down. On GND instead, the line is held low for ever and the ' +
+          'sketch reports the module as permanently silent.',
+      },
+      {
+        pin: 'D7',
+        terminal: 'b',
+        why:
+          'The pull-up belongs at the ECHO node itself, sharing that row with the module\'s output. ' +
+          'A pull-up on a neighbouring row is a pull-up of nothing: ECHO floats, and floating ECHO ' +
+          'is indistinguishable from no target — so the bar goes dark intermittently and looks like ' +
+          'a wiring fault somewhere else.',
+      },
+      {
+        pin: '5V',
+        terminal: 'anode',
+        why:
+          'Every anode goes to the supply so that the pin sinks, which is also what keeps each band ' +
+          'independent — nothing else on that row is carrying the current. Anode on the pin and ' +
+          'cathode on the rail inverts all five at once, and the bar sits dark while the serial line ' +
+          'goes on printing perfectly good distances.',
+      },
+      {
+        pin: 'D2',
+        terminal: 'b',
+        why:
+          'The nearest band, under 30 cm: `PIN_LED1` is 2, and it is the one that stays lit while the ' +
+          'others drop away. On a pin the sketch never writes, the bar reads as though it had three ' +
+          'bands instead of four, and the fault looks like a threshold rather than a jumper.',
+      },
+      {
+        pin: 'D3',
+        terminal: 'b',
+        why:
+          'The under-60 cm band, `PIN_LED2`. Miss this one and the step from two lit LEDs to one ' +
+          'happens at 60 cm instead, which reads as the sketch\'s comparison being wrong rather than ' +
+          'as a resistor on the wrong pin.',
+      },
+      {
+        pin: 'D4',
+        terminal: 'b',
+        why:
+          'The under-100 cm band, `PIN_LED3`. The band boundaries and the pin numbers have to agree; ' +
+          'when they do not the bar changes shape at the wrong distance while the number in the CSV ' +
+          'line stays correct, which is the hardest kind of fault to spot.',
+      },
+      {
+        pin: 'D5',
+        terminal: 'b',
+        why:
+          'The under-200 cm band, `PIN_LED4`, the last of the four that light as the wall comes in. ' +
+          'Lose it and a wall at 150 cm is indistinguishable from one at 250 cm on the display.',
+      },
+      {
+        pin: 'D8',
+        terminal: 'b',
+        why:
+          'The far band, past 200 cm: `PIN_LED5` is 8, and it is the only LED lit at 400 cm, which ' +
+          'is what separates "nothing close" from "nothing there". D8 rather than D10 or D13 keeps ' +
+          'those free for SPI; on a pin the sketch never writes, a distant wall and a dead sensor ' +
+          'look identical.',
+      },
+      {
+        pin: 'D9',
+        terminal: 'positive',
+        why:
+          '`PIN_BUZZER` is 9 — deliberately not one of the LED pins, so the note never contends with ' +
+          'a band for the same pin, and not D10–D13, which stay free. Share a pin with an LED and the ' +
+          'beep stops tracking distance, which reads as the gap arithmetic being wrong rather than ' +
+          'as two loads on one output.',
+      },
+    ],
+    working: [
+      'With the Distance knob at 100 cm the CSV line reads 5800 in the raw µs column and about 100 ' +
+        'in the distance column. That pair is the round-trip constant doing the halving for you, in ' +
+        'one line.',
+      'The valid column stays at 1 for every line at every distance in range, which is the proof that ' +
+        'an abort is reported as no target rather than as a number nobody measured.',
+      'Dropping the knob to 2 cm lights D2, D3, D4 and D5 together and shortens the beep gap to ' +
+        'about 100 ms; walking back out drops one band at a time and stretches the gap to 1000 ms. ' +
+        'The bar is cumulative, so the count of lit LEDs is the distance.',
+      'Nothing freezes during a reading: the LEDs and the buzzer keep moving through the longest ' +
+        'echo. That is the state machine earning its place, and it is precisely what the one-line ' +
+        '`pulseIn` version cannot do.',
+    ],
+    traps: [
+      'The 10 kΩ left off the ECHO node. The line floats, so readings alternate between 0 and the ' +
+        'full timeout and the bar goes dark — a symptom that points at the transducer, because a ' +
+        'transducer is the part you can see.',
+      'TRIG and ECHO crossed. The sketch pulses D6 and reads D7, so it ends up bursting into a pin ' +
+        'nothing is watching and timing a pin it drives itself: every line reads 0 cm, and the CSV ' +
+        'output looks like the sensor has simply stopped answering.',
+      'Halving twice — dividing the raw µs by two as well as using the round-trip constant. Every ' +
+        'reading comes back exactly double, which looks like a calibration error on the part rather ' +
+        'than an arithmetic slip, and a factor of exactly two is the tell.',
+      'Bursting faster than the 60 ms recovery floor allows. The oscillator cannot be re-triggered ' +
+        'that soon, and echoes start going missing in a way that looks like noise: the bar flickers ' +
+        'and the readings jump, which reads as an unreliable sensor rather than as a module being ' +
+        'asked a question before it has answered the last one.',
+    ],
+  },
   sketch: `/*
  * Noesis Lab twin for 4.2 -- the non-blocking radar sequence.
  *
