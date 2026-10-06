@@ -10,7 +10,7 @@ import {
 } from './boardRegistry';
 
 import { Simulation } from './simulation';
-import { BLINK_SKETCH } from './examples';
+import { BLINK_SKETCH, PI_BLINK_SKETCH } from './examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '../sim/breadboard';
 import { ledDefinition, resistorDefinition } from '../sim/passives';
 import { DIODE_PROFILES } from '../sim/elements';
@@ -142,16 +142,23 @@ describe('board registry', () => {
           pins.filter((pin) => pin.canDrive === false).length,
         );
         expect(specs.logicVolts).toBeGreaterThan(0);
-        expect(specs.adcBits).toBeGreaterThan(0);
+        // Zero is the honest answer for a board with no converter at all.
+        expect(specs.adcBits).toBeGreaterThanOrEqual(0);
       }
     });
 
-    it('pairs the 3.3 V boards with a 12-bit ADC and the 5 V boards with 10', () => {
-      // The pairing a learner meets on the card has to be the pairing the
-      // converter implements, or the card's first fact is the wrong one.
+    it('pairs the 3.3 V boards with a 12-bit ADC and the 5 V boards with 10, or has none', () => {
+      /*
+       * The pairing a learner meets on the card has to be the pairing the
+       * converter implements, or the card's first fact is the wrong one -- but
+       * it only applies to a board that has a converter at all. A single-board
+       * computer has none, and `adcBits: 0` is how it says so: giving it a
+       * width would advertise a resolution the board cannot deliver.
+       */
       for (const board of BOARDS) {
         const specs = boardSpecs(board.id);
-        expect(specs.adcBits).toBe(specs.logicVolts < 3.4 ? 12 : 10);
+        const expected = specs.adcCount > 0 ? (specs.logicVolts < 3.4 ? 12 : 10) : 0;
+        expect(specs.adcBits, `${board.name} ADC`).toBe(expected);
       }
     });
 
@@ -200,22 +207,25 @@ describe('board registry', () => {
       }
     });
 
-    it('lands the starter LED on the pin the sketch drives', () => {
+    it('lands the starter LED on the pin that board’s own sketch drives', () => {
       /*
-       * Every shipped example names `#define LED_PIN 2`, so the starter wiring
-       * has to put the LED on the hole that answers to pin 2 -- not on the pin
-       * a board's silkscreen would suggest. Wiring it to pin 13 instead gives a
-       * bench whose LED never lights, which looks exactly like a broken
-       * simulator and was true on five of the six boards.
+       * Every microcontroller here names `#define LED_PIN 2` in the sketch that
+       * ships, so the starter wiring has to put the LED on the hole that
+       * answers to pin 2 -- not on the pin a board's silkscreen would suggest.
+       * Wiring it to pin 13 instead gives a bench whose LED never lights, which
+       * looks exactly like a broken simulator and was true on five of the six
+       * boards that shipped before this check.
+       *
+       * The number lives on the wiring rather than here because it is no longer
+       * the same on every board: a single-board computer's GPIO2 is its I2C data
+       * line, so its sketch names a different pin and the wiring follows it.
        */
-      const STARTER_LED_PIN = 2;
-
       for (const board of BOARDS) {
         const definition = boardOption(board.id).make();
         const pin = definition.boardPins?.find(
           (candidate) => candidate.id === STARTER_WIRING[board.id].led,
         );
-        expect(pin?.gpio, `${board.name} starter LED pin`).toBe(STARTER_LED_PIN);
+        expect(pin?.gpio, `${board.name} starter LED pin`).toBe(STARTER_WIRING[board.id].ledPin);
         // A pin with no output driver cannot light anything, however it is wired.
         expect(pin?.canDrive, `${board.name} starter LED pin`).not.toBe(false);
       }
@@ -238,7 +248,15 @@ describe('board registry', () => {
     for (const board of BOARDS) {
       it(`lights and darkens the LED on the ${board.name}`, () => {
         const { simulation, led } = starterLedBench(board.id);
-        simulation.loadFirmware(BLINK_SKETCH);
+        // Each board is given the sketch it would actually be handed when its
+        // bench opens, in its own language. Loading the C++ one onto a
+        // single-board computer would fail before it reached a pin, which says
+        // nothing about whether the wiring is right.
+        const language = boardOption(board.id).language;
+        simulation.loadFirmware(
+          language === 'python' ? PI_BLINK_SKETCH : BLINK_SKETCH,
+          language,
+        );
         simulation.start();
 
         const anodeKey = `${led.id}:anode`;
