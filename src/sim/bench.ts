@@ -127,6 +127,15 @@ export interface Bench {
   readonly terminals: readonly Terminal[];
   readonly parts: readonly PartInstance[];
   readonly wires: readonly Wire[];
+  /**
+   * Counts every change to the bench's contents.
+   *
+   * The collections above are mutated in place, so this is the only thing that
+   * changes when a part turns or a jumper is re-clipped. Anything memoised from
+   * a bench -- wire routing most of all -- has to key on this, or it keeps
+   * drawing where things used to be.
+   */
+  readonly revision: number;
 }
 
 /**
@@ -264,6 +273,9 @@ export class BenchBuilder {
 
     this.nextPartSerial = snapshot.nextPartSerial;
     this.nextWireSerial = snapshot.nextWireSerial;
+    // A restore replaces the bench wholesale, so anything memoised from it is
+    // stale whether or not the shape happens to match.
+    this.markChanged();
   }
 
   /** Places a part with its top-left corner at (x, y). */
@@ -278,6 +290,7 @@ export class BenchBuilder {
     };
     this.resolveHoles(part);
     this.parts.push(part);
+    this.markChanged();
     return part;
   }
 
@@ -294,13 +307,59 @@ export class BenchBuilder {
     part.x = x;
     part.y = y;
     this.resolveHoles(part);
+    this.markChanged();
   }
 
+  /**
+   * Turns a part a quarter turn about its own centre.
+   *
+   * The origin moves as well as the angle, and that is the part that is easy to
+   * leave out. A quarter turn of a part that is wider than it is tall swaps its
+   * bounding box over, so the centre sits half a width to the left and half a
+   * height lower than it did -- and a part whose origin was left alone appears
+   * to jump sideways by the difference between its own two dimensions. On a
+   * breadboard that reads as the part teleporting out of its row.
+   *
+   * Carrying the centre across instead keeps the part exactly where it was put,
+   * which is what turning something on a desk actually does.
+   */
   rotatePart(id: string, rotation: Rotation): void {
     const part = this.parts.find((candidate) => candidate.id === id);
     if (!part) return;
-    part.rotation = rotation;
+
+    /*
+     * Wrapped back into a single turn. The bench turns by repeated +90s with
+     * no wrap of its own, so the fifth press arrives as 450: past every
+     * ===90/270 check while the renderer draws it mod 360, which detaches the
+     * painted leads from their holes. The stored value stays canonical, so
+     * the readout, the resolver and the canvas always mean the same angle.
+     */
+    const wrapped = (((rotation % 360) + 360) % 360) as Rotation;
+
+    /*
+     * Measured in the box the part is in now, not the one its definition
+     * declares: after a quarter turn the part occupies the swapped box, and
+     * halving the unrotated width instead walks the centre 4.75 mm per turn
+     * (half the width/height difference, compounding every press), dragging
+     * the leads out from under their wires while the resolver insists nothing
+     * moved.
+     */
+    const { widthMm, heightMm } = part.definition;
+    const turned = part.rotation === 90 || part.rotation === 270;
+    const centreX = part.x + (turned ? heightMm : widthMm) / 2;
+    const centreY = part.y + (turned ? widthMm : heightMm) / 2;
+
+    // The bounding box a quarter turn produces is the old one with its sides
+    // exchanged, so the centre has to be measured in the new box.
+    const swapped = wrapped === 90 || wrapped === 270;
+    const drawnWidth = swapped ? heightMm : widthMm;
+    const drawnHeight = swapped ? widthMm : heightMm;
+
+    part.x = centreX - drawnWidth / 2;
+    part.y = centreY - drawnHeight / 2;
+    part.rotation = wrapped;
     this.resolveHoles(part);
+    this.markChanged();
   }
 
   /**
@@ -334,6 +393,7 @@ export class BenchBuilder {
       bends: [...bends],
     };
     this.wires.push(wire);
+    this.markChanged();
     return wire;
   }
 
@@ -356,8 +416,23 @@ export class BenchBuilder {
     const terminal = this.terminalAt(x, y);
     if (terminal === wire.from || terminal === wire.to) return;
 
+    const old = this.terminals[end === 'from' ? wire.from : wire.to];
     if (end === 'from') wire.from = terminal;
     else wire.to = terminal;
+
+    /*
+     * The hand-placed shape follows the drag, rubber-band style: bends are
+     * absolute bench positions from the old shape, and leaving them behind
+     * while the end travels re-threads the wire through stale points --
+     * nodes stranded in empty space, as if the wire forgot its own route.
+     * The far end stays pinned, so only the travelled delta carries across.
+     */
+    const fresh = this.terminals[end === 'from' ? wire.from : wire.to];
+    const dx = fresh.x - old.x;
+    const dy = fresh.y - old.y;
+    if (dx !== 0 || dy !== 0) {
+      wire.bends = wire.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy }));
+    }
 
     const from = this.terminals[wire.from];
     const to = this.terminals[wire.to];
@@ -365,6 +440,7 @@ export class BenchBuilder {
     // The contact the end left is released, so a wire dragged off a breadboard
     // hole does not leave a phantom pin behind in the netlist.
     this.pruneTerminals();
+    this.markChanged();
   }
 
   /**
@@ -378,6 +454,7 @@ export class BenchBuilder {
     const wire = this.wires.find((candidate) => candidate.id === id);
     if (!wire) return;
     wire.colour = colour;
+    this.markChanged();
   }
 
   /**
@@ -396,6 +473,7 @@ export class BenchBuilder {
     // Length tracks the route, so it has to be re-measured on every change or
     // the solver would price a reshaped jumper at its old resistance.
     wire.lengthMm = routedLengthMm(from.x, from.y, wire.bends, to.x, to.y);
+    this.markChanged();
   }
 
   /**
@@ -450,6 +528,7 @@ export class BenchBuilder {
     this.wires.length = 0;
     this.wires.push(...keep);
     this.pruneTerminals();
+    this.markChanged();
   }
 
   removeWire(id: string): void {
@@ -457,6 +536,7 @@ export class BenchBuilder {
     if (index < 0) return;
     this.wires.splice(index, 1);
     this.pruneTerminals();
+    this.markChanged();
   }
 
   terminalAtPosition(x: number, y: number): Terminal | null {
@@ -472,29 +552,39 @@ export class BenchBuilder {
     return best;
   }
 
-  /** Nearest terminal to a board position, or null past the snap radius. */
-  nearestTerminal(x: number, y: number): Terminal | null {
-    return this.terminalAtPosition(x, y);
-  }
-
   /**
-   * The bench, wrapped for the renderer.
+   * The bench, wrapped for the renderer, plus a count of what has changed.
    *
-   * Built once and handed back every time, because the three collections are
-   * mutated in place rather than replaced: a part is pushed onto `parts` and
-   * the array it lands in is the same one the last caller is holding. So a
-   * fresh wrapper each call would be a different object describing exactly the
-   * same bench -- indistinguishable to everything except `===`, which is the
-   * one comparison that matters to React.
+   * Built once and handed back every time, because the collections are mutated
+   * in place rather than replaced: a part is pushed onto `parts` and the array
+   * it lands in is the same one the last caller is holding. So a fresh wrapper
+   * each call would be a different object describing exactly the same bench.
    *
-   * Every memo keyed on `bench` in the UI was silently recomputing on every
-   * render for this reason: a miss does not look wrong, it just re-derives
-   * what it already had, several times a second, over a thousand terminals.
+   * That stability is why `revision` exists. Identity alone cannot report a
+   * change -- a pin moving mutates a terminal rather than replacing it -- so
+   * anything memoised from the bench has to key on the count. Without it, wire
+   * routing keeps drawing where a part's pins used to be, which is exactly what
+   * turning a panel looked like.
    */
   private built: Bench | null = null;
 
+  private revision = 0;
+
+  /** Records that the bench has changed in a way identity cannot show. */
+  markChanged(): void {
+    this.revision += 1;
+    // A cached bench captured the old count, so it has to be rebuilt rather
+    // than patched: the wrapper holds it as a plain value.
+    this.built = null;
+  }
+
   build(): Bench {
-    this.built ??= { terminals: this.terminals, parts: this.parts, wires: this.wires };
+    this.built ??= {
+      terminals: this.terminals,
+      parts: this.parts,
+      wires: this.wires,
+      revision: this.revision,
+    };
     return this.built;
   }
 
@@ -508,7 +598,13 @@ export class BenchBuilder {
    */
   private resolveHoles(part: PartInstance): void {
     for (const pin of part.definition.pins) {
-      const offset = rotateOffset(pin.x, pin.y, part.rotation);
+      const offset = rotateOffset(
+        pin.x,
+        pin.y,
+        part.rotation,
+        part.definition.widthMm,
+        part.definition.heightMm,
+      );
       const held = part.terminals[pin.id];
       if (held === undefined) {
         part.terminals[pin.id] = this.claimTerminal(part.x + offset.x, part.y + offset.y);
