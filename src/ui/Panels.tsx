@@ -41,21 +41,18 @@ export interface InspectorProps {
   onSetPressed(pressed: boolean): void;
   onSetKnob(spec: KnobSpec, value: number): void;
   /**
-   * Turns the panel a quarter turn, on a colour display.
+   * Turns the selected part a quarter turn, on the bench.
    *
-   * Not a knob, and deliberately so: turning a screen changes nothing about the
-   * circuit, so routing it through one would re-solve the whole netlist on
-   * every click for an operation that is purely about how the glass is read.
+   * Not a knob, and deliberately so: turning a part is a physical act with a
+   * consequence for the circuit -- its pins land in different contacts -- so it
+   * re-solves the netlist, which is what a knob would do anyway. Keeping it a
+   * direct action makes that honest.
    */
   onRotate(): void;
-  /**
-   * The screen's size right now, as `width × height`, or undefined for a part
-   * with no colour panel to turn.
-   *
-   * Read from the controller rather than the definition because a panel that
-   * has been turned is a different shape than the one it was defined as.
-   */
+  /** The colour panel's visible size, when the part is one. */
   panelSize?: string;
+  /** Which way up the part is, in degrees. 0 is as it was drawn. */
+  rotation: number;
 }
 
 export function Inspector({
@@ -63,6 +60,7 @@ export function Inspector({
   pinVoltages,
   controls,
   panelSize,
+  rotation,
   onDelete,
   onRotate,
   onSetPressed,
@@ -153,29 +151,39 @@ export function Inspector({
         ))}
 
         {/*
-         * Turning the glass is an operation on the panel rather than on its
-         * wiring, so it sits with the other direct actions rather than among
-         * the knobs. The readout is the useful half of it: an orientation that
-         * swaps the axes changes the size the screen is, and a learner who
-         * cannot see that is left guessing why their map stopped fitting.
+         * Turning a part is a physical act, so it belongs on every part rather
+         * than on the displays alone -- a resistor is the part most worth
+         * turning, since a quarter turn is what puts its leads in two different
+         * rows of a breadboard.
+         *
+         * The button is labelled for what it does rather than what it is
+         * called. `R` does the same thing, which is why the key is on the
+         * button too: a part can be turned while the operator's attention is on
+         * the board rather than the side panel.
+         *
+         * The screen readout stays below it for a colour panel, because there
+         * is a second, unrelated rotation on a display -- the electronic one
+         * the sketch asks for -- and a learner who cannot see the two apart
+         * concludes neither works.
          */}
-        {panelSize && (
-          <div className="flex flex-col gap-1.5">
-            <button
-              type="button"
-              onClick={onRotate}
-              className="ctl ctl-quiet h-8 w-full text-xs"
-              title="Turn the panel a quarter turn"
-            >
-              <RotateIcon className="icon" aria-hidden="true" />
-              Rotate panel
-            </button>
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={onRotate}
+            className="ctl ctl-quiet h-8 w-full text-xs"
+            title="Turn this part a quarter turn clockwise (R)"
+          >
+            <RotateIcon className="icon" aria-hidden="true" />
+            Turn part
+            <span className="num ml-auto text-slate-400">{rotation}°</span>
+          </button>
+          {panelSize && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-400">Screen</span>
               <span className="num text-slate-200">{panelSize}</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <button type="button" onClick={onDelete} className="ctl ctl-danger mt-1 w-full">
           <TrashIcon className="icon" aria-hidden="true" />
