@@ -682,12 +682,29 @@ const ResistorBody = staticBody(function ResistorBody({
 }) {
   const ohms = definition.component.kind === 'resistor' ? definition.component.ohms : 0;
   const bands = bandsFor(ohms);
-  const bodyY = 0.6;
+  /*
+   * The leads are drawn on the same row as the pins, which is why both say
+   * 2.54: the pins were moved down to the breadboard grid, and a lead drawn
+   * at the old 1.6 ended a millimetre above where the wire attaches -- so the
+   * wire met the body above the visible end of the leg and read as floating
+   * against the resistor rather than soldered to it.
+   */
+  // The pin row, which is also the breadboard grid: a whole 0.1" step down.
+  const leadY = 2.54;
+  // The body is centred on the lead line, as a cermilm body sits over its legs.
   const bodyH = 2.2;
+  const bodyY = leadY - bodyH / 2;
 
   return (
     <g filter="url(#nz-lift)">
-      <AxialLeads left={0} right={10.16} y={1.6} bendLeft={0} bendRight={10.16} />
+      {/*
+       * Drawn on the pin row, so the metal ends exactly where the contact is.
+       * `AxialLeads` drops its stub down to the row it is given and stops there,
+       * so the leg's visible end and the wire's attachment are the same point --
+       * which is what makes a wire read as soldered to the lead rather than
+       * passing it.
+       */}
+      <AxialLeads left={0} right={10.16} y={leadY} bendLeft={0} bendRight={10.16} />
       {/* Cermilm body: a cylinder lit along its top edge. */}
       <rect x={1.4} y={bodyY} width={7.36} height={bodyH} rx={1.1} fill={definition.bodyColour} stroke="#8d7f5c" strokeWidth={0.18} />
       <rect x={1.4} y={bodyY} width={7.36} height={bodyH * 0.5} rx={1.1} fill="#ffffff" opacity={0.28} />
