@@ -62,6 +62,113 @@ const PRECISION_DIMMER: Exercise = {
     'Put the sketch in the editor, open the Serial monitor at 9600 baud, and push the slider slowly from end to end while watching all three printed columns.',
     'Probe D3 on the scope as you do. A 490 Hz square wave appears whose average voltage tracks the duty: about 1.0 V when the printed duty reads 51.',
   ],
+  solution: {
+    approach: [
+      'The knob is a divider, not a variable resistor. Its two ends go across the rails — end A to ' +
+        'the red + rail, end B to the blue − rail — and only the wiper goes to an ADC pin. Put an ' +
+        'end on A0 instead and the pin sees a fixed point on the track or half the divider, which ' +
+        'is a different fault from the one you are looking for.',
+      'The LED has to be on a pin the hardware can pulse. `LED_PIN` is 3, and D3 is OC2A — one of ' +
+        'the six pins the timers drive (3, 5, 6, 9, 10, 11). `analogWrite` on anything else ' +
+        'compiles, runs, and does nothing at all.',
+      'The pin sources the current here, so the anode goes to the pin through the resistor and the ' +
+        'cathode returns to the blue − rail. That is the orientation in which a bigger duty really ' +
+        'is brighter; put the anode on the 5 V rail instead and the duty counts the wrong way ' +
+        'round.',
+      'The rescale runs from the pot\'s measured travel, not from the code\'s. A 10 kΩ pot rarely ' +
+        'reaches 0 or 1023, so `CAL_MIN` 30 and `CAL_MAX` 995 are what its two ends actually read. ' +
+        'Map the full 0–1023 instead and the extremes of the knob are unreachable — and because ' +
+        '`map()` truncates rather than rounds, only the exact top code reaches 255.',
+      '`map()` does not clamp, so a count outside the range you gave it comes back outside the ' +
+        'output range and `analogWrite` is handed a duty it cannot use. Constrain after mapping, ' +
+        'and average before it: a four-sample mean at 100 Hz costs about 1% of the loop, and its ' +
+        'divisor has to match the window.',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'endA',
+        why:
+          'The top of the divider, so the wiper can reach the full 5 V at the far end of travel. ' +
+          'On the low side instead, the wiper only ever sees a fraction of the track, the top of ' +
+          'the knob falls off the top of the ADC\'s range, and the dimmer tops out early.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'endB',
+        why:
+          'The bottom of the divider and the reference the count is measured against. Both ends on ' +
+          'the same rail short the track, the wiper settles near one end of the range and the ' +
+          'count barely moves — which reads as a faulty ADC pin rather than a shorted pot.',
+      },
+      {
+        pin: 'A0',
+        terminal: 'wiper',
+        why:
+          'The wiper is the position; an end is only a fixed point on the track. An end on A0 ' +
+          'makes the pin see a constant voltage or half the divider, so the count either never ' +
+          'moves or sweeps half its range — the symptom of an intermittent pot, not of a wrong ' +
+          'pin.',
+      },
+      {
+        pin: 'D3',
+        terminal: 'b',
+        why:
+          'This is the leg the sketch\'s PWM comes out on, because `LED_PIN` is 3. Any other pin ' +
+          'lights the LED only if it is one of the six PWM channels and lands on nothing ' +
+          'otherwise — a perfectly ordinary GPIO, and the LED simply never comes on.',
+      },
+      {
+        pin: 'D3',
+        terminal: 'anode',
+        why:
+          'The pin sources, so the anode belongs on the pin side and the cathode on the return. ' +
+          'Wire the anode to the 5 V rail instead and the pin has to pull the LED down to light ' +
+          'it, so duty 255 reads as dark and the third column of the monitor looks inverted.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'cathode',
+        why:
+          'Without a return path there is no current, and an LED with no path is not a damaged ' +
+          'LED — it simply never lights. That is the version of this fault that reads as a broken ' +
+          'part.',
+      },
+    ],
+    working: [
+      'The monitor at 9600 baud prints three tab-separated columns every 200 ms: the raw count, ' +
+        'the filtered count and the duty. Watching the raw column sweep from about 30 to about 995 ' +
+        'as the slider travels is the divider working, and the second column moving more smoothly ' +
+        'than the first is the four-sample mean.',
+      'The duty column reaches 255 before the slider reaches its stop, and the LED is at full ' +
+        'brightness when it does. Reaching it exactly is the proof the map range is right, because ' +
+        '`map()` truncates — a range even slightly too wide never quite gets there.',
+      'On the scope, D3 carries a 488 Hz square wave whose average voltage tracks the printed ' +
+        'duty: about 1.0 V at duty 51. PWM is an average voltage rather than a smaller current, so ' +
+        'the LED itself only ever sees nearly 5 V or nearly 0 V.',
+      'Turning the knob, brightness moves in 256 steps and a dim setting hisses faintly at 490 Hz. ' +
+        'That is real resolution rather than a fault — each duty step moves the average current by ' +
+        '0.39%, and the eye finds that more easily on a bare LED than on a diffused one.',
+    ],
+    traps: [
+      'An end of the pot on A0 instead of the wiper. The count then moves over half the range or ' +
+        'not at all, and the brightness stops at about half however far the slider goes. The part ' +
+        'most likely to be blamed is the pot, which is the one component here still doing its job.',
+      'Judging the circuit by the first column and not the second. `raw` is the ADC and `filtered` ' +
+        'is the mean of the last four samples, so watching only `raw` shows a count that jumps a ' +
+        'step at a time and never sits still — and the conclusion is a noisy supply rather than an ' +
+        'unfiltered reading.',
+      'The LED wired the other way round, anode on the 5 V rail and cathode through the resistor to ' +
+        'D3. Duty 255 leaves it dark and duty 0 lights it, so the numbers in the monitor rise while ' +
+        'the light falls. Both orientations work — they are opposite signs of the same circuit — ' +
+        'and knowing which one you built is the whole of the diagnosis.',
+      'Priming the moving-average window with zeros rather than with real readings. The first ' +
+        'conversion after the ADC is enabled is allowed 114 us rather than 104 us and can read a ' +
+        'few counts low, so the sketch starts from an average of nothing and the LED fades up from ' +
+        'dark over the first second even before the slider is touched, which looks like a sampling ' +
+        'rate that is too slow.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 
 /*
@@ -361,6 +468,111 @@ const SENSOR_CALIBRATION: Exercise = {
     'Turn the thermistor knob up. The temperature column follows, always a little behind — that gap is the filter\'s group lag, and it is worth measuring rather than guessing at.',
     'Cover the LDR with your hand and watch both light columns. The raw count and the percentage move the same way, and the percentage is the one you would put in a log.',
   ],
+  solution: {
+    approach: [
+      'Neither module needs anything built on the breadboard, because each one already is a ' +
+        'divider: a bead or a photoresistor on top, a 10 kΩ fixed resistor below it, and a node ' +
+        'between them that the ADC reads. That is why both are three wires and why the board ' +
+        'carries no resistors for this exercise.',
+      'Supply both modules from the rails before anything else, and read each one on its own ADC ' +
+        'channel. An unpowered module has no reference for its output, so its count wanders ' +
+        'wherever the pin\'s leakage lets it — and two modules on one pin means one of them is ' +
+        'being read as the other.',
+      'The photoresistor has two outputs and only one of them is analogue. `AO` is the divider\'s ' +
+        'node and moves continuously; `DO` is the on-board comparator\'s output and can only ever ' +
+        'be HIGH or LOW, so `analogRead` on it returns a number shaped exactly like a reading ' +
+        'and meaning nothing. It goes to A1.',
+      'Leave the thermistor\'s trimmer alone, and check the divider with one number rather than ' +
+        'with the maths. At 25 °C a 10 kΩ bead and a 10 kΩ resistor are equal, so the node sits ' +
+        'at exactly half the supply — count 512. That single figure tells you whether the maths ' +
+        'is being applied to the divider actually in front of you.',
+      'Counts are not temperatures, and this dialect has no `log()`, so the beta curve becomes a ' +
+        'lookup table keyed on counts with linear interpolation between them. The divisor of the ' +
+        'mean is then part of the calibration, not a detail: `sum / 8` over an eight-deep window ' +
+        'is a mean, and widening the window means changing both together.',
+    ],
+    wiring: [
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The supply the module\'s divider is referenced to. Without it the output floats and ' +
+          'settles near zero, which reads as a dead sensor rather than as a module that was never ' +
+          'powered — and every count downstream is then measured against nothing.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'The bottom of the divider, which is what makes 2.5 V mean half of the supply and 512 ' +
+          'mean half of the ADC\'s range. On any other rail the reference moves, and 512 stops ' +
+          'being the 25 °C anchor the whole table is built on.',
+      },
+      {
+        pin: 'A0',
+        terminal: 'OUT',
+        why:
+          'A0 is the channel the sketch reads for temperature, as `TEMP_PIN` 14. On A1 instead ' +
+          'the temperature column still prints plausible numbers — of the wrong sensor, in the ' +
+          'wrong units — because both modules look exactly the same from the monitor.',
+      },
+      {
+        pin: '5V',
+        terminal: 'VCC',
+        why:
+          'The same supply question for the photoresistor. Its divider runs the other way up from ' +
+          'the thermistor\'s, so leaving this off drops `light_pct` towards zero in daylight and ' +
+          'looks like an LDR that only responds to darkness.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'The return the divider\'s other leg is measured against. Both modules share the blue − ' +
+          'rail, so forgetting this one leaves a photoresistor reading that hovers and twitches ' +
+          'without ever reaching the dark end of its range.',
+      },
+      {
+        pin: 'A1',
+        terminal: 'AO',
+        why:
+          '`AO` is the analogue output, and A1 is the channel the sketch reads as `LIGHT_PIN` 15. ' +
+          'On `DO` instead, the count pins near 0 or near 1023 and the percentage column is a ' +
+          'constant — indistinguishable on the monitor from a light source that has stopped ' +
+          'responding.',
+      },
+    ],
+    working: [
+      'The monitor at 9600 baud prints a header, `ms,temp_c,raw_t,lux_raw,light_pct`, and then one ' +
+        'CSV row every 500 ms. The unfiltered count is printed beside the temperature on purpose, ' +
+        'so the two can be checked against each other instead of the maths being taken on trust.',
+      'With the knob at 25 °C the raw count reads 512 and the temperature reads 25.0. That pair ' +
+        'appearing together is the divider being right and the table being anchored — the single ' +
+        'most useful line the monitor will ever print.',
+      'Turning the knob up moves the temperature column the same way, always a little behind it. ' +
+        'That gap is the filter\'s group lag of about 40 ms at 100 Hz, not an error, and it is ' +
+        'worth measuring rather than guessing at.',
+      'Covering the LDR sends the raw count up and the percentage up with it, towards 100 in ' +
+        'bright light — the opposite direction from the thermistor on the same board, because the ' +
+        'two dividers are the right way round.',
+    ],
+    traps: [
+      'The thermistor wired into A0 correctly but its module left unpowered. The count still ' +
+        'prints, and still moves a little, because a floating pin wanders rather than sitting at ' +
+        'zero — so the symptom is a plausible-looking temperature that is wrong and slowly drifting, ' +
+        'which is the shape of a drifting sensor rather than of a disconnected one.',
+      'Reading `raw_t` as the temperature. It is a count: 512 at 25 °C, not 25. A column that is ' +
+        'obviously the wrong unit is easy to spot, which is exactly why the filtered column beside ' +
+        'it is the one worth checking against the meter.',
+      'The moving average dividing by the wrong number. Every reading comes out consistently ' +
+        'about 11% low, which is not visibly broken — it is weather, or a slightly cooler room — ' +
+        'so the divisor is the last thing anyone suspects when the temperature simply disagrees ' +
+        'with a thermometer by a degree and a half.',
+      'Fitting a spike to a problem that has too many samples in the average. A mean smears one ' +
+        'large excursion across all N of its samples and never removes it, so a reading that ' +
+        'briefly jumps and settles reads as a real thermal event rather than as one bad conversion.',
+    ],
+  },
   sketch: `#include <Arduino.h>
 
 /*
