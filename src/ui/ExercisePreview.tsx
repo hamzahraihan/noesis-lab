@@ -1,13 +1,14 @@
 /**
  * The finished build, as a static picture of the result.
  *
- * Every exercise already wires its completed circuit through `setup()`, which
- * is what the bench loads — and what the tests run headless. The data comes
- * from `previewFor` (`exercise-preview-data.ts`); this file only draws it
- * with the bench's own renderers (`PartFootprint`, the wire router), framed
- * on the parts the exercise placed. What the learner sees here is what lands
- * on the bench, down to the wire colours — the one honest difference is that
- * nothing is powered, so LEDs sit unlit and the caption says so.
+ * Every exercise — and every gallery build — already wires its completed
+ * circuit through a `setup()`, which is what the bench loads and what the
+ * tests run headless. The data comes from `previewBench`
+ * (`exercise-preview-data.ts`); this file only draws it with the bench's
+ * own renderers (`PartFootprint`, the wire router), framed on the parts the
+ * build placed. What the learner sees here is what lands on the bench, down
+ * to the wire colours — the one honest difference is that nothing is
+ * powered, so LEDs sit unlit and the caption says so.
  *
  * Board and breadboard bodies are left out of the frame on purpose: the
  * breadboard alone draws the better part of a thousand holes, which is fine
@@ -17,31 +18,34 @@
  */
 
 import { useId, useMemo } from 'react';
+import type { BoardId } from './boardRegistry';
 import type { Exercise } from './exercises';
-import { previewFor } from './exercise-preview-data';
+import { previewBench, previewFor, type ExercisePreviewData } from './exercise-preview-data';
 import { PartFootprint } from './footprints';
 import { HardwareDefs } from './hardware';
 import { partTransform } from './part-transform';
+import type { Simulation } from './simulation';
 
 /**
- * A non-interactive picture of the finished build.
+ * The SVG body every finished-build picture shares, whatever built the bench.
  *
- * `fit="meet"` shows the whole circuit (lesson page); `fit="slice"` fills the
- * frame edge to edge for uniform card thumbs. Either way the SVG scales from
- * the content frame, so no pixel math leaks in.
+ * Split out so exercises and gallery projects draw through one code path:
+ * one frame rule, one wire treatment, one grid. The data decides what is
+ * drawn; this decides only how.
  */
-export function ExercisePreview({
-  exercise,
+function PreviewSvg({
+  preview,
+  label,
   className,
   fit = 'meet',
 }: {
-  exercise: Exercise;
+  preview: ExercisePreviewData;
+  label: string;
   className?: string;
   fit?: 'meet' | 'slice';
 }) {
-  const preview = useMemo(() => previewFor(exercise), [exercise]);
-  // Suffixed: pattern ids share the document across inline SVGs, and the
-  // Learn index holds thirty of these at once.
+  // Suffixed: pattern ids share the document across inline SVGs, and index
+  // pages hold dozens of these at once.
   const gridId = `${useId().replace(/:/g, 'finished-grid')}`;
   const { frame } = preview;
 
@@ -51,7 +55,7 @@ export function ExercisePreview({
       viewBox={`${frame.x} ${frame.y} ${frame.width} ${frame.height}`}
       preserveAspectRatio={fit === 'slice' ? 'xMidYMid slice' : 'xMidYMid meet'}
       role="img"
-      aria-label={`Finished wiring for ${exercise.title}`}
+      aria-label={label}
     >
       <defs>
         <pattern id={gridId} width={10.16} height={10.16} patternUnits="userSpaceOnUse">
@@ -94,5 +98,54 @@ export function ExercisePreview({
         ))}
       </g>
     </svg>
+  );
+}
+
+/**
+ * A non-interactive picture of the finished build.
+ *
+ * `fit="meet"` shows the whole circuit (lesson page); `fit="slice"` fills the
+ * frame edge to edge for uniform card thumbs. Either way the SVG scales from
+ * the content frame, so no pixel math leaks in.
+ */
+export function ExercisePreview({
+  exercise,
+  className,
+  fit = 'meet',
+}: {
+  exercise: Exercise;
+  className?: string;
+  fit?: 'meet' | 'slice';
+}) {
+  const preview = useMemo(() => previewFor(exercise), [exercise]);
+  return (
+    <PreviewSvg preview={preview} label={`Finished wiring for ${exercise.title}`} className={className} fit={fit} />
+  );
+}
+
+/**
+ * The same picture for a gallery build: a board plus a wiring setup.
+ *
+ * The cache key namespaces the project and the board, so one project's Uno
+ * wiring never serves as another board's image.
+ */
+export function GalleryPreview({
+  board,
+  setup,
+  cacheKey,
+  title,
+  className,
+  fit = 'meet',
+}: {
+  board: BoardId;
+  setup: (simulation: Simulation) => void;
+  cacheKey: string;
+  title: string;
+  className?: string;
+  fit?: 'meet' | 'slice';
+}) {
+  const preview = useMemo(() => previewBench(board, setup, cacheKey), [board, setup, cacheKey]);
+  return (
+    <PreviewSvg preview={preview} label={`Finished wiring for ${title}`} className={className} fit={fit} />
   );
 }

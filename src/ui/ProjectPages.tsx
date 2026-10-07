@@ -8,10 +8,13 @@
  */
 
 import { Link, useParams } from 'react-router';
+import { ArrowRightIcon } from '@radix-ui/react-icons';
 import { boardOption, boardSpecs, isBoardId } from './boardRegistry';
 import { EXAMPLES } from './examples';
+import { GALLERY, buildFor } from './gallery';
 import { BoardArt, Chip } from './HomePage';
 import { projectFor } from './projects';
+import { GalleryPreview } from './ExercisePreview';
 
 export function ProjectPage() {
   const { boardId } = useParams<{ boardId?: string }>();
@@ -34,6 +37,15 @@ export function ProjectPage() {
   const board = boardOption(project.board);
   const specs = boardSpecs(project.board);
   const next = EXAMPLES.filter((example) => project.tryNext.includes(example.id));
+  /*
+   * The finished builds for this board: gallery projects with a validated
+   * build on its headers. Uno has six; boards whose batches have not landed
+   * yet show the honest empty state below instead of a thin list.
+   */
+  const builds = GALLERY.flatMap((entry) => {
+    const build = buildFor(entry, project.board);
+    return build === null ? [] : [{ entry, build }];
+  });
 
   return (
     <ProjectShell title={board.name}>
@@ -79,6 +91,46 @@ export function ProjectPage() {
             Open in bench
           </Link>
         </div>
+      </ProjectSection>
+
+      <ProjectSection title="Finished projects">
+        {builds.length > 0 ? (
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {builds.map(({ entry, build }) => (
+              <li
+                key={entry.id}
+                className="flex flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900"
+              >
+                <span className="block h-36 border-b border-slate-800 bg-slate-950">
+                  <GalleryPreview
+                    board={project.board}
+                    setup={build.setup}
+                    cacheKey={`gallery:${project.board}:${entry.id}`}
+                    title={entry.title}
+                    fit="slice"
+                    className="h-full w-full"
+                  />
+                </span>
+                <span className="flex flex-1 flex-col gap-1.5 px-4 py-3.5">
+                  <span className="font-medium tracking-tight text-slate-100">{entry.title}</span>
+                  <span className="text-sm leading-relaxed text-slate-400">{entry.blurb}</span>
+                  <Link
+                    to={`/bench/${project.board}?project=${entry.id}`}
+                    className="mt-auto inline-flex items-center gap-1.5 pt-2 text-sm font-medium text-sky-400"
+                  >
+                    Open on bench
+                    <ArrowRightIcon className="icon-sm" aria-hidden="true" />
+                  </Link>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="max-w-[65ch] text-sm leading-relaxed text-slate-400">
+            No finished projects for this board yet — its batch is still being built and
+            validated. The starter bench above runs today; check back soon.
+          </p>
+        )}
       </ProjectSection>
 
       <ProjectSection title="Try next">
