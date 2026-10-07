@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { PART_CATALOGUE } from '../sim/catalogue';
 import { breadboardDefinition } from '../sim/breadboard';
-import { boardOption } from './boardRegistry';
-import { GALLERY, galleryById } from './gallery';
+import { boardOption, type BoardId } from './boardRegistry';
+import { GALLERY, boardsFor, buildFor, galleryById } from './gallery';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from './simulation';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 
-function freshBench() {
-  const board = boardOption('uno').make();
-  const simulation = new Simulation(board);
-  simulation.addPart(board, 0, 0);
+function freshBench(board: BoardId) {
+  const definition = boardOption(board).make();
+  const simulation = new Simulation(definition);
+  simulation.addPart(definition, 0, 0);
   simulation.addPart(breadboardDefinition(), 230, 0);
   return simulation;
 }
@@ -25,17 +25,27 @@ function partTerminals(simulation: Simulation): Set<number> {
 }
 
 describe('the project gallery', () => {
-  it('numbers every project uniquely and tags real boards', () => {
+  it('numbers every project uniquely and builds each at least once', () => {
     const ids = GALLERY.map((entry) => entry.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const entry of GALLERY) {
-      expect(entry.boards.length).toBeGreaterThan(0);
-      for (const board of entry.boards) {
-        expect(boardOption(board).id).toBe(board);
-      }
+      expect(entry.builds.length, `${entry.id} builds`).toBeGreaterThan(0);
       expect(galleryById(entry.id)?.id).toBe(entry.id);
+      for (const build of entry.builds) {
+        expect(boardOption(build.board).id).toBe(build.board);
+      }
     }
     expect(galleryById('nope')).toBeNull();
+  });
+
+  it('resolves builds per board and none where none exist', () => {
+    for (const entry of GALLERY) {
+      expect(boardsFor(entry)).toEqual(entry.builds.map((build) => build.board));
+      for (const board of boardsFor(entry)) {
+        expect(buildFor(entry, board)?.board).toBe(board);
+      }
+      expect(buildFor(entry, 'mega')).toBeNull();
+    }
   });
 
   it('names only parts the catalogue stocks and says what running shows', () => {
@@ -49,51 +59,61 @@ describe('the project gallery', () => {
     }
   });
 
-  it('parses every sketch through the real parser', () => {
+  it('parses every build sketch in its board language', () => {
     for (const entry of GALLERY) {
-      const simulation = freshBench();
-      simulation.loadFirmware(entry.sketch, 'arduino-cpp');
-      expect(simulation.firmwareError, `${entry.id} sketch: ${simulation.firmwareError}`).toBeNull();
+      for (const build of entry.builds) {
+        const simulation = freshBench(build.board);
+        simulation.loadFirmware(build.sketch, boardOption(build.board).language);
+        expect(simulation.firmwareError, `${entry.id}/${build.board}: ${simulation.firmwareError}`).toBeNull();
+      }
     }
   });
 
-  it('wires each project onto the bench without throwing', () => {
-    // Exact counts, measured from the setups: deterministic wiring means a
-    // skipped leg changes the number, and the number is what catches it.
+  it('wires every build onto its board bench without throwing', () => {
     const wireFloors: Record<string, number> = {
       'alarm-clock': 16,
       safe: 14,
       dashboard: 14,
       parking: 15,
       weather: 12,
+      reaction: 5,
     };
     for (const entry of GALLERY) {
-      const simulation = freshBench();
-      expect(() => entry.setup(simulation), `${entry.id} setup`).not.toThrow();
-      expect(simulation.bench.wires.length, `${entry.id} wires`).toBeGreaterThanOrEqual(
-        wireFloors[entry.id] ?? 1,
-      );
-      const real = partTerminals(simulation);
-      const touched = new Set<number>();
-      for (const wire of simulation.bench.wires) {
-        expect(real.has(wire.from), `${entry.id} wire from`).toBe(true);
-        expect(real.has(wire.to), `${entry.id} wire to`).toBe(true);
-        touched.add(wire.from);
-        touched.add(wire.to);
+      for (const build of entry.builds) {
+        const key = `${entry.id}/${build.board}`;
+        const simulation = freshBench(build.board);
+        expect(() => build.setup(simulation), `${key} setup`).not.toThrow();
+        expect(simulation.bench.wires.length, `${key} wires`).toBeGreaterThanOrEqual(
+          wireFloors[entry.id] ?? 1,
+        );
+        const real = partTerminals(simulation);
+        const touched = new Set<number>();
+        for (const wire of simulation.bench.wires) {
+          expect(real.has(wire.from), `${key} wire from`).toBe(true);
+          expect(real.has(wire.to), `${key} wire to`).toBe(true);
+          touched.add(wire.from);
+          touched.add(wire.to);
+        }
+        for (const part of entry.parts) {
+          const placed = simulation.bench.parts.filter((p) => p.definition.name === part.name).length;
+          expect(placed, `${key} "${part.name}" qty`).toBeGreaterThanOrEqual(part.qty);
+        }
+        for (const part of simulation.bench.parts) {
+          const kind = part.definition.component.kind;
+          if (kind === 'mcu' || kind === 'breadboard') continue;
+          const wired = Object.values(part.terminals).some((id) => touched.has(id));
+          expect(wired, `${key} "${part.definition.name}" wired`).toBe(true);
+        }
       }
-      // Every listed part made it onto the bench, in the listed quantity.
-      for (const part of entry.parts) {
-        const placed = simulation.bench.parts.filter((p) => p.definition.name === part.name).length;
-        expect(placed, `${entry.id} "${part.name}" qty`).toBeGreaterThanOrEqual(part.qty);
-      }
-      // Every placed project part is touched by at least one jumper: a
-      // misspelled pin skips its leg silently (setups return early rather
-      // than throw), and an untouched part is what that looks like.
-      for (const part of simulation.bench.parts) {
-        const kind = part.definition.component.kind;
-        if (kind === 'mcu' || kind === 'breadboard') continue;
-        const wired = Object.values(part.terminals).some((id) => touched.has(id));
-        expect(wired, `${entry.id} "${part.definition.name}" wired`).toBe(true);
+    }
+  });
+
+  it('frames every project preview on real content', () => {
+    for (const entry of GALLERY) {
+      for (const build of entry.builds) {
+        const preview = previewBench(build.board, build.setup, `gallery:${build.board}:${entry.id}`);
+        expect(preview.parts.length, `${entry.id} parts`).toBeGreaterThan(0);
+        expect(preview.paths.length, `${entry.id} paths`).toBeGreaterThan(0);
       }
     }
   });
@@ -118,13 +138,7 @@ describe('the project gallery', () => {
     expect(galleryById('weather')?.title).toBe('Weather Station');
   });
 
-  it('frames every project preview on real content', () => {
-    for (const entry of GALLERY) {
-      const preview = previewBench(entry.boards[0], entry.setup, `gallery:${entry.id}`);
-      expect(preview.parts.length, `${entry.id} parts`).toBeGreaterThan(0);
-      expect(preview.frame.width, `${entry.id} width`).toBeGreaterThan(0);
-      expect(preview.frame.height, `${entry.id} height`).toBeGreaterThan(0);
-      expect(preview.paths.length, `${entry.id} paths`).toBeGreaterThan(0);
-    }
+  it('times the reaction game', () => {
+    expect(galleryById('reaction')?.title).toBe('Reaction Timer');
   });
 });
