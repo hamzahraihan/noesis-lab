@@ -16,7 +16,7 @@ for (const f of files) {
   const code = readFileSync(f, 'utf8').replace(/(import|export)\s+type[\s\S]*?;/g, '');
   for (const m of code.matchAll(/(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]/g)) {
     const spec = m[1], line = code.slice(0, m.index).split('\n').length, at = `${f}:${line}`;
-    if (spec.startsWith('@/ui') || spec.startsWith('@/sim/') || /(^|[./\\])\.\.[\\/]+(sim|ui)[\\/]/.test(spec)) { errors.push(`${at}: legacy ${spec}`); continue; }
+    if (spec.startsWith('@/ui') || spec === '@/sim' || spec.startsWith('@/sim/') || /(^|[./\\])\.\.[\\/]+(sim|ui)[\\/]/.test(spec)) { errors.push(`${at}: legacy ${spec}`); continue; }
     const deep = spec.match(/^@\/features\/([^/]+)\/(.+)$/), tgt = deep?.[1] ?? spec.match(/^@\/features\/([^/]+)$/)?.[1];
     if (tgt && !f.endsWith('.test.ts') && badDir(feat(f), tgt)) { errors.push(`${at}: ${feat(f)} → ${tgt} value edge (${spec})`); continue; }
     if (!deep) continue;
