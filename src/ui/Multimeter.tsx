@@ -7,7 +7,7 @@
  */
 import type { BoardPin } from '../sim/catalog';
 import { AMP_RANGES, OHM_RANGES, type MeterMode, type MeterReading } from '../sim/multimeter';
-import { formatAmps, formatOhms, formatVolts } from './format';
+import { formatAmps, formatOhms, formatVolts } from '@/utils';
 import { ExclamationTriangleIcon, MixerHorizontalIcon } from '@radix-ui/react-icons';
 
 export interface MultimeterPanelProps {
