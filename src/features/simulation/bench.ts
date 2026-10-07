@@ -20,7 +20,7 @@
  * and therefore firmware state -- stable across a drag.
  */
 
-import { type PartDefinition, type Rotation, rotateOffset } from './catalog';
+import { type PartDefinition, type Rotation, rotateOffset } from '@/sim/catalog';
 
 /**
  * A bend position, in millimetres.

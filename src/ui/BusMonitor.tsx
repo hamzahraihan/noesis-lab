@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import type { BusEntry } from '../sim/bus/log';
+import type { BusEntry } from '@/features/simulation';
 import { EraserIcon, SewingPinIcon } from '@radix-ui/react-icons';
 
 /** How many bytes one line shows before it elides the rest. */

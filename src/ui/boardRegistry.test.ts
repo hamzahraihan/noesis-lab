@@ -13,8 +13,8 @@ import { Simulation } from './simulation';
 import { BLINK_SKETCH, PI_BLINK_SKETCH } from './examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '../sim/breadboard';
 import { ledDefinition, resistorDefinition } from '../sim/passives';
-import { DIODE_PROFILES } from '../sim/elements';
-import type { PartInstance, Terminal } from '../sim/bench';
+import { DIODE_PROFILES } from '@/features/simulation';
+import type { PartInstance, Terminal } from '@/features/simulation';
 
 /**
  * The board registry.

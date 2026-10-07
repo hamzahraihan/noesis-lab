@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '../sim/boards';
-import { sonarDefinition } from '../sim/sonar';
-import type { PartInstance } from '../sim/bench';
+import { sonarDefinition } from '@/features/simulation';
+import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';
 
 function wiredBench(wireEcho: boolean, vccToGround = false) {

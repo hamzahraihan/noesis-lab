@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { columnX, railRowY, stripRowY, breadboardDefinition } from './breadboard';
-import { esp32DevKitV1 } from './boards';
+import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/sim/breadboard';
+import { esp32DevKitV1 } from '@/sim/boards';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { GROUND, type Element } from './elements';
 import { solveCircuit, type Solution } from './circuit';
-import { DynamicState, type PartDefinition } from './catalog';
+import { DynamicState, type PartDefinition } from '@/sim/catalog';
 import { buildNetlist, type Netlist } from './netlist';
 import { coilEnergized, RELAY_COIL_OHMS, relayDefinition } from './relay';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 const BOARD_ORIGIN_X = 200;
 const SUPPLY_VOLTS = 3.3;

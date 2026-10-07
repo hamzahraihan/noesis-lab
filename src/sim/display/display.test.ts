@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from '../bench';
+import { BenchBuilder } from '@/features/simulation';
 import { columnX, railRowY, stripRowY, breadboardDefinition } from '../breadboard';
 import { esp32DevKitV1 } from '../boards';
-import { Engine } from '../engine';
-import { McuRuntime } from '../mcu';
-import type { LiquidCrystalPort, ServoPort } from '../firmware/interpreter';
-import { I2CBus } from '../bus/i2c';
+import { Engine } from '@/features/simulation';
+import { McuRuntime } from '@/features/simulation';
+import type { LiquidCrystalPort, ServoPort } from '@/features/simulation';
+import { I2CBus } from '@/features/simulation';
 import { ssd1306Definition } from './part';
 import { Ssd1306 } from './ssd1306';
-import { FirmwareRunner, type FirmwareServices } from '../firmware/interpreter';
+import { FirmwareRunner, type FirmwareServices } from '@/features/simulation';
 
 const BOARD_ORIGIN_X = 0;
 const BREADBOARD_ORIGIN_X = 230;

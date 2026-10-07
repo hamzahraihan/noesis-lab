@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from './bench';
+import { BenchBuilder } from '@/features/simulation';
 import { columnX, railRowY, stripRowY, breadboardDefinition } from './breadboard';
 import { esp32DevKitV1 } from './boards';
 import { ledDefinition, resistorDefinition } from './passives';
-import { DIODE_PROFILES } from './elements';
-import { Engine } from './engine';
-import { McuRuntime } from './mcu';
-import { FirmwareRunner } from './firmware/interpreter';
-import { measureDutyCycle, measureFrequency } from './probe';
+import { DIODE_PROFILES } from '@/features/simulation';
+import { Engine } from '@/features/simulation';
+import { McuRuntime } from '@/features/simulation';
+import { FirmwareRunner } from '@/features/simulation';
+import { measureDutyCycle, measureFrequency } from '@/features/simulation';
 
 const BREADBOARD_ORIGIN_X = 230;
 const SIGNAL_COLUMN = 20;

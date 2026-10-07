@@ -3,7 +3,7 @@ import { Simulation } from './simulation';
 import { EXAMPLES, I2C_CLOCK_EXAMPLE, LCD_EXAMPLE, SERVO_EXAMPLE } from './examples';
 import { esp32DevKitV1 } from '../sim/boards';
 import { breadboardDefinition } from '../sim/breadboard';
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 
 /**
  * The examples, run.

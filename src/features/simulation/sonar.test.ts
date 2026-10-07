@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { esp32DevKitV1 } from './boards';
+import { esp32DevKitV1 } from '@/sim/boards';
 import { GROUND, type Element } from './elements';
 import { solveCircuit, type Solution } from './circuit';
-import { DynamicState } from './catalog';
+import { DynamicState } from '@/sim/catalog';
 import { buildNetlist, type Netlist } from './netlist';
 import { DISTANCE_KNOB, echoMicroseconds, sonarDefinition } from './sonar';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 describe('sonar definition', () => {
   it('exposes VCC/TRIG/ECHO/GND with a distance knob', () => {

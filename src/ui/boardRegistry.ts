@@ -12,7 +12,7 @@
  */
 
 import type { PartDefinition } from '../sim/catalog';
-import type { FirmwareLanguage } from '../sim/firmware/interpreter';
+import type { FirmwareLanguage } from '@/features/simulation';
 import {
   arduinoMega2560,
   arduinoNano,

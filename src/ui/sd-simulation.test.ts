@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '../sim/boards';
-import { microsdDefinition } from '../sim/sdcard';
-import type { PartInstance } from '../sim/bench';
+import { microsdDefinition } from '@/features/simulation';
+import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';
 
 function cardBench() {

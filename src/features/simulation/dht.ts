@@ -12,8 +12,8 @@
  * rather than a pulse train.
  */
 
-import type { KnobSpec, PartDefinition } from './catalog';
-import { TEMPERATURE_KNOB } from './modules';
+import type { KnobSpec, PartDefinition } from '@/sim/catalog';
+import { TEMPERATURE_KNOB } from '@/sim/modules';
 
 /** Relative humidity in percent, the unit its datasheet works in. */
 export const HUMIDITY_KNOB: KnobSpec = {

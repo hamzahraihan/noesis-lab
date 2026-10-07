@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { esp32DevKitV1 } from './boards';
+import { esp32DevKitV1 } from '@/sim/boards';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
-import { DynamicState } from './catalog';
-import { irReceiverDefinition } from './modules';
+import { DynamicState } from '@/sim/catalog';
+import { irReceiverDefinition } from '@/sim/modules';
 import { sonarDefinition } from './sonar';
 import { NEC_CODES, REMOTE_KEY_KNOB, remoteDefinition } from './remote';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 describe('remote definition', () => {
   it('is pinless with a 20-key table', () => {

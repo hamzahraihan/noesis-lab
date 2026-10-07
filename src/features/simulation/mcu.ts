@@ -7,7 +7,7 @@
  * firmware VM, and the solver without any of them knowing about the others.
  */
 
-import type { BoardPin, BoardSpec, PartDefinition } from './catalog';
+import type { BoardPin, BoardSpec, PartDefinition } from '@/sim/catalog';
 
 export type PinDirection = 'input' | 'output' | 'inputPullUp';
 

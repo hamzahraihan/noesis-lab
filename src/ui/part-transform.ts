@@ -1,4 +1,4 @@
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 
 /**
  * Where a part's group sits on the bench canvas.

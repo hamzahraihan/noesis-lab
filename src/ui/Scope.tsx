@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { decodeUart, measureDutyCycle, measureFrequency, type TraceSample } from '../sim/probe';
+import { decodeUart, measureDutyCycle, measureFrequency, type TraceSample } from '@/features/simulation';
 import type { BoardPin } from '../sim/catalog';
 import { ActivityLogIcon, Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
 

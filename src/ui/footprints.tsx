@@ -13,17 +13,17 @@
  * `hardware.tsx`; each SVG document renders `HardwareDefs` once.
  */
 
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition, PinSpec } from '../sim/catalog';
 import { DynamicState } from '../sim/catalog';
-import { DIODE_PROFILES } from '../sim/elements';
+import { DIODE_PROFILES } from '@/features/simulation';
 import { WIPER_KNOB } from '../sim/passives';
 import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '../sim/display/ili9341';
 import { Ssd1306 } from '../sim/display/ssd1306';
 import type { DisplayController } from '../sim/display/part';
 import type { Servo } from '../sim/devices/servo';
-import type { PixelColor } from '../sim/pixels';
+import type { PixelColor } from '@/features/simulation';
 import type { Lcd1602 } from '../sim/devices/lcd';
 import {
   AxialLeads,

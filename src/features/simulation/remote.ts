@@ -8,7 +8,7 @@
  * Carrier bursts are deliberately not modeled.
  */
 
-import type { KnobSpec, PartDefinition } from './catalog';
+import type { KnobSpec, PartDefinition } from '@/sim/catalog';
 
 /** NEC code behind one remote key, in the element's key order. */
 export interface RemoteKey {

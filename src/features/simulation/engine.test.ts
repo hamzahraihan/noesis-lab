@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { columnX, railRowY, stripRowY, breadboardDefinition } from './breadboard';
-import { esp32DevKitV1 } from './boards';
-import { ledDefinition, resistorDefinition, buttonDefinition } from './passives';
+import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/sim/breadboard';
+import { esp32DevKitV1 } from '@/sim/boards';
+import { ledDefinition, resistorDefinition, buttonDefinition } from '@/sim/passives';
 import { DIODE_PROFILES, GROUND } from './elements';
 import { Engine } from './engine';
 import { McuRuntime } from './mcu';
 import { elementCurrent } from './circuit';
-import { DynamicState } from './catalog';
+import { DynamicState } from '@/sim/catalog';
 
 const BOARD_ORIGIN_X = 200;
 const BOTTOM_NEGATIVE_RAIL = 2;

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '../sim/boards';
-import { HUMIDITY_KNOB, dhtDefinition } from '../sim/dht';
+import { HUMIDITY_KNOB, dhtDefinition } from '@/features/simulation';
 import { TEMPERATURE_KNOB } from '../sim/modules';
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';
 
 function climateBench() {

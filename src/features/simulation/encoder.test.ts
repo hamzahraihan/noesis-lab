@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { esp32DevKitV1 } from './boards';
+import { esp32DevKitV1 } from '@/sim/boards';
 import { GROUND, type Element } from './elements';
 import { solveCircuit, type Solution } from './circuit';
-import { DynamicState, type KnobSpec, type PartDefinition } from './catalog';
+import { DynamicState, type KnobSpec, type PartDefinition } from '@/sim/catalog';
 import { buildNetlist, type Netlist } from './netlist';
 import { DETENT_KNOB, encoderDefinition, quadratureAt } from './encoder';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 const SUPPLY_VOLTS = 3.3;
 

@@ -6,7 +6,7 @@
  * while the circuit is telling it something else would be the worst outcome.
  */
 import type { BoardPin } from '../sim/catalog';
-import { AMP_RANGES, OHM_RANGES, type MeterMode, type MeterReading } from '../sim/multimeter';
+import { AMP_RANGES, OHM_RANGES, type MeterMode, type MeterReading } from '@/features/simulation';
 import { formatAmps, formatOhms, formatVolts } from '@/utils';
 import { ExclamationTriangleIcon, MixerHorizontalIcon } from '@radix-ui/react-icons';
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { esp32DevKitV1 } from './boards';
-import { DynamicState } from './catalog';
+import { esp32DevKitV1 } from '@/sim/boards';
+import { DynamicState } from '@/sim/catalog';
 import { buildNetlist } from './netlist';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { STEP_DEGREES, biaxialStepperDefinition, stepperDefinition, stepTransition } from './stepper';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 describe('stepper definition', () => {
   it('exposes four coil pins in a row', () => {

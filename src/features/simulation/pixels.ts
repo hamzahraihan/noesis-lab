@@ -13,7 +13,7 @@
  * rather than a pulse train.
  */
 
-import type { PartDefinition } from './catalog';
+import type { PartDefinition } from '@/sim/catalog';
 
 /** One LED die: integer channels, 0 to 255. */
 export interface PixelColor {

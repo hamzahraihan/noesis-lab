@@ -12,19 +12,19 @@
  * successive steps, the way it does on real hardware, instead of being faked by
  * handing the LED an averaged voltage.
  */
-import { createController, type DisplayController } from './display/part';
-import { createI2cDevice, isI2cDevice, type I2cDevice } from './devices/part';
+import { createController, type DisplayController } from '@/sim/display/part';
+import { createI2cDevice, isI2cDevice, type I2cDevice } from '@/sim/devices/part';
 import { coilEnergized } from './relay';
 import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from './remote';
 import { DIGIT_KNOB } from './dialer';
 import { SD_CARD_BYTES } from './sdcard';
 import { clampChannel, pixelCount, type PixelColor } from './pixels';
 import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
-import { Servo } from './devices/servo';
-import { createLcd, type Lcd1602 } from './devices/lcd';
-import { Ds1307 } from './devices/ds1307';
-import { Ili9341 } from './display/ili9341';
-import { Ssd1306 } from './display/ssd1306';
+import { Servo } from '@/sim/devices/servo';
+import { createLcd, type Lcd1602 } from '@/sim/devices/lcd';
+import { Ds1307 } from '@/sim/devices/ds1307';
+import { Ili9341 } from '@/sim/display/ili9341';
+import { Ssd1306 } from '@/sim/display/ssd1306';
 
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
@@ -32,7 +32,7 @@ import type { Multimeter } from './multimeter';
 import { GROUND, type Element } from './elements';
 import { buildNetlist, type Netlist } from './netlist';
 import type { Bench, PartInstance } from './bench';
-import { NO_DYNAMIC_STATE, type DynamicState } from './catalog';
+import { NO_DYNAMIC_STATE, type DynamicState } from '@/sim/catalog';
 import {
   INTERNAL_PULLUP_OHMS,
   INPUT_IMPEDANCE_OHMS,
