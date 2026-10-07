@@ -612,3 +612,18 @@ git commit -m "refactor: extract features/learn and routes composition, add boun
 - Task 5: canvas (`Bench/Workbench/simulation-facade/wire-route/wire-colours/hit-test/part-transform/footprints/hardware/wokwi/*Browser/*Search/*Preview` + tests) → `features/bench`.
 - Task 6: panels (`Scope/Multimeter/LogicAnalyser/BusMonitor/Panels` + tests) → `features/instruments`.
 - Task 7: learning (`exercises/gallery/projects/HomePage/ExercisePages/ProjectPages/boardRegistry/examples/glossary/guide-dismissal/map-*/monaco-setup` + tests) → `features/learn`; thin wrappers → `src/routes`.
+
+---
+
+## As-built deviations (recorded during subagent-driven execution; ledger: `.superpowers/sdd/2026-10-07-feature-architecture-migration/progress.md`)
+
+- Plan-wide: `npx vitest run --reporter=basic` is invalid on Vitest 5 — default reporter used everywhere.
+- Task 1: dropped `"baseUrl": "."` (TS 6 TS5101 hard-error); text-based alias check (brief's `require()` of JSONC throws).
+- Task 3/4 split defect → Task 4b (new): device-model leaves relocated `simulation → parts`; directed layering now rules — `parts` has zero value-deps on `simulation`, `simulation` imports the `parts` seam only, type-only imports allowed either way. No permanent deep-import allowlist.
+- `export *` barrels accepted where proven conflict-free (Tasks 3–4 re-reviews).
+- Bench seam is two-tier (node-crash verified: `Bench → Panels → monaco-editor` crashes vitest node collection): barrel holds node-safe modules only; `src/app` + `src/routes` import `Bench`/`Workbench` via documented deep paths (composition exemption, DOM-only).
+- `monaco-setup.ts` lives in `features/instruments` (sole consumer `Panels.tsx`), not `learn`.
+- `Bench.tsx` takes 15 dependency-injected props via `BenchRoute` (bench→learn ban); `simulation.ts` ownership splits resolved by move-or-inject.
+- `src/sim/` retains 3 seam-importing test stays (`passives`, `rotation`, `scope`); `src/ui/` deleted.
+- `scripts/check-boundaries.mjs` (`npm run check:boundaries`) encodes the tiers: bare seams + intra-feature relatives + `import type` allowed; deep subpaths only from owning feature, `*.test.ts`, or `src/app`+`src/routes` (bench DOM); forbidden directions enforced.
+- Deferred to post-merge: 5 test files on deep bench subpaths where the barrel now covers them (uniformity); gate `@/sim` bare-spec edge; `parts/index.ts` comment already fixed in Task 7.
