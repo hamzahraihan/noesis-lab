@@ -8,7 +8,7 @@
  * modules use.
  */
 
-import type { PartDefinition } from '@/sim/catalog';
+import type { PartDefinition } from '@/features/parts';
 
 /** Shaft travel of one full step on the 42 mm NEMA frame the artwork draws. */
 export const STEP_DEGREES = 7.5;

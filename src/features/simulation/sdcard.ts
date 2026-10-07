@@ -9,7 +9,7 @@
  * are explicitly not modeled -- files live in the engine store.
  */
 
-import type { PartDefinition } from '@/sim/catalog';
+import type { PartDefinition } from '@/features/parts';
 
 /** Flat-file capacity of one virtual card, in text length units. */
 export const SD_CARD_BYTES = 1048576;

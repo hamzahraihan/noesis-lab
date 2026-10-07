@@ -13,14 +13,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isLargePart, type CatalogueEntry } from '../sim/catalogue';
+import { isLargePart, type CatalogueEntry } from '@/features/parts';
 import { ComponentBrowser } from './ComponentBrowser';
-import { breadboardDefinition, columnX, railRowY, stripRowY } from '../sim/breadboard';
-import { ledDefinition, resistorDefinition } from '../sim/passives';
+import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
+import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/simulation';
-import type { PartDefinition } from '../sim/catalog';
+import type { PartDefinition } from '@/features/parts';
 import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
-import { ili9341Definition, ssd1306Definition } from '../sim/display/part';
+import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';

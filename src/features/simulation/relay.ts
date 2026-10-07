@@ -7,7 +7,7 @@
  * breadboard modules use -- snapping would pull holes off their pads.
  */
 
-import type { PartDefinition } from '@/sim/catalog';
+import type { PartDefinition } from '@/features/parts';
 
 /** Coil resistance of a 5 V signal relay of this class (~70 mA pull-in). */
 export const RELAY_COIL_OHMS = 70;

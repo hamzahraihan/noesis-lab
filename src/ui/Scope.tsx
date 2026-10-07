@@ -9,7 +9,7 @@
 
 import { useEffect, useRef } from 'react';
 import { decodeUart, measureDutyCycle, measureFrequency, type TraceSample } from '@/features/simulation';
-import type { BoardPin } from '../sim/catalog';
+import type { BoardPin } from '@/features/parts';
 import { ActivityLogIcon, Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
 
 const TRACE_HEIGHT_MM = 60;

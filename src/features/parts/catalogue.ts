@@ -10,7 +10,7 @@
 
 import type { PartDefinition, SensorVariant } from './catalog';
 import { breadboardDefinition } from './breadboard';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/simulation/elements';
 import {
   buttonDefinition,
   capacitorDefinition,
@@ -44,15 +44,15 @@ import {
   thermistorDefinition,
   tiltSwitchDefinition,
 } from './modules';
-import { relayDefinition } from '@/features/simulation';
-import { encoderDefinition } from '@/features/simulation';
-import { sonarDefinition } from '@/features/simulation';
-import { dhtDefinition } from '@/features/simulation';
-import { remoteDefinition } from '@/features/simulation';
-import { dialerDefinition } from '@/features/simulation';
-import { microsdDefinition } from '@/features/simulation';
-import { ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition } from '@/features/simulation';
-import { biaxialStepperDefinition, stepperDefinition } from '@/features/simulation';
+import { relayDefinition } from '@/features/simulation/relay';
+import { encoderDefinition } from '@/features/simulation/encoder';
+import { sonarDefinition } from '@/features/simulation/sonar';
+import { dhtDefinition } from '@/features/simulation/dht';
+import { remoteDefinition } from '@/features/simulation/remote';
+import { dialerDefinition } from '@/features/simulation/dialer';
+import { microsdDefinition } from '@/features/simulation/sdcard';
+import { ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition } from '@/features/simulation/pixels';
+import { biaxialStepperDefinition, stepperDefinition } from '@/features/simulation/stepper';
 
 export interface CatalogueEntry {
   readonly id: string;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { esp32DevKitV1 } from '@/sim/boards';
-import { DynamicState } from '@/sim/catalog';
+import { esp32DevKitV1 } from '@/features/parts';
+import { DynamicState } from '@/features/parts';
 import { buildNetlist } from './netlist';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';

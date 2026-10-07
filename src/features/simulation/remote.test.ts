@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { esp32DevKitV1 } from '@/sim/boards';
+import { esp32DevKitV1 } from '@/features/parts';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
-import { DynamicState } from '@/sim/catalog';
-import { irReceiverDefinition } from '@/sim/modules';
+import { DynamicState } from '@/features/parts';
+import { irReceiverDefinition } from '@/features/parts';
 import { sonarDefinition } from './sonar';
 import { NEC_CODES, REMOTE_KEY_KNOB, remoteDefinition } from './remote';
 import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';

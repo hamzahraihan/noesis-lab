@@ -11,7 +11,7 @@
  * the simulator models as 12-bit. Only the editorial lines are hand-written.
  */
 
-import type { PartDefinition } from '../sim/catalog';
+import type { PartDefinition } from '@/features/parts';
 import type { FirmwareLanguage } from '@/features/simulation';
 import {
   arduinoMega2560,
@@ -21,7 +21,7 @@ import {
   franzininhoBoard,
   nanoRp2040Connect,
   raspberryPi4,
-} from '../sim/boards';
+} from '@/features/parts';
 
 export type BoardId = 'esp32' | 'uno' | 'mega' | 'nano' | 'rp2040' | 'franzininho' | 'raspberry-pi';
 

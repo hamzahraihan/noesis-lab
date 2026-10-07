@@ -14,8 +14,8 @@ import {
   MagnifyingGlassIcon,
   ReaderIcon,
 } from '@radix-ui/react-icons';
-import { PART_CATALOGUE, type CatalogueEntry } from '../sim/catalogue';
-import type { PartDefinition } from '../sim/catalog';
+import { PART_CATALOGUE, type CatalogueEntry } from '@/features/parts';
+import type { PartDefinition } from '@/features/parts';
 import { PartPreview } from './PartPreview';
 
 /**

@@ -14,17 +14,17 @@
  */
 
 import type { PartInstance } from '@/features/simulation';
-import type { PartDefinition, PinSpec } from '../sim/catalog';
-import { DynamicState } from '../sim/catalog';
+import type { PartDefinition, PinSpec } from '@/features/parts';
+import { DynamicState } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/simulation';
-import { WIPER_KNOB } from '../sim/passives';
+import { WIPER_KNOB } from '@/features/parts';
 import { memo, useEffect, useRef } from 'react';
-import { Ili9341 } from '../sim/display/ili9341';
-import { Ssd1306 } from '../sim/display/ssd1306';
-import type { DisplayController } from '../sim/display/part';
-import type { Servo } from '../sim/devices/servo';
+import { Ili9341 } from '@/features/parts';
+import { Ssd1306 } from '@/features/parts';
+import type { DisplayController } from '@/features/parts';
+import type { Servo } from '@/features/parts';
 import type { PixelColor } from '@/features/simulation';
-import type { Lcd1602 } from '../sim/devices/lcd';
+import type { Lcd1602 } from '@/features/parts';
 import {
   AxialLeads,
   BarrelJack,

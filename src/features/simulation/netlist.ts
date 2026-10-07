@@ -17,9 +17,9 @@
 import { DIODE_PROFILES, GROUND, type DiodeProfile, type Element } from './elements';
 import { wireResistanceOhms } from './units';
 import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
-import type { DynamicState } from '@/sim/catalog';
+import type { DynamicState } from '@/features/parts';
 import { RELAY_COIL_OHMS } from './relay';
-import { WIPER_KNOB } from '@/sim/passives';
+import { WIPER_KNOB } from '@/features/parts';
 import { DETENT_KNOB, quadratureAt } from './encoder';
 import { WINDING_OHMS } from './stepper';
 import {
@@ -37,7 +37,7 @@ import {
   TEMPERATURE_KNOB,
   TILTED_KNOB,
   VERTICAL_KNOB,
-} from '@/sim/modules';
+} from '@/features/parts';
 
 export interface NetInfo {
   readonly index: number;

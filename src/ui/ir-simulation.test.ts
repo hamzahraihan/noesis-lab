@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { esp32DevKitV1 } from '../sim/boards';
-import { irReceiverDefinition } from '../sim/modules';
+import { esp32DevKitV1 } from '@/features/parts';
+import { irReceiverDefinition } from '@/features/parts';
 import { remoteDefinition, REMOTE_KEY_KNOB } from '@/features/simulation';
 import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';

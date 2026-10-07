@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { esp32DevKitV1 } from '@/sim/boards';
+import { esp32DevKitV1 } from '@/features/parts';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { SD_CARD_BYTES, microsdDefinition } from './sdcard';

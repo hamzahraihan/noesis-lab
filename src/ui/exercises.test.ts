@@ -9,7 +9,7 @@ import {
 } from './exercises';
 import { Simulation } from './simulation';
 import { boardOption } from './boardRegistry';
-import { PART_CATALOGUE } from '../sim/catalogue';
+import { PART_CATALOGUE } from '@/features/parts';
 
 /**
  * The curriculum has to be true, not just present.
@@ -22,7 +22,7 @@ import { PART_CATALOGUE } from '../sim/catalogue';
  */
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
-import { breadboardDefinition } from '../sim/breadboard';
+import { breadboardDefinition } from '@/features/parts';
 
 /**
  * A bench with the board and breadboard already placed.

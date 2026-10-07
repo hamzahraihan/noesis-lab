@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { raspberryPi4 } from '../sim/boards';
+import { raspberryPi4 } from '@/features/parts';
 import { boardOption, boardSpecs, STARTER_WIRING } from './boardRegistry';
 
 /**

@@ -11,10 +11,10 @@
  * the board hides the holes the rest of the circuit uses.
  */
 
-import type { PartDefinition } from '../sim/catalog';
-import { ds1307Definition } from '../sim/devices/sensors';
-import { lcd1602Definition } from '../sim/devices/lcd';
-import { servoDefinition } from '../sim/devices/servo';
+import type { PartDefinition } from '@/features/parts';
+import { ds1307Definition } from '@/features/parts';
+import { lcd1602Definition } from '@/features/parts';
+import { servoDefinition } from '@/features/parts';
 import type { Simulation } from './simulation';
 
 /** The parts an example can put on the bench for itself. */

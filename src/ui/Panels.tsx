@@ -9,7 +9,7 @@
 import Editor from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import type { PartInstance } from '@/features/simulation';
-import { DynamicState, type KnobSpec } from '../sim/catalog';
+import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
 import type { FirmwareLanguage } from '@/features/simulation';

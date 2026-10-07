@@ -8,8 +8,8 @@
  * way, "the part named `220 Resistor`" would stop meaning one thing.
  */
 
-import { PART_CATALOGUE } from '../../sim/catalogue';
-import type { PartDefinition } from '../../sim/catalog';
+import { PART_CATALOGUE } from '@/features/parts';
+import type { PartDefinition } from '@/features/parts';
 
 /**
  * The board the exercises are written for.

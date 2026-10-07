@@ -7,7 +7,7 @@
  * artwork.
  */
 
-import type { KnobSpec, PartDefinition } from '@/sim/catalog';
+import type { KnobSpec, PartDefinition } from '@/features/parts';
 
 /**
  * Target distance in centimetres: the echo width follows it.

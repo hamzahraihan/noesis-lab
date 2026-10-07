@@ -6,7 +6,7 @@
  */
 
 import type { KnobSpec, PartDefinition } from './catalog';
-import { DIODE_PROFILES, type DiodeProfile } from '@/features/simulation';
+import { DIODE_PROFILES, type DiodeProfile } from '@/features/simulation/elements';
 /**
  * The potentiometer's one control.
  *

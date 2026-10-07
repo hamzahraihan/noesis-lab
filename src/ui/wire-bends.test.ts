@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
 import { routeWireViaCorners, type Point } from './wire-route';
-import { esp32DevKitV1 } from '../sim/boards';
-import { breadboardDefinition } from '../sim/breadboard';
+import { esp32DevKitV1 } from '@/features/parts';
+import { breadboardDefinition } from '@/features/parts';
 
 /**
  * Choosing where a new waypoint goes.

@@ -8,8 +8,8 @@
 
 import { useMemo } from 'react';
 import type { PartInstance } from '@/features/simulation';
-import type { PartDefinition } from '../sim/catalog';
-import { DynamicState } from '../sim/catalog';
+import type { PartDefinition } from '@/features/parts';
+import { DynamicState } from '@/features/parts';
 import { PartFootprint, type FootprintState } from './footprints';
 import { HardwareDefs } from './hardware';
 import { renderedSizeMm } from './wokwi';

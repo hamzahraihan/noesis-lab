@@ -12,8 +12,8 @@ import {
   CATALOGUE_GROUPS,
   PART_CATALOGUE,
   type CatalogueEntry,
-} from '../sim/catalogue';
-import type { PartDefinition } from '../sim/catalog';
+} from '@/features/parts';
+import type { PartDefinition } from '@/features/parts';
 import { PartPreview } from './PartPreview';
 import { WokwiLibrary } from './WokwiLibrary';
 import {

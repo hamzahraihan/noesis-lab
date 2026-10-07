@@ -9,7 +9,7 @@
  * the `dht` port.
  */
 
-import type { KnobSpec, PartDefinition } from '@/sim/catalog';
+import type { KnobSpec, PartDefinition } from '@/features/parts';
 
 /** The finger hole the dial stopped at: 0 counts the full ten pulses. */
 export const DIGIT_KNOB: KnobSpec = {

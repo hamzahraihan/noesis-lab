@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { esp32DevKitV1 } from '../sim/boards';
+import { esp32DevKitV1 } from '@/features/parts';
 
 /**
  * Frame pacing is where blocking firmware is most easily broken.

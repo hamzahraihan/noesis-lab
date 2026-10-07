@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from '@/features/simulation';
-import { breadboardDefinition } from '../sim/breadboard';
-import { resistorDefinition, ledDefinition, buttonDefinition } from '../sim/passives';
-import { arduinoUnoR3 } from '../sim/boards';
-import { ili9341Definition } from '../sim/display/part';
+import { breadboardDefinition } from '@/features/parts';
+import { resistorDefinition, ledDefinition, buttonDefinition } from '@/features/parts';
+import { arduinoUnoR3 } from '@/features/parts';
+import { ili9341Definition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/simulation';
 import { rotatedPartAt, pressHitsOwnPin, hoverPinLabel, wireClickAction, type BenchForHit } from './hit-test';
 
