@@ -632,7 +632,122 @@ void loop() {
   ],
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER];
+/* ------------------------------------------------------------------ *
+ * Reaction Timer — one button, one LED, one latency number
+ * ------------------------------------------------------------------ */
+
+const REACTION: GalleryProject = {
+  id: 'reaction',
+  title: 'Reaction Timer',
+  blurb:
+    'Press to arm, wait for the light, then press as fast as you can: the serial monitor reports your latency in milliseconds. Jump the gun and it calls the false start.',
+  parts: [
+    { name: 'Tactile Button', qty: 1 },
+    { name: 'Red LED', qty: 1 },
+    { name: '220 Resistor', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      sketch: `#include <Arduino.h>
+
+byte BTN = 2;
+byte LED = 8;
+
+byte raw = HIGH;
+byte settled = HIGH;
+unsigned long changedAt = 0;
+
+unsigned long DEBOUNCE_MS = 25;
+
+byte state = 0;
+unsigned long t0 = 0;
+unsigned long waitMs = 0;
+
+void setup() {
+  pinMode(BTN, INPUT_PULLUP);
+  pinMode(LED, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("press to arm");
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  byte level = digitalRead(BTN);
+  if (level != raw) { raw = level; changedAt = now; }
+  if (level != settled && now - changedAt >= DEBOUNCE_MS) {
+    settled = level;
+    if (settled == LOW) {
+      if (state == 0) {
+        state = 1;
+      } else if (state == 2) {
+        Serial.println("false start");
+        digitalWrite(LED, LOW);
+        state = 0;
+        Serial.println("press to arm");
+      } else if (state == 3) {
+        Serial.print("latency ");
+        Serial.print(now - t0);
+        Serial.println(" ms");
+        digitalWrite(LED, LOW);
+        state = 4;
+      }
+    } else {
+      if (state == 1) {
+        state = 2;
+        t0 = now;
+        waitMs = 2000 + (now % 3000);
+      } else if (state == 4) {
+        state = 0;
+        Serial.println("press to arm");
+      }
+    }
+  }
+
+  if (state == 2 && now - t0 >= waitMs) {
+    state = 3;
+    t0 = now;
+    digitalWrite(LED, HIGH);
+  }
+}
+`,
+      setup: (simulation) => {
+        simulation.clearExampleParts();
+        const supply = simulation.boardTerminal('5V');
+        const ground = simulation.boardTerminal('GND');
+        if (!supply || !ground) return;
+
+        const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y);
+        const boardPin = simulation.boardTerminal('D2');
+        const legA = simulation.pinAt(button, 'a');
+        const legB = simulation.pinAt(button, 'b');
+        if (!boardPin || !legA || !legB) return;
+        simulation.routeWire(boardPin, legA);
+        simulation.routeWire(legB, ground);
+
+        const led = simulation.addPart(part('Red LED'), PART_X, PART_Y + PART_STEP);
+        const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + PART_STEP);
+        const ledPin = simulation.boardTerminal('D8');
+        const anode = simulation.pinAt(led, 'anode');
+        const cathode = simulation.pinAt(led, 'cathode');
+        const resA = simulation.pinAt(resistor, 'a');
+        const resB = simulation.pinAt(resistor, 'b');
+        if (!ledPin || !anode || !cathode || !resA || !resB) return;
+        simulation.routeWire(supply, anode);
+        simulation.routeWire(cathode, resA);
+        simulation.routeWire(resB, ledPin);
+      },
+    },
+  ],
+  working: [
+    'Press once to arm; the light comes on two to five seconds later.',
+    'The serial monitor reports your latency in milliseconds on a clean run.',
+    'Pressing early prints "false start" and the round restarts.',
+  ],
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER, REACTION];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;

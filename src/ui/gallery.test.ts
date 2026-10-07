@@ -76,6 +76,7 @@ describe('the project gallery', () => {
       dashboard: 14,
       parking: 15,
       weather: 12,
+      reaction: 5,
     };
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
@@ -135,5 +136,9 @@ describe('the project gallery', () => {
 
   it('logs the weather station', () => {
     expect(galleryById('weather')?.title).toBe('Weather Station');
+  });
+
+  it('times the reaction game', () => {
+    expect(galleryById('reaction')?.title).toBe('Reaction Timer');
   });
 });
