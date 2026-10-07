@@ -15,7 +15,7 @@ import type { PartDefinition } from '@/features/parts';
 import { ds1307Definition } from '@/features/parts';
 import { lcd1602Definition } from '@/features/parts';
 import { servoDefinition } from '@/features/parts';
-import type { Simulation } from '@/features/bench/simulation';
+import type { Simulation } from '@/features/bench';
 
 /** The parts an example can put on the bench for itself. */
 export type ExampleDevice = 'ds1307' | 'lcd1602' | 'servo';
@@ -310,7 +310,7 @@ export const I2C_CLOCK_EXAMPLE: Example = {
   note: 'Reads a real-time clock register by register, the way the datasheet says to.',
   sketch: I2C_CLOCK_SKETCH,
   wire: (simulation) => {
-    simulation.placeExampleDevice('ds1307', BENCH_X, BENCH_Y);
+    simulation.placeExampleDevice('ds1307', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
   },
 };
 
@@ -320,8 +320,8 @@ export const LCD_EXAMPLE: Example = {
   note: 'A clock on a character display. Six wires, not two, and the glass only lights if all six land.',
   sketch: LCD_SKETCH,
   wire: (simulation) => {
-    simulation.placeExampleDevice('lcd1602', BENCH_X, BENCH_Y);
-    simulation.placeExampleDevice('ds1307', BENCH_X, BENCH_Y + BENCH_STEP);
+    simulation.placeExampleDevice('lcd1602', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
+    simulation.placeExampleDevice('ds1307', BENCH_X, BENCH_Y + BENCH_STEP, EXAMPLE_DEVICES, LCD_LINES);
   },
 };
 
@@ -331,7 +331,7 @@ export const SERVO_EXAMPLE: Example = {
   note: 'Sweeps a horn between its end stops, which is not the same as 0 and 180.',
   sketch: SERVO_SKETCH,
   wire: (simulation) => {
-    simulation.placeExampleDevice('servo', BENCH_X, BENCH_Y);
+    simulation.placeExampleDevice('servo', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
   },
 };
 

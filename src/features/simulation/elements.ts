@@ -82,13 +82,6 @@ export interface DiodeProfile {
   readonly breakdownAmps: number;
 }
 
-/**
- * Re-exported from the parts catalogue (device-model data lives there; the
- * solver only reads profiles through element definitions). Keeps the
- * simulation seam stable for `src/ui/*` until Task 5 rewrites it.
- */
-export { DIODE_PROFILES } from '@/features/parts';
-
 interface CurvePoint {
   readonly volts: number;
   readonly amps: number;

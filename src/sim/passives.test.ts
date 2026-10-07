@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ledDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
 import { SNAP_DISTANCE_MM } from '@/features/simulation';
 import { WOKWI_PARTS, wokwiPartFor } from '@/features/bench/wokwi';
 

@@ -13,7 +13,7 @@ import { Simulation } from '@/features/bench/simulation';
 import { BLINK_SKETCH, PI_BLINK_SKETCH } from './examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
 import type { PartInstance, Terminal } from '@/features/simulation';
 
 /**

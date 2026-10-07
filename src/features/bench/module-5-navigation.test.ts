@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from './simulation';
 import { breadboardDefinition } from '@/features/parts';
-import { boardOption } from './boardRegistry';
-import { EXERCISES, exerciseById } from './exercises';
+import { boardOption } from '@/features/learn';
+import { EXERCISES, exerciseById } from '@/features/learn';
 import { TILE_SIZE, TileStore, tileForLatLon, pixelInTile } from './map-tiles';
 import type { Ili9341 } from '@/features/parts';
 

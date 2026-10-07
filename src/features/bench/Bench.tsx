@@ -12,7 +12,7 @@
  * sending the link to someone else rebuilds the same board.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { isLargePart, type CatalogueEntry } from '@/features/parts';
 import { ComponentBrowser } from './ComponentBrowser';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
@@ -24,7 +24,15 @@ import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
-import { BLINK_EXAMPLE, EXAMPLES, PI_BLINK_SKETCH } from '@/ui/examples';
+import type {
+  BoardId,
+  BoardOption,
+  Example,
+  Exercise,
+  GalleryBuild,
+  GalleryProject,
+  StarterWiring,
+} from '@/features/learn';
 import type { FirmwareLanguage } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
@@ -33,14 +41,6 @@ import {
   SerialMonitor,
   StatusBar,
 } from '@/features/instruments';
-import {
-  BOARDS,
-  boardOption,
-  DEFAULT_BOARD_ID,
-  isBoardId,
-  STARTER_WIRING,
-  type BoardId,
-} from '@/ui/boardRegistry';
 import { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wire-colours';
 import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
@@ -60,10 +60,6 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { exerciseBoard, exerciseById, exerciseLanguage } from '@/ui/exercises';
-import { buildFor, galleryById } from '@/ui/gallery';
-import { ExerciseGuide } from '@/ui/ExerciseGuide';
-import { isGuideDismissed } from '@/ui/guide-dismissal';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -93,8 +89,7 @@ function at(x: number, y: number): Terminal {
  * once for every bench, because an exercise needs them too and placing them
  * here would mean two boards on any bench that arrives through this path.
  */
-function buildStartingBench(simulation: Simulation, boardId: BoardId): void {
-  const wiring = STARTER_WIRING[boardId];
+function buildStartingBench(simulation: Simulation, wiring: StarterWiring): void {
   const board = simulation.bench.parts[0];
 
   const pinAt = (id: string) => {
@@ -207,7 +202,55 @@ function offsetOfFirstPin(definition: PartDefinition): [x: number, y: number] {
   return [x, y];
 }
 
-export default function Bench() {
+/**
+ * Learn content the bench renders against, injected by the composition layer
+ * (`src/routes/BenchRoute.tsx`).
+ *
+ * The bench never imports `@/features/learn` values itself — the
+ * bench → learn direction is forbidden (T7 gate) — so every name below arrives
+ * here as a prop with exactly the name the body already uses. The body is
+ * untouched; only the source of the names changed from import to argument.
+ */
+export interface BenchProps {
+  readonly BLINK_EXAMPLE: Example;
+  readonly EXAMPLES: readonly Example[];
+  readonly PI_BLINK_SKETCH: string;
+  readonly BOARDS: ReadonlyArray<BoardOption>;
+  readonly boardOption: (boardId: BoardId) => BoardOption;
+  readonly DEFAULT_BOARD_ID: BoardId;
+  readonly isBoardId: (value: string | undefined) => value is BoardId;
+  readonly STARTER_WIRING: Readonly<Record<BoardId, StarterWiring>>;
+  readonly exerciseBoard: (exercise: Exercise) => BoardId;
+  readonly exerciseById: (id: string) => Exercise | null;
+  readonly exerciseLanguage: (exercise: Exercise) => FirmwareLanguage;
+  readonly buildFor: (project: GalleryProject, board: BoardId) => GalleryBuild | null;
+  readonly galleryById: (id: string) => GalleryProject | null;
+  readonly ExerciseGuide: ComponentType<{
+    exercise: Exercise;
+    open: boolean;
+    onClose(): void;
+  }>;
+  readonly isGuideDismissed: (id: string) => boolean;
+}
+
+export default function Bench(props: BenchProps) {
+  const {
+    BLINK_EXAMPLE,
+    EXAMPLES,
+    PI_BLINK_SKETCH,
+    BOARDS,
+    boardOption,
+    DEFAULT_BOARD_ID,
+    isBoardId,
+    STARTER_WIRING,
+    exerciseBoard,
+    exerciseById,
+    exerciseLanguage,
+    buildFor,
+    galleryById,
+    ExerciseGuide,
+    isGuideDismissed,
+  } = props;
   const navigate = useNavigate();
   const { boardId: requested } = useParams<{ boardId?: string }>();
 
@@ -310,7 +353,7 @@ export default function Bench() {
   useEffect(() => {
     if (exercise && !isGuideDismissed(exercise.id)) setGuideOpen(true);
     else setGuideOpen(false);
-  }, [exercise]);
+  }, [exercise, isGuideDismissed]);
 
   /*
    * The project banner: a slim strip naming the build this bench was opened
@@ -352,7 +395,7 @@ export default function Bench() {
         projectBuild.setup(created);
         created.loadFirmware(projectBuild.sketch, boardOption(boardId).language);
       } else {
-        buildStartingBench(created, boardId);
+        buildStartingBench(created, STARTER_WIRING[boardId]);
         created.loadFirmware(
           boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
           boardOption(boardId).language,
@@ -365,7 +408,7 @@ export default function Bench() {
       // "running" over a simulation nobody had started.
       return created;
     },
-    [boardId, exercise, projectBuild],
+    [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE],
   );
 
   const [baud, setBaud] = useState(9600);
@@ -773,7 +816,7 @@ export default function Bench() {
       simulation.loadFirmware(example.sketch);
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, EXAMPLES],
   );
 
   const onPlacePart = useCallback(

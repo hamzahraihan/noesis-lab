@@ -11,5 +11,5 @@ export default defineConfig({
   // canvas while the rest of the UI kept updating -- a blank OLED next to a
   // running status bar. Correctness wins over the memoisation here.
   plugins: [tailwindcss(), react()],
-  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
 });

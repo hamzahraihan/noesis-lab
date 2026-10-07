@@ -14,7 +14,8 @@
  * datum.
  */
 
-import { DIODE_PROFILES, GROUND, type DiodeProfile, type Element } from './elements';
+import { GROUND, type DiodeProfile, type Element } from './elements';
+import { DIODE_PROFILES } from '@/features/parts';
 import { wireResistanceOhms } from './units';
 import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
 import type { DynamicState } from '@/features/parts';

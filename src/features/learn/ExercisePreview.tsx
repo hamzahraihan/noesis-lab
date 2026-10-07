@@ -21,10 +21,10 @@ import { useId, useMemo } from 'react';
 import type { BoardId } from './boardRegistry';
 import type { Exercise } from './exercises';
 import { previewBench, previewFor, type ExercisePreviewData } from './exercise-preview-data';
-import { PartFootprint } from '@/features/bench/footprints';
-import { HardwareDefs } from '@/features/bench/hardware';
-import { partTransform } from '@/features/bench/part-transform';
-import type { Simulation } from '@/features/bench/simulation';
+import { PartFootprint } from '@/features/bench';
+import { HardwareDefs } from '@/features/bench';
+import { partTransform } from '@/features/bench';
+import type { Simulation } from '@/features/bench';
 
 /**
  * The SVG body every finished-build picture shares, whatever built the bench.

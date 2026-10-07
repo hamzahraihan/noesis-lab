@@ -3,7 +3,7 @@ import { BenchBuilder } from '@/features/simulation';
 import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/features/parts';
 import { esp32DevKitV1 } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
 import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { FirmwareRunner } from '@/features/simulation';
