@@ -6,7 +6,41 @@
  */
 
 import type { KnobSpec, PartDefinition } from './catalog';
-import { DIODE_PROFILES, type DiodeProfile } from '@/features/simulation/elements';
+import type { DiodeProfile } from '@/features/simulation/elements';
+
+/**
+ * Diode forward-characteristic profiles, shared by every LED colour and the
+ * 1N4148.
+ *
+ * Device-model data, so it lives with the parts: the solver only reads it
+ * through element definitions. `simulation/elements` re-exports it for the
+ * solver kernel and the simulation seam.
+ */
+const LED_SHAPE = {
+  seriesOhms: 8,
+  ideality: 2.0,
+  leakageAmps: 1e-7,
+  breakdownVolts: 5,
+  breakdownAmps: 0.05,
+} as const;
+
+export const DIODE_PROFILES = {
+  red: { forwardVolts: 2.1, ratedAmps: 0.02, ...LED_SHAPE },
+  green: { forwardVolts: 2.1, ratedAmps: 0.02, ...LED_SHAPE },
+  yellow: { forwardVolts: 2.0, ratedAmps: 0.02, ...LED_SHAPE },
+  blue: { forwardVolts: 3.1, ratedAmps: 0.02, ...LED_SHAPE },
+  white: { forwardVolts: 3.1, ratedAmps: 0.02, ...LED_SHAPE },
+  /** 1N4148 signal diode: ~0.7 V forward, much lower leakage than an LED. */
+  silicon: {
+    forwardVolts: 0.7,
+    ratedAmps: 0.01,
+    seriesOhms: 0.5,
+    ideality: 1.05,
+    leakageAmps: 1e-9,
+    breakdownVolts: 75,
+    breakdownAmps: 0.1,
+  },
+} as const satisfies Record<string, DiodeProfile>;
 /**
  * The potentiometer's one control.
  *

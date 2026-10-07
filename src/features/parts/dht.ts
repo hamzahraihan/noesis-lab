@@ -13,7 +13,7 @@
  */
 
 import type { KnobSpec, PartDefinition } from '@/features/parts';
-import { TEMPERATURE_KNOB } from '@/features/parts';
+import { TEMPERATURE_KNOB } from './modules';
 
 /** Relative humidity in percent, the unit its datasheet works in. */
 export const HUMIDITY_KNOB: KnobSpec = {

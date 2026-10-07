@@ -10,15 +10,15 @@ export * from './probe';
 export * from './multimeter';
 export * from './units';
 export * from './matrix';
-export * from './encoder';
-export * from './relay';
-export * from './remote';
-export * from './dialer';
-export * from './sonar';
-export * from './stepper';
-export * from './sdcard';
-export * from './pixels';
-export * from './dht';
+// Transition shims for src/ui/* (untouchable until Task 5): these device
+// models now live in features/parts. Task 5 rewrites ui to the parts seam
+// and removes these lines. sim → parts-seam direction only; no cycle.
+export { DISTANCE_KNOB, echoMicroseconds, sonarDefinition } from '@/features/parts';
+export { HUMIDITY_KNOB, dhtDefinition } from '@/features/parts';
+export { REMOTE_KEY_KNOB, remoteDefinition } from '@/features/parts';
+export { DIGIT_KNOB, dialerDefinition } from '@/features/parts';
+export { microsdDefinition } from '@/features/parts';
+export { pixelCount, type PixelColor, neopixelDefinition } from '@/features/parts';
 export * from './bus/i2c';
 export * from './bus/spi';
 export * from './bus/log';

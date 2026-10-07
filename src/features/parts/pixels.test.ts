@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder, type PartInstance } from './bench';
+import { BenchBuilder, type PartInstance } from '@/features/simulation';
 import { esp32DevKitV1 } from '@/features/parts';
-import { GROUND, type Element } from './elements';
-import { solveCircuit, type Solution } from './circuit';
+import { GROUND, type Element } from '@/features/simulation';
+import { solveCircuit, type Solution } from '@/features/simulation';
 import { DynamicState } from '@/features/parts';
-import { buildNetlist, type Netlist } from './netlist';
-import { McuRuntime } from './mcu';
-import { Engine } from './engine';
+import { buildNetlist, type Netlist } from '@/features/simulation';
+import { McuRuntime } from '@/features/simulation';
+import { Engine } from '@/features/simulation';
 import { clampChannel, ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition, pixelCount } from './pixels';
 import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 

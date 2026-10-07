@@ -19,6 +19,15 @@ export * from './display/font5x7';
 export * from './display/ili9341';
 export * from './display/part';
 export * from './display/ssd1306';
+export * from './relay';
+export * from './encoder';
+export * from './sonar';
+export * from './dht';
+export * from './remote';
+export * from './dialer';
+export * from './sdcard';
+export * from './pixels';
+export * from './stepper';
 // Last: reads engine-defined part factories at module scope, so every
 // definition module above must already be evaluated (import-cycle order).
 export * from './catalogue';

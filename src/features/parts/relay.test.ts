@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder, type PartInstance } from './bench';
+import { BenchBuilder, type PartInstance } from '@/features/simulation';
 import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/features/parts';
 import { esp32DevKitV1 } from '@/features/parts';
-import { McuRuntime } from './mcu';
-import { Engine } from './engine';
-import { GROUND, type Element } from './elements';
-import { solveCircuit, type Solution } from './circuit';
+import { McuRuntime } from '@/features/simulation';
+import { Engine } from '@/features/simulation';
+import { GROUND, type Element } from '@/features/simulation';
+import { solveCircuit, type Solution } from '@/features/simulation';
 import { DynamicState, type PartDefinition } from '@/features/parts';
-import { buildNetlist, type Netlist } from './netlist';
+import { buildNetlist, type Netlist } from '@/features/simulation';
 import { coilEnergized, RELAY_COIL_OHMS, relayDefinition } from './relay';
 import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 

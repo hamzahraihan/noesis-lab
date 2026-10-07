@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from './bench';
+import { BenchBuilder } from '@/features/simulation';
 import { esp32DevKitV1 } from '@/features/parts';
-import { McuRuntime } from './mcu';
-import { Engine } from './engine';
+import { McuRuntime } from '@/features/simulation';
+import { Engine } from '@/features/simulation';
 import { SD_CARD_BYTES, microsdDefinition } from './sdcard';
 import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
