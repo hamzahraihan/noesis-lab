@@ -15,11 +15,11 @@
  */
 
 import { HashRouter, Navigate, Route, Routes } from 'react-router';
-import Bench from './ui/Bench';
-import { HomePage } from './ui/HomePage';
-import { ExercisesPage, ExercisePage, ReferencesPage } from './ui/ExercisePages';
-import { ProjectPage } from './ui/ProjectPages';
-import { DEFAULT_BOARD_ID } from './ui/boardRegistry';
+import Bench from '@/ui/Bench';
+import { HomePage } from '@/ui/HomePage';
+import { ExercisesPage, ExercisePage, ReferencesPage } from '@/ui/ExercisePages';
+import { ProjectPage } from '@/ui/ProjectPages';
+import { DEFAULT_BOARD_ID } from '@/ui/boardRegistry';
 
 export default function App() {
   return (
