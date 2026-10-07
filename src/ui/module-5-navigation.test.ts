@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { breadboardDefinition } from '../sim/breadboard';
+import { breadboardDefinition } from '@/features/parts';
 import { boardOption } from './boardRegistry';
 import { EXERCISES, exerciseById } from './exercises';
 import { TILE_SIZE, TileStore, tileForLatLon, pixelInTile } from './map-tiles';
-import type { Ili9341 } from '../sim/display/ili9341';
+import type { Ili9341 } from '@/features/parts';
 
 /**
  * The OpenStreetMap lesson, on the bench.

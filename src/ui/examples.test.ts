@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
 import { EXAMPLES, I2C_CLOCK_EXAMPLE, LCD_EXAMPLE, SERVO_EXAMPLE } from './examples';
-import { esp32DevKitV1 } from '../sim/boards';
-import { breadboardDefinition } from '../sim/breadboard';
+import { esp32DevKitV1 } from '@/features/parts';
+import { breadboardDefinition } from '@/features/parts';
 import type { PartInstance } from '@/features/simulation';
 
 /**

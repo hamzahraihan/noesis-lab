@@ -23,7 +23,7 @@ import {
   type FirmwareServices,
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
-import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '../sim/catalog';
+import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
 import { nextAutomaticWireColour } from './wire-colours';
 
@@ -31,18 +31,18 @@ import { GROUND } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds } from '@/features/simulation';
 import { HUMIDITY_KNOB } from '@/features/simulation';
 import { pixelCount, type PixelColor } from '@/features/simulation';
-import { TEMPERATURE_KNOB } from '../sim/modules';
-import type { DisplayController } from '../sim/display/part';
-import { Ili9341, type PanelRotation } from '../sim/display/ili9341';
+import { TEMPERATURE_KNOB } from '@/features/parts';
+import type { DisplayController } from '@/features/parts';
+import { Ili9341, type PanelRotation } from '@/features/parts';
 import { TileFetcher } from './map-fetcher';
 import { TILE_SIZE, TileStore } from './map-tiles';
 import type { MapPort, TftPort } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
 import { BusLog, type BusEntry } from '@/features/simulation';
-import type { Servo } from '../sim/devices/servo';
-import type { Lcd1602 } from '../sim/devices/lcd';
-import { LcdDriver, type LcdCommand } from '../sim/devices/lcd-driver';
+import type { Servo } from '@/features/parts';
+import type { Lcd1602 } from '@/features/parts';
+import { LcdDriver, type LcdCommand } from '@/features/parts';
 
 
 import type { TraceSample } from '@/features/simulation';
@@ -56,7 +56,7 @@ import {
   type OhmRange,
 } from '@/features/simulation';
 
-import { DynamicState } from '../sim/catalog';
+import { DynamicState } from '@/features/parts';
 import { routeWireViaCorners } from './wire-route';
 /** Longest slice of simulated time one rendered frame may cover. */
 const MAX_FRAME_MS = 40;

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/sim/breadboard';
-import { esp32DevKitV1 } from '@/sim/boards';
+import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/features/parts';
+import { esp32DevKitV1 } from '@/features/parts';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { GROUND, type Element } from './elements';
 import { solveCircuit, type Solution } from './circuit';
-import { DynamicState, type PartDefinition } from '@/sim/catalog';
+import { DynamicState, type PartDefinition } from '@/features/parts';
 import { buildNetlist, type Netlist } from './netlist';
 import { coilEnergized, RELAY_COIL_OHMS, relayDefinition } from './relay';
 import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { rotateOffset, type Rotation } from './catalog';
+import { rotateOffset, type Rotation } from '@/features/parts';
 import { BenchBuilder } from '@/features/simulation';
-import { resistorDefinition } from './passives';
+import { resistorDefinition } from '@/features/parts';
 
 /**
  * Turning a part over.

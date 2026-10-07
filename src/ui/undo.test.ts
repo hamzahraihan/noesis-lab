@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { esp32DevKitV1 } from '../sim/boards';
-import { breadboardDefinition } from '../sim/breadboard';
-import { resistorDefinition } from '../sim/passives';
+import { esp32DevKitV1 } from '@/features/parts';
+import { breadboardDefinition } from '@/features/parts';
+import { resistorDefinition } from '@/features/parts';
 
 /**
  * Undo and redo.

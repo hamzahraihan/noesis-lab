@@ -7,7 +7,7 @@
  */
 
 import type { Bench, PartInstance } from '@/features/simulation';
-import { breadboardDefinition } from '../sim/breadboard';
+import { breadboardDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
 import { exerciseBoard, type Exercise } from './exercises';
 import type { FootprintState } from './footprints';

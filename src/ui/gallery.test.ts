@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PART_CATALOGUE } from '../sim/catalogue';
-import { breadboardDefinition } from '../sim/breadboard';
+import { PART_CATALOGUE } from '@/features/parts';
+import { breadboardDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
 import { GALLERY, boardsFor, buildFor, galleryById } from './gallery';
 import { previewBench } from './exercise-preview-data';

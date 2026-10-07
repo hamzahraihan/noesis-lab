@@ -3,7 +3,7 @@ import { columnX, railRowY, stripRowY, breadboardDefinition } from '../breadboar
 import { esp32DevKitV1 } from '../boards';
 import { Ili9341 } from './ili9341';
 import { ili9341Definition } from './part';
-import { Simulation } from '../../ui/simulation';
+import { Simulation } from '../../../ui/simulation';
 
 const BREADBOARD_ORIGIN_X = 230;
 const SPI_COLUMN = 33;

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { esp32DevKitV1 } from '@/sim/boards';
-import { breadboardDefinition, columnX, stripRowY } from '@/sim/breadboard';
+import { esp32DevKitV1 } from '@/features/parts';
+import { breadboardDefinition, columnX, stripRowY } from '@/features/parts';
 import { buildNetlist } from './netlist';
-import { NO_DYNAMIC_STATE } from '@/sim/catalog';
+import { NO_DYNAMIC_STATE } from '@/features/parts';
 
 /**
  * A bench holds one contact per pin and one per jumper end, and nothing else.

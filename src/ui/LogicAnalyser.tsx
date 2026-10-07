@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import type { BoardPin } from '../sim/catalog';
+import type { BoardPin } from '@/features/parts';
 import type { TraceSample } from '@/features/simulation';
 import { Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
 

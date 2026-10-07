@@ -11,8 +11,8 @@ import {
 
 import { Simulation } from './simulation';
 import { BLINK_SKETCH, PI_BLINK_SKETCH } from './examples';
-import { breadboardDefinition, columnX, railRowY, stripRowY } from '../sim/breadboard';
-import { ledDefinition, resistorDefinition } from '../sim/passives';
+import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
+import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/simulation';
 import type { PartInstance, Terminal } from '@/features/simulation';
 

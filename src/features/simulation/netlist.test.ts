@@ -8,11 +8,11 @@ import {
   railRowY,
   stripRowY,
   breadboardDefinition,
-} from '@/sim/breadboard';
-import { esp32DevKitV1 } from '@/sim/boards';
-import { ledDefinition, resistorDefinition } from '@/sim/passives';
+} from '@/features/parts';
+import { esp32DevKitV1 } from '@/features/parts';
+import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES, GROUND, type Element } from './elements';
-import { NO_DYNAMIC_STATE } from '@/sim/catalog';
+import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from './netlist';
 import { elementCurrent, solveCircuit } from './circuit';
 

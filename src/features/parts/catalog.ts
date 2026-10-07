@@ -12,7 +12,7 @@
  * netlist extraction never needs a special case per component.
  */
 
-import type { DiodeProfile } from '@/features/simulation';
+import type { DiodeProfile } from '@/features/simulation/elements';
 
 export type Rotation = 0 | 90 | 180 | 270;
 

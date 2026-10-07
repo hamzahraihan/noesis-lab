@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from '../bench';
-import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/sim/breadboard';
-import { esp32DevKitV1 } from '@/sim/boards';
-import { ledDefinition, resistorDefinition } from '@/sim/passives';
+import { columnX, railRowY, stripRowY, breadboardDefinition } from '@/features/parts';
+import { esp32DevKitV1 } from '@/features/parts';
+import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '../elements';
 import { Engine } from '../engine';
 import { McuRuntime } from '../mcu';
