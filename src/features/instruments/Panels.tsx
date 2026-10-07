@@ -11,9 +11,9 @@ import { useEffect, useRef } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
-import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
+import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from '@/ui/monaco-setup';
 import type { FirmwareLanguage } from '@/features/simulation';
-import type { Example } from './examples';
+import type { Example } from '@/ui/examples';
 import {
   CaretRightIcon,
   CodeIcon,

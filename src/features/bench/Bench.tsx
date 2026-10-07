@@ -32,7 +32,7 @@ import {
   Inspector,
   SerialMonitor,
   StatusBar,
-} from '@/ui/Panels';
+} from '@/features/instruments';
 import {
   BOARDS,
   boardOption,
@@ -43,10 +43,10 @@ import {
 } from '@/ui/boardRegistry';
 import { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wire-colours';
 import type { WireEnd } from '@/features/simulation';
-import { ScopePanel } from '@/ui/Scope';
-import { MultimeterPanel } from '@/ui/Multimeter';
-import { LogicAnalyser } from '@/ui/LogicAnalyser';
-import { BusMonitor } from '@/ui/BusMonitor';
+import { ScopePanel } from '@/features/instruments';
+import { MultimeterPanel } from '@/features/instruments';
+import { LogicAnalyser } from '@/features/instruments';
+import { BusMonitor } from '@/features/instruments';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
