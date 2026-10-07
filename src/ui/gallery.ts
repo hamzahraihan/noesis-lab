@@ -13,20 +13,24 @@ import type { BoardId } from './boardRegistry';
 import { PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
 import type { Simulation } from './simulation';
 
+export interface GalleryBuild {
+  readonly board: BoardId;
+  /** Places the parts and runs the jumpers on that board's headers. */
+  readonly setup: (simulation: Simulation) => void;
+  /** The sketch in that board's language (Python on the Pi). */
+  readonly sketch: string;
+}
+
 export interface GalleryProject {
   readonly id: string;
   readonly title: string;
   readonly blurb: string;
-  /** Boards this project runs on; v1 is Uno throughout. */
-  readonly boards: readonly BoardId[];
   readonly parts: readonly {
     readonly name: string;
     readonly qty: number;
   }[];
-  /** Places the parts and runs the jumpers this project needs. */
-  readonly setup: (simulation: Simulation) => void;
-  /** The sketch the bench runs. */
-  readonly sketch: string;
+  /** One validated build per board; v1 is Uno throughout. */
+  readonly builds: readonly GalleryBuild[];
   /** What you should see when it is working. */
   readonly working: readonly string[];
 }
@@ -40,14 +44,16 @@ const ALARM_CLOCK: GalleryProject = {
   title: 'Alarm Clock with RTC',
   blurb:
     'A real-time clock chip keeps the time and a character LCD shows it, ticking once a second while an LED beats along.',
-  boards: ['uno'],
   parts: [
     { name: 'DS1307 RTC Module', qty: 1 },
     { name: 'LCD 16x2 (HD44780)', qty: 1 },
     { name: 'Red LED', qty: 1 },
     { name: '220 Resistor', qty: 1 },
   ],
-  sketch: `#include <Arduino.h>
+  builds: [
+    {
+      board: 'uno',
+      sketch: `#include <Arduino.h>
 #include <Wire.h>
 
 #define LED_PIN 2
@@ -88,11 +94,6 @@ void loop() {
   delay(500);
 }
 `,
-  working: [
-    'The LCD counts seconds on its top line with "alarm 07:30" below.',
-    'The LED flips with every even second.',
-    'The serial monitor logs "clock up" once, then stays quiet — the glass is the output here.',
-  ],
   setup: (simulation) => {
     simulation.clearExampleParts();
     const supply = simulation.boardTerminal('5V');
@@ -114,7 +115,14 @@ void loop() {
     simulation.routeWire(supply, anode);
     simulation.routeWire(cathode, legA);
     simulation.routeWire(legB, board);
+    },
   },
+  ],
+  working: [
+    'The LCD counts seconds on its top line with "alarm 07:30" below.',
+    'The LED flips with every even second.',
+    'The serial monitor logs "clock up" once, then stays quiet — the glass is the output here.',
+  ],
 };
 
 /* ------------------------------------------------------------------ *
@@ -131,7 +139,6 @@ const SAFE: GalleryProject = {
   title: 'Electronic Safe',
   blurb:
     'Three buttons are the combination dial: enter A, C, B in order to unlock. A wrong digit buzzes and the attempt resets.',
-  boards: ['uno'],
   parts: [
     { name: 'Tactile Button', qty: 3 },
     { name: 'Red LED', qty: 1 },
@@ -139,7 +146,10 @@ const SAFE: GalleryProject = {
     { name: '220 Resistor', qty: 2 },
     { name: 'Piezo Buzzer', qty: 1 },
   ],
-  sketch: `#include <Arduino.h>
+  builds: [
+    {
+      board: 'uno',
+      sketch: `#include <Arduino.h>
 
 byte BTN_A = 2;
 byte BTN_B = 3;
@@ -252,11 +262,6 @@ void loop() {
   }
 }
 `,
-  working: [
-    'The red LED is lit while locked; nothing else happens until three digits land.',
-    'A, then C, then B turns the green LED on for two seconds and prints "unlocked".',
-    'Any wrong digit buzzes three times and the attempt starts over.',
-  ],
   setup: (simulation) => {
     simulation.clearExampleParts();
     const supply = simulation.boardTerminal('5V');
@@ -306,7 +311,14 @@ void loop() {
     if (!buzzPin || !positive || !negative) return;
     simulation.routeWire(buzzPin, positive);
     simulation.routeWire(negative, ground);
+    },
   },
+  ],
+  working: [
+    'The red LED is lit while locked; nothing else happens until three digits land.',
+    'A, then C, then B turns the green LED on for two seconds and prints "unlocked".',
+    'Any wrong digit buzzes three times and the attempt starts over.',
+  ],
 };
 
 /* ------------------------------------------------------------------ *
@@ -318,7 +330,6 @@ const DASHBOARD: GalleryProject = {
   title: 'Servo Dashboard',
   blurb:
     'A slide potentiometer becomes a steering wheel: the servo horn follows the knob and three LEDs show which third of the travel it is in.',
-  boards: ['uno'],
   parts: [
     { name: 'Slide Potentiometer', qty: 1 },
     { name: 'Hobby Servo', qty: 1 },
@@ -327,7 +338,10 @@ const DASHBOARD: GalleryProject = {
     { name: 'Red LED', qty: 1 },
     { name: '220 Resistor', qty: 3 },
   ],
-  sketch: `#include <Arduino.h>
+  builds: [
+    {
+      board: 'uno',
+      sketch: `#include <Arduino.h>
 
 byte KNOB_PIN = 14;
 byte HORN_PIN = 19;
@@ -361,11 +375,6 @@ void loop() {
   delay(200);
 }
 `,
-  working: [
-    'The horn tracks the knob from end stop to end stop, never asked past 10–170.',
-    'Exactly one of the three LEDs is lit, marking the third of the travel.',
-    'The serial monitor reports both numbers: the knob reading and the horn angle.',
-  ],
   setup: (simulation) => {
     simulation.clearExampleParts();
     const supply = simulation.boardTerminal('5V');
@@ -406,7 +415,14 @@ void loop() {
       simulation.routeWire(cathode, legA);
       simulation.routeWire(legB, boardPin);
     });
+    },
   },
+  ],
+  working: [
+    'The horn tracks the knob from end stop to end stop, never asked past 10–170.',
+    'Exactly one of the three LEDs is lit, marking the third of the travel.',
+    'The serial monitor reports both numbers: the knob reading and the horn angle.',
+  ],
 };
 
 /* ------------------------------------------------------------------ *
@@ -418,7 +434,6 @@ const PARKING: GalleryProject = {
   title: 'Parking Sensor',
   blurb:
     'An ultrasonic ranger watches the bench: LEDs mark far, near, and too close, and the buzzer complains inside 30 cm. Turn the distance knob to drive closer.',
-  boards: ['uno'],
   parts: [
     { name: 'Ultrasonic Sensor (HC-SR04)', qty: 1 },
     { name: 'Piezo Buzzer', qty: 1 },
@@ -427,7 +442,10 @@ const PARKING: GalleryProject = {
     { name: 'Red LED', qty: 1 },
     { name: '220 Resistor', qty: 3 },
   ],
-  sketch: `#include <Arduino.h>
+  builds: [
+    {
+      board: 'uno',
+      sketch: `#include <Arduino.h>
 
 byte PIN_TRIG = 6;
 byte PIN_ECHO = 7;
@@ -475,11 +493,6 @@ void loop() {
   }
 }
 `,
-  working: [
-    'The serial monitor reports centimetres that follow the distance knob.',
-    'Green means something is out there, yellow inside a metre, red inside 30 cm.',
-    'Inside 30 cm the buzzer beeps twice a second; a timed-out echo reads 0 and lights nothing.',
-  ],
   setup: (simulation) => {
     simulation.clearExampleParts();
     const supply = simulation.boardTerminal('5V');
@@ -529,7 +542,14 @@ void loop() {
       simulation.routeWire(cathode, legA);
       simulation.routeWire(legB, boardPin);
     });
+    },
   },
+  ],
+  working: [
+    'The serial monitor reports centimetres that follow the distance knob.',
+    'Green means something is out there, yellow inside a metre, red inside 30 cm.',
+    'Inside 30 cm the buzzer beeps twice a second; a timed-out echo reads 0 and lights nothing.',
+  ],
 };
 
 /* ------------------------------------------------------------------ *
@@ -541,12 +561,14 @@ const WEATHER: GalleryProject = {
   title: 'Weather Station',
   blurb:
     'A temperature-humidity sensor reports to a character LCD and the serial log. Turn the knobs on the part — or warm it with a fingertip on the bench — and watch both numbers move.',
-  boards: ['uno'],
   parts: [
     { name: 'DHT22 Temp/Humidity', qty: 1 },
     { name: 'LCD 16x2 (HD44780)', qty: 1 },
   ],
-  sketch: `#include <Arduino.h>
+  builds: [
+    {
+      board: 'uno',
+      sketch: `#include <Arduino.h>
 
 byte SENSOR_PIN = 2;
 
@@ -583,11 +605,6 @@ void loop() {
   delay(2000);
 }
 `,
-  working: [
-    'The LCD shows temperature on line one and humidity on line two.',
-    'Turning the part knobs moves both numbers within a couple of seconds.',
-    'The serial monitor logs one line per reading, never a scroll of repeats.',
-  ],
   setup: (simulation) => {
     simulation.clearExampleParts();
     const supply = simulation.boardTerminal('5V');
@@ -605,11 +622,26 @@ void loop() {
     simulation.routeWire(supply, vcc);
     simulation.routeWire(ground, gnd);
     simulation.routeWire(data, sda);
+    },
   },
+  ],
+  working: [
+    'The LCD shows temperature on line one and humidity on line two.',
+    'Turning the part knobs moves both numbers within a couple of seconds.',
+    'The serial monitor logs one line per reading, never a scroll of repeats.',
+  ],
 };
 
 export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
+}
+
+export function buildFor(project: GalleryProject, board: BoardId): GalleryBuild | null {
+  return project.builds.find((build) => build.board === board) ?? null;
+}
+
+export function boardsFor(project: GalleryProject): readonly BoardId[] {
+  return project.builds.map((build) => build.board);
 }
