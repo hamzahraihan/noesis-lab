@@ -627,3 +627,4 @@ git commit -m "refactor: extract features/learn and routes composition, add boun
 - `src/sim/` retains 3 seam-importing test stays (`passives`, `rotation`, `scope`); `src/ui/` deleted.
 - `scripts/check-boundaries.mjs` (`npm run check:boundaries`) encodes the tiers: bare seams + intra-feature relatives + `import type` allowed; deep subpaths only from owning feature, `*.test.ts`, or `src/app`+`src/routes` (bench DOM); forbidden directions enforced.
 - Deferred to post-merge: 5 test files on deep bench subpaths where the barrel now covers them (uniformity); gate `@/sim` bare-spec edge; `parts/index.ts` comment already fixed in Task 7.
+- map-fetcher/map-tiles owned by bench (Simulation consumes TileFetcher/TileStore); module-5-navigation curriculum test co-located with its canvas subject, importing the learn seam.
