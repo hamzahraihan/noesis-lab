@@ -25,7 +25,7 @@ import {
 import { FirmwareSyntaxError } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
-import { nextAutomaticWireColour } from './wire-colours';
+import { nextAutomaticWireColour, WIRE_COLOURS } from './wire-colours';
 
 import { GROUND } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds } from '@/features/parts';
@@ -116,6 +116,34 @@ interface BenchHistoryEntry {
   readonly bench: BenchSnapshot;
   readonly examplePartIds: string[];
   readonly lcdPins: [string, number][];
+}
+
+/**
+ * Insulation colour for a wire an example places, by the signal it carries.
+ *
+ * A real bench has a drawer of coloured Dupont wires: power is red, ground is
+ * black, the I2C pair reads yellow/green at a glance, and signal lines cycle
+ * the automatic palette so consecutive jumpers differ. Colour carries no
+ * electrical meaning -- this is purely so a bench stops being a wall of red.
+ */
+function deviceWireColour(pin: string, wireCount: number): string {
+  const byLabel = (label: string): string =>
+    WIRE_COLOURS.find((colour) => colour.label === label)?.hex ?? '#d94f4f';
+  switch (pin) {
+    case 'VCC':
+    case 'VDD':
+    case 'V+':
+      return byLabel('1');
+    case 'GND':
+    case 'VSS':
+      return byLabel('0');
+    case 'SDA':
+      return byLabel('3');
+    case 'SCL':
+      return byLabel('4');
+    default:
+      return nextAutomaticWireColour(wireCount);
+  }
 }
 
 export class Simulation {
@@ -525,6 +553,14 @@ export class Simulation {
    * sketch would run and quietly read nothing, which is indistinguishable from
    * the API being broken.
    */
+/**
+ * Insulation colour for a wire an example places, by the signal it carries.
+ *
+ * A real bench has a drawer of coloured Dupont wires: power is red, ground is
+ * black, the I2C pair reads yellow/green at a glance, and signal lines cycle
+ * the automatic palette so consecutive jumpers differ. Colour carries no
+ * electrical meaning -- this is purely so a bench stops being a wall of red.
+ */
   placeExampleDevice(
     what: ExampleDevice,
     x: number,
@@ -553,7 +589,9 @@ export class Simulation {
       if (!from) return;
       const to = this.boardPin(boardPin);
       if (!to) return;
-      this.builder.addWire(from.x, from.y, to.x, to.y);
+      this.builder.addWire(from.x, from.y, to.x, to.y, {
+        colour: deviceWireColour(pin, this.bench.wires.length),
+      });
     };
 
     /*
