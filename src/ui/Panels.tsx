@@ -10,7 +10,7 @@ import Editor from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import type { PartInstance } from '../sim/bench';
 import { DynamicState, type KnobSpec } from '../sim/catalog';
-import { formatOhms, formatVolts } from './format';
+import { formatOhms, formatVolts } from '@/utils';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
 import type { FirmwareLanguage } from '../sim/firmware/interpreter';
 import type { Example } from './examples';
