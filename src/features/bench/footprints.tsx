@@ -16,14 +16,14 @@
 import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition, PinSpec } from '@/features/parts';
 import { DynamicState } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
 import { WIPER_KNOB } from '@/features/parts';
 import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import type { Servo } from '@/features/parts';
-import type { PixelColor } from '@/features/simulation';
+import type { PixelColor } from '@/features/parts';
 import type { Lcd1602 } from '@/features/parts';
 import {
   AxialLeads,

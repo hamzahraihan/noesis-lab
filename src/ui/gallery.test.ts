@@ -4,7 +4,7 @@ import { breadboardDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
 import { GALLERY, boardsFor, buildFor, galleryById } from './gallery';
 import { previewBench } from './exercise-preview-data';
-import { Simulation } from './simulation';
+import { Simulation } from '@/features/bench/simulation';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 

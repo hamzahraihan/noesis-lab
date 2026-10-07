@@ -10,10 +10,10 @@ import type { Bench, PartInstance } from '@/features/simulation';
 import { breadboardDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
 import { exerciseBoard, type Exercise } from './exercises';
-import type { FootprintState } from './footprints';
-import { Simulation } from './simulation';
-import { artworkBox } from './wokwi';
-import { routeWire, routeWireVia, wireLanes } from './wire-route';
+import type { FootprintState } from '@/features/bench/footprints';
+import { Simulation } from '@/features/bench/simulation';
+import { artworkBox } from '@/features/bench/wokwi';
+import { routeWire, routeWireVia, wireLanes } from '@/features/bench/wire-route';
 
 /**
  * Where the breadboard sits, clear of the board plugged in beside it.

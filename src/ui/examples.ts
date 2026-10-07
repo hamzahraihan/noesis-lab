@@ -15,7 +15,7 @@ import type { PartDefinition } from '@/features/parts';
 import { ds1307Definition } from '@/features/parts';
 import { lcd1602Definition } from '@/features/parts';
 import { servoDefinition } from '@/features/parts';
-import type { Simulation } from './simulation';
+import type { Simulation } from '@/features/bench/simulation';
 
 /** The parts an example can put on the bench for itself. */
 export type ExampleDevice = 'ds1307' | 'lcd1602' | 'servo';

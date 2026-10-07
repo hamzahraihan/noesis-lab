@@ -3,8 +3,8 @@ import { columnX, railRowY, stripRowY, breadboardDefinition } from '../breadboar
 import { esp32DevKitV1 } from '../boards';
 import { ssd1306SpiDefinition } from './part';
 import { Ssd1306 } from './ssd1306';
-import { Simulation } from '../../../ui/simulation';
-import { renderedSizeMm, wokwiPartFor } from '../../../ui/wokwi';
+import { Simulation } from '@/features/bench/simulation';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
 
 describe('SPI OLED definition', () => {
   it('exposes the eight-pin SPI header', () => {

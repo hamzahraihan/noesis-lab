@@ -17,14 +17,14 @@ import { isLargePart, type CatalogueEntry } from '@/features/parts';
 import { ComponentBrowser } from './ComponentBrowser';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
 import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
-import { BLINK_EXAMPLE, EXAMPLES, PI_BLINK_SKETCH } from './examples';
+import { BLINK_EXAMPLE, EXAMPLES, PI_BLINK_SKETCH } from '@/ui/examples';
 import type { FirmwareLanguage } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
@@ -32,7 +32,7 @@ import {
   Inspector,
   SerialMonitor,
   StatusBar,
-} from './Panels';
+} from '@/ui/Panels';
 import {
   BOARDS,
   boardOption,
@@ -40,13 +40,13 @@ import {
   isBoardId,
   STARTER_WIRING,
   type BoardId,
-} from './boardRegistry';
+} from '@/ui/boardRegistry';
 import { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wire-colours';
 import type { WireEnd } from '@/features/simulation';
-import { ScopePanel } from './Scope';
-import { MultimeterPanel } from './Multimeter';
-import { LogicAnalyser } from './LogicAnalyser';
-import { BusMonitor } from './BusMonitor';
+import { ScopePanel } from '@/ui/Scope';
+import { MultimeterPanel } from '@/ui/Multimeter';
+import { LogicAnalyser } from '@/ui/LogicAnalyser';
+import { BusMonitor } from '@/ui/BusMonitor';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -60,10 +60,10 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { exerciseBoard, exerciseById, exerciseLanguage } from './exercises';
-import { buildFor, galleryById } from './gallery';
-import { ExerciseGuide } from './ExerciseGuide';
-import { isGuideDismissed } from './guide-dismissal';
+import { exerciseBoard, exerciseById, exerciseLanguage } from '@/ui/exercises';
+import { buildFor, galleryById } from '@/ui/gallery';
+import { ExerciseGuide } from '@/ui/ExerciseGuide';
+import { isGuideDismissed } from '@/ui/guide-dismissal';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */

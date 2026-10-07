@@ -24,18 +24,18 @@ import {
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
-import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
+import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from '@/ui/examples';
 import { nextAutomaticWireColour } from './wire-colours';
 
 import { GROUND } from '@/features/simulation';
-import { DISTANCE_KNOB, echoMicroseconds } from '@/features/simulation';
-import { HUMIDITY_KNOB } from '@/features/simulation';
-import { pixelCount, type PixelColor } from '@/features/simulation';
+import { DISTANCE_KNOB, echoMicroseconds } from '@/features/parts';
+import { HUMIDITY_KNOB } from '@/features/parts';
+import { pixelCount, type PixelColor } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import { Ili9341, type PanelRotation } from '@/features/parts';
-import { TileFetcher } from './map-fetcher';
-import { TILE_SIZE, TileStore } from './map-tiles';
+import { TileFetcher } from '@/ui/map-fetcher';
+import { TILE_SIZE, TileStore } from '@/ui/map-tiles';
 import type { MapPort, TftPort } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';

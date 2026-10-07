@@ -21,7 +21,7 @@ import {
 import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardRegistry';
-import { PartPreview } from './PartPreview';
+import { PartPreview } from '@/features/bench/PartPreview';
 
 /** A spec chip: a label and the value it describes, in the board's own units. */
 export function Chip({ label, value }: { readonly label: string; readonly value: string }) {

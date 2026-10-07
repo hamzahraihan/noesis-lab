@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '@/features/parts';
-import { DIGIT_KNOB, dialerDefinition } from '@/features/simulation';
+import { DIGIT_KNOB, dialerDefinition } from '@/features/parts';
 import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';
 

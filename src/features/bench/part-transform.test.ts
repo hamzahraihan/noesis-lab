@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from '@/features/simulation';
 import type { PartDefinition, Rotation } from '@/features/parts';
 import { resistorDefinition, buttonDefinition, ledDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
 import { partTransform } from './part-transform';
 import { artworkBox } from './wokwi';
 

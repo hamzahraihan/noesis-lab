@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '@/features/parts';
-import { HUMIDITY_KNOB, dhtDefinition } from '@/features/simulation';
+import { HUMIDITY_KNOB, dhtDefinition } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';

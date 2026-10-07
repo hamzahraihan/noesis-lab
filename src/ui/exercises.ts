@@ -29,7 +29,7 @@
 
 import type { FirmwareLanguage } from '@/features/simulation';
 import { boardOption, type BoardId } from './boardRegistry';
-import type { Simulation } from './simulation';
+import type { Simulation } from '@/features/bench/simulation';
 import { EXERCISE_BOARD, PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
 import { MODULE_1 } from './exercises/module-1-gpio';
 import { MODULE_2 } from './exercises/module-2-analog';

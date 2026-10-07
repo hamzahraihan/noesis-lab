@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '@/features/parts';
-import { microsdDefinition } from '@/features/simulation';
+import { microsdDefinition } from '@/features/parts';
 import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';
 
