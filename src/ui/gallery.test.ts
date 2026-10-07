@@ -141,4 +141,44 @@ describe('the project gallery', () => {
   it('times the reaction game', () => {
     expect(galleryById('reaction')?.title).toBe('Reaction Timer');
   });
+
+  /*
+   * Live on the bench, not just wired: the glass must show the project's own
+   * text and keep showing new text as time moves. This is the test that would
+   * have caught the D2 pin collision (blank/garbled LCD) and the frozen RTC
+   * (a clock that never ticks) before any learner did.
+   */
+  it('runs each LCD project live on the bench', () => {
+    for (const id of ['alarm-clock', 'weather'] as const) {
+      const entry = galleryById(id)!;
+      const build = entry.builds[0];
+      const board = boardOption('uno').make();
+      const simulation = new Simulation(board);
+      simulation.addPart(board, 0, 0);
+      simulation.addPart(breadboardDefinition(), 230, 0);
+      build.setup(simulation);
+      simulation.loadFirmware(build.sketch, 'arduino-cpp');
+      expect(simulation.firmwareError, `${id} firmware`).toBeNull();
+      simulation.start();
+      const glasses: string[] = [];
+      for (let frame = 0; frame < 120; frame++) {
+        simulation.tick(0.05);
+        if (frame % 40 === 39) {
+          const lcd = [...simulation.lcdModels().values()][0];
+          glasses.push(lcd ? lcd.text() : '');
+        }
+      }
+      if (id === 'alarm-clock') {
+        for (const glass of glasses) {
+          expect(glass, `${id} glass shows time`).toMatch(/\d+:\d+:\d+/);
+        }
+        expect(new Set(glasses).size, `${id} clock ticks`).toBeGreaterThan(1);
+      } else {
+        for (const glass of glasses) {
+          expect(glass, `${id} glass shows readings`).toMatch(/t \d/);
+          expect(glass, `${id} glass shows humidity`).toMatch(/rh \d/);
+        }
+      }
+    }
+  }, 60_000);
 });
