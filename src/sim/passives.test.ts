@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ledDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/simulation';
 import { SNAP_DISTANCE_MM } from '@/features/simulation';
-import { WOKWI_PARTS, wokwiPartFor } from '../ui/wokwi';
+import { WOKWI_PARTS, wokwiPartFor } from '@/features/bench/wokwi';
 
 /**
  * The LED's pins must sit under the Wokwi lamp's own legs.

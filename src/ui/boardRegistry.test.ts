@@ -9,7 +9,7 @@ import {
   type BoardId,
 } from './boardRegistry';
 
-import { Simulation } from './simulation';
+import { Simulation } from '@/features/bench/simulation';
 import { BLINK_SKETCH, PI_BLINK_SKETCH } from './examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';

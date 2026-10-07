@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from './simulation';
+import { Simulation } from '@/features/bench/simulation';
 import { breadboardDefinition } from '@/features/parts';
 import { boardOption } from './boardRegistry';
 import { EXERCISES, exerciseById } from './exercises';

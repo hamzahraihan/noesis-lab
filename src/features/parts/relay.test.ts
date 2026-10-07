@@ -9,7 +9,7 @@ import { solveCircuit, type Solution } from '@/features/simulation';
 import { DynamicState, type PartDefinition } from '@/features/parts';
 import { buildNetlist, type Netlist } from '@/features/simulation';
 import { coilEnergized, RELAY_COIL_OHMS, relayDefinition } from './relay';
-import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
 
 const BOARD_ORIGIN_X = 200;
 const SUPPLY_VOLTS = 3.3;

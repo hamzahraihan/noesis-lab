@@ -6,7 +6,7 @@ import { solveCircuit, type Solution } from '@/features/simulation';
 import { DynamicState } from '@/features/parts';
 import { buildNetlist, type Netlist } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds, sonarDefinition } from './sonar';
-import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
 
 describe('sonar definition', () => {
   it('exposes VCC/TRIG/ECHO/GND with a distance knob', () => {

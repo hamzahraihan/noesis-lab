@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from '../../../ui/simulation';
-import { BLINK_SKETCH } from '../../../ui/examples';
+import { Simulation } from '@/features/bench/simulation';
+import { BLINK_SKETCH } from '@/ui/examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '../breadboard';
 import { esp32DevKitV1 } from '../boards';
 import { ssd1306Definition } from './part';

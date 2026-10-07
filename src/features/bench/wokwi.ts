@@ -28,14 +28,15 @@ import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition, Rotation, SensorVariant } from '@/features/parts';
 import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from '@/features/parts';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from '@/features/parts';
-import { DIODE_PROFILES, type DiodeProfile } from '@/features/simulation';
+import { DIODE_PROFILES } from '@/features/parts';
+import type { DiodeProfile } from '@/features/simulation';
 import { WIPER_KNOB } from '@/features/parts';
 import {
   HORIZONTAL_KNOB,
   SLIDE_POSITION_KNOB,
   VERTICAL_KNOB,
 } from '@/features/parts';
-import { DIGIT_KNOB } from '@/features/simulation';
+import { DIGIT_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import type { FootprintState } from './footprints';
 

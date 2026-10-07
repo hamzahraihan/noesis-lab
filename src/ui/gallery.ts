@@ -11,7 +11,7 @@
 
 import type { BoardId } from './boardRegistry';
 import { PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
-import type { Simulation } from './simulation';
+import type { Simulation } from '@/features/bench/simulation';
 
 export interface GalleryBuild {
   readonly board: BoardId;

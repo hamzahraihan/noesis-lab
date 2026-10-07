@@ -15,7 +15,7 @@
  */
 
 import { HashRouter, Navigate, Route, Routes } from 'react-router';
-import Bench from '@/ui/Bench';
+import Bench from '@/features/bench';
 import { HomePage } from '@/ui/HomePage';
 import { ExercisesPage, ExercisePage, ReferencesPage } from '@/ui/ExercisePages';
 import { ProjectPage } from '@/ui/ProjectPages';

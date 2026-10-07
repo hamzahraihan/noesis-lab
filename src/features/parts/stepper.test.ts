@@ -6,7 +6,7 @@ import { buildNetlist } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
 import { STEP_DEGREES, biaxialStepperDefinition, stepperDefinition, stepTransition } from './stepper';
-import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
 
 describe('stepper definition', () => {
   it('exposes four coil pins in a row', () => {

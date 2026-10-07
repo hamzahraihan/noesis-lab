@@ -7,7 +7,7 @@ import {
   firstExercise,
   type Exercise,
 } from './exercises';
-import { Simulation } from './simulation';
+import { Simulation } from '@/features/bench/simulation';
 import { boardOption } from './boardRegistry';
 import { PART_CATALOGUE } from '@/features/parts';
 
