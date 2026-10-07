@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from '../bench';
+import { BenchBuilder } from '@/features/simulation';
 import { columnX, stripRowY, breadboardDefinition } from '../breadboard';
 import { esp32DevKitV1 } from '../boards';
-import { Engine } from '../engine';
-import { McuRuntime } from '../mcu';
-import { I2CBus } from '../bus/i2c';
+import { Engine } from '@/features/simulation';
+import { McuRuntime } from '@/features/simulation';
+import { I2CBus } from '@/features/simulation';
 import { DynamicState } from '../catalog';
 import { ds1307Definition, hx711Definition, mpu6050Definition } from '../devices/sensors';
 import { Servo, servoDefinition } from '../devices/servo';
 import { Lcd1602 } from '../devices/lcd1602';
 import { LcdDriver } from '../devices/lcd-driver';
-import { FirmwareRunner, type FirmwareServices } from '../firmware/interpreter';
+import { FirmwareRunner, type FirmwareServices } from '@/features/simulation';
 
 /** Breadboard origin, clear of the board plugged in beside it. */
 const BOARD_ORIGIN_X = 230;

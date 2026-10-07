@@ -1,4 +1,4 @@
-import type { PartInstance, Terminal } from '../sim/bench';
+import type { PartInstance, Terminal } from '@/features/simulation';
 import { artworkBox } from './wokwi';
 
 /**

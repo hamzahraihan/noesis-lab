@@ -1,3 +1,27 @@
 // Public seam for features/simulation. Populated in Task 3.
 // Code outside this folder must import from '@/features/simulation', never deep.
-export {};
+export * from './engine';
+export * from './circuit';
+export * from './netlist';
+export * from './mcu';
+export * from './bench';
+export * from './elements';
+export * from './probe';
+export * from './multimeter';
+export * from './units';
+export * from './matrix';
+export * from './encoder';
+export * from './relay';
+export * from './remote';
+export * from './dialer';
+export * from './sonar';
+export * from './stepper';
+export * from './sdcard';
+export * from './pixels';
+export * from './dht';
+export * from './bus/i2c';
+export * from './bus/spi';
+export * from './bus/log';
+export * from './firmware/interpreter';
+export * from './firmware/parser';
+export * from './firmware/python';

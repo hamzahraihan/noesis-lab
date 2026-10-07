@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder, type PartInstance } from './bench';
+import { BenchBuilder, type PartInstance } from '@/features/simulation';
 import { columnX, railRowY, stripRowY, breadboardDefinition } from './breadboard';
 import { esp32DevKitV1 } from './boards';
-import { GROUND, type Element } from './elements';
-import { elementCurrent, solveCircuit, type Solution } from './circuit';
+import { GROUND, type Element } from '@/features/simulation';
+import { elementCurrent, solveCircuit, type Solution } from '@/features/simulation';
 import { DynamicState, type KnobSpec, type PartDefinition } from './catalog';
-import { buildNetlist, type Netlist } from './netlist';
+import { buildNetlist, type Netlist } from '@/features/simulation';
 import {
   buzzerDefinition,
   COMPARATOR_THRESHOLD_KNOB,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { rotateOffset, type Rotation } from './catalog';
-import { BenchBuilder } from './bench';
+import { BenchBuilder } from '@/features/simulation';
 import { resistorDefinition } from './passives';
 
 /**

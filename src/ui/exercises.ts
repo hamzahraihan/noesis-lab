@@ -27,7 +27,7 @@
  * learner.
  */
 
-import type { FirmwareLanguage } from '../sim/firmware/interpreter';
+import type { FirmwareLanguage } from '@/features/simulation';
 import { boardOption, type BoardId } from './boardRegistry';
 import type { Simulation } from './simulation';
 import { EXERCISE_BOARD, PART_STEP, PART_X, PART_Y, part } from './exercises/shared';

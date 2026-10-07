@@ -24,18 +24,18 @@
  *    wrong holes.
  */
 
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition, Rotation, SensorVariant } from '../sim/catalog';
 import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from '../sim/display/ili9341';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from '../sim/display/ssd1306';
-import { DIODE_PROFILES, type DiodeProfile } from '../sim/elements';
+import { DIODE_PROFILES, type DiodeProfile } from '@/features/simulation';
 import { WIPER_KNOB } from '../sim/passives';
 import {
   HORIZONTAL_KNOB,
   SLIDE_POSITION_KNOB,
   VERTICAL_KNOB,
 } from '../sim/modules';
-import { DIGIT_KNOB } from '../sim/dialer';
+import { DIGIT_KNOB } from '@/features/simulation';
 import type { DisplayController } from '../sim/display/part';
 import type { FootprintState } from './footprints';
 

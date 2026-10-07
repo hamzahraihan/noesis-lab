@@ -7,7 +7,7 @@
  * the measured spacing rather than a uniform pitch so they stay on the pads.
  */
 
-import type { KnobSpec, PartDefinition } from './catalog';
+import type { KnobSpec, PartDefinition } from '@/sim/catalog';
 
 /**
  * Detent steps turned from rest. Each step advances the Gray cycle one

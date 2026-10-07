@@ -6,7 +6,7 @@
  * plain model work with no JSX in it.
  */
 
-import type { Bench, PartInstance } from '../sim/bench';
+import type { Bench, PartInstance } from '@/features/simulation';
 import { breadboardDefinition } from '../sim/breadboard';
 import { boardOption, type BoardId } from './boardRegistry';
 import { exerciseBoard, type Exercise } from './exercises';

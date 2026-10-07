@@ -13,7 +13,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { BoardPin } from '../sim/catalog';
-import type { TraceSample } from '../sim/probe';
+import type { TraceSample } from '@/features/simulation';
 import { Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
 
 /** Simulated milliseconds shown across the capture. */

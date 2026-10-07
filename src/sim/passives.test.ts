@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ledDefinition } from './passives';
-import { DIODE_PROFILES } from './elements';
-import { SNAP_DISTANCE_MM } from './bench';
+import { DIODE_PROFILES } from '@/features/simulation';
+import { SNAP_DISTANCE_MM } from '@/features/simulation';
 import { WOKWI_PARTS, wokwiPartFor } from '../ui/wokwi';
 
 /**

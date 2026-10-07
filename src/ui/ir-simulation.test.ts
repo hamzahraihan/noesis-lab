@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1 } from '../sim/boards';
 import { irReceiverDefinition } from '../sim/modules';
-import { remoteDefinition, REMOTE_KEY_KNOB } from '../sim/remote';
-import type { PartInstance } from '../sim/bench';
+import { remoteDefinition, REMOTE_KEY_KNOB } from '@/features/simulation';
+import type { PartInstance } from '@/features/simulation';
 import { Simulation } from './simulation';
 
 function airBench() {

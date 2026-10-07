@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from 'react';
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition } from '../sim/catalog';
 import { DynamicState } from '../sim/catalog';
 import { PartFootprint, type FootprintState } from './footprints';

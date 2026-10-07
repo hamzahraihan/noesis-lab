@@ -17,15 +17,15 @@ import { isLargePart, type CatalogueEntry } from '../sim/catalogue';
 import { ComponentBrowser } from './ComponentBrowser';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '../sim/breadboard';
 import { ledDefinition, resistorDefinition } from '../sim/passives';
-import { DIODE_PROFILES } from '../sim/elements';
+import { DIODE_PROFILES } from '@/features/simulation';
 import type { PartDefinition } from '../sim/catalog';
-import type { BendPoint, PartInstance, Terminal } from '../sim/bench';
+import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
 import { ili9341Definition, ssd1306Definition } from '../sim/display/part';
 import { Workbench } from './Workbench';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
 import { BLINK_EXAMPLE, EXAMPLES, PI_BLINK_SKETCH } from './examples';
-import type { FirmwareLanguage } from '../sim/firmware/interpreter';
+import type { FirmwareLanguage } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
@@ -42,7 +42,7 @@ import {
   type BoardId,
 } from './boardRegistry';
 import { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wire-colours';
-import type { WireEnd } from '../sim/bench';
+import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from './Scope';
 import { MultimeterPanel } from './Multimeter';
 import { LogicAnalyser } from './LogicAnalyser';

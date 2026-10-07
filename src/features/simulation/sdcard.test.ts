@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { esp32DevKitV1 } from './boards';
+import { esp32DevKitV1 } from '@/sim/boards';
 import { McuRuntime } from './mcu';
 import { Engine } from './engine';
 import { SD_CARD_BYTES, microsdDefinition } from './sdcard';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 describe('microsd definition', () => {
   it('exposes the seven breakout pins', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from '../sim/bench';
+import { BenchBuilder } from '@/features/simulation';
 import type { PartDefinition, Rotation } from '../sim/catalog';
 import { resistorDefinition, buttonDefinition, ledDefinition } from '../sim/passives';
-import { DIODE_PROFILES } from '../sim/elements';
+import { DIODE_PROFILES } from '@/features/simulation';
 import { partTransform } from './part-transform';
 import { artworkBox } from './wokwi';
 

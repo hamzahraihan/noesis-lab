@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Bench, Terminal, Wire, WireEnd } from '../sim/bench';
+import type { Bench, Terminal, Wire, WireEnd } from '@/features/simulation';
 import { PartFootprint, type FootprintState } from './footprints';
 import { HardwareDefs, SILKSCREEN_FONT } from './hardware';
 import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from './wire-route';

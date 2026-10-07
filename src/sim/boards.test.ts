@@ -6,7 +6,7 @@ import {
   esp32DevKitV1,
   nanoRp2040Connect,
 } from './boards';
-import { McuRuntime } from './mcu';
+import { McuRuntime } from '@/features/simulation';
 import type { PartDefinition } from './catalog';
 
 const BOARDS: ReadonlyArray<readonly [string, () => PartDefinition]> = [

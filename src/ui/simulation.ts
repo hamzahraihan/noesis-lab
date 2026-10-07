@@ -14,38 +14,38 @@ import {
   type PartInstance,
   type Terminal,
   type WireEnd,
-} from '../sim/bench';
-import { Engine } from '../sim/engine';
-import { McuRuntime } from '../sim/mcu';
+} from '@/features/simulation';
+import { Engine } from '@/features/simulation';
+import { McuRuntime } from '@/features/simulation';
 import {
   FirmwareRunner,
   type FirmwareLanguage,
   type FirmwareServices,
-} from '../sim/firmware/interpreter';
-import { FirmwareSyntaxError } from '../sim/firmware/parser';
+} from '@/features/simulation';
+import { FirmwareSyntaxError } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '../sim/catalog';
 import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from './examples';
 import { nextAutomaticWireColour } from './wire-colours';
 
-import { GROUND } from '../sim/elements';
-import { DISTANCE_KNOB, echoMicroseconds } from '../sim/sonar';
-import { HUMIDITY_KNOB } from '../sim/dht';
-import { pixelCount, type PixelColor } from '../sim/pixels';
+import { GROUND } from '@/features/simulation';
+import { DISTANCE_KNOB, echoMicroseconds } from '@/features/simulation';
+import { HUMIDITY_KNOB } from '@/features/simulation';
+import { pixelCount, type PixelColor } from '@/features/simulation';
 import { TEMPERATURE_KNOB } from '../sim/modules';
 import type { DisplayController } from '../sim/display/part';
 import { Ili9341, type PanelRotation } from '../sim/display/ili9341';
 import { TileFetcher } from './map-fetcher';
 import { TILE_SIZE, TileStore } from './map-tiles';
-import type { MapPort, TftPort } from '../sim/firmware/interpreter';
-import { I2CBus } from '../sim/bus/i2c';
-import { SpiBus } from '../sim/bus/spi';
-import { BusLog, type BusEntry } from '../sim/bus/log';
+import type { MapPort, TftPort } from '@/features/simulation';
+import { I2CBus } from '@/features/simulation';
+import { SpiBus } from '@/features/simulation';
+import { BusLog, type BusEntry } from '@/features/simulation';
 import type { Servo } from '../sim/devices/servo';
 import type { Lcd1602 } from '../sim/devices/lcd';
 import { LcdDriver, type LcdCommand } from '../sim/devices/lcd-driver';
 
 
-import type { TraceSample } from '../sim/probe';
+import type { TraceSample } from '@/features/simulation';
 import {
   AMP_RANGES,
   OHM_RANGES,
@@ -54,7 +54,7 @@ import {
   type MeterMode,
   type MeterReading,
   type OhmRange,
-} from '../sim/multimeter';
+} from '@/features/simulation';
 
 import { DynamicState } from '../sim/catalog';
 import { routeWireViaCorners } from './wire-route';

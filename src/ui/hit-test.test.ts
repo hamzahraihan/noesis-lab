@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from '../sim/bench';
+import { BenchBuilder } from '@/features/simulation';
 import { breadboardDefinition } from '../sim/breadboard';
 import { resistorDefinition, ledDefinition, buttonDefinition } from '../sim/passives';
 import { arduinoUnoR3 } from '../sim/boards';
 import { ili9341Definition } from '../sim/display/part';
-import { DIODE_PROFILES } from '../sim/elements';
+import { DIODE_PROFILES } from '@/features/simulation';
 import { rotatedPartAt, pressHitsOwnPin, hoverPinLabel, wireClickAction, type BenchForHit } from './hit-test';
 
 /**

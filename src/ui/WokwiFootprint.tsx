@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import type { PartInstance } from '../sim/bench';
+import type { PartInstance } from '@/features/simulation';
 
 import type { FootprintState } from './footprints';
 import { artworkBox, pushWokwiState, type WokwiPart } from './wokwi';

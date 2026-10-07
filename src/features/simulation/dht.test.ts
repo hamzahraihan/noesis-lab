@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder, type PartInstance } from './bench';
-import { esp32DevKitV1 } from './boards';
+import { esp32DevKitV1 } from '@/sim/boards';
 import { GROUND, type Element } from './elements';
 import { solveCircuit, type Solution } from './circuit';
-import { DynamicState } from './catalog';
+import { DynamicState } from '@/sim/catalog';
 import { buildNetlist } from './netlist';
 import { HUMIDITY_KNOB, dhtDefinition } from './dht';
-import { TEMPERATURE_KNOB } from './modules';
-import { renderedSizeMm, wokwiPartFor } from '../ui/wokwi';
+import { TEMPERATURE_KNOB } from '@/sim/modules';
+import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 
 describe('dht definition', () => {
   it('exposes VCC/SDA/NC/GND with climate knobs', () => {
