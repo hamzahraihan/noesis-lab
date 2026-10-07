@@ -61,6 +61,7 @@ import {
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { exerciseBoard, exerciseById, exerciseLanguage } from './exercises';
+import { buildFor, galleryById } from './gallery';
 import { ExerciseGuide } from './ExerciseGuide';
 import { isGuideDismissed } from './guide-dismissal';
 
@@ -239,6 +240,19 @@ export default function Bench() {
     found !== null && boardId === exerciseBoard(found) ? found : null;
 
   /*
+   * A project arriving from a board page, as `?project=alarm-clock`.
+   *
+   * Same shape as an exercise — a validated setup plus a sketch — but only
+   * honoured on a board the project has a build for, and never together with
+   * `?ex=`: an exercise wins when both are present, so a shared link always
+   * means one thing.
+   */
+  const requestedProject = search.get('project');
+  const foundProject = requestedProject === null ? null : galleryById(requestedProject);
+  const projectBuild =
+    exercise === null && foundProject !== null ? buildFor(foundProject, boardId) : null;
+
+  /*
    * The editor's text, the simulation's copy of it and the grammar they are in
    * all have to agree with each other and with the board.
    *
@@ -258,6 +272,7 @@ export default function Bench() {
   // a different language.
   const [firmware, setFirmware] = useState(
     exercise?.sketch ??
+      projectBuild?.sketch ??
       (boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch),
   );
   const [browserOpen, setBrowserOpen] = useState(false);
@@ -297,6 +312,17 @@ export default function Bench() {
     else setGuideOpen(false);
   }, [exercise]);
 
+  /*
+   * The project banner: a slim strip naming the build this bench was opened
+   * for through `?project=:id`. Dismissible, and reset on project change so
+   * a second project re-announces itself. Deliberately not the full guide —
+   * the instructions live on the board page this links back to.
+   */
+  const [projectBannerOpen, setProjectBannerOpen] = useState(true);
+  useEffect(() => {
+    setProjectBannerOpen(true);
+  }, [projectBuild]);
+
   // Rebuilt on board change only: a sketch's pin numbers mean something
   // different on each board, so carrying one across would silently misfire.
   const simulation = useMemo(
@@ -322,6 +348,9 @@ export default function Bench() {
         // A Pi lesson hands over Python, and handing that to the C++ parser
         // reports "expected a type" on the first `from` and stops there.
         created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
+      } else if (projectBuild) {
+        projectBuild.setup(created);
+        created.loadFirmware(projectBuild.sketch, boardOption(boardId).language);
       } else {
         buildStartingBench(created, boardId);
         created.loadFirmware(
@@ -336,7 +365,7 @@ export default function Bench() {
       // "running" over a simulation nobody had started.
       return created;
     },
-    [boardId, exercise],
+    [boardId, exercise, projectBuild],
   );
 
   const [baud, setBaud] = useState(9600);
@@ -955,6 +984,31 @@ export default function Bench() {
           )}
         </div>
       </header>
+
+      {projectBuild !== null && foundProject !== null && projectBannerOpen && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 bg-slate-950/80 px-4 py-1.5 text-sm">
+          <span className="truncate text-slate-300">
+            <span className="font-medium text-slate-100">{foundProject.title}</span>
+            <span className="text-slate-500"> — wired and loaded, press Run to see it live.</span>
+          </span>
+          <span className="flex-1" />
+          <Link
+            to={`/projects/${boardId}`}
+            className="shrink-0 text-xs text-sky-400 underline underline-offset-2"
+          >
+            Back to project
+          </Link>
+          <button
+            type="button"
+            onClick={() => setProjectBannerOpen(false)}
+            aria-label="Dismiss the project banner"
+            title="Dismiss"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          >
+            <Cross2Icon className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {/*
