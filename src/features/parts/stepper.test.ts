@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder, type PartInstance } from './bench';
+import { BenchBuilder, type PartInstance } from '@/features/simulation';
 import { esp32DevKitV1 } from '@/features/parts';
 import { DynamicState } from '@/features/parts';
-import { buildNetlist } from './netlist';
-import { McuRuntime } from './mcu';
-import { Engine } from './engine';
+import { buildNetlist } from '@/features/simulation';
+import { McuRuntime } from '@/features/simulation';
+import { Engine } from '@/features/simulation';
 import { STEP_DEGREES, biaxialStepperDefinition, stepperDefinition, stepTransition } from './stepper';
 import { renderedSizeMm, wokwiPartFor } from '@/ui/wokwi';
 

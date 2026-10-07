@@ -18,10 +18,10 @@ import { DIODE_PROFILES, GROUND, type DiodeProfile, type Element } from './eleme
 import { wireResistanceOhms } from './units';
 import { SNAP_DISTANCE_MM, type Bench, type PartInstance } from './bench';
 import type { DynamicState } from '@/features/parts';
-import { RELAY_COIL_OHMS } from './relay';
+import { RELAY_COIL_OHMS } from '@/features/parts';
 import { WIPER_KNOB } from '@/features/parts';
-import { DETENT_KNOB, quadratureAt } from './encoder';
-import { WINDING_OHMS } from './stepper';
+import { DETENT_KNOB, quadratureAt } from '@/features/parts';
+import { WINDING_OHMS } from '@/features/parts';
 import {
   COMPARATOR_THRESHOLD_KNOB,
   DIP_WAY_KNOBS,

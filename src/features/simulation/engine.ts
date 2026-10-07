@@ -14,12 +14,12 @@
  */
 import { createController, type DisplayController } from '@/features/parts';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from '@/features/parts';
-import { coilEnergized } from './relay';
-import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from './remote';
-import { DIGIT_KNOB } from './dialer';
-import { SD_CARD_BYTES } from './sdcard';
-import { clampChannel, pixelCount, type PixelColor } from './pixels';
-import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
+import { coilEnergized } from '@/features/parts';
+import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from '@/features/parts';
+import { DIGIT_KNOB } from '@/features/parts';
+import { SD_CARD_BYTES } from '@/features/parts';
+import { clampChannel, pixelCount, type PixelColor } from '@/features/parts';
+import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from '@/features/parts';
 import { Servo } from '@/features/parts';
 import { createLcd, type Lcd1602 } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';

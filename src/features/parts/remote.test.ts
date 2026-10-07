@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BenchBuilder } from './bench';
+import { BenchBuilder } from '@/features/simulation';
 import { esp32DevKitV1 } from '@/features/parts';
-import { McuRuntime } from './mcu';
-import { Engine } from './engine';
+import { McuRuntime } from '@/features/simulation';
+import { Engine } from '@/features/simulation';
 import { DynamicState } from '@/features/parts';
 import { irReceiverDefinition } from '@/features/parts';
 import { sonarDefinition } from './sonar';

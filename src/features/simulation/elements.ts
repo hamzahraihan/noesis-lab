@@ -82,31 +82,12 @@ export interface DiodeProfile {
   readonly breakdownAmps: number;
 }
 
-const LED_SHAPE = {
-  seriesOhms: 8,
-  ideality: 2.0,
-  leakageAmps: 1e-7,
-  breakdownVolts: 5,
-  breakdownAmps: 0.05,
-} as const;
-
-export const DIODE_PROFILES = {
-  red: { forwardVolts: 2.1, ratedAmps: 0.02, ...LED_SHAPE },
-  green: { forwardVolts: 2.1, ratedAmps: 0.02, ...LED_SHAPE },
-  yellow: { forwardVolts: 2.0, ratedAmps: 0.02, ...LED_SHAPE },
-  blue: { forwardVolts: 3.1, ratedAmps: 0.02, ...LED_SHAPE },
-  white: { forwardVolts: 3.1, ratedAmps: 0.02, ...LED_SHAPE },
-  /** 1N4148 signal diode: ~0.7 V forward, much lower leakage than an LED. */
-  silicon: {
-    forwardVolts: 0.7,
-    ratedAmps: 0.01,
-    seriesOhms: 0.5,
-    ideality: 1.05,
-    leakageAmps: 1e-9,
-    breakdownVolts: 75,
-    breakdownAmps: 0.1,
-  },
-} as const satisfies Record<string, DiodeProfile>;
+/**
+ * Re-exported from the parts catalogue (device-model data lives there; the
+ * solver only reads profiles through element definitions). Keeps the
+ * simulation seam stable for `src/ui/*` until Task 5 rewrites it.
+ */
+export { DIODE_PROFILES } from '@/features/parts';
 
 interface CurvePoint {
   readonly volts: number;
