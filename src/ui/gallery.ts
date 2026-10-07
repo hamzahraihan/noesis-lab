@@ -56,7 +56,7 @@ const ALARM_CLOCK: GalleryProject = {
       sketch: `#include <Arduino.h>
 #include <Wire.h>
 
-#define LED_PIN 2
+#define LED_PIN 10
 #define RTC_ADDR 0x68
 
 int bcdToInt(byte bcd) {
@@ -105,7 +105,7 @@ void loop() {
 
     const led = simulation.addPart(part('Red LED'), PART_X, PART_Y + 2 * PART_STEP);
     const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + 2 * PART_STEP);
-    const board = simulation.boardTerminal('D2');
+    const board = simulation.boardTerminal('D10');
     const anode = simulation.pinAt(led, 'anode');
     const cathode = simulation.pinAt(led, 'cathode');
     const legA = simulation.pinAt(resistor, 'a');
@@ -570,7 +570,7 @@ const WEATHER: GalleryProject = {
       board: 'uno',
       sketch: `#include <Arduino.h>
 
-byte SENSOR_PIN = 2;
+byte SENSOR_PIN = 10;
 
 void setup() {
   Serial.begin(115200);
@@ -614,7 +614,7 @@ void loop() {
     simulation.placeExampleDevice('lcd1602', PART_X, PART_Y);
 
     const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), PART_X, PART_Y + PART_STEP);
-    const data = simulation.boardTerminal('D2');
+    const data = simulation.boardTerminal('D10');
     const vcc = simulation.pinAt(sensor, 'VCC');
     const sda = simulation.pinAt(sensor, 'SDA');
     const gnd = simulation.pinAt(sensor, 'GND');
