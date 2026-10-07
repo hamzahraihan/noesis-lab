@@ -139,6 +139,32 @@ describe('the examples', () => {
     expect(swept).toContain(10);
     expect(swept).toContain(170);
   }, 30_000);
+
+  it('colours device wires by signal', () => {
+    /*
+     * Power is red, ground is black, the I2C pair is yellow/green, and signal
+     * lines cycle — the Wokwi convention, so a bench wired entirely in red is
+     * a thing the suite catches instead of a learner squinting at.
+     */
+    const simulation = bench();
+    LCD_EXAMPLE.wire(simulation);
+    const owner = new Map<number, string>();
+    for (const part of simulation.bench.parts) {
+      for (const [pin, id] of Object.entries(part.terminals)) {
+        owner.set(id, `${part.definition.name}:${pin}`);
+      }
+    }
+    const colourOf = (needle: string): string | undefined =>
+      simulation.bench.wires.find((wire) =>
+        [owner.get(wire.from), owner.get(wire.to)].some((end) => end?.endsWith(needle)),
+      )?.colour;
+    expect(colourOf(':VCC')).toBe('#ef4444');
+    expect(colourOf(':GND')).toBe('#111111');
+    expect(colourOf(':VSS')).toBe('#111111');
+    expect(colourOf(':SDA')).toBe('#facc15');
+    expect(colourOf(':SCL')).toBe('#22c55e');
+    expect(new Set(simulation.bench.wires.map((wire) => wire.colour)).size).toBeGreaterThan(4);
+  });
 });
 
 describe('loading one example replaces the last', () => {
