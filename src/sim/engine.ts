@@ -22,6 +22,7 @@ import { clampChannel, pixelCount, type PixelColor } from './pixels';
 import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from './stepper';
 import { Servo } from './devices/servo';
 import { createLcd, type Lcd1602 } from './devices/lcd';
+import { Ds1307 } from './devices/ds1307';
 import { Ili9341 } from './display/ili9341';
 import { Ssd1306 } from './display/ssd1306';
 
@@ -60,6 +61,15 @@ const SUPPLY_RAIL_LABELS: Readonly<Record<string, string>> = {
   mega: '5V',
   nano: '5V',
 };
+
+/**
+ * What the real-time clocks read when simulated time is zero.
+ *
+ * Midnight, 1 January 2000: the power-up story the DS1307 model itself tells.
+ * Clocks advance from here as `timeMs` moves; tests assert advancement, not
+ * the wall-clock alignment, which is local-time by construction.
+ */
+const RTC_EPOCH_MS = new Date(2000, 0, 1).getTime();
 
 export class Engine {
   readonly mcu: McuRuntime;
@@ -347,21 +357,20 @@ export class Engine {
       if (!nets) continue;
       const high = this.mcu.board.logicVolts / 2;
       /*
-       * One byte per rising edge, not per solve. Enable is held high across
-       * however many solves the solver takes, so latching on every one of them
-       * turns a single character into as many as the solver happened to need --
-       * and latching on the falling edge as well drops every other byte.
+       * One nibble per rising edge, and only on a rising edge. Enable idles
+       * high between strobes, so latching on every solve that observes it
+       * high re-latches the stale nibble — and every solve that re-latches
+       * shifts the panel's pairing by one, garbling everything after it. The
+       * flag arms on a low solve and is consumed by the high one, which is
+       * what a stroke always is: low settle, then high settle.
        */
       const strobe = this.voltageOfNet(nets.enable) >= high;
-      const previous = this.lcdStrobe.get(partId) ?? false;
-      /*
-       * The edge is consumed by the first solve that sees it: enable is held
-       * high across however many solves the solver takes, and a latch that
-       * re-armed on every one of them would turn one character into as many as
-       * the solver happened to need.
-       */
+      if (!strobe) {
+        this.lcdStrobe.set(partId, true);
+        continue;
+      }
+      if (!this.lcdStrobe.get(partId)) continue;
       this.lcdStrobe.set(partId, false);
-      if (!strobe || previous) continue;
 
       /*
        * D4 is the panel's *most* significant bit. A four-bit HD44780 takes its
@@ -572,7 +581,29 @@ export class Engine {
    */
   skip(dtSeconds: number): void {
     this.timeMs += dtSeconds * 1000;
+    this.advanceClocks();
     this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
+  }
+
+  /**
+   * Moves each real-time clock on with simulated time.
+   *
+   * A DS1307 has no crystal of its own in the model — its `setTime` exists to
+   * be called as the bench's time moves, and until it is, every read answers
+   * power-up zeros. The epoch matches the part's own power-up story: midnight,
+   * 1 January 2000, advancing from there. Absolute rather than incremental, so
+   * a `skip` that jumps time without solving still lands on the right second.
+   *
+   * A sketch that writes the time registers takes the calendar over in the
+   * model, and the next step takes it back — no shipped sketch does that, and
+   * a frozen clock would be the stranger untruth.
+   */
+  private advanceClocks(): void {
+    for (const device of this.devices.values()) {
+      if (device instanceof Ds1307) {
+        device.setTime(new Date(RTC_EPOCH_MS + this.timeMs));
+      }
+    }
   }
 
   /**
@@ -596,6 +627,7 @@ export class Engine {
    */
   step(dtSeconds: number): Solution {
     this.timeMs += dtSeconds * 1000;
+    this.advanceClocks();
     return this.solveAt(this.timeMs, dtSeconds);
   }
 
@@ -649,6 +681,8 @@ export class Engine {
     });
 
     this.solution = solution;
+    // eslint-disable-next-line no-console
+    console.log(`solve conv=${solution.converged} iters=${solution.iterations}`);
     // Both pumps run every solve: short-circuiting would starve one of them,
     // and one shared re-solve covers armature and transmission changes alike.
     const armaturesMoved = this.pumpRelays();

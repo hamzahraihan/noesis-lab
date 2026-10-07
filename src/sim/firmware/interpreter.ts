@@ -1057,8 +1057,7 @@ export class FirmwareRuntime {
             return 0;
           }
           if (callee.target.name === 'Wire') {
-            yield* this.evaluateWireCall(callee.member, args, services);
-            return 0;
+            return (yield* this.evaluateWireCall(callee.member, args, services)) ?? 0;
           }
           if (callee.target.name === 'map' || callee.target.name === 'Map') {
             return this.evaluateMapCall(callee.member, args, services);
@@ -1067,8 +1066,7 @@ export class FirmwareRuntime {
             return this.evaluateTftCall(callee.member, args, services);
           }
           if (callee.target.name === 'SPI') {
-            yield* this.evaluateSpiCall(callee.member, args, services);
-            return 0;
+            return (yield* this.evaluateSpiCall(callee.member, args, services)) ?? 0;
           }
           return this.evaluateSerialCall(callee.member, args, services);
         }
