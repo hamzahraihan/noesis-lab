@@ -24,7 +24,7 @@ import {
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
-import { EXAMPLE_DEVICES, LCD_LINES, type ExampleDevice } from '@/ui/examples';
+import type { ExampleDevice } from '@/features/learn';
 import { nextAutomaticWireColour } from './wire-colours';
 
 import { GROUND } from '@/features/simulation';
@@ -34,8 +34,8 @@ import { pixelCount, type PixelColor } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import { Ili9341, type PanelRotation } from '@/features/parts';
-import { TileFetcher } from '@/ui/map-fetcher';
-import { TILE_SIZE, TileStore } from '@/ui/map-tiles';
+import { TileFetcher } from './map-fetcher';
+import { TILE_SIZE, TileStore } from './map-tiles';
 import type { MapPort, TftPort } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
@@ -525,12 +525,18 @@ export class Simulation {
    * sketch would run and quietly read nothing, which is indistinguishable from
    * the API being broken.
    */
-  placeExampleDevice(what: ExampleDevice, x: number, y: number): PartInstance {
+  placeExampleDevice(
+    what: ExampleDevice,
+    x: number,
+    y: number,
+    devices: Readonly<Record<ExampleDevice, () => PartDefinition>>,
+    lcdLines: readonly string[],
+  ): PartInstance {
     // One checkpoint for the whole device: the part and every wire it brings
     // are a single action, and undoing half of an example would leave a module
     // on the bench wired to nothing.
     this.checkpoint();
-    const definition = EXAMPLE_DEVICES[what]();
+    const definition = devices[what]();
     const part = this.builder.addPart(definition, x, y);
     // Recorded before the wiring so `clearExampleParts` can take the whole
     // example away, however many parts it ends up owning.
@@ -595,7 +601,7 @@ export class Simulation {
         const spare = this.mcu.pins().filter(
           (pin) => pin.role === 'gpio' && pin.gpio !== undefined && !taken.has(pin.gpio),
         );
-        LCD_LINES.forEach((line, index) => {
+        lcdLines.forEach((line, index) => {
           const boardPin = spare[index];
           if (!boardPin) return;
           this.lcdBoardPins.set(line, boardPin.gpio ?? -1);

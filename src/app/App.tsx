@@ -15,11 +15,15 @@
  */
 
 import { HashRouter, Navigate, Route, Routes } from 'react-router';
-import Bench from '@/features/bench';
-import { HomePage } from '@/ui/HomePage';
-import { ExercisesPage, ExercisePage, ReferencesPage } from '@/ui/ExercisePages';
-import { ProjectPage } from '@/ui/ProjectPages';
-import { DEFAULT_BOARD_ID } from '@/ui/boardRegistry';
+import BenchRoute from '@/routes/BenchRoute';
+import { HomeRoute } from '@/routes/HomeRoute';
+import {
+  ExercisePage,
+  ExercisesPage,
+  ReferencesPage,
+} from '@/routes/LearnRoutes';
+import { ProjectsRoute } from '@/routes/ProjectsRoute';
+import { DEFAULT_BOARD_ID } from '@/features/learn';
 
 export default function App() {
   return (
@@ -34,8 +38,8 @@ export default function App() {
         <Route path="/learn" element={<ExercisesPage />} />
         <Route path="/learn/references" element={<ReferencesPage />} />
         <Route path="/learn/:id" element={<ExercisePage />} />
-        <Route path="/projects/:boardId" element={<ProjectPage />} />
-        <Route path="/" element={<HomePage />} />
+        <Route path="/projects/:boardId" element={<ProjectsRoute />} />
+        <Route path="/" element={<HomeRoute />} />
         {/*
          * The bare `/bench` redirect exists so a hand-typed or stale link lands
          * on a working bench rather than an empty one. `replace` keeps it out of
@@ -45,7 +49,7 @@ export default function App() {
           path="/bench"
           element={<Navigate to={`/bench/${DEFAULT_BOARD_ID}`} replace />}
         />
-        <Route path="/bench/:boardId" element={<Bench />} />
+        <Route path="/bench/:boardId" element={<BenchRoute />} />
         {/* Anything unrecognised goes back to the picker, which is the page that
             can explain what a board is. */}
         <Route path="*" element={<Navigate to="/" replace />} />

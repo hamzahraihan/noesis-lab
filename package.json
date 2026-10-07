@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "oxlint",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

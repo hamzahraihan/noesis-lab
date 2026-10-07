@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { elementCurrent, solveCircuit, type Solution } from './circuit';
-import { DIODE_PROFILES, GROUND, type DiodeProfile, type Element } from './elements';
+import { GROUND, type DiodeProfile, type Element } from './elements';
+import { DIODE_PROFILES } from '@/features/parts';
 
 /** Series resistor + LED from a supply, the most common bench circuit there is. */
 function ledCircuit(

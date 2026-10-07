@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from './simulation';
 import { esp32DevKitV1 } from '@/features/parts';
 
 /**

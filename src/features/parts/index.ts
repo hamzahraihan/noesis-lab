@@ -28,6 +28,6 @@ export * from './dialer';
 export * from './sdcard';
 export * from './pixels';
 export * from './stepper';
-// Last: reads engine-defined part factories at module scope, so every
-// definition module above must already be evaluated (import-cycle order).
+// Last: the catalogue aggregates every definition above, so it evaluates
+// after them (import-cycle order).
 export * from './catalogue';

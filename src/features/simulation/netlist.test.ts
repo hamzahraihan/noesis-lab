@@ -11,7 +11,8 @@ import {
 } from '@/features/parts';
 import { esp32DevKitV1 } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
-import { DIODE_PROFILES, GROUND, type Element } from './elements';
+import { GROUND, type Element } from './elements';
+import { DIODE_PROFILES } from '@/features/parts';
 import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from './netlist';
 import { elementCurrent, solveCircuit } from './circuit';

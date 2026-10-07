@@ -10,8 +10,9 @@
  */
 
 import type { BoardId } from './boardRegistry';
+import { EXAMPLE_DEVICES, LCD_LINES } from './examples';
 import { PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
-import type { Simulation } from '@/features/bench/simulation';
+import type { Simulation } from '@/features/bench';
 
 export interface GalleryBuild {
   readonly board: BoardId;
@@ -100,8 +101,8 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    simulation.placeExampleDevice('ds1307', PART_X, PART_Y);
-    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y + PART_STEP);
+    simulation.placeExampleDevice('ds1307', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
+    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y + PART_STEP, EXAMPLE_DEVICES, LCD_LINES);
 
     const led = simulation.addPart(part('Red LED'), PART_X, PART_Y + 2 * PART_STEP);
     const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + 2 * PART_STEP);
@@ -381,7 +382,7 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    simulation.placeExampleDevice('servo', PART_X, PART_Y);
+    simulation.placeExampleDevice('servo', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
 
     const pot = simulation.addPart(part('Slide Potentiometer'), PART_X, PART_Y + PART_STEP);
     const knob = simulation.boardTerminal('A0');
@@ -611,7 +612,7 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y);
+    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
 
     const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), PART_X, PART_Y + PART_STEP);
     const data = simulation.boardTerminal('D10');
