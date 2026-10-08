@@ -40,25 +40,20 @@ export interface RouteSpan {
 }
 
 /**
- * The line a wire turns on, and so the group of wires it has to be kept clear
- * of. A wire that runs mostly sideways turns on a vertical line and one that
- * runs mostly down turns on a horizontal one, so where that line falls is the
- * only thing that decides whether two of them come out on top of each other.
- */
-function crossingLine(from: Point, to: Point): string {
-  return Math.abs(to.x - from.x) >= Math.abs(to.y - from.y) ? `x:${to.x}` : `y:${to.y}`;
-}
-
-/**
  * The lane each automatic jumper should take, keyed by wire id.
  *
  * A lane only means anything against the wires a jumper runs alongside, so
- * that is what the grouping is by: wires turning on the same line. Numbering
- * the bench instead made a jumper's detour grow with every wire already on it
- * -- wire nineteen sat forty millimetres off the line it belonged on, and
- * adding a twentieth shoved all of them further out. A loaded example splayed
- * its fans clean past their own contacts, which is what read as tangled. The
- * detour now scales with the size of the group and nothing else.
+ * that is what the grouping is by: wires sharing either the line they leave
+ * or the line they turn on. Grouping by the turning line alone left the LCD
+ * header tangled: eight control lines leave one header row for eight different
+ * board pins, so no two share a turning line yet all eight share the leaving
+ * row and lie on top of each other. Unioning on either line puts that fan in
+ * one group with distinct lanes, while wires sharing neither stay independent.
+ * Numbering the bench instead made a jumper's detour grow with every wire
+ * already on it -- wire nineteen sat forty millimetres off the line it
+ * belonged on, and adding a twentieth shoved all of them further out. A loaded
+ * example splayed its fans clean past their own contacts, which is what read
+ * as tangled. The detour now scales with the size of the group and nothing else.
  *
  * Each group is numbered from the middle outwards so it straddles the line it
  * was crossing anyway. Numbering from the line pushes every wire the same way
@@ -66,16 +61,47 @@ function crossingLine(from: Point, to: Point): string {
  * further out.
  */
 export function wireLanes(spans: readonly RouteSpan[]): ReadonlyMap<string, number> {
+  const active = spans.filter((span) => span.from.x !== span.to.x && span.from.y !== span.to.y);
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const next = parent.get(id) ?? id;
+    if (next === id) return id;
+    const root = find(next);
+    parent.set(id, root);
+    return root;
+  };
+  const union = (a: string, b: string): void => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootA, rootB);
+  };
+
+  // Wires union when they share a leaving or turning line, within one
+  // orientation: sideways wires leave on a horizontal row and turn on a
+  // vertical line, vertical wires the mirror. The orientation prefix keeps a
+  // sideways row at y=10 apart from a vertical column at x=10.
+  const seen = new Map<string, string>();
+  const keysOf = (span: RouteSpan): readonly [string, string] =>
+    Math.abs(span.to.x - span.from.x) >= Math.abs(span.to.y - span.from.y)
+      ? [`hs:${span.from.y}`, `vd:${span.to.x}`]
+      : [`vs:${span.from.x}`, `hd:${span.to.y}`];
+  for (const span of active) {
+    parent.set(span.id, span.id);
+  }
+  for (const span of active) {
+    for (const key of keysOf(span)) {
+      const first = seen.get(key);
+      if (first === undefined) seen.set(key, span.id);
+      else union(first, span.id);
+    }
+  }
+
   const groups = new Map<string, string[]>();
-  for (const span of spans) {
-    // A wire whose ends already line up is drawn on a straight run, which has
-    // no lane to take. It neither needs one nor may claim one, or it would
-    // push its neighbours off a line it is not drawn over.
-    if (span.from.x === span.to.x || span.from.y === span.to.y) continue;
-    const line = crossingLine(span.from, span.to);
-    const group = groups.get(line);
+  for (const span of active) {
+    const root = find(span.id);
+    const group = groups.get(root);
     if (group) group.push(span.id);
-    else groups.set(line, [span.id]);
+    else groups.set(root, [span.id]);
   }
 
   const lanes = new Map<string, number>();
