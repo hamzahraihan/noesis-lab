@@ -158,128 +158,6 @@
 }
 
 @layer components {
-  /*
-   * One control, four dressings. The bench had a dozen hand-written class
-   * strings that had drifted apart in padding and hover colour; these keep a
-   * button, a toggle and a select on the same body.
-   */
-  .ctl {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    border-radius: var(--radius-control);
-    padding-inline: 0.625rem;
-    height: 1.75rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-    line-height: 1;
-    white-space: nowrap;
-    transition:
-      background-color 120ms ease-out,
-      border-color 120ms ease-out,
-      color 120ms ease-out;
-  }
-
-  /* A square control for a single glyph. */
-  .ctl-icon {
-    width: 1.75rem;
-    padding-inline: 0;
-    flex: none;
-  }
-
-  /* Neutral: the default thing you press. */
-  .ctl-quiet {
-    background-color: var(--color-slate-800);
-    color: var(--color-slate-200);
-  }
-
-  .ctl-quiet:hover {
-    background-color: var(--color-slate-700);
-  }
-
-  /* Outlined: a secondary commitment, like opening the parts browser. */
-  .ctl-outline {
-    background-color: transparent;
-    color: var(--color-slate-300);
-    box-shadow: inset 0 0 0 1px var(--color-slate-700);
-  }
-
-  .ctl-outline:hover {
-    background-color: var(--color-slate-800);
-    color: var(--color-slate-100);
-  }
-
-  /* Accent: reserved for the one action a panel exists to offer. */
-  .ctl-accent {
-    background-color: var(--color-accent-strong);
-    color: #fff;
-  }
-
-  .ctl-accent:hover {
-    background-color: var(--color-accent);
-  }
-
-  /* Danger: destructive and nothing else. */
-  .ctl-danger {
-    background-color: transparent;
-    color: var(--color-red-300);
-    box-shadow: inset 0 0 0 1px var(--color-red-900);
-  }
-
-  .ctl-danger:hover {
-    background-color: var(--color-red-950);
-    color: var(--color-red-200);
-  }
-
-  /* Held down: the tool is active until the operator says otherwise. */
-  .ctl[aria-pressed="true"],
-  .ctl[aria-expanded="true"][data-toggle] {
-    background-color: var(--color-accent-strong);
-    color: #fff;
-  }
-
-  .ctl:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  /* Every select on the bench, including the tiny ones inside instruments. */
-  .ctl-select {
-    height: 1.75rem;
-    min-width: 0;
-    border-radius: var(--radius-control);
-    border: none;
-    background-color: var(--color-slate-800);
-    padding-inline: 0.5rem 1.25rem;
-    font-size: 0.75rem;
-    color: var(--color-slate-200);
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' stroke='%2394a3b8' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.375rem center;
-  }
-
-  .ctl-select:hover {
-    background-color: var(--color-slate-700);
-  }
-
-  /*
-   * Instrument heading. The panels had four copies of the same uppercase
-   * string and nothing to tell them apart at a glance.
-   */
-  .panel-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-slate-400);
-  }
-
   /* Radix icons are 15px; one size keeps the stroke weight even across panels. */
   .icon {
     width: 1rem;
@@ -299,42 +177,12 @@
   }
 
   /*
-   * Empty states. A panel that says "no output yet" in dim type reads as
-   * broken; these say what to do next and show the control that does it.
+   * The exercise guide's one authored moment: the panel rises 8px into place.
+   * Exponential ease-out, from an already-visible default — no bounce, no
+   * stagger, nothing else on the bench moves.
    */
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 1.5rem 1rem;
-    text-align: center;
-    color: var(--color-slate-500);
-    font-size: 0.75rem;
-    line-height: 1.45;
-  }
-
-  /*
-   * The exercise guide's one authored moment: the backdrop fades while the
-   * panel rises 8px into place. Exponential ease-out, from an already-visible
-   * default — no bounce, no stagger, nothing else on the bench moves.
-   */
-  .guide-backdrop {
-    animation: guide-backdrop-in 180ms ease-out;
-  }
-
   .guide-panel {
     animation: guide-panel-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  @keyframes guide-backdrop-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
   }
 
   @keyframes guide-panel-in {
@@ -349,7 +197,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .guide-backdrop,
     .guide-panel {
       animation: none;
     }

@@ -9,7 +9,7 @@
  *
  * Operate mode: the visitor completes a task. Scanability and consistency with
  * the bench chrome (slate-950, one sky accent, shadcn Button controls,
- * `panel-title` headings) outrank expression.
+ * CardTitle headings) outrank expression.
  */
 
 import { useEffect, useId, useState } from 'react';
@@ -22,7 +22,7 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link } from 'react-router';
-import { Button, Dialog, DialogContent, DialogTitle } from '@/components';
+import { Button, CardTitle, Dialog, DialogContent, DialogTitle } from '@/components';
 import type { Exercise } from './exercises';
 import { ExercisePreview } from './ExercisePreview';
 import { isGuideDismissed, setGuideDismissed } from './guide-dismissal';
@@ -187,10 +187,10 @@ export function ExerciseGuide({
 
           {exercise.solution !== undefined && (
             <section aria-label="When it is working">
-              <h3 className="panel-title">
+              <CardTitle className="flex items-center gap-2">
                 <CheckIcon className="icon-sm" aria-hidden="true" />
                 When it is working
-              </h3>
+              </CardTitle>
               <ul className="mt-2 space-y-1.5">
                 {exercise.solution.working.map((sign) => (
                   <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-slate-400">
@@ -203,10 +203,10 @@ export function ExerciseGuide({
           )}
 
           <section aria-label="Build steps">
-            <h3 className="panel-title">
+            <CardTitle className="flex items-center gap-2">
               <CheckIcon className="icon-sm" aria-hidden="true" />
               Build it
-            </h3>
+            </CardTitle>
             <div className="mt-2.5 rounded-lg border border-slate-700/80 bg-slate-950/60 p-4">
               <p className="text-sm leading-relaxed text-slate-200">{currentStep}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -268,10 +268,10 @@ export function ExerciseGuide({
           </section>
 
           <section aria-label="Wiring">
-            <h3 className="panel-title">
+            <CardTitle className="flex items-center gap-2">
               <span className="font-mono text-[11px]">⌁</span>
               Wiring
-            </h3>
+            </CardTitle>
             <table className="mt-2.5 w-full text-sm">
               <tbody>
                 {exercise.wiring.map((row, index) => (
@@ -296,7 +296,7 @@ export function ExerciseGuide({
           </section>
 
           <section aria-label="Parts">
-            <h3 className="panel-title">On the bench already</h3>
+            <CardTitle className="flex items-center gap-2">On the bench already</CardTitle>
             <ul className="mt-2.5 space-y-1.5">
               {exercise.parts.map((entry) => (
                 <li key={entry.name} className="flex gap-2.5 text-sm">
@@ -322,7 +322,7 @@ export function ExerciseGuide({
           )}
 
           <section aria-label="Hints">
-            <h3 className="panel-title">Stuck?</h3>
+            <CardTitle className="flex items-center gap-2">Stuck?</CardTitle>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
               Try it first — the guessing is the skill. Take hints one at a time.
             </p>

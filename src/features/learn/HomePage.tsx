@@ -25,21 +25,6 @@ import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardR
 import { PartPreview } from '@/features/bench';
 
 /**
- * A spec chip: a label and the value it describes, in the board's own units.
- *
- * @deprecated Use {@link Badge} directly. Kept as an alias so existing
- * importers keep compiling; removal is scheduled separately.
- */
-export function Chip({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <Badge>
-      <span>{label}</span>
-      <span>{value}</span>
-    </Badge>
-  );
-}
-
-/**
  * The board itself, drawn by the very renderer the bench uses.
  *
  * A card that lists pin counts asks the reader to picture the board from a name
@@ -143,25 +128,43 @@ export function HomePage() {
                    * bench is built from.
                    */}
                   <span className="flex flex-wrap gap-1.5">
-                    <Chip label="logic" value={`${specs.logicVolts} V`} />
+                    <Badge>
+                      <span>logic</span>
+                      <span>{`${specs.logicVolts} V`}</span>
+                    </Badge>
                     {/*
                      * A board with no converter says so rather than showing a
                      * resolution of zero. That absence is the reason to reach
                      * for an MCP3008, so it belongs on the card.
                      */}
                     {specs.adcCount > 0 ? (
-                      <Chip label="ADC" value={`${specs.adcBits}-bit`} />
+                      <Badge>
+                        <span>ADC</span>
+                        <span>{`${specs.adcBits}-bit`}</span>
+                      </Badge>
                     ) : (
-                      <Chip label="ADC" value="none" />
+                      <Badge>
+                        <span>ADC</span>
+                        <span>none</span>
+                      </Badge>
                     )}
-                    <Chip label="GPIO" value={String(specs.gpioCount)} />
-                    <Chip label="analogue" value={String(specs.adcCount)} />
-                    <Chip label="PWM" value={`${specs.pwmHz} Hz`} />
+                    <Badge>
+                      <span>GPIO</span>
+                      <span>{String(specs.gpioCount)}</span>
+                    </Badge>
+                    <Badge>
+                      <span>analogue</span>
+                      <span>{String(specs.adcCount)}</span>
+                    </Badge>
+                    <Badge>
+                      <span>PWM</span>
+                      <span>{`${specs.pwmHz} Hz`}</span>
+                    </Badge>
                     {specs.inputOnlyCount > 0 && (
-                      <Chip
-                        label="input-only"
-                        value={String(specs.inputOnlyCount)}
-                      />
+                      <Badge>
+                        <span>input-only</span>
+                        <span>{String(specs.inputOnlyCount)}</span>
+                      </Badge>
                     )}
                   </span>
 
