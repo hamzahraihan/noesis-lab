@@ -401,7 +401,7 @@ export function FirmwareEditor({
 
   const handleAddFile = () => {
     const name = window.prompt('New file name', 'helpers.h');
-    if (!name) return;
+    if (!name || !name.trim()) return;
     try {
       onProjectChange(addFile(project, name.trim()));
     } catch (cause) {
@@ -430,9 +430,10 @@ export function FirmwareEditor({
   const handleContentChange = (name: string, next: string) => {
     try {
       onProjectChange(updateFileContent(project, name, next));
-    } catch {
-      // Over the 32 KB cap: the keystroke is dropped and the limit surfaces
-      // as a project error on Run rather than mid-typing.
+    } catch (cause) {
+      // Over the 32 KB cap: the edit is rejected by the controlled `value`,
+      // so surface it now — waiting for Run would validate stale content.
+      reportHelperError(cause);
     }
   };
   return (
