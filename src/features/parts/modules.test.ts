@@ -14,6 +14,7 @@ import {
   LIGHT_KNOB,
   photoresistorDefinition,
   rgbLedDefinition,
+  sevenSegmentDefinition,
   SLIDE_POSITION_KNOB,
   slideSwitchDefinition,
   TEMPERATURE_KNOB,
@@ -322,5 +323,42 @@ describe('piezo buzzer', () => {
     const piezo = netlist.elements.find((element) => element.kind === 'capacitor');
     expect(piezo).toBeDefined();
     expect(Math.abs(elementCurrent(piezo!, solution))).toBeLessThan(5e-6);
+  });
+});
+
+describe('7-segment display', () => {
+  it('expands from one digit to four, with a common per digit', () => {
+    const one = sevenSegmentDefinition(1);
+    expect(one.id).toBe('7segment');
+    expect(one.pins.map((pin) => pin.id)).toContain('COM.1');
+
+    for (const digits of [2, 3, 4] as const) {
+      const definition = sevenSegmentDefinition(digits);
+      expect(definition.id).toBe(`7segment-${digits}digit`);
+      expect(definition.component).toEqual({ kind: '7segment', digits });
+      for (let d = 1; d <= digits; d++) {
+        expect(definition.pins.map((pin) => pin.id)).toContain(`DIG${d}`);
+      }
+      // One shared set of eight segment lines, however many digits.
+      for (const segment of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP']) {
+        expect(definition.pins.map((pin) => pin.id)).toContain(segment);
+      }
+    }
+  });
+
+  it('clamps the digit count into the Wokwi element\u2019s range', () => {
+    expect(sevenSegmentDefinition(0).id).toBe('7segment');
+    expect(sevenSegmentDefinition(9).id).toBe('7segment-4digit');
+  });
+
+  it('stamps one diode per segment per digit', () => {
+    for (const digits of [1, 2, 4] as const) {
+      const builder = new BenchBuilder();
+      builder.addPart(sevenSegmentDefinition(digits), 0, 0);
+      const netlist = buildNetlist(builder.build(), new DynamicState());
+      const diodes = netlist.elements.filter((element) => element.kind === 'diode');
+      // Eight segments, each tied to every digit common on the part.
+      expect(diodes.length).toBe(digits * 8);
+    }
   });
 });
