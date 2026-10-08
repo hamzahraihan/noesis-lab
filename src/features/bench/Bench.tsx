@@ -62,6 +62,7 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
 import { decodeShareToProject, encodeProjectToShare, isShareable } from './share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './project-store';
 
@@ -1015,45 +1016,50 @@ export default function Bench(props: BenchProps) {
          * rather than in the far-right action group because it belongs to the
          * same question -- which board is this.
          */}
-        <Link to="/" className="ctl ctl-quiet" title="Back to the board list">
-          <Component1Icon className="icon" aria-hidden="true" />
-          Boards
-        </Link>
+        <Button asChild variant="secondary" size="sm" title="Back to the board list">
+          <Link to="/">
+            <Component1Icon className="icon" aria-hidden="true" />
+            Boards
+          </Link>
+        </Button>
 
         <div className="flex items-center gap-1.5 border-l border-slate-800 pl-3">
           <span className="text-slate-500" aria-hidden="true">
             <Component1Icon className="icon" />
           </span>
-          <select
+          <Select
             value={boardId}
-            onChange={(event) => {
-              const next = event.target.value;
+            onValueChange={(next) => {
               // Guarded rather than cast: the select is the one place a board
               // id can come from something we did not choose, and navigating
               // to a board that does not exist would leave the path lying about
               // what is on the bench.
               if (isBoardId(next)) navigate(`/bench/${next}`);
             }}
-            aria-label="Board"
-            title="Swap board"
           >
-            {BOARDS.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-7 max-w-44 truncate text-xs" aria-label="Board" title="Swap board">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BOARDS.map((board) => (
+                <SelectItem key={board.id} value={board.id}>
+                  {board.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => {
               if (simulation.running) simulation.stop();
               else simulation.start();
               forceRender((n) => n + 1);
             }}
-            className="ctl ctl-quiet"
             title={simulation.running ? 'Pause the simulation (Space)' : 'Run the simulation (Space)'}
           >
             {simulation.running ? (
@@ -1062,7 +1068,7 @@ export default function Bench(props: BenchProps) {
               <PlayIcon className="icon" aria-hidden="true" />
             )}
             {simulation.running ? 'Pause' : 'Run'}
-          </button>
+          </Button>
 
 
           {/*
@@ -1074,26 +1080,28 @@ export default function Bench(props: BenchProps) {
            * control whose absence has to be explained, and a greyed button
            * explains itself.
            */}
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="icon-sm"
             onClick={() => stepHistory(false)}
             disabled={!simulation.canUndo()}
-            className="ctl ctl-quiet"
             title="Undo the last change to the bench (Ctrl+Z)"
             aria-label="Undo"
           >
             <ArrowLeftIcon className="icon" aria-hidden="true" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
+            size="icon-sm"
             onClick={() => stepHistory(true)}
             disabled={!simulation.canRedo()}
-            className="ctl ctl-quiet"
             title="Redo the change you just undid (Ctrl+Shift+Z)"
             aria-label="Redo"
           >
             <ArrowRightIcon className="icon" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
 
         <span className="flex-1" />
@@ -1143,11 +1151,12 @@ export default function Bench(props: BenchProps) {
             })}
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={copyShareLink}
             disabled={shareTooLarge}
-            className="ctl ctl-quiet"
             title={
               shareTooLarge
                 ? 'Too large to share by link — files stay local'
@@ -1156,28 +1165,30 @@ export default function Bench(props: BenchProps) {
           >
             <Link2Icon className="icon" aria-hidden="true" />
             Copy link
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
+            variant="default"
+            size="sm"
             onClick={() => setBrowserOpen(true)}
-            className="ctl ctl-accent"
             title="Browse every part the bench can hold (C)"
           >
             <PlusIcon className="icon" aria-hidden="true" />
             Components
-          </button>
+          </Button>
 
           {exercise && (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setGuideOpen(true)}
-              className="ctl ctl-outline"
               title={`Open the guide for ${exercise.id} ${exercise.title}`}
             >
               <ReaderIcon className="icon" aria-hidden="true" />
               Guide {exercise.id}
-            </button>
+            </Button>
           )}
         </div>
       </header>
