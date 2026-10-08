@@ -16,6 +16,7 @@ import {
 } from '@radix-ui/react-icons';
 import { PART_CATALOGUE, type CatalogueEntry } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
+import { Button, Input } from '@/components';
 import { PartPreview } from './PartPreview';
 
 /**
@@ -78,14 +79,15 @@ export function PartSearch({
             className="icon-sm pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-slate-600"
             aria-hidden="true"
           />
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search parts…"
             autoComplete="off"
             spellCheck={false}
-            className="w-full rounded-md border border-slate-700 bg-slate-950 py-1.5 pr-7 pl-7 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500"
+            aria-label="Search components"
+            className="pr-7 pl-7"
           />
           {query && (
             <button
@@ -108,13 +110,11 @@ export function PartSearch({
         {results.length === 0 ? (
           // A search that finds nothing should offer the way out, not just
           // report the absence.
-          <div className="empty">
-            <MagnifyingGlassIcon className="icon text-slate-700" aria-hidden="true" />
-            <p>
-              Nothing matches “{query.trim()}”.
-              <br />
-              Browse all {PART_CATALOGUE.length} parts instead.
-            </p>
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center text-xs text-slate-500">
+            <p>No parts match “{query}”.</p>
+            <Button variant="outline" size="sm" onClick={() => setQuery('')}>
+              Clear search
+            </Button>
           </div>
         ) : (
           results.map((entry) => (
@@ -123,10 +123,16 @@ export function PartSearch({
         )}
       </div>
 
-      <button type="button" onClick={onBrowse} className="ctl ctl-outline mx-2 mb-3 shrink-0">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onBrowse}
+        className="mx-2 mb-3 shrink-0"
+      >
         <ReaderIcon className="icon" aria-hidden="true" />
         Browse all components
-      </button>
+      </Button>
     </section>
   );
 }
