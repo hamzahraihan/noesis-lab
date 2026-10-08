@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Isolated worktrees (superpowers:using-git-worktrees)
+.worktrees/
