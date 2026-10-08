@@ -1079,14 +1079,14 @@ export class Simulation {
     level(pins.data[4], (value & 1) === 1);
     if (pins.enable < 0) return;
     /*
-     * The panel latches on the rising edge of enable, and it can only do that
-     * after the data lines have settled -- so the circuit is solved with the
-     * lines written and enable still low, and then again with enable high. One
-     * solve for all of it is a single edge the solver never observes, and a
-     * display wired correctly stays blank.
+     * The panel latches on the rising edge of enable. The low level arms the
+     * edge detector, which `primeLcdEdges` does directly: the low solve exists
+     * only to set that flag, and the voltages it produces are superseded by
+     * the high solve that follows. One solve per nibble keeps an LCD-heavy
+     * loop (tens of characters per iteration) from blocking the frame.
      */
     level(pins.enable, false);
-    this.engine.settle();
+    this.engine.primeLcdEdges();
     level(pins.enable, true);
     this.engine.settle();
   }
