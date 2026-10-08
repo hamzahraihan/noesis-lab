@@ -59,3 +59,34 @@ export class FirmwareProjectError extends Error {
     this.name = 'FirmwareProjectError';
   }
 }
+
+export function addFile(project: FirmwareProject, name: string, content = ''): FirmwareProject {
+  const bad = validateFileName(name, project.language);
+  if (bad) throw new FirmwareProjectError(bad);
+  if (project.files.some((f) => f.name === name)) throw new FirmwareProjectError(`${name}: file already exists`);
+  if (project.files.length >= MAX_FILES) throw new FirmwareProjectError(`project has more than ${MAX_FILES} files`);
+  return { ...project, files: [...project.files, { name, content }], activeName: name };
+}
+
+export function removeFile(project: FirmwareProject, name: string): FirmwareProject {
+  if (name === ENTRY_BY_LANGUAGE[project.language]) throw new FirmwareProjectError(`${name}: entry file cannot be deleted`);
+  const files = project.files.filter((f) => f.name !== name);
+  return { ...project, files, activeName: project.activeName === name ? ENTRY_BY_LANGUAGE[project.language] : project.activeName };
+}
+
+export function renameFile(project: FirmwareProject, from: string, to: string): FirmwareProject {
+  if (from === ENTRY_BY_LANGUAGE[project.language]) throw new FirmwareProjectError(`${from}: entry file cannot be renamed`);
+  const bad = validateFileName(to, project.language);
+  if (bad) throw new FirmwareProjectError(bad);
+  if (project.files.some((f) => f.name === to)) throw new FirmwareProjectError(`${to}: file already exists`);
+  return {
+    ...project,
+    files: project.files.map((f) => (f.name === from ? { ...f, name: to } : f)),
+    activeName: project.activeName === from ? to : project.activeName,
+  };
+}
+
+export function updateFileContent(project: FirmwareProject, name: string, content: string): FirmwareProject {
+  if (content.length > MAX_FILE_BYTES) throw new FirmwareProjectError(`${name}: file is larger than 32 KB`);
+  return { ...project, files: project.files.map((f) => (f.name === name ? { ...f, content } : f)) };
+}
