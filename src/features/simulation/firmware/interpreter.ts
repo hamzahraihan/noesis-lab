@@ -65,6 +65,7 @@ import {
   type Stmt,
   parseFirmware,
 } from './parser';
+import { FirmwareProjectError, validateProject, type FirmwareProject } from './project';
 
 /** A runtime value: numbers for everything numeric, plus strings for Serial. */
 export type Value = number | string;
@@ -501,18 +502,43 @@ function formatValue(value: Value): string {
   return typeof value === 'string' ? value : formatPrintValue(asNumber(value));
 }
 
-export class FirmwareRuntime {
-  readonly program: Program;
-  readonly defines: Map<string, number>;
+const LOCAL_INCLUDE = /^#\s*include\s*"([^"]+)"/;
+function localIncludes(content: string): string[] {
+  return content.split('\n')
+    .map((line) => LOCAL_INCLUDE.exec(line.trim())?.[1])
+    .filter((name): name is string => Boolean(name));
+}
+function pythonImports(content: string): string[] {
+  const names: string[] = [];
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    const direct = /^import\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(trimmed)?.[1];
+    const from = /^from\s+([A-Za-z_][A-Za-z0-9_]*)\s+import\s+/.exec(trimmed)?.[1];
+    const candidate = direct ?? from;
+    if (candidate && candidate !== 'time' && candidate !== 'gpiozero') names.push(candidate);
+  }
+  return names;
+}
 
-  private readonly globals = new Scope();
-  private readonly functions = new Map<string, FunctionDecl>();
-  private readonly language: FirmwareLanguage;
+export class FirmwareRuntime {
+  program!: Program;
+  defines!: Map<string, number>;
+
+  private globals!: Scope;
+  private functions!: Map<string, FunctionDecl>;
+  private language!: FirmwareLanguage;
 
   constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
-    this.program = language === 'python' ? parsePython(source) : parseFirmware(source);
+    this.init(language === 'python' ? parsePython(source) : parseFirmware(source), language);
+  }
+
+  /** Shared init for the single-source and merged-project paths. */
+  private init(program: Program, language: FirmwareLanguage): void {
+    this.program = program;
     this.language = language;
-    this.defines = new Map(this.program.defines);
+    this.defines = new Map(program.defines);
+    this.globals = new Scope();
+    this.functions = new Map();
 
     for (const declaration of this.program.functions.values()) {
       this.functions.set(declaration.name, declaration);
@@ -523,6 +549,83 @@ export class FirmwareRuntime {
     }
     this.globals.values.set('true', 1);
     this.globals.values.set('false', 0);
+  }
+
+  /** Merged-construction path for fromProject; shares init with the constructor. */
+  private static __merged(
+    merged: { defines: Map<string, number>; globals: Stmt[]; functions: Map<string, FunctionDecl> },
+    language: FirmwareLanguage,
+  ): FirmwareRuntime {
+    const runtime = Object.create(FirmwareRuntime.prototype) as FirmwareRuntime;
+    runtime.init(
+      { defines: merged.defines, globals: merged.globals, functions: merged.functions },
+      language,
+    );
+    return runtime;
+  }
+
+  static fromProject(project: FirmwareProject): FirmwareRuntime {
+    const problems = validateProject(project);
+    if (problems.length > 0) throw new FirmwareProjectError(problems[0]);
+    const byName = new Map(project.files.map((file) => [file.name, file.content]));
+    // Resolve + cycle check over local edges only.
+    const order: string[] = [];
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (name: string, stack: string[]) => {
+      if (visited.has(name)) return;
+      if (visiting.has(name)) throw new FirmwareProjectError(`${[...stack, name].join(' → ')}: include cycle detected`);
+      visiting.add(name);
+      const content = byName.get(name) ?? '';
+      const edges = project.language === 'python'
+        ? pythonImports(content).map((mod) => `${mod}.py`)
+        : localIncludes(content);
+      for (const edge of edges) {
+        if (!byName.has(edge)) {
+          const owner = name;
+          throw new FirmwareProjectError(
+            project.language === 'python'
+              ? `${owner}: import ${edge.replace(/\.py$/, '')} not found`
+              : `${owner}: #include "${edge}" not found`,
+          );
+        }
+        visit(edge, [...stack, name]);
+      }
+      visiting.delete(name);
+      visited.add(name);
+      order.push(name);
+    };
+    const entry = project.language === 'python' ? 'main.py' : 'main.ino';
+    visit(project.files.find((f) => f.name === entry)?.name ?? project.files[0].name, []);
+    for (const file of project.files) if (!visited.has(file.name)) visit(file.name, []);
+    // Parse each file with its own name, then merge.
+    const programs = order.map((name) =>
+      project.language === 'python'
+        ? parsePython(byName.get(name)!, name)
+        : parseFirmware(byName.get(name)!, name),
+    );
+    const defines = new Map<string, number>();
+    const globals: Stmt[] = [];
+    const functions = new Map<string, FunctionDecl>();
+    const functionOwner = new Map<string, string>();
+    programs.forEach((program, index) => {
+      const owner = order[index];
+      for (const [key, value] of program.defines) {
+        if (defines.has(key) && defines.get(key) !== value) {
+          throw new FirmwareProjectError(`${owner}: conflicting #define ${key}`);
+        }
+        defines.set(key, value);
+      }
+      globals.push(...program.globals);
+      for (const [key, decl] of program.functions) {
+        if (functions.has(key)) {
+          throw new FirmwareProjectError(`${owner}: duplicate function '${key}' (also in ${functionOwner.get(key)})`);
+        }
+        functions.set(key, decl);
+        functionOwner.set(key, owner);
+      }
+    });
+    return FirmwareRuntime.__merged({ defines, globals, functions }, project.language);
   }
 
   hasFunction(name: string): boolean {
@@ -1674,11 +1777,13 @@ export class FirmwareRunner {
   private readonly generator: Generator<DelayRequest, void, void>;
   private finished = false;
   constructor(
-    source: string,
+    source: string | FirmwareProject,
     services: FirmwareServices,
     language: FirmwareLanguage = 'arduino-cpp',
   ) {
-    this.runtime = new FirmwareRuntime(source, language);
+    this.runtime = typeof source === 'string'
+      ? new FirmwareRuntime(source, language)
+      : FirmwareRuntime.fromProject(source);
     this.generator = this.runtime.main(this.withSerialSink(services));
   }
 
