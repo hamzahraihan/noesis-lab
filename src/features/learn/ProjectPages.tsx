@@ -9,6 +9,7 @@
 
 import { Link, useParams } from 'react-router';
 import { ArrowRightIcon } from '@radix-ui/react-icons';
+import { Button } from '@/components';
 import { boardOption, boardSpecs, isBoardId } from './boardRegistry';
 import { EXAMPLES } from './examples';
 import { GALLERY, buildFor } from './gallery';
@@ -87,9 +88,9 @@ export function ProjectPage() {
           ))}
         </ul>
         <div className="mt-4">
-          <Link to={`/bench/${project.board}`} className="ctl ctl-accent">
-            Open in bench
-          </Link>
+          <Button asChild size="sm">
+            <Link to={`/bench/${project.board}`}>Open in bench</Link>
+          </Button>
         </div>
       </ProjectSection>
 
@@ -171,9 +172,9 @@ function ProjectShell({
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <header className="border-b border-slate-800">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <Link to="/" className="ctl ctl-quiet">
-            Boards
-          </Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link to="/">Boards</Link>
+          </Button>
           <span className="text-slate-600">/</span>
           <span className="text-sm text-slate-400">Featured project</span>
         </div>
