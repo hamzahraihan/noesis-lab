@@ -19,11 +19,12 @@ export interface SourceLocation {
 
 export class FirmwareSyntaxError extends Error {
   public readonly location: SourceLocation;
-
-  constructor(message: string, location: SourceLocation) {
-    super(`${message} (line ${location.line}, column ${location.column})`);
+  public readonly file: string;
+  constructor(message: string, location: SourceLocation, file = 'main.ino') {
+    super(`${file}:${location.line}: ${message} (line ${location.line}, column ${location.column})`);
     this.name = 'FirmwareSyntaxError';
     this.location = location;
+    this.file = file;
   }
 }
 
@@ -65,7 +66,7 @@ const PUNCTUATION = [
   '=', '<', '>', '!', '~', '&', '|', '^', '?', ':', '#',
 ];
 
-export function tokenize(source: string): Token[] {
+export function tokenize(source: string, file = 'main.ino'): Token[] {
   const tokens: Token[] = [];
   let index = 0;
   let line = 1;
@@ -189,7 +190,7 @@ export function tokenize(source: string): Token[] {
       continue;
     }
 
-    throw new FirmwareSyntaxError(`unexpected character '${char}'`, location);
+    throw new FirmwareSyntaxError(`unexpected character '${char}'`, location, file);
   }
 
   tokens.push({ kind: 'eof', text: '', location: here() });
@@ -285,9 +286,11 @@ const TYPE_KEYWORDS = [
 class Parser {
   private position = 0;
   private readonly tokens: Token[];
+  private readonly file: string;
 
-  constructor(tokens: Token[]) {
+  constructor(tokens: Token[], file = 'main.ino') {
     this.tokens = tokens;
+    this.file = file;
   }
   parseProgram(): Program {
     const defines = new Map<string, number>();
@@ -391,7 +394,7 @@ class Parser {
     const token = this.next();
     const match = /^#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(\S.*?)\s*$/.exec(token.text.trim());
     if (!match) return;
-    const parts = tokenize(match[2]).filter((part) => part.kind !== 'eof');
+    const parts = tokenize(match[2], this.file).filter((part) => part.kind !== 'eof');
     const [sign, literal] =
       parts.length === 2 && parts[0].kind === 'punctuation' ? parts : [null, parts[0]];
     const magnitude = literal?.kind === 'number' ? literal.value : undefined;
@@ -413,7 +416,7 @@ class Parser {
   private readType(): string {
     const first = this.peek();
     if (first.kind !== 'keyword' || !TYPE_KEYWORDS.includes(first.text)) {
-      throw new FirmwareSyntaxError(`expected a type, found '${first.text}'`, first.location);
+      throw new FirmwareSyntaxError(`expected a type, found '${first.text}'`, first.location, this.file);
     }
     this.next();
     // Consume any further type keywords, e.g. `unsigned long x`.
@@ -428,7 +431,7 @@ class Parser {
     const location = this.peek().location;
     const statements: Stmt[] = [];
     while (!this.atPunctuation('}')) {
-      if (this.at('eof')) throw new FirmwareSyntaxError('unclosed block', location);
+      if (this.at('eof')) throw new FirmwareSyntaxError('unclosed block', location, this.file);
       statements.push(this.readStatement());
     }
     this.expectPunctuation('}');
@@ -472,7 +475,7 @@ class Parser {
           }
           const value = this.readExpression();
           if (!this.acceptPunctuation(';')) {
-            throw new FirmwareSyntaxError("expected ';'", token.location);
+            throw new FirmwareSyntaxError("expected ';'", token.location, this.file);
           }
           return { kind: 'return', value, location: token.location };
         }
@@ -555,7 +558,7 @@ class Parser {
     this.next();
     const body = this.readStatement();
     if (!(this.peek().kind === 'keyword' && this.peek().text === 'while')) {
-      throw new FirmwareSyntaxError("expected 'while'", this.peek().location);
+      throw new FirmwareSyntaxError("expected 'while'", this.peek().location, this.file);
     }
     this.next();
     this.expectPunctuation('(');
@@ -723,7 +726,7 @@ class Parser {
       return inner;
     }
 
-    throw new FirmwareSyntaxError(`unexpected '${token.text}'`, token.location);
+    throw new FirmwareSyntaxError(`unexpected '${token.text}'`, token.location, this.file);
   }
 
   // -- token helpers -------------------------------------------------------
@@ -748,7 +751,7 @@ class Parser {
   private expect(kind: TokenKind): Token {
     const token = this.next();
     if (token.kind !== kind) {
-      throw new FirmwareSyntaxError(`expected ${kind}, found '${token.text}'`, token.location);
+      throw new FirmwareSyntaxError(`expected ${kind}, found '${token.text}'`, token.location, this.file);
     }
     return token;
   }
@@ -759,7 +762,7 @@ class Parser {
 
   private expectPunctuation(text: string): void {
     if (!this.acceptPunctuation(text)) {
-      throw new FirmwareSyntaxError(`expected '${text}', found '${this.peek().text}'`, this.peek().location);
+      throw new FirmwareSyntaxError(`expected '${text}', found '${this.peek().text}'`, this.peek().location, this.file);
     }
   }
 
@@ -786,6 +789,6 @@ const BINARY_PRECEDENCE: Readonly<Record<string, number>> = {
   '*': 10, '/': 10, '%': 10,
 };
 
-export function parseFirmware(source: string): Program {
-  return new Parser(tokenize(source)).parseProgram();
+export function parseFirmware(source: string, file = 'main.ino'): Program {
+  return new Parser(tokenize(source, file), file).parseProgram();
 }

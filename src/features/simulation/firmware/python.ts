@@ -152,7 +152,7 @@ function readStringLiteral(source: string, start: number): StringLiteral {
   return { body: unescape(source.slice(contentStart, end)), fstring, end: end + opener.length };
 }
 
-export function tokenizePython(source: string): PythonToken[] {
+export function tokenizePython(source: string, file = 'main.py'): PythonToken[] {
   const tokens: PythonToken[] = [];
   /** The column each open suite starts at, innermost last. */
   const indents: number[] = [0];
@@ -295,7 +295,7 @@ export function tokenizePython(source: string): PythonToken[] {
       continue;
     }
 
-    throw new FirmwareSyntaxError(`unexpected '${char}'`, location);
+    throw new FirmwareSyntaxError(`unexpected '${char}'`, location, file);
   }
 
   if (tokens.length > 0 && tokens[tokens.length - 1].kind !== 'newline') {
@@ -326,9 +326,11 @@ class PythonParser {
   private loopCounter = 0;
 
   private readonly tokens: PythonToken[];
+  private readonly file: string;
 
-  constructor(tokens: PythonToken[]) {
+  constructor(tokens: PythonToken[], file = 'main.py') {
     this.tokens = tokens;
+    this.file = file;
   }
 
   readExpression(): Expr {
@@ -417,10 +419,10 @@ class PythonParser {
     if (this.atKeyword('def')) {
       // The VM has no nested functions. Reporting that beats hoisting the
       // definition to file scope where it would quietly become visible.
-      throw new FirmwareSyntaxError('functions must be defined at the top level', token.location);
+      throw new FirmwareSyntaxError('functions must be defined at the top level', token.location, this.file);
     }
     if (token.kind === 'keyword') {
-      throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location);
+      throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
     }
     return this.readSimpleStatement();
   }
@@ -550,6 +552,7 @@ class PythonParser {
       throw new FirmwareSyntaxError(
         "only 'for ... in range(...)' is supported",
         callee.location,
+        this.file,
       );
     }
     this.next();
@@ -564,7 +567,7 @@ class PythonParser {
     this.expectPunctuation(')');
 
     if (bounds.length === 0 || bounds.length > 3) {
-      throw new FirmwareSyntaxError('range() takes one to three arguments', location);
+      throw new FirmwareSyntaxError('range() takes one to three arguments', location, this.file);
     }
     const [start, stop, step] = bounds;
     return {
@@ -626,7 +629,7 @@ class PythonParser {
     if (value.kind === 'identifier') {
       // Two names on the left, as in `a, b = 1, 2`, which this VM has no way to
       // bind. Saying so beats dropping the second value without a word.
-      throw new FirmwareSyntaxError(`'${value.name}' on its own is not a statement`, location);
+      throw new FirmwareSyntaxError(`'${value.name}' on its own is not a statement`, location, this.file);
     }
     return { kind: 'expression', value, location };
   }
@@ -651,6 +654,7 @@ class PythonParser {
       throw new FirmwareSyntaxError(
         `expected end of statement, found '${this.peek().text}'`,
         this.peek().location,
+        this.file,
       );
     }
   }
@@ -725,7 +729,7 @@ class PythonParser {
       }
 
       if (UNSUPPORTED_OPERATORS.has(token.text)) {
-        throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location);
+        throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
       }
 
       const precedence = token.kind === 'punctuation' ? PRECEDENCE[token.text] : undefined;
@@ -749,6 +753,7 @@ class PythonParser {
         throw new FirmwareSyntaxError(
           'chained comparisons are not supported; use `and` between them',
           token.location,
+          this.file,
         );
       }
 
@@ -770,7 +775,7 @@ class PythonParser {
       return { kind: 'unary', operator: token.text, operand: this.readUnary(), location: token.location };
     }
     if (token.kind === 'keyword' && (token.text === 'lambda' || token.text === 'yield')) {
-      throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location);
+      throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
     }
     return this.readPostfix();
   }
@@ -814,7 +819,7 @@ class PythonParser {
       return { kind: 'string', value: token.text, location: token.location };
     }
     if (token.kind === 'fstring') {
-      return readFstring(token);
+      return readFstring(token, this.file);
     }
     if (token.kind === 'identifier') {
       return { kind: 'identifier', name: token.text, location: token.location };
@@ -831,7 +836,7 @@ class PythonParser {
       return inner;
     }
 
-    throw new FirmwareSyntaxError(`unexpected '${token.text}'`, token.location);
+    throw new FirmwareSyntaxError(`unexpected '${token.text}'`, token.location, this.file);
   }
 
   // -- token helpers -------------------------------------------------------
@@ -861,7 +866,7 @@ class PythonParser {
   private expect(kind: PythonTokenKind): PythonToken {
     const token = this.next();
     if (token.kind !== kind) {
-      throw new FirmwareSyntaxError(`expected ${kind}, found '${token.text}'`, token.location);
+      throw new FirmwareSyntaxError(`expected ${kind}, found '${token.text}'`, token.location, this.file);
     }
     return token;
   }
@@ -873,7 +878,7 @@ class PythonParser {
   private expectKeyword(text: string): PythonToken {
     const token = this.peek();
     if (!this.atKeyword(text)) {
-      throw new FirmwareSyntaxError(`expected '${text}', found '${token.text}'`, token.location);
+      throw new FirmwareSyntaxError(`expected '${text}', found '${token.text}'`, token.location, this.file);
     }
     return this.next();
   }
@@ -883,6 +888,7 @@ class PythonParser {
       throw new FirmwareSyntaxError(
         `expected '${text}', found '${this.peek().text}'`,
         this.peek().location,
+        this.file,
       );
     }
   }
@@ -904,6 +910,7 @@ class PythonParser {
       throw new FirmwareSyntaxError(
         `expected end of line, found '${this.peek().text}'`,
         this.peek().location,
+        this.file,
       );
     }
   }
@@ -922,7 +929,7 @@ class PythonParser {
  * added on that side -- so the values are still formatted when the program
  * runs, not when it is parsed.
  */
-function readFstring(token: PythonToken): Expr {
+function readFstring(token: PythonToken, file = 'main.py'): Expr {
   const parts: Expr[] = [];
   let literal = '';
   let index = 0;
@@ -947,7 +954,7 @@ function readFstring(token: PythonToken): Expr {
       continue;
     }
     if (char === '}') {
-      throw new FirmwareSyntaxError("single '}' is not allowed in an f-string", token.location);
+      throw new FirmwareSyntaxError("single '}' is not allowed in an f-string", token.location, file);
     }
     if (char !== '{') {
       literal += char;
@@ -956,10 +963,10 @@ function readFstring(token: PythonToken): Expr {
     }
 
     flush();
-    const close = findClosingBrace(token.text, index + 1, token.location);
+    const close = findClosingBrace(token.text, index + 1, token.location, file);
     // A format spec would be a second, different answer to how a number prints.
     // The VM formats numbers one way, so the spec is dropped rather than faked.
-    parts.push(parsePythonExpression(token.text.slice(index + 1, close).split(':')[0]));
+    parts.push(parsePythonExpression(token.text.slice(index + 1, close).split(':')[0], file));
     index = close + 1;
   }
 
@@ -975,7 +982,7 @@ function readFstring(token: PythonToken): Expr {
 }
 
 /** The index of the `}` closing the replacement field that starts at `from`. */
-function findClosingBrace(body: string, from: number, location: SourceLocation): number {
+function findClosingBrace(body: string, from: number, location: SourceLocation, file = 'main.py'): number {
   let depth = 0;
   let quote: string | null = null;
   for (let index = from; index < body.length; index++) {
@@ -991,14 +998,14 @@ function findClosingBrace(body: string, from: number, location: SourceLocation):
     if (char === '{') depth++;
     else if (char === '}' && depth-- === 0) return index;
   }
-  throw new FirmwareSyntaxError("f-string is missing its closing '}'", location);
+  throw new FirmwareSyntaxError("f-string is missing its closing '}'", location, file);
 }
 
-export function parsePython(source: string): Program {
-  return new PythonParser(tokenizePython(source)).parseModule();
+export function parsePython(source: string, file = 'main.py'): Program {
+  return new PythonParser(tokenizePython(source, file), file).parseModule();
 }
 
 /** One Python expression, for the f-string fields that need their own parse. */
-export function parsePythonExpression(source: string): Expr {
-  return new PythonParser(tokenizePython(source)).readExpression();
+export function parsePythonExpression(source: string, file = 'main.py'): Expr {
+  return new PythonParser(tokenizePython(source, file), file).readExpression();
 }
