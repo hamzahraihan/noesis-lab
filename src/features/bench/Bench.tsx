@@ -33,8 +33,8 @@ import type {
   GalleryProject,
   StarterWiring,
 } from '@/features/learn';
-import type { FirmwareLanguage } from '@/features/simulation';
-import { ENTRY_BY_LANGUAGE, toSingleFileProject } from '@/features/simulation';
+import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
+import { toSingleFileProject } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
@@ -297,27 +297,27 @@ export default function Bench(props: BenchProps) {
     exercise === null && foundProject !== null ? buildFor(foundProject, boardId) : null;
 
   /*
-   * The editor's text, the simulation's copy of it and the grammar they are in
-   * all have to agree with each other and with the board.
+   * The firmware project: every tab, the language they are written in, and
+   * which tab is open.
    *
    * Seeded from the exercise when there is one -- a Pi lesson hands over a
    * Python program and opens the editor in Python, an Uno lesson the same in
    * C++ -- because a reader who pressed "Put it on the bench" and landed on
    * Blink is being told to press Run on a program that is not the one they
    * were just handed.
+   *
+   * A board that does not run sketches opens on one it can run. Handing a Pi
+   * the C++ blink would put a syntax error on screen before anyone had touched
+   * anything, which reads as a broken simulator rather than a board that speaks
+   * a different language.
    */
-  const [language, setLanguage] = useState<FirmwareLanguage>(
-    exercise ? exerciseLanguage(exercise) : boardOption(boardId).language,
-  );
-
-  // A board that does not run sketches opens on one it can run. Handing a Pi
-  // the C++ blink would put a syntax error on screen before anyone had touched
-  // anything, which reads as a broken simulator rather than a board that speaks
-  // a different language.
-  const [firmware, setFirmware] = useState(
-    exercise?.sketch ??
-      projectBuild?.sketch ??
-      (boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch),
+  const [project, setProject] = useState<FirmwareProject>(() =>
+    toSingleFileProject(
+      exercise?.sketch ??
+        projectBuild?.sketch ??
+        (boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch),
+      exercise ? exerciseLanguage(exercise) : boardOption(boardId).language,
+    ),
   );
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -801,6 +801,10 @@ export default function Bench(props: BenchProps) {
    * the sketch is loaded onto them. The bench keeps the board and the breadboard
    * and everything already wired to them, because the examples share the
    * displays and the clock that one of them reads.
+   *
+   * The sketch arrives wrapped as a single-file project, so any tabs the
+   * operator had open are replaced rather than merged: an example is a fresh
+   * starting point, not an extra file.
    */
   const loadExample = useCallback(
     (id: string) => {
@@ -812,13 +816,55 @@ export default function Bench(props: BenchProps) {
       // bench fills with duplicates that all look live.
       simulation.clearExampleParts();
       example.wire(simulation);
-      setFirmware(example.sketch);
+      const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
+      setProject(next);
       setExampleId(example.id);
-      simulation.loadFirmware(example.sketch);
+      simulation.loadFirmware(next);
       forceRender((n) => n + 1);
     },
-    [simulation, EXAMPLES],
+    [simulation, EXAMPLES, boardOption, boardId],
   );
+
+  /*
+   * Switching grammars on a multi-file project drops every tab but the entry:
+   * a `.h` means nothing to the Python front end and vice versa. A native
+   * confirm guards the multi-file case; a single file restarts from that
+   * language's blink.
+   */
+  const handleLanguageChange = (nextLanguage: FirmwareLanguage) => {
+    if (nextLanguage === project.language) return;
+    if (
+      project.files.length > 1 &&
+      !window.confirm('Switching language discards other-language tabs. Continue?')
+    ) {
+      return;
+    }
+    setProject(
+      toSingleFileProject(
+        nextLanguage === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
+        nextLanguage,
+      ),
+    );
+  };
+
+  /*
+   * Run loads the whole project, then opens the tab the error names: the bar
+   * shows the message verbatim and the editor shows the file it came from, so
+   * the operator never has to guess which tab broke.
+   */
+  const handleRun = () => {
+    simulation.loadFirmware(project);
+    const message = simulation.firmwareError;
+    if (message) {
+      const head = message.split(':')[0]?.trim() ?? '';
+      if (head !== '' && head !== project.activeName && project.files.some((file) => file.name === head)) {
+        const failed = head;
+        setProject((previous) => ({ ...previous, activeName: failed }));
+      }
+    }
+    simulation.start();
+    forceRender((n) => n + 1);
+  };
 
   const onPlacePart = useCallback(
     (definition: PartDefinition, entry: CatalogueEntry) => {
@@ -1181,26 +1227,14 @@ export default function Bench(props: BenchProps) {
             }`}
           >
             <FirmwareEditor
-              // Task 6 owns the full project-state rewire. Until then the bench
-              // stays single-file: structural tab edits are inert and only the
-              // entry file's content syncs back, so no sketch text can be lost.
-              project={toSingleFileProject(firmware, language)}
-              onProjectChange={(next) => {
-                const entry = next.files.find(
-                  (file) => file.name === ENTRY_BY_LANGUAGE[next.language],
-                );
-                if (entry && entry.content !== firmware) setFirmware(entry.content);
-              }}
+              project={project}
+              onProjectChange={setProject}
               error={simulation.firmwareError}
               expanded={firmwareOpen}
               onToggle={() => setFirmwareOpen((open) => !open)}
-              language={language}
-              onChangeLanguage={setLanguage}
-              onRun={() => {
-                simulation.loadFirmware(firmware, language);
-                simulation.start();
-                forceRender((n) => n + 1);
-              }}
+              language={project.language}
+              onChangeLanguage={handleLanguageChange}
+              onRun={handleRun}
               onReset={() => {
                 simulation.reset();
                 forceRender((n) => n + 1);
