@@ -22,6 +22,52 @@
   --color-accent-soft: oklch(0.685 0.169 237.323 / 0.14);
 }
 
+:root {
+  --radius: var(--radius-control);
+  --background: var(--color-slate-950);
+  --foreground: var(--color-slate-100);
+  --card: var(--color-slate-900);
+  --card-foreground: var(--color-slate-100);
+  --popover: var(--color-slate-900);
+  --popover-foreground: var(--color-slate-100);
+  --primary: var(--color-accent-strong);
+  --primary-foreground: #fff;
+  --secondary: var(--color-slate-800);
+  --secondary-foreground: var(--color-slate-200);
+  --muted: var(--color-slate-800);
+  --muted-foreground: var(--color-slate-400);
+  --accent: var(--color-slate-800);
+  --accent-foreground: var(--color-slate-100);
+  --destructive: var(--color-red-500);
+  --destructive-foreground: var(--color-slate-100);
+  --border: var(--color-slate-800);
+  --input: var(--color-slate-700);
+  --ring: var(--color-accent);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
 @layer base {
   /*
    * Every control on the bench shares one focus indicator. Left to browser
