@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
+import { toSingleFileProject } from '@/features/simulation';
 import { arduinoUnoR3 } from '@/features/parts';
 
 function bench() {
@@ -33,6 +34,14 @@ describe('loadFirmware with a project', () => {
   it('keeps the string overload working', () => {
     const sim = bench();
     sim.loadFirmware('void setup() {}\nvoid loop() {}\n', 'arduino-cpp');
+    expect(sim.firmwareError).toBeNull();
+  });
+
+  it('wraps legacy sketches as single-file projects', () => {
+    const wrapped = toSingleFileProject('void setup() {}\n', 'arduino-cpp');
+    expect(wrapped.files).toHaveLength(1);
+    const sim = bench();
+    sim.loadFirmware(wrapped);
     expect(sim.firmwareError).toBeNull();
   });
 });

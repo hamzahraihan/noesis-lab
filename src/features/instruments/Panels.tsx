@@ -7,7 +7,7 @@
  */
 
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
@@ -357,6 +357,14 @@ export function FirmwareEditor({
   const entry = ENTRY_BY_LANGUAGE[project.language];
 
   /*
+   * Helper-op failures (add/rename/delete, oversize edits) surface here in
+   * the error bar rather than in a `window.alert`, so a rejected tab edit
+   * reads like any other firmware error. Cleared by the next successful op
+   * or Run; `window.prompt` stays for name input.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /*
    * One Monaco instance shows every tab, so each tab's cursor and scroll live
    * here rather than in the editor. Saved on the way out of a tab, restored on
    * the way in; anything Monaco rejects is dropped, since a lost scroll
@@ -396,7 +404,7 @@ export function FirmwareEditor({
   };
 
   const reportHelperError = (cause: unknown) => {
-    window.alert(cause instanceof Error ? cause.message : String(cause));
+    setNotice(cause instanceof Error ? cause.message : String(cause));
   };
 
   const handleAddFile = () => {
@@ -404,6 +412,7 @@ export function FirmwareEditor({
     if (!name || !name.trim()) return;
     try {
       onProjectChange(addFile(project, name.trim()));
+      setNotice(null);
     } catch (cause) {
       reportHelperError(cause);
     }
@@ -414,6 +423,7 @@ export function FirmwareEditor({
     if (!next || next.trim() === name) return;
     try {
       onProjectChange(renameFile(project, name, next.trim()));
+      setNotice(null);
     } catch (cause) {
       reportHelperError(cause);
     }
@@ -422,6 +432,7 @@ export function FirmwareEditor({
   const handleRemoveFile = (name: string) => {
     try {
       onProjectChange(removeFile(project, name));
+      setNotice(null);
     } catch (cause) {
       reportHelperError(cause);
     }
@@ -430,12 +441,20 @@ export function FirmwareEditor({
   const handleContentChange = (name: string, next: string) => {
     try {
       onProjectChange(updateFileContent(project, name, next));
+      setNotice(null);
     } catch (cause) {
       // Over the 32 KB cap: the edit is rejected by the controlled `value`,
       // so surface it now — waiting for Run would validate stale content.
       reportHelperError(cause);
     }
   };
+
+  const handleRun = () => {
+    setNotice(null);
+    onRun();
+  };
+
+  const displayError = notice ?? error;
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
@@ -508,7 +527,7 @@ export function FirmwareEditor({
          */}
         <button
           type="button"
-          onClick={running ? onReset : onRun}
+          onClick={running ? onReset : handleRun}
           className={`ctl ${running ? 'ctl-quiet' : 'ctl-accent'}`}
           title={running ? 'Reset the running sketch' : 'Run this sketch'}
         >
@@ -605,10 +624,10 @@ export function FirmwareEditor({
         </>
       )}
 
-      {error && (
+      {displayError && (
         <p className="flex shrink-0 items-start gap-1.5 border-t border-red-900 bg-red-950 px-3 py-1.5 text-xs text-red-300">
           <CrossCircledIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
-          {error}
+          {displayError}
         </p>
       )}
     </div>
