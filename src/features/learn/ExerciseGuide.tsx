@@ -22,7 +22,7 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link } from 'react-router';
-import { Button, Dialog, DialogContent } from '@/components';
+import { Button, Dialog, DialogContent, DialogTitle } from '@/components';
 import type { Exercise } from './exercises';
 import { ExercisePreview } from './ExercisePreview';
 import { isGuideDismissed, setGuideDismissed } from './guide-dismissal';
@@ -101,6 +101,7 @@ export function ExerciseGuide({
         aria-describedby={undefined}
         className="guide-panel flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden bg-slate-900 p-0 sm:max-w-3xl"
       >
+        <DialogTitle className="sr-only">{exercise.title}</DialogTitle>
         {/* Header: what this is, and the way out. */}
         <div className="flex shrink-0 items-start gap-3 border-b border-slate-800 px-5 pt-4 pb-3">
           <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-400">
