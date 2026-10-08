@@ -78,7 +78,7 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
       <DialogContent
         showCloseButton={false}
         aria-describedby={undefined}
-        className="flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden bg-slate-900"
+        className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden bg-slate-900"
       >
         <DialogTitle className="sr-only">Component browser</DialogTitle>
         <DialogHeader className="flex shrink-0 flex-row items-center gap-2 border-b border-slate-800 p-3">
@@ -145,7 +145,7 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
             </Button>
           </nav>
 
-          <TabsContent value="catalogue" className="mt-0 min-h-0 flex-1">
+          <TabsContent value="catalogue" className="mt-0 min-h-0 flex-1 overflow-hidden">
             <ScrollArea className="h-full">
               <div className="px-4 py-4">
                 {matches.length === 0 && (
@@ -178,7 +178,7 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
               </div>
             </ScrollArea>
           </TabsContent>
-          <TabsContent value="library" className="mt-0 min-h-0 flex-1">
+          <TabsContent value="library" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
             <WokwiLibrary />
           </TabsContent>
         </Tabs>
