@@ -34,6 +34,15 @@ import {
   TrashIcon,
   ValueIcon,
 } from '@radix-ui/react-icons';
+import {
+  Button,
+  CardTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components';
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -78,8 +87,13 @@ export function Inspector({
     // to click and shows the glyph for the thing they'd click.
     return (
       <div className="flex flex-1 flex-col">
-        <PanelTitle icon={<CubeIcon className="icon-sm" />} text="Inspector" />
-        <div className="empty flex-1">
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+          <CardTitle className="flex items-center gap-2">
+            <CubeIcon className="icon-sm text-slate-500" aria-hidden="true" />
+            Inspector
+          </CardTitle>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6 text-center text-xs text-slate-500">
           <TargetIcon className="icon text-slate-700" aria-hidden="true" />
           <p>Select a part on the bench to read its pins and drive it.</p>
         </div>
@@ -95,7 +109,12 @@ export function Inspector({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelTitle icon={<CubeIcon className="icon-sm" />} text="Inspector" />
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+        <CardTitle className="flex items-center gap-2">
+          <CubeIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          Inspector
+        </CardTitle>
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         <div>
@@ -116,10 +135,10 @@ export function Inspector({
 
         {labelledPins.length > 0 && (
           <div>
-            <h3 className="panel-title mb-1.5">
+            <CardTitle className="mb-1.5 flex items-center gap-2">
               <ValueIcon className="icon-sm" aria-hidden="true" />
               Pin voltages
-            </h3>
+            </CardTitle>
             <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
               {labelledPins.map((pin) => (
                 <li key={pin.id} className="flex justify-between gap-2">
@@ -134,18 +153,17 @@ export function Inspector({
         )}
 
         {definition.momentary && (
-          <button
+          <Button
             type="button"
             onMouseDown={() => onSetPressed(true)}
             onMouseUp={() => onSetPressed(false)}
             onMouseLeave={() => onSetPressed(false)}
-            className={`ctl h-8 w-full text-xs ${
-              controls.isPressed(part.id) ? '!bg-amber-400 !text-slate-900' : 'ctl-quiet'
-            }`}
+            variant={controls.isPressed(part.id) ? 'default' : 'secondary'}
+            className={controls.isPressed(part.id) ? 'h-8 w-full !bg-amber-400 !text-slate-900' : 'h-8 w-full'}
           >
             <ReaderIcon className="icon" aria-hidden="true" />
             {controls.isPressed(part.id) ? 'Pressed' : 'Press and hold'}
-          </button>
+          </Button>
         )}
 
         {knobs.map((spec) => (
@@ -174,16 +192,17 @@ export function Inspector({
          * concludes neither works.
          */}
         <div className="flex flex-col gap-1.5">
-          <button
+          <Button
             type="button"
             onClick={onRotate}
-            className="ctl ctl-quiet h-8 w-full text-xs"
+            variant="secondary"
+            className="h-8 w-full"
             title="Turn this part a quarter turn clockwise (R)"
           >
             <RotateIcon className="icon" aria-hidden="true" />
             Turn part
             <span className="num ml-auto text-slate-400">{rotation}°</span>
-          </button>
+          </Button>
           {panelSize && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-400">Screen</span>
@@ -192,10 +211,10 @@ export function Inspector({
           )}
         </div>
 
-        <button type="button" onClick={onDelete} className="ctl ctl-danger mt-1 w-full">
+        <Button type="button" onClick={onDelete} variant="destructive" className="mt-1 w-full">
           <TrashIcon className="icon" aria-hidden="true" />
           Remove part
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -223,7 +242,7 @@ function KnobControl({
         <span className="text-slate-400">{spec.label}</span>
         <input
           type="checkbox"
-          className="ctl size-4 accent-amber-400"
+          className="size-4 accent-amber-400"
           checked={value >= 1}
           onChange={(event) => onChange(event.target.checked ? 1 : 0)}
         />
@@ -265,22 +284,6 @@ function trimNumber(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/**
- * Every instrument's heading, so the panels read as one console.
- *
- * The glyph is part of the heading rather than decoration beside it: it is what
- * lets an operator find the serial monitor by shape while their eyes are on the
- * waveform.
- */
-function PanelTitle({ icon, text }: { icon: React.ReactNode; text: string }) {
-  return (
-    <h3 className="panel-title h-9 shrink-0 border-b border-slate-800 px-3">
-      <span className="text-slate-500">{icon}</span>
-      {text}
-    </h3>
-  );
-}
-
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
@@ -299,7 +302,12 @@ export function SerialMonitor({ lines }: { lines: readonly string[] }) {
 
   return (
     <div className="flex h-full flex-col">
-      <PanelTitle icon={<ReaderIcon className="icon-sm" />} text="Serial Monitor" />
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+        <CardTitle className="flex items-center gap-2">
+          <ReaderIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          Serial Monitor
+        </CardTitle>
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap text-emerald-300">
         {lines.length === 0 ? (
           // Dim prose here read as a stalled instrument rather than an idle
@@ -462,7 +470,7 @@ export function FirmwareEditor({
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="panel-title transition-colors hover:text-slate-200"
+          className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase transition-colors hover:text-slate-200"
         >
           <CaretRightIcon
             className={`icon-sm transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -482,20 +490,26 @@ export function FirmwareEditor({
          */}
         <label className="flex items-center gap-1.5">
           <span className="sr-only">Firmware language</span>
-          <select
+          <Select
             value={language}
-            onChange={(event) => onChangeLanguage(event.target.value as FirmwareLanguage)}
-            className="ctl-select"
-            aria-label="Firmware language"
-            title={
-              language === 'python'
-                ? 'Python, with the gpiozero API. A Raspberry Pi runs this.'
-                : 'An Arduino sketch. Runs on every microcontroller here.'
-            }
+            onValueChange={(next) => onChangeLanguage(next as FirmwareLanguage)}
           >
-            <option value="arduino-cpp">C++</option>
-            <option value="python">Python</option>
-          </select>
+            <SelectTrigger
+              className="h-7 text-xs"
+              aria-label="Firmware language"
+              title={
+                language === 'python'
+                  ? 'Python, with the gpiozero API. A Raspberry Pi runs this.'
+                  : 'An Arduino sketch. Runs on every microcontroller here.'
+              }
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="arduino-cpp">C++</SelectItem>
+              <SelectItem value="python">Python</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
         {/*
          * An example carries its own wiring, so picking one replaces the
@@ -504,19 +518,18 @@ export function FirmwareEditor({
          */}
         <label className="flex items-center gap-1.5">
           <span className="sr-only">Load an example</span>
-          <select
-            value={activeExampleId ?? ''}
-            onChange={(event) => onLoadExample(event.target.value)}
-            className="ctl-select max-w-44"
-            aria-label="Load an example"
-          >
-            <option value="">Load an example…</option>
-            {examples.map((example) => (
-              <option key={example.id} value={example.id} title={example.note}>
-                {example.name}
-              </option>
-            ))}
-          </select>
+          <Select value={activeExampleId ?? undefined} onValueChange={onLoadExample}>
+            <SelectTrigger className="h-7 max-w-44 text-xs" aria-label="Load an example">
+              <SelectValue placeholder="Load an example…" />
+            </SelectTrigger>
+            <SelectContent>
+              {examples.map((example) => (
+                <SelectItem key={example.id} value={example.id}>
+                  <span title={example.note}>{example.name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
 
         <span className="flex-1" />
@@ -525,10 +538,11 @@ export function FirmwareEditor({
          * side claiming equal weight. Reset is deliberately the quiet
          * dressing: it discards run state, it does not start work.
          */}
-        <button
+        <Button
           type="button"
           onClick={running ? onReset : handleRun}
-          className={`ctl ${running ? 'ctl-quiet' : 'ctl-accent'}`}
+          size="sm"
+          variant={running ? 'secondary' : 'default'}
           title={running ? 'Reset the running sketch' : 'Run this sketch'}
         >
           {running ? (
@@ -537,7 +551,7 @@ export function FirmwareEditor({
             <PlayIcon className="icon" aria-hidden="true" />
           )}
           {running ? 'Reset' : 'Run'}
-        </button>
+        </Button>
       </div>
 
       {expanded && (
@@ -587,15 +601,17 @@ export function FirmwareEditor({
                 </div>
               );
             })}
-            <button
+            <Button
               type="button"
               onClick={handleAddFile}
+              variant="secondary"
+              size="icon-sm"
+              className="shrink-0 font-mono"
               aria-label="Add file"
               title="Add file"
-              className="ctl ctl-quiet ctl-icon shrink-0 font-mono"
             >
               +
-            </button>
+            </Button>
           </div>
           <Editor
             height="100%"

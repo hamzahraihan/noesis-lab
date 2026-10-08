@@ -9,6 +9,15 @@ import type { BoardPin } from '@/features/parts';
 import { AMP_RANGES, OHM_RANGES, type MeterMode, type MeterReading } from '@/features/simulation';
 import { formatAmps, formatOhms, formatVolts } from '@/utils';
 import { ExclamationTriangleIcon, MixerHorizontalIcon } from '@radix-ui/react-icons';
+import {
+  Button,
+  CardTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components';
 
 export interface MultimeterPanelProps {
   mode: MeterMode;
@@ -51,24 +60,28 @@ export function MultimeterPanel({
   return (
     <div className="flex flex-col gap-2 border-t border-slate-800 p-3">
       <div className="flex items-center gap-2">
-        <h3 className="panel-title flex-1">
+        <CardTitle className="flex flex-1 items-center gap-2">
           <MixerHorizontalIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Multimeter
-        </h3>
+        </CardTitle>
         <div className="flex gap-0.5 rounded border border-slate-800 bg-slate-950 p-0.5">
           {(Object.keys(MODE_LABELS) as MeterMode[]).map((candidate) => (
-            <button
+            <Button
               key={candidate}
               type="button"
               onClick={() => onMode(candidate)}
               aria-pressed={mode === candidate}
-              className={`ctl h-6 px-1.5 text-[11px] ${
-                mode === candidate ? 'ctl-quiet !bg-amber-400 !text-slate-900' : 'text-slate-400'
-              }`}
+              size="sm"
+              variant={mode === candidate ? 'default' : 'secondary'}
+              className={
+                mode === candidate
+                  ? 'h-6 px-1.5 text-[11px] !bg-amber-400 !text-slate-900'
+                  : 'h-6 px-1.5 text-[11px]'
+              }
               title={`Measure ${MODE_LABELS[candidate] === 'V' ? 'voltage' : MODE_LABELS[candidate] === 'A' ? 'current' : 'resistance'}`}
             >
               {MODE_LABELS[candidate]}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -98,18 +111,18 @@ export function MultimeterPanel({
       {ranges.length > 0 && (
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-500">Range</span>
-          <select
-            value={rangeId}
-            onChange={(event) => onRange(event.target.value)}
-            aria-label="Meter range"
-            className="ctl-select h-6 flex-1 text-[11px]"
-          >
-            {ranges.map((range) => (
-              <option key={range.id} value={range.id}>
-                {range.label}
-              </option>
-            ))}
-          </select>
+          <Select value={rangeId} onValueChange={onRange}>
+            <SelectTrigger className="h-6 flex-1 text-[11px]" aria-label="Meter range">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ranges.map((range) => (
+                <SelectItem key={range.id} value={range.id}>
+                  {range.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -119,28 +132,28 @@ export function MultimeterPanel({
         <span className="text-slate-300">−</span> {blackLabel}
       </p>
       <div className="flex items-center gap-1 text-[11px]">
-        <select
-          value={redPinId ?? ''}
-          onChange={(event) => onRedPin(event.target.value || null)}
-          aria-label="Red probe pin"
-          className="ctl-select h-6 min-w-0 flex-1 text-[11px]"
-        >
-          <option value="">+ not clipped</option>
-          {pins.map((pin) => (
-            <option key={pin.id} value={pin.id}>{pin.label}</option>
-          ))}
-        </select>
-        <select
-          value={blackPinId ?? ''}
-          onChange={(event) => onBlackPin(event.target.value || null)}
-          aria-label="Black probe pin"
-          className="ctl-select h-6 min-w-0 flex-1 text-[11px]"
-        >
-          <option value="">− ground</option>
-          {pins.map((pin) => (
-            <option key={pin.id} value={pin.id}>{pin.label}</option>
-          ))}
-        </select>
+        <Select value={redPinId ?? 'none'} onValueChange={(next) => onRedPin(next === 'none' ? null : next)}>
+          <SelectTrigger className="h-6 min-w-0 flex-1 text-[11px]" aria-label="Red probe pin">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">+ not clipped</SelectItem>
+            {pins.map((pin) => (
+              <SelectItem key={pin.id} value={pin.id}>{pin.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={blackPinId ?? 'none'} onValueChange={(next) => onBlackPin(next === 'none' ? null : next)}>
+          <SelectTrigger className="h-6 min-w-0 flex-1 text-[11px]" aria-label="Black probe pin">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">− ground</SelectItem>
+            {pins.map((pin) => (
+              <SelectItem key={pin.id} value={pin.id}>{pin.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {mode === 'amps' && (

@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react';
 import type { BoardPin } from '@/features/parts';
 import type { TraceSample } from '@/features/simulation';
 import { Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
+import { Button, CardTitle } from '@/components';
 
 /** Simulated milliseconds shown across the capture. */
 const WINDOW_MS = 100;
@@ -130,10 +131,10 @@ export function LogicAnalyser({
   return (
     <section className="border-b border-slate-800">
       <div className="flex items-center gap-2 px-3 pt-2">
-        <h3 className="panel-title flex-1">
+        <CardTitle className="flex flex-1 items-center gap-2">
           <StopwatchIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Logic analyser
-        </h3>
+        </CardTitle>
         <span className="num text-[10px] text-slate-600">{WINDOW_MS} ms</span>
       </div>
 
@@ -158,17 +159,19 @@ export function LogicAnalyser({
           const on = isCapturing(pin.id);
           const full = !on && capturing.length >= MAX_LANES;
           return (
-            <button
+            <Button
               key={pin.id}
               type="button"
               disabled={full}
               onClick={() => onTogglePin(pin.id)}
               aria-pressed={on}
-              className={`ctl h-6 px-2 text-[11px] ${on ? 'ctl-accent' : 'ctl-quiet'}`}
+              size="sm"
+              variant={on ? 'default' : 'secondary'}
+              className="h-6 px-2 text-[11px]"
               title={full ? `Capture is full: ${MAX_LANES} lanes is as many as stay readable` : undefined}
             >
               {pin.label}
-            </button>
+            </Button>
           );
         })}
       </div>
