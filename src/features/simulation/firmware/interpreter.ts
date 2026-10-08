@@ -608,13 +608,15 @@ export class FirmwareRuntime {
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
     const functionOwner = new Map<string, string>();
+    const defineOwner = new Map<string, string>();
     programs.forEach((program, index) => {
       const owner = order[index];
       for (const [key, value] of program.defines) {
         if (defines.has(key) && defines.get(key) !== value) {
-          throw new FirmwareProjectError(`${owner}: conflicting #define ${key}`);
+          throw new FirmwareProjectError(`${owner}: conflicting #define ${key} (also in ${defineOwner.get(key)})`);
         }
         defines.set(key, value);
+        if (!defineOwner.has(key)) defineOwner.set(key, owner);
       }
       globals.push(...program.globals);
       for (const [key, decl] of program.functions) {
