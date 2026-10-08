@@ -18,6 +18,7 @@ export * from './devices/servo';
 export * from './display/font5x7';
 export * from './display/ili9341';
 export * from './display/part';
+export * from './display/sevensegment';
 export * from './display/ssd1306';
 export * from './relay';
 export * from './encoder';
