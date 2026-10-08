@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react';
 import type { BusEntry } from '@/features/simulation';
 import { EraserIcon, SewingPinIcon } from '@radix-ui/react-icons';
+import { Button, CardTitle } from '@/components';
 
 /** How many bytes one line shows before it elides the rest. */
 const BYTES_PER_LINE = 8;
@@ -35,19 +36,20 @@ export function BusMonitor({ entries, onClear }: BusMonitorProps) {
   return (
     <section className="border-b border-slate-800">
       <div className="flex items-center gap-2 px-3 py-2">
-        <h3 className="panel-title flex-1">
+        <CardTitle className="flex flex-1 items-center gap-2">
           <SewingPinIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Bus monitor
-        </h3>
-        <button
+        </CardTitle>
+        <Button
           type="button"
           onClick={onClear}
-          className="ctl ctl-icon ctl-quiet"
+          variant="secondary"
+          size="icon-sm"
           title="Clear the log"
           aria-label="Clear the bus log"
         >
           <EraserIcon className="icon" aria-hidden="true" />
-        </button>
+        </Button>
       </div>
 
       <ul ref={listRef} className="max-h-48 overflow-y-auto px-3 pb-3 font-mono text-[11px] leading-relaxed">

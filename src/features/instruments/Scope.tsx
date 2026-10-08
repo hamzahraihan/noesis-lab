@@ -11,6 +11,14 @@ import { useEffect, useRef } from 'react';
 import { decodeUart, measureDutyCycle, measureFrequency, type TraceSample } from '@/features/simulation';
 import type { BoardPin } from '@/features/parts';
 import { ActivityLogIcon, Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
+import {
+  CardTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components';
 
 const TRACE_HEIGHT_MM = 60;
 /** Simulated milliseconds shown across the trace. */
@@ -90,23 +98,23 @@ export function ScopePanel({
   return (
     <div className="flex flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
-        <h3 className="panel-title flex-1">
+        <CardTitle className="flex flex-1 items-center gap-2">
           <ActivityLogIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Oscilloscope
-        </h3>
-        <select
-          value={probePinId ?? ''}
-          onChange={(event) => onProbe(event.target.value || null)}
-          aria-label="Probe pin"
-          className="ctl-select max-w-28"
-        >
-          <option value="">No probe</option>
-          {pins.map((pin) => (
-            <option key={pin.id} value={pin.id}>
-              {pin.label}
-            </option>
-          ))}
-        </select>
+        </CardTitle>
+        <Select value={probePinId ?? 'none'} onValueChange={(next) => onProbe(next === 'none' ? null : next)}>
+          <SelectTrigger className="h-6 max-w-28 text-[11px]" aria-label="Probe pin">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No probe</SelectItem>
+            {pins.map((pin) => (
+              <SelectItem key={pin.id} value={pin.id}>
+                {pin.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="relative">
@@ -137,18 +145,18 @@ export function ScopePanel({
 
       <div className="flex items-center gap-2">
         <StopwatchIcon className="icon-sm shrink-0 text-slate-500" aria-hidden="true" />
-        <select
-          value={baud}
-          onChange={(event) => onBaud(Number(event.target.value))}
-          aria-label="UART baud rate"
-          className="ctl-select h-6 w-20 shrink-0 text-[11px]"
-        >
-          {BAUD_RATES.map((rate) => (
-            <option key={rate} value={rate}>
-              {rate}
-            </option>
-          ))}
-        </select>
+        <Select value={String(baud)} onValueChange={(next) => onBaud(Number(next))}>
+          <SelectTrigger className="h-6 w-20 shrink-0 text-[11px]" aria-label="UART baud rate">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {BAUD_RATES.map((rate) => (
+              <SelectItem key={rate} value={String(rate)}>
+                {rate}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="truncate font-mono text-[11px] text-emerald-300">
           {decoded.length > 0 ? ascii : '--'}
         </span>
