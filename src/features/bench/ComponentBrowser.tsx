@@ -7,13 +7,9 @@
  * than a stand-in, so the thing you pick is the thing that appears on the bench.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  CATALOGUE_GROUPS,
-  PART_CATALOGUE,
-  type CatalogueEntry,
-} from '@/features/parts';
-import type { PartDefinition } from '@/features/parts';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CATALOGUE_GROUPS, PART_CATALOGUE, type CatalogueEntry } from "@/features/parts";
+import type { PartDefinition } from "@/features/parts";
 import {
   Badge,
   Button,
@@ -26,10 +22,10 @@ import {
   ScrollArea,
   Tabs,
   TabsContent,
-} from '@/components';
-import { PartPreview } from './PartPreview';
-import { WokwiLibrary } from './WokwiLibrary';
-import { Cross2Icon, PlusIcon } from '@radix-ui/react-icons';
+} from "@/components";
+import { PartPreview } from "./PartPreview";
+import { WokwiLibrary } from "./WokwiLibrary";
+import { Cross2Icon, PlusIcon } from "@radix-ui/react-icons";
 
 export interface ComponentBrowserProps {
   readonly onPlace: (definition: PartDefinition, entry: CatalogueEntry) => void;
@@ -37,9 +33,9 @@ export interface ComponentBrowserProps {
 }
 
 export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
-  const [query, setQuery] = useState('');
-  const [view, setView] = useState<'catalogue' | 'library'>('catalogue');
-  const [group, setGroup] = useState('all');
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<"catalogue" | "library">("catalogue");
+  const [group, setGroup] = useState("all");
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -49,7 +45,7 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return PART_CATALOGUE.filter((entry) => {
-      if (group !== 'all' && entry.group !== group) return false;
+      if (group !== "all" && entry.group !== group) return false;
       if (!needle) return true;
       return (
         entry.name.toLowerCase().includes(needle) ||
@@ -104,23 +100,23 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
          */}
         <Tabs
           value={view}
-          onValueChange={(v) => setView(v as 'catalogue' | 'library')}
+          onValueChange={(v) => setView(v as "catalogue" | "library")}
           className="flex min-h-0 flex-1 flex-col gap-0"
         >
           <nav
             className="flex shrink-0 items-center gap-1.5 border-b border-slate-800 px-4 py-2"
             aria-label="Component categories"
           >
-            {[{ id: 'all', label: 'All' }, ...CATALOGUE_GROUPS].map((option) => (
+            {[{ id: "all", label: "All" }, ...CATALOGUE_GROUPS].map((option) => (
               <Button
                 key={option.id}
                 type="button"
                 size="sm"
-                variant={view === 'catalogue' && group === option.id ? 'default' : 'secondary'}
+                variant={view === "catalogue" && group === option.id ? "default" : "secondary"}
                 className="rounded-full"
-                aria-pressed={view === 'catalogue' && group === option.id}
+                aria-pressed={view === "catalogue" && group === option.id}
                 onClick={() => {
-                  setView('catalogue');
+                  setView("catalogue");
                   setGroup(option.id);
                 }}
               >
@@ -135,11 +131,11 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
             <Button
               type="button"
               size="sm"
-              variant={view === 'library' ? 'default' : 'secondary'}
+              variant={view === "library" ? "default" : "secondary"}
               className="ml-auto rounded-full"
-              aria-pressed={view === 'library'}
+              aria-pressed={view === "library"}
               title="Every element Wokwi ships, and what the bench does with each"
-              onClick={() => setView('library')}
+              onClick={() => setView("library")}
             >
               Full library
             </Button>
@@ -155,8 +151,8 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        setQuery('');
-                        setGroup('all');
+                        setQuery("");
+                        setGroup("all");
                       }}
                     >
                       Clear search
@@ -178,7 +174,10 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
               </div>
             </ScrollArea>
           </TabsContent>
-          <TabsContent value="library" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <TabsContent
+            value="library"
+            className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
             <WokwiLibrary />
           </TabsContent>
         </Tabs>
