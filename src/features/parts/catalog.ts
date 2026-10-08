@@ -107,7 +107,7 @@ export type ComponentSpec =
   | { readonly kind: 'i2c-sensor'; readonly device: I2cSensorVariant }
   | { readonly kind: 'lcd'; readonly variant: LcdVariant }
   | { readonly kind: 'servo' }
-  | { readonly kind: '7segment' };
+  | { readonly kind: '7segment'; readonly digits: 1 | 2 | 3 | 4 }
 
 /**
  * The comparator sensor boards, which are the same circuit however many times
