@@ -16,6 +16,7 @@
 import { useState } from 'react';
 import { CheckIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { Link, useParams } from 'react-router';
+import { Button } from '@/components';
 import {
   EXERCISES,
   EXERCISE_BOARD,
@@ -53,9 +54,9 @@ export function ExercisesPage() {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <header className="border-b border-slate-800">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <Link to="/" className="ctl ctl-quiet">
-            Noesis Lab
-          </Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link to="/">Noesis Lab</Link>
+          </Button>
           <span className="text-slate-600">/</span>
           <h1 className="text-sm font-medium text-slate-300">Learn</h1>
         </div>
@@ -73,12 +74,12 @@ export function ExercisesPage() {
         </p>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <Link to={`/bench/${EXERCISE_BOARD}`} className="ctl ctl-accent">
-            Open the bench
-          </Link>
-          <Link to="/learn/references" className="ctl ctl-outline">
-            Reference &amp; glossary
-          </Link>
+          <Button asChild size="sm">
+            <Link to={`/bench/${EXERCISE_BOARD}`}>Open the bench</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/learn/references">Reference &amp; glossary</Link>
+          </Button>
         </div>
 
         {levels.map((level) => (
@@ -184,16 +185,16 @@ export function ExercisePage() {
       <References exercise={exercise} />
 
       <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-6">
-        <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`} className="ctl ctl-accent">
-          Put it on the bench
-        </Link>
+        <Button asChild size="sm">
+          <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`}>Put it on the bench</Link>
+        </Button>
         <span className="text-xs text-slate-500">
           Opens the bench with wiring + code, and the guide walks you through it.
         </span>
         <span className="flex-1" />
-        <Link to="/learn/references" className="ctl ctl-outline">
-          Reference &amp; glossary
-        </Link>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/learn/references">Reference &amp; glossary</Link>
+        </Button>
       </div>
     </ExerciseShell>
   );
@@ -212,9 +213,9 @@ function ExerciseShell({
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <header className="border-b border-slate-800">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <Link to="/" className="ctl ctl-quiet">
-            Noesis Lab
-          </Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link to="/">Noesis Lab</Link>
+          </Button>
           <span className="text-slate-600">/</span>
           <Link to="/learn" className="text-sm text-slate-400 hover:text-slate-200">
             Learn
@@ -434,13 +435,15 @@ function Hints({
         ))}
       </div>
       {revealed < available && (
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => setRevealed(revealed + 1)}
-          className="ctl ctl-outline mt-3"
+          className="mt-3"
         >
           {revealed === 0 ? 'Show a hint' : `Another hint (${available - revealed} left)`}
-        </button>
+        </Button>
       )}
     </Section>
   );
@@ -473,9 +476,9 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
             The reasoning behind the wiring — why each pin is where it is, and what a finished
             circuit should be doing. Worth reading after you have tried it and read the hints.
           </p>
-          <button type="button" onClick={() => setOpen(true)} className="ctl ctl-outline">
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
             Show the worked solution
-          </button>
+          </Button>
         </>
       ) : (
         <div className="space-y-5">
@@ -534,9 +537,9 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
             </ul>
           </div>
 
-          <button type="button" onClick={() => setOpen(false)} className="ctl ctl-quiet">
+          <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>
             Hide the solution
-          </button>
+          </Button>
         </div>
       )}
     </Section>

@@ -20,16 +20,22 @@ import {
 } from '@radix-ui/react-icons';
 import { useMemo } from 'react';
 import { Link } from 'react-router';
+import { Badge } from '@/components';
 import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardRegistry';
 import { PartPreview } from '@/features/bench';
 
-/** A spec chip: a label and the value it describes, in the board's own units. */
+/**
+ * A spec chip: a label and the value it describes, in the board's own units.
+ *
+ * @deprecated Use {@link Badge} directly. Kept as an alias so existing
+ * importers keep compiling; removal is scheduled separately.
+ */
 export function Chip({ label, value }: { readonly label: string; readonly value: string }) {
   return (
-    <span className="inline-flex items-baseline gap-1.5 rounded-md bg-slate-800 px-2 py-1 text-xs">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-slate-200 tabular-nums">{value}</span>
-    </span>
+    <Badge>
+      <span>{label}</span>
+      <span>{value}</span>
+    </Badge>
   );
 }
 
