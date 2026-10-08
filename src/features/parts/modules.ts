@@ -749,16 +749,54 @@ export const SEVEN_SEGMENT_SEGMENTS: readonly string[] = ['A', 'B', 'C', 'D', 'E
  * `DP` along the bottom. Its holes are at 1.195 mm along each row and 1 and
  * 19 mm down, which the grid rounds to 1.27 and 19.05 -- seven pitches apart
  * afterwards, so both rows land in holes at the same placement.
+ *
+ * Supports 1-4 digits. Multi-digit parts use a single-row header with digit
+ * commons first (D1, D2...), then segments A, B, DP, G, F, E, D, C.
  */
-export function sevenSegmentDefinition(): PartDefinition {
-  return {
-    id: '7segment',
-    name: '7-Segment Display',
-    category: 'output',
-    widthMm: 12.55,
-    heightMm: 22,
-    component: { kind: '7segment' },
-    pins: [
+export function sevenSegmentDefinition(digits = 1): PartDefinition {
+  if (digits < 1) digits = 1;
+  if (digits > 4) digits = 4;
+
+  const isMulti = digits > 1;
+  const widthMm = isMulti ? 9.5 + digits * 7.1 : 12.55;
+  const heightMm = 22;
+  const pitch = 2.54;
+  const headerX = 2.54;
+  const headerY = 1.27;
+
+  const pins: PinSpec[] = [];
+
+  if (isMulti) {
+    // Digit commons first, matching the Wokwi element's DIG1..DIGn pin names,
+    // then the shared segment lines.
+    for (let d = 1; d <= digits; d++) {
+      pins.push({
+        id: `DIG${d}`,
+        label: `D${d}`,
+        x: headerX + (d - 1) * pitch,
+        y: headerY,
+      });
+    }
+    const segmentOrder = [
+      { id: 'A', label: 'A' },
+      { id: 'B', label: 'B' },
+      { id: 'DP', label: 'DP' },
+      { id: 'G', label: 'G' },
+      { id: 'F', label: 'F' },
+      { id: 'E', label: 'E' },
+      { id: 'D', label: 'D' },
+      { id: 'C', label: 'C' },
+    ];
+    for (let i = 0; i < 8; i++) {
+      pins.push({
+        id: segmentOrder[i].id,
+        label: segmentOrder[i].label,
+        x: headerX + (digits + i) * pitch,
+        y: headerY,
+      });
+    }
+  } else {
+    pins.push(
       { id: 'G', label: 'G', x: 1.27, y: 1.27 },
       { id: 'F', label: 'F', x: 3.81, y: 1.27 },
       { id: 'COM.2', label: 'COM.2', x: 6.35, y: 1.27, net: 'COM' },
@@ -769,7 +807,19 @@ export function sevenSegmentDefinition(): PartDefinition {
       { id: 'COM.1', label: 'COM.1', x: 6.35, y: 19.05, net: 'COM' },
       { id: 'C', label: 'C', x: 8.89, y: 19.05 },
       { id: 'DP', label: 'DP', x: 11.43, y: 19.05 },
-    ],
+    );
+  }
+
+  const suffix = digits === 1 ? '' : `-${digits}digit`;
+  const typedDigits = digits as 1 | 2 | 3 | 4;
+  return {
+    id: `7segment${suffix}`,
+    name: `${digits}-Digit 7-Segment Display`,
+    category: 'output',
+    widthMm,
+    heightMm,
+    component: { kind: '7segment', digits: typedDigits },
+    pins,
     bodyColour: '#111111',
     legendColour: '#e0e0e0',
   };
