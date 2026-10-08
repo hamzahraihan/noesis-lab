@@ -37,19 +37,19 @@ export interface GalleryProject {
 }
 
 /* ------------------------------------------------------------------ *
- * Alarm Clock with RTC — DS1307 + LCD1602 + heartbeat LED
+ * Alarm Clock with RTC — DS1307 + 4-digit 7-segment + buttons + buzzer
  * ------------------------------------------------------------------ */
 
 const ALARM_CLOCK: GalleryProject = {
   id: 'alarm-clock',
   title: 'Alarm Clock with RTC',
   blurb:
-    'A real-time clock chip keeps the time and a character LCD shows it, ticking once a second while an LED beats along.',
+    'A real-time clock chip keeps the time on a 4-digit 7-segment display. Set the alarm with the Hours and Minutes buttons, arm it with Alarm, and the buzzer sounds at the hour.',
   parts: [
     { name: 'DS1307 RTC Module', qty: 1 },
-    { name: 'LCD 16x2 (HD44780)', qty: 1 },
-    { name: 'Red LED', qty: 1 },
-    { name: '220 Resistor', qty: 1 },
+    { name: '4-Digit 7-Segment Display', qty: 1 },
+    { name: 'Tactile Button', qty: 3 },
+    { name: 'Piezo Buzzer', qty: 1 },
   ],
   builds: [
     {
@@ -57,19 +57,76 @@ const ALARM_CLOCK: GalleryProject = {
       sketch: `#include <Arduino.h>
 #include <Wire.h>
 
-#define LED_PIN 10
 #define RTC_ADDR 0x68
+#define BUZZER_PIN 17
+#define HOURS_BTN 14
+#define MINS_BTN 15
+#define ALARM_BTN 16
+
+byte digitPins[4] = {2, 3, 4, 5};
+byte segmentPins[8] = {6, 7, 13, 12, 11, 10, 9, 8};
+
+int alarmH = 7;
+int alarmM = 30;
+byte alarmOn = 0;
+byte setting = 0;
+byte currentDigit = 0;
+int show0 = 0;
+int show1 = 0;
+int show2 = 0;
+int show3 = 0;
+byte lastH = 1;
+byte lastM = 1;
+byte lastA = 1;
 
 int bcdToInt(byte bcd) {
   return (bcd >> 4) * 10 + (bcd & 15);
 }
 
+byte patternFor(int d) {
+  if (d == 0) return 0x3F;
+  if (d == 1) return 0x06;
+  if (d == 2) return 0x5B;
+  if (d == 3) return 0x4F;
+  if (d == 4) return 0x66;
+  if (d == 5) return 0x6D;
+  if (d == 6) return 0x7D;
+  if (d == 7) return 0x07;
+  if (d == 8) return 0x7F;
+  if (d == 9) return 0x6F;
+  return 0x00;
+}
+
+void setSegments(byte pattern) {
+  for (int i = 0; i < 8; i++) {
+    digitalWrite(segmentPins[i], (pattern & (1 << i)) ? LOW : HIGH);
+  }
+}
+
+int digitValue(byte which) {
+  if (which == 0) return show0;
+  if (which == 1) return show1;
+  if (which == 2) return show2;
+  return show3;
+}
+
+void refreshDisplay() {
+  for (int i = 0; i < 4; i++) digitalWrite(digitPins[i], LOW);
+  byte pattern = patternFor(digitValue(currentDigit));
+  setSegments(pattern);
+  digitalWrite(digitPins[currentDigit], HIGH);
+  currentDigit = (currentDigit + 1) % 4;
+}
+
 void setup() {
-  pinMode(LED_PIN, OUTPUT);
+  for (int i = 0; i < 4; i++) pinMode(digitPins[i], OUTPUT);
+  for (int i = 0; i < 8; i++) pinMode(segmentPins[i], OUTPUT);
+  pinMode(HOURS_BTN, INPUT_PULLUP);
+  pinMode(MINS_BTN, INPUT_PULLUP);
+  pinMode(ALARM_BTN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
   Serial.begin(115200);
   Wire.begin();
-  lcd.begin(16, 2);
-  lcd.backlight();
   Serial.println("clock up");
 }
 
@@ -82,17 +139,63 @@ void loop() {
   int minutes = bcdToInt(Wire.read());
   int hours = bcdToInt(Wire.read());
 
-  lcd.setCursor(0, 0);
-  lcd.print(hours);
-  lcd.print(":");
-  lcd.print(minutes);
-  lcd.print(":");
-  lcd.print(seconds);
-  lcd.setCursor(0, 1);
-  lcd.print("alarm 07:30");
+  byte h = digitalRead(HOURS_BTN);
+  if (h == 0 && lastH == 1 && setting == 1) {
+    alarmH = alarmH + 1;
+    if (alarmH >= 24) alarmH = 0;
+  }
+  lastH = h;
 
-  digitalWrite(LED_PIN, seconds % 2 == 0);
-  delay(500);
+  byte m = digitalRead(MINS_BTN);
+  if (m == 0 && lastM == 1 && setting == 1) {
+    alarmM = alarmM + 1;
+    if (alarmM >= 60) alarmM = 0;
+  }
+  lastM = m;
+
+  byte a = digitalRead(ALARM_BTN);
+  if (a == 0 && lastA == 1) {
+    if (setting == 1) {
+      setting = 0;
+      alarmOn = 1;
+    } else {
+      setting = 1;
+    }
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+  lastA = a;
+
+  if (setting == 1) {
+    show0 = (alarmH / 10) % 10;
+    show1 = alarmH % 10;
+    show2 = (alarmM / 10) % 10;
+    show3 = alarmM % 10;
+  } else {
+    show0 = (hours / 10) % 10;
+    show1 = hours % 10;
+    show2 = (minutes / 10) % 10;
+    show3 = minutes % 10;
+  }
+
+  byte ringing = 0;
+  if (alarmOn == 1 && setting == 0 && hours == alarmH && minutes == alarmM) ringing = 1;
+  digitalWrite(BUZZER_PIN, ringing == 1 && seconds % 2 == 0);
+
+  Serial.print("t=");
+  Serial.print(hours);
+  Serial.print(":");
+  Serial.print(minutes);
+  Serial.print(":");
+  Serial.println(seconds);
+
+  // One full multiplex cycle; the engine latches every digit while its
+  // common is asserted, and the last-driven digit stays lit through the
+  // delay below, so the glass holds a steady reading.
+  for (int i = 0; i < 4; i++) {
+    refreshDisplay();
+    delayMicroseconds(250);
+  }
+  delay(200);
 }
 `,
   setup: (simulation) => {
@@ -102,27 +205,62 @@ void loop() {
     if (!supply || !ground) return;
 
     simulation.placeExampleDevice('ds1307', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
-    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y + PART_STEP, EXAMPLE_DEVICES, LCD_LINES);
 
-    const led = simulation.addPart(part('Red LED'), PART_X, PART_Y + 2 * PART_STEP);
-    const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + 2 * PART_STEP);
-    const board = simulation.boardTerminal('D10');
-    const anode = simulation.pinAt(led, 'anode');
-    const cathode = simulation.pinAt(led, 'cathode');
-    const legA = simulation.pinAt(resistor, 'a');
-    const legB = simulation.pinAt(resistor, 'b');
-    if (!board || !anode || !cathode || !legA || !legB) return;
+    // 4-digit 7-segment display: digit commons D1-D4, then segments A-G, DP.
+    const seg = simulation.addPart(part('4-Digit 7-Segment Display'), PART_X, PART_Y + PART_STEP);
+    const segWires: Array<[string, string]> = [
+      ['DIG1', 'D2'],
+      ['DIG2', 'D3'],
+      ['DIG3', 'D4'],
+      ['DIG4', 'D5'],
+      ['A', 'D6'],
+      ['B', 'D7'],
+      ['DP', 'D8'],
+      ['G', 'D9'],
+      ['F', 'D10'],
+      ['E', 'D11'],
+      ['D', 'D12'],
+      ['C', 'D13'],
+    ];
+    for (const [segPin, boardPin] of segWires) {
+      const from = simulation.pinAt(seg, segPin);
+      const to = simulation.boardTerminal(boardPin);
+      if (!from || !to) return;
+      simulation.routeWire(from, to);
+    }
 
-    simulation.routeWire(supply, anode);
-    simulation.routeWire(cathode, legA);
-    simulation.routeWire(legB, board);
+    // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
+    // The sketch uses the internal pull-ups, so a held button reads LOW.
+    const buttons: Array<[string, string]> = [
+      ['Hours', 'A0'],
+      ['Minutes', 'A1'],
+      ['Alarm', 'A2'],
+    ];
+    buttons.forEach(([label, pin], index) => {
+      const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + (2 + index) * PART_STEP);
+      const boardPin = simulation.boardTerminal(pin);
+      const legA = simulation.pinAt(button, 'a');
+      const legB = simulation.pinAt(button, 'b');
+      if (!boardPin || !legA || !legB) return;
+      simulation.routeWire(boardPin, legA);
+      simulation.routeWire(legB, ground);
+      void label;
+    });
+
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), PART_X, PART_Y + 5 * PART_STEP);
+    const buzzPin = simulation.boardTerminal('A3');
+    const positive = simulation.pinAt(buzzer, 'positive');
+    const negative = simulation.pinAt(buzzer, 'negative');
+    if (!buzzPin || !positive || !negative) return;
+    simulation.routeWire(buzzPin, positive);
+    simulation.routeWire(negative, ground);
     },
   },
   ],
   working: [
-    'The LCD counts seconds on its top line with "alarm 07:30" below.',
-    'The LED flips with every even second.',
-    'The serial monitor logs "clock up" once, then stays quiet — the glass is the output here.',
+    'The 7-segment display shows HHMM from the RTC, ticking once a minute.',
+    'Press Alarm to set the alarm time with Hours and Minutes, press Alarm again to arm it.',
+    'The buzzer beeps when the clock reaches the armed alarm time.',
   ],
 };
 
