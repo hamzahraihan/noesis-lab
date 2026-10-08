@@ -8,11 +8,11 @@
  * dialog with step navigation, so the work happens where the wires are.
  *
  * Operate mode: the visitor completes a task. Scanability and consistency with
- * the bench chrome (slate-950, one sky accent, `ctl` controls, `panel-title`
- * headings) outrank expression.
+ * the bench chrome (slate-950, one sky accent, shadcn Button controls,
+ * `panel-title` headings) outrank expression.
  */
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -22,6 +22,7 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link } from 'react-router';
+import { Button, Dialog, DialogContent } from '@/components';
 import type { Exercise } from './exercises';
 import { ExercisePreview } from './ExercisePreview';
 import { isGuideDismissed, setGuideDismissed } from './guide-dismissal';
@@ -48,31 +49,26 @@ export function ExerciseGuide({
   // keeps the steps already marked done.
   const [dontShow, setDontShow] = useState(() => isGuideDismissed(exercise.id));
   const titleId = useId();
-  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Esc closes, and the background stops scrolling while the dialog is up.
+  // Esc closes through Radix (`onOpenChange` → `close`), and the background
+  // stops scrolling while the dialog is up.
   // The bench canvas keeps its own key handler; it ignores keys from inputs
   // but not from here, so stop propagation to avoid e.g. Space toggling Run.
+  // Escape itself is left alone so it reaches Radix, which owns dismissal.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') return;
       event.stopPropagation();
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
     };
     window.addEventListener('keydown', onKey, { capture: true });
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    panelRef.current?.focus();
     return () => {
       window.removeEventListener('keydown', onKey, { capture: true });
       document.body.style.overflow = previousOverflow;
     };
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [open]);
 
   const totalSteps = exercise.steps.length;
   const currentStep = exercise.steps[Math.min(stepIndex, totalSteps - 1)] ?? '';
@@ -94,19 +90,16 @@ export function ExerciseGuide({
   };
 
   return (
-    <div
-      className="guide-backdrop fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 p-4 backdrop-blur-[2px] sm:items-center"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
       }}
     >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="guide-panel flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-[0_24px_64px_-16px_rgba(0,0,0,0.7)] outline-none"
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        className="guide-panel flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden bg-slate-900 p-0 sm:max-w-3xl"
       >
         {/* Header: what this is, and the way out. */}
         <div className="flex shrink-0 items-start gap-3 border-b border-slate-800 px-5 pt-4 pb-3">
@@ -122,15 +115,17 @@ export function ExerciseGuide({
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">{exercise.module}</p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="icon-sm"
             onClick={close}
             aria-label="Close the exercise guide"
             title="Close (Esc)"
-            className="ctl ctl-quiet ctl-icon shrink-0"
+            className="shrink-0"
           >
             <Cross2Icon className="icon" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
 
         {/* Progress: how far through the build. A linear bar, because it is
@@ -214,33 +209,35 @@ export function ExerciseGuide({
             <div className="mt-2.5 rounded-lg border border-slate-700/80 bg-slate-950/60 p-4">
               <p className="text-sm leading-relaxed text-slate-200">{currentStep}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setStepIndex((index) => Math.max(0, index - 1))}
                   disabled={stepIndex === 0}
-                  className="ctl ctl-quiet"
                 >
                   <ArrowLeftIcon className="icon" aria-hidden="true" />
                   Back
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  size="sm"
+                  variant={done.has(stepIndex) ? 'default' : 'outline'}
                   onClick={() => toggleDone(stepIndex)}
                   aria-pressed={done.has(stepIndex)}
-                  className={`ctl ${done.has(stepIndex) ? 'ctl-accent' : 'ctl-outline'}`}
                 >
                   <CheckIcon className="icon" aria-hidden="true" />
                   {done.has(stepIndex) ? 'Done' : 'Mark done'}
-                </button>
+                </Button>
                 {stepIndex < totalSteps - 1 ? (
-                  <button
+                  <Button
                     type="button"
+                    size="sm"
                     onClick={() => setStepIndex((index) => Math.min(totalSteps - 1, index + 1))}
-                    className="ctl ctl-accent"
                   >
                     Next step
                     <ArrowRightIcon className="icon" aria-hidden="true" />
-                  </button>
+                  </Button>
                 ) : (
                   <span className="text-xs text-slate-500">Last step — press Run when ready.</span>
                 )}
@@ -337,24 +334,26 @@ export function ExerciseGuide({
               ))}
             </div>
             {hintsRevealed < exercise.hints.length && (
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setHintsRevealed((count) => count + 1)}
-                className="ctl ctl-outline mt-2.5"
+                className="mt-2.5"
               >
                 {hintsRevealed === 0
                   ? 'Show a hint'
                   : `Another hint (${exercise.hints.length - hintsRevealed} left)`}
-              </button>
+              </Button>
             )}
           </section>
         </div>
 
         {/* Footer: the way back to the full lesson, and the way onto the bench. */}
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-800 bg-slate-950/40 px-5 py-3">
-          <Link to={`/learn/${exercise.id}`} className="ctl ctl-quiet">
-            Full lesson {exercise.id}
-          </Link>
+          <Button asChild variant="secondary" size="sm">
+            <Link to={`/learn/${exercise.id}`}>Full lesson {exercise.id}</Link>
+          </Button>
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500">
             <input
               type="checkbox"
@@ -365,12 +364,12 @@ export function ExerciseGuide({
             Don&apos;t auto-open
           </label>
           <span className="flex-1" />
-          <button type="button" onClick={close} className="ctl ctl-accent">
+          <Button type="button" size="sm" onClick={close}>
             Start building
             <ArrowRightIcon className="icon" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
