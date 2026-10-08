@@ -5,6 +5,8 @@ import { boardOption, type BoardId } from './boardRegistry';
 import { GALLERY, boardsFor, buildFor, galleryById } from './gallery';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulation';
+import { pushWokwiState } from '@/features/bench/wokwi';
+import type { FootprintState } from '@/features/bench/footprints';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 
@@ -71,7 +73,7 @@ describe('the project gallery', () => {
 
   it('wires every build onto its board bench without throwing', () => {
     const wireFloors: Record<string, number> = {
-      'alarm-clock': 16,
+      'alarm-clock': 24,
       safe: 14,
       dashboard: 14,
       parking: 15,
@@ -147,6 +149,11 @@ describe('the project gallery', () => {
    * text and keep showing new text as time moves. This is the test that would
    * have caught the D2 pin collision (blank/garbled LCD) and the frozen RTC
    * (a clock that never ticks) before any learner did.
+   *
+   * The alarm clock drives a multiplexed 7-segment display straight from GPIO
+   * rather than through a text controller, so the test watches the solved
+   * nets instead: the last-driven digit common stays high through the delay,
+   * and the serial log proves the RTC is ticking underneath it.
    */
   it('runs each LCD project live on the bench', () => {
     for (const id of ['alarm-clock', 'weather'] as const) {
@@ -160,6 +167,46 @@ describe('the project gallery', () => {
       simulation.loadFirmware(build.sketch, 'arduino-cpp');
       expect(simulation.firmwareError, `${id} firmware`).toBeNull();
       simulation.start();
+      if (id === 'alarm-clock') {
+        let digitSeenHigh = false;
+        for (let frame = 0; frame < 120; frame++) {
+          simulation.tick(0.05);
+          // D2-D5 are the four digit commons; the last-driven one persists
+          // HIGH through the end-of-loop delay.
+          for (const gpio of [2, 3, 4, 5]) {
+            if (simulation.engine.readDigital(gpio)) digitSeenHigh = true;
+          }
+        }
+        expect(digitSeenHigh, `${id} multiplexes its digits`).toBe(true);
+        // The glass itself: push the solved state into the Wokwi element and
+        // read back all four digits. The bench starts at midnight, so every
+        // digit holds '0' — segments A-F lit, G and DP dark.
+        const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+        const element = { values: [] as number[], digits: 0 } as unknown as HTMLElement;
+        pushWokwiState(element, segPart.definition, segPart, {
+          pinVolts: simulation.pinVoltages(),
+          displays: simulation.displayControllers(),
+        } as unknown as FootprintState);
+        const values = (element as unknown as { values: number[] }).values;
+        expect(values).toHaveLength(32);
+        for (let d = 0; d < 4; d++) {
+          expect(values.slice(d * 8, d * 8 + 8), `${id} digit ${d + 1} shows 0`).toEqual([
+            1, 1, 1, 1, 1, 1, 0, 0,
+          ]);
+        }
+        // Buttons rest HIGH on their pull-ups; the disarmed buzzer rests LOW.
+        expect(simulation.engine.readDigital(14), `${id} hours button released`).toBe(true);
+        expect(simulation.engine.readDigital(15), `${id} minutes button released`).toBe(true);
+        expect(simulation.engine.readDigital(16), `${id} alarm button released`).toBe(true);
+        expect(simulation.engine.readDigital(17), `${id} buzzer silent while disarmed`).toBe(false);
+        // The serial log carries one t=H:M:S line per loop: the seconds in
+        // them must advance, proving the RTC ticks under the display.
+        const seconds = [...simulation.serialLines().join('').matchAll(/t=\d+:\d+:(\d+)/g)].map(
+          (match) => Number(match[1]),
+        );
+        expect(new Set(seconds).size, `${id} clock ticks`).toBeGreaterThan(1);
+        continue;
+      }
       const glasses: string[] = [];
       for (let frame = 0; frame < 120; frame++) {
         simulation.tick(0.05);
@@ -168,16 +215,9 @@ describe('the project gallery', () => {
           glasses.push(lcd ? lcd.text() : '');
         }
       }
-      if (id === 'alarm-clock') {
-        for (const glass of glasses) {
-          expect(glass, `${id} glass shows time`).toMatch(/\d+:\d+:\d+/);
-        }
-        expect(new Set(glasses).size, `${id} clock ticks`).toBeGreaterThan(1);
-      } else {
-        for (const glass of glasses) {
-          expect(glass, `${id} glass shows readings`).toMatch(/t \d/);
-          expect(glass, `${id} glass shows humidity`).toMatch(/rh \d/);
-        }
+      for (const glass of glasses) {
+        expect(glass, `${id} glass shows readings`).toMatch(/t \d/);
+        expect(glass, `${id} glass shows humidity`).toMatch(/rh \d/);
       }
     }
   }, 60_000);
