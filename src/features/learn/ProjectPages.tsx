@@ -9,11 +9,11 @@
 
 import { Link, useParams } from 'react-router';
 import { ArrowRightIcon } from '@radix-ui/react-icons';
-import { Button } from '@/components';
+import { Badge, Button } from '@/components';
 import { boardOption, boardSpecs, isBoardId } from './boardRegistry';
 import { EXAMPLES } from './examples';
 import { GALLERY, buildFor } from './gallery';
-import { BoardArt, Chip } from './HomePage';
+import { BoardArt } from './HomePage';
 import { projectFor } from './projects';
 import { GalleryPreview } from './ExercisePreview';
 
@@ -62,15 +62,33 @@ export function ProjectPage() {
       </figure>
 
       <div className="flex flex-wrap gap-1.5" aria-label="Board specifications">
-        <Chip label="logic" value={`${specs.logicVolts} V`} />
+        <Badge>
+          <span>logic</span>
+          <span>{`${specs.logicVolts} V`}</span>
+        </Badge>
         {specs.adcCount > 0 ? (
-          <Chip label="ADC" value={`${specs.adcBits}-bit`} />
+          <Badge>
+            <span>ADC</span>
+            <span>{`${specs.adcBits}-bit`}</span>
+          </Badge>
         ) : (
-          <Chip label="ADC" value="none" />
+          <Badge>
+            <span>ADC</span>
+            <span>none</span>
+          </Badge>
         )}
-        <Chip label="GPIO" value={String(specs.gpioCount)} />
-        <Chip label="analogue" value={String(specs.adcCount)} />
-        <Chip label="PWM" value={`${specs.pwmHz} Hz`} />
+        <Badge>
+          <span>GPIO</span>
+          <span>{String(specs.gpioCount)}</span>
+        </Badge>
+        <Badge>
+          <span>analogue</span>
+          <span>{String(specs.adcCount)}</span>
+        </Badge>
+        <Badge>
+          <span>PWM</span>
+          <span>{`${specs.pwmHz} Hz`}</span>
+        </Badge>
       </div>
 
       <ProjectSection title="The featured project">
