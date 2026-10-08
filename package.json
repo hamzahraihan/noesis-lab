@@ -18,6 +18,7 @@
     "@radix-ui/react-icons": "^1.3.2",
     "@tailwindcss/vite": "^4.3.3",
     "@wokwi/elements": "^1.9.2",
+    "lz-string": "^1.5.0",
     "monaco-editor": "^0.57.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

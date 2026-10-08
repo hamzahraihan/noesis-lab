@@ -58,9 +58,12 @@ import {
   PauseIcon,
   PlayIcon,
   PlusIcon,
+  Link2Icon,
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { decodeShareToProject, encodeProjectToShare, SHARE_URL_LIMIT } from './share-codec';
+import { loadBenchProject, saveBenchProject } from './project-store';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -310,15 +313,53 @@ export default function Bench(props: BenchProps) {
    * the C++ blink would put a syntax error on screen before anyone had touched
    * anything, which reads as a broken simulator rather than a board that speaks
    * a different language.
+   *
+   * Seeded once, on mount, in this order: the exercise or gallery build when
+   * the URL names one (`?ex=` / `?project=` win over everything, so a shared
+   * lesson link always means one thing); then a `?files=` share payload; then
+   * this board's autosave; then the starter single-file project. A corrupt
+   * `?files=` falls back to the starter with an error line under the editor,
+   * never a blank bench.
    */
-  const [project, setProject] = useState<FirmwareProject>(() =>
-    toSingleFileProject(
+  const [seed] = useState(() => {
+    const starter = toSingleFileProject(
       exercise?.sketch ??
         projectBuild?.sketch ??
         (boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch),
       exercise ? exerciseLanguage(exercise) : boardOption(boardId).language,
-    ),
-  );
+    );
+    if (exercise !== null || projectBuild !== null) {
+      return { project: starter, shareError: null as string | null };
+    }
+    const shared = search.get('files');
+    if (shared !== null) {
+      const decoded = decodeShareToProject(shared);
+      if (decoded !== null) return { project: decoded, shareError: null as string | null };
+      return {
+        project: starter,
+        shareError: 'That share link could not be read, so the bench opened a fresh project instead.',
+      };
+    }
+    return { project: loadBenchProject(boardId) ?? starter, shareError: null as string | null };
+  });
+  const [project, setProject] = useState<FirmwareProject>(seed.project);
+  /*
+   * The corrupt-share notice: shown in the error bar until the next Run, when
+   * real firmware errors take over. Editing does not clear it -- the bench
+   * still opened a fresh project instead of the link's, which stays true.
+   */
+  const [shareError, setShareError] = useState<string | null>(seed.shareError);
+
+  /*
+   * Autosave: every project change lands in this board's localStorage slot
+   * ~500 ms later, so a reload reopens the same tabs. Loading an example,
+   * exercise, or gallery build replaces the project, which flows through here
+   * and overwrites that board's save.
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => saveBenchProject(boardId, project), 500);
+    return () => clearTimeout(timer);
+  }, [boardId, project]);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   /*
@@ -853,6 +894,9 @@ export default function Bench(props: BenchProps) {
    * the operator never has to guess which tab broke.
    */
   const handleRun = () => {
+    // A real firmware verdict replaces the corrupt-share notice: the bar
+    // shows one thing at a time, and the run just produced something newer.
+    setShareError(null);
     simulation.loadFirmware(project);
     const message = simulation.firmwareError;
     if (message) {
@@ -897,6 +941,25 @@ export default function Bench(props: BenchProps) {
     },
     [simulation],
   );
+
+  /*
+   * The share payload for the header's Copy-link button: the whole project
+   * compressed into a `?files=` parameter. Recomputed per render, which is
+   * cheap next to the bench itself -- and the button must track the project,
+   * not the project as it was when the bench opened.
+   *
+   * Oversize projects stay local-only by design: the button disables rather
+   * than producing a URL no address bar will survive.
+   */
+  const sharePayload = encodeProjectToShare(project);
+  const shareTooLarge = sharePayload.length > SHARE_URL_LIMIT;
+  const copyShareLink = () => {
+    const base = window.location.href.split('#')[0];
+    const url = `${base}#/bench/${boardId}?files=${sharePayload}`;
+    void navigator.clipboard.writeText(url).catch(() => {
+      /* Clipboard unavailable: the button stays, the project stays local. */
+    });
+  };
 
   /*
    * Swapping boards is a navigation, not a state change: the board is in the
@@ -1050,6 +1113,21 @@ export default function Bench(props: BenchProps) {
               );
             })}
           </div>
+
+          <button
+            type="button"
+            onClick={copyShareLink}
+            disabled={shareTooLarge}
+            className="ctl ctl-quiet"
+            title={
+              shareTooLarge
+                ? 'Too large to share by link — files stay local'
+                : 'Copy a link carrying this project'
+            }
+          >
+            <Link2Icon className="icon" aria-hidden="true" />
+            Copy link
+          </button>
 
           <button
             type="button"
@@ -1229,7 +1307,7 @@ export default function Bench(props: BenchProps) {
             <FirmwareEditor
               project={project}
               onProjectChange={setProject}
-              error={simulation.firmwareError}
+              error={simulation.firmwareError ?? shareError}
               expanded={firmwareOpen}
               onToggle={() => setFirmwareOpen((open) => !open)}
               language={project.language}
