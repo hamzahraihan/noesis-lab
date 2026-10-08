@@ -16,9 +16,10 @@ import {
   ILI9341_WIDTH,
 } from './ili9341';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from './ssd1306';
+import type { SevenSegment } from './sevensegment';
 
 /** Either controller model a display part can be driving. */
-export type DisplayController = Ssd1306 | Ili9341;
+export type DisplayController = Ssd1306 | Ili9341 | SevenSegment;
 
 /**
  * 0.96" 128x64 OLED, I2C, 4-pin breakout.
