@@ -34,6 +34,7 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage } from '@/features/simulation';
+import { ENTRY_BY_LANGUAGE, toSingleFileProject } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
@@ -1180,11 +1181,19 @@ export default function Bench(props: BenchProps) {
             }`}
           >
             <FirmwareEditor
-              value={firmware}
+              // Task 6 owns the full project-state rewire. Until then the bench
+              // stays single-file: structural tab edits are inert and only the
+              // entry file's content syncs back, so no sketch text can be lost.
+              project={toSingleFileProject(firmware, language)}
+              onProjectChange={(next) => {
+                const entry = next.files.find(
+                  (file) => file.name === ENTRY_BY_LANGUAGE[next.language],
+                );
+                if (entry && entry.content !== firmware) setFirmware(entry.content);
+              }}
               error={simulation.firmwareError}
               expanded={firmwareOpen}
               onToggle={() => setFirmwareOpen((open) => !open)}
-              onChange={setFirmware}
               language={language}
               onChangeLanguage={setLanguage}
               onRun={() => {

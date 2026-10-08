@@ -6,13 +6,20 @@
  * panels are instruments, and an instrument that needs explaining is a bad one.
  */
 
-import Editor from '@monaco-editor/react';
+import Editor, { type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import type { PartInstance } from '@/features/simulation';
+import {
+  addFile,
+  ENTRY_BY_LANGUAGE,
+  removeFile,
+  renameFile,
+  updateFileContent,
+} from '@/features/simulation';
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
-import type { FirmwareLanguage } from '@/features/simulation';
+import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import type { Example } from '@/features/learn';
 import {
   CaretRightIcon,
@@ -314,12 +321,12 @@ export function SerialMonitor({ lines }: { lines: readonly string[] }) {
 // ---------------------------------------------------------------------------
 
 export function FirmwareEditor({
-  value,
+  project,
+  onProjectChange,
   error,
   language,
   expanded,
   onToggle,
-  onChange,
   onChangeLanguage,
   onRun,
   onReset,
@@ -328,14 +335,14 @@ export function FirmwareEditor({
   activeExampleId,
   onLoadExample,
 }: {
-  value: string;
+  project: FirmwareProject;
+  onProjectChange(next: FirmwareProject): void;
   error: string | null;
   /** Which grammar the text in the editor is written in. */
   language: FirmwareLanguage;
   /** Whether the editor body is showing under its header. */
   expanded: boolean;
   onToggle(): void;
-  onChange(next: string): void;
   onChangeLanguage(language: FirmwareLanguage): void;
   onRun(): void;
   onReset(): void;
@@ -345,6 +352,89 @@ export function FirmwareEditor({
   activeExampleId: string | null;
   onLoadExample(id: string): void;
 }) {
+  const active = project.files.find((f) => f.name === project.activeName) ?? project.files[0];
+  const activeName = active?.name;
+  const entry = ENTRY_BY_LANGUAGE[project.language];
+
+  /*
+   * One Monaco instance shows every tab, so each tab's cursor and scroll live
+   * here rather than in the editor. Saved on the way out of a tab, restored on
+   * the way in; anything Monaco rejects is dropped, since a lost scroll
+   * position is never worth an error bar.
+   */
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const viewStatesRef = useRef(new Map<string, unknown>());
+
+  const handleMount: OnMount = (editor) => {
+    editorRef.current = editor;
+  };
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !activeName) return;
+    const saved = viewStatesRef.current.get(activeName);
+    if (saved) {
+      try {
+        editor.restoreViewState(saved as ReturnType<typeof editor.saveViewState>);
+      } catch {
+        // Dropped: the tab still opens at the top, which is always correct.
+      }
+    }
+  }, [activeName]);
+
+  const selectFile = (name: string) => {
+    const editor = editorRef.current;
+    if (editor && active && name !== active.name) {
+      try {
+        const state = editor.saveViewState();
+        if (state) viewStatesRef.current.set(active.name, state);
+      } catch {
+        // Dropped: the tab still opens, which is what matters.
+      }
+    }
+    onProjectChange({ ...project, activeName: name });
+  };
+
+  const reportHelperError = (cause: unknown) => {
+    window.alert(cause instanceof Error ? cause.message : String(cause));
+  };
+
+  const handleAddFile = () => {
+    const name = window.prompt('New file name', 'helpers.h');
+    if (!name) return;
+    try {
+      onProjectChange(addFile(project, name.trim()));
+    } catch (cause) {
+      reportHelperError(cause);
+    }
+  };
+
+  const handleRenameFile = (name: string) => {
+    const next = window.prompt('Rename file', name);
+    if (!next || next.trim() === name) return;
+    try {
+      onProjectChange(renameFile(project, name, next.trim()));
+    } catch (cause) {
+      reportHelperError(cause);
+    }
+  };
+
+  const handleRemoveFile = (name: string) => {
+    try {
+      onProjectChange(removeFile(project, name));
+    } catch (cause) {
+      reportHelperError(cause);
+    }
+  };
+
+  const handleContentChange = (name: string, next: string) => {
+    try {
+      onProjectChange(updateFileContent(project, name, next));
+    } catch {
+      // Over the 32 KB cap: the keystroke is dropped and the limit surfaces
+      // as a project error on Run rather than mid-typing.
+    }
+  };
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
@@ -431,27 +521,87 @@ export function FirmwareEditor({
       </div>
 
       {expanded && (
-        <Editor
-          height="100%"
-          language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
-          theme={FIRMWARE_THEME}
-          value={value}
-          onChange={(next) => onChange(next ?? '')}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 12,
-            lineHeight: 19,
-            fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-            scrollBeyondLastLine: false,
-            smoothScrolling: true,
-            cursorBlinking: 'smooth',
-            padding: { top: 10, bottom: 10 },
-            renderLineHighlight: 'none',
-            automaticLayout: true,
-            tabSize: 2,
-            wordWrap: 'off',
-          }}
-        />
+        <>
+          {/*
+           * One tab per file over a single Monaco instance. The entry tab has
+           * no close button; double-click renames in v1. Tab order is file
+           * order, which is also include order.
+           */}
+          <div
+            role="tablist"
+            aria-label="Firmware files"
+            className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
+          >
+            {project.files.map((file) => {
+              const selected = file.name === active?.name;
+              const isEntry = file.name === entry;
+              return (
+                <div
+                  key={file.name}
+                  role="tab"
+                  aria-selected={selected}
+                  className={`flex shrink-0 items-center rounded-md font-mono text-xs ${
+                    selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => selectFile(file.name)}
+                    onDoubleClick={() => handleRenameFile(file.name)}
+                    title={isEntry ? file.name : `${file.name} — double-click to rename`}
+                    className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                  >
+                    {file.name}
+                  </button>
+                  {!isEntry && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFile(file.name)}
+                      aria-label={`Remove ${file.name}`}
+                      title={`Remove ${file.name}`}
+                      className="rounded-md px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={handleAddFile}
+              aria-label="Add file"
+              title="Add file"
+              className="ctl ctl-quiet ctl-icon shrink-0 font-mono"
+            >
+              +
+            </button>
+          </div>
+          <Editor
+            height="100%"
+            language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
+            theme={FIRMWARE_THEME}
+            value={active?.content ?? ''}
+            onChange={(next) => {
+              if (active) handleContentChange(active.name, next ?? '');
+            }}
+            onMount={handleMount}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 12,
+              lineHeight: 19,
+              fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+              scrollBeyondLastLine: false,
+              smoothScrolling: true,
+              cursorBlinking: 'smooth',
+              padding: { top: 10, bottom: 10 },
+              renderLineHighlight: 'none',
+              automaticLayout: true,
+              tabSize: 2,
+              wordWrap: 'off',
+            }}
+          />
+        </>
       )}
 
       {error && (
