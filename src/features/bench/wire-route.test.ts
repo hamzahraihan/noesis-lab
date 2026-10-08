@@ -207,6 +207,18 @@ describe('lane assignment', () => {
     expect(drawn([...existing, elsewhere], 'a')).toBe(alone);
     expect(drawn([...existing, alongside], 'a')).not.toBe(alone);
   });
+
+  it('separates a fan leaving one header row for different pins', () => {
+    // The character LCD: eight control lines leave one header row (same y)
+    // for eight different board pins (different x). Grouping by the turning
+    // line alone puts each in a group of one with lane 0, so all eight lie
+    // on top of each other along the header. They must share one group.
+    const fan = Array.from({ length: 8 }, (_, i) =>
+      sideways(`lcd-${i}`, { x: 430 + i * 2.5, y: 146.29 }, { x: 35 + i * 4, y: 2.38 }),
+    );
+    const lanes = wireLanes(fan);
+    expect(new Set(fan.map((span) => lanes.get(span.id))).size).toBe(fan.length);
+  });
 });
 
 describe('every bend lands on the wire', () => {
