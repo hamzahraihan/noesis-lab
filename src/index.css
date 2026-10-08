@@ -355,3 +355,17 @@
     }
   }
 }
+
+/*
+ * Task 8 reduced-motion pin: Radix's `animate-in/out` utilities live in the
+ * utilities cascade layer, so the components-layer `animation: none` above
+ * loses to them under `prefers-reduced-motion` and the 200ms enter fade/zoom
+ * would still play. Unlayered author CSS beats any layered rule, so this
+ * restores instant appearance for the guide panel and every dialog overlay.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .guide-panel,
+  [data-slot='dialog-overlay'] {
+    animation: none;
+  }
+}
