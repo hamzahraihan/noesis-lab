@@ -12,7 +12,7 @@
  * sending the link to someone else rebuilds the same board.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { isLargePart, type CatalogueEntry } from '@/features/parts';
 import { ComponentBrowser } from './ComponentBrowser';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
@@ -62,8 +62,8 @@ import {
   ReaderIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { decodeShareToProject, encodeProjectToShare, SHARE_URL_LIMIT } from './share-codec';
-import { loadBenchProject, saveBenchProject } from './project-store';
+import { decodeShareToProject, encodeProjectToShare, isShareable } from './share-codec';
+import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './project-store';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -319,28 +319,36 @@ export default function Bench(props: BenchProps) {
    * lesson link always means one thing); then a `?files=` share payload; then
    * this board's autosave; then the starter single-file project. A corrupt
    * `?files=` falls back to the starter with an error line under the editor,
-   * never a blank bench.
+   * never a blank bench — as does an unreadable autosave.
+   *
+   * The precedence itself lives in `resolveBenchSeed` (project-store) so it is
+   * node-testable; this only folds the exercise/build sketch into the starter.
    */
+  const starterFor = useCallback(
+    (id: BoardId) => {
+      const language = boardOption(id).language;
+      return toSingleFileProject(
+        language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
+        language,
+      );
+    },
+    [boardOption, BLINK_EXAMPLE, PI_BLINK_SKETCH],
+  );
   const [seed] = useState(() => {
-    const starter = toSingleFileProject(
-      exercise?.sketch ??
-        projectBuild?.sketch ??
-        (boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch),
-      exercise ? exerciseLanguage(exercise) : boardOption(boardId).language,
-    );
-    if (exercise !== null || projectBuild !== null) {
-      return { project: starter, shareError: null as string | null };
-    }
-    const shared = search.get('files');
-    if (shared !== null) {
-      const decoded = decodeShareToProject(shared);
-      if (decoded !== null) return { project: decoded, shareError: null as string | null };
-      return {
-        project: starter,
-        shareError: 'That share link could not be read, so the bench opened a fresh project instead.',
-      };
-    }
-    return { project: loadBenchProject(boardId) ?? starter, shareError: null as string | null };
+    const starter =
+      exercise !== null
+        ? toSingleFileProject(exercise.sketch, exerciseLanguage(exercise))
+        : projectBuild !== null
+          ? toSingleFileProject(projectBuild.sketch, boardOption(boardId).language)
+          : starterFor(boardId);
+    return resolveBenchSeed({
+      starter,
+      pinned: exercise !== null || projectBuild !== null,
+      sharedPayload: search.get('files'),
+      saved: loadBenchProject(boardId),
+      hadUnreadableSave: hasBenchProject(boardId),
+      decode: decodeShareToProject,
+    });
   });
   const [project, setProject] = useState<FirmwareProject>(seed.project);
   /*
@@ -373,6 +381,27 @@ export default function Bench(props: BenchProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
   const [exampleId, setExampleId] = useState<string | null>(null);
+
+  /*
+   * Switching boards reloads that board's tabs from its own autosave (or its
+   * starter when it has none). The project belongs to the board it was written
+   * for — pin numbers differ per board — and carrying it across would let the
+   * autosave below write the wrong-language project over the new board's own
+   * save. `?ex=` / `?project=` / `?files=` stay mount-only: they named the
+   * bench that was opened, not the one being switched to.
+   *
+   * Skipped on mount (the ref still names this board), so the mount seed above
+   * is never overwritten by it.
+   */
+  const mountedBoard = useRef(boardId);
+  useEffect(() => {
+    if (mountedBoard.current === boardId) return;
+    mountedBoard.current = boardId;
+    setProject(loadBenchProject(boardId) ?? starterFor(boardId));
+    setExampleId(null);
+    setShareError(null);
+  }, [boardId, starterFor]);
+
   /*
    * The colour the next jumper will be drawn in.
    *
@@ -886,6 +915,8 @@ export default function Bench(props: BenchProps) {
         nextLanguage,
       ),
     );
+    // A fresh blink in a new grammar is not the example that was highlighted.
+    setExampleId(null);
   };
 
   /*
@@ -943,19 +974,17 @@ export default function Bench(props: BenchProps) {
   );
 
   /*
-   * The share payload for the header's Copy-link button: the whole project
-   * compressed into a `?files=` parameter. Recomputed per render, which is
-   * cheap next to the bench itself -- and the button must track the project,
-   * not the project as it was when the bench opened.
+   * Whether the whole project fits in a shareable link, recomputed per render
+   * (cheap next to the bench itself) so the button tracks the current project.
    *
    * Oversize projects stay local-only by design: the button disables rather
-   * than producing a URL no address bar will survive.
+   * than producing a URL no address bar will survive. The payload itself is
+   * encoded at click time, so the check and the link cannot disagree.
    */
-  const sharePayload = encodeProjectToShare(project);
-  const shareTooLarge = sharePayload.length > SHARE_URL_LIMIT;
+  const shareTooLarge = !isShareable(project);
   const copyShareLink = () => {
     const base = window.location.href.split('#')[0];
-    const url = `${base}#/bench/${boardId}?files=${sharePayload}`;
+    const url = `${base}#/bench/${boardId}?files=${encodeProjectToShare(project)}`;
     void navigator.clipboard.writeText(url).catch(() => {
       /* Clipboard unavailable: the button stays, the project stays local. */
     });

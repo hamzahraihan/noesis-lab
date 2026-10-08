@@ -44,4 +44,46 @@ describe('loadFirmware with a project', () => {
     sim.loadFirmware(wrapped);
     expect(sim.firmwareError).toBeNull();
   });
+
+  it('reset() reloads the same project', () => {
+    const sim = bench();
+    sim.loadFirmware({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' }],
+    });
+    const before = sim.firmwareError;
+    expect(before).toContain('missing.h');
+    sim.reset();
+    expect(sim.firmwareError).toBe(before);
+  });
+
+  it('keeps a valid project loaded across reset()', () => {
+    const sim = bench();
+    sim.loadFirmware({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [
+        { name: 'main.ino', content: '#include "helpers.h"\nvoid setup() { helper(); }\nvoid loop() {}\n' },
+        { name: 'helpers.h', content: 'void helper() {}\n' },
+      ],
+    });
+    expect(sim.firmwareError).toBeNull();
+    sim.reset();
+    expect(sim.firmwareError).toBeNull();
+    expect(sim.runner).not.toBeNull();
+  });
+
+  it('start() reloads the project when there is no runner', () => {
+    const sim = bench();
+    sim.loadFirmware({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' }],
+    });
+    expect(sim.runner).toBeNull();
+    sim.start();
+    expect(sim.running).toBe(true);
+    expect(sim.firmwareError).toContain('missing.h');
+  });
 });

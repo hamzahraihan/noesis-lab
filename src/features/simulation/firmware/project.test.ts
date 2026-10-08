@@ -18,6 +18,23 @@ describe('validateProject', () => {
     });
     expect(errors.length).toBeGreaterThan(0);
   });
+
+  it('rejects more than 8 files', () => {
+    const files = [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }];
+    for (let index = 0; index < 8; index += 1) files.push({ name: `h${index}.h`, content: 'x\n' });
+    expect(files).toHaveLength(9);
+    const errors = validateProject({ language: 'arduino-cpp', activeName: 'main.ino', files });
+    expect(errors.some((error) => /more than 8 files/.test(error))).toBe(true);
+  });
+
+  it('rejects files larger than 32 KB', () => {
+    const errors = validateProject({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: 'x'.repeat(32 * 1024 + 1) }],
+    });
+    expect(errors.some((error) => /larger than 32 KB/.test(error))).toBe(true);
+  });
 });
 
 describe('tab helpers', () => {
