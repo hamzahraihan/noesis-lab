@@ -25,6 +25,7 @@ import { createLcd, type Lcd1602 } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
+import { SevenSegment } from '@/features/parts';
 
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
@@ -303,7 +304,16 @@ export class Engine {
 
     for (const part of this.bench.parts) {
       const carried = previousDisplays.get(part.id);
-      const controller = carried ?? createController(part.definition);
+      let controller: DisplayController | undefined = carried ?? undefined;
+      if (!controller) {
+        // The multiplexed 7-segment display keeps its own per-digit latch so
+        // the renderer never depends on sampling a transient digit strobe.
+        if (part.definition.component.kind === '7segment') {
+          controller = new SevenSegment(part.definition.component.digits ?? 1);
+        } else {
+          controller = createController(part.definition) ?? undefined;
+        }
+      }
       if (controller) this.displays.set(part.id, controller);
       /*
        * A display that speaks I2C is one model, not two. Registering a second
@@ -361,8 +371,8 @@ export class Engine {
        * high between strobes, so latching on every solve that observes it
        * high re-latches the stale nibble — and every solve that re-latches
        * shifts the panel's pairing by one, garbling everything after it. The
-       * flag arms on a low solve and is consumed by the high one, which is
-       * what a stroke always is: low settle, then high settle.
+       * flag arms on a low solve and is consumed by the high one; hosts that
+       * strobe via pins may also arm via `primeLcdEdges` to skip the low solve.
        */
       const strobe = this.voltageOfNet(nets.enable) >= high;
       if (!strobe) {
@@ -394,8 +404,52 @@ export class Engine {
     }
   }
 
-  /** An LCD's signal nets, or null when it is not wired to anything usable. */
-  private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
+  /**
+   * Latches each multiplexed digit's pattern while its common is asserted.
+   *
+   * Render instants can never observe a multiplexed strobe reliably, so the
+   * latch lives here — fed every solve — and the renderer reads the held
+   * frame. Single-digit parts use COM.1; multi-digit parts use DIG1..DIGn.
+   * Volts go across raw so the relative forward bias decides, which holds up
+   * while the commons sag under load.
+   */
+  private pumpSevenSegments(): void {
+    for (const [partId, controller] of this.displays) {
+      if (!(controller instanceof SevenSegment)) continue;
+      const nets = this.sevenSegmentNets(partId, controller.digitCount);
+      if (!nets) continue;
+      controller.update(
+        nets.digits.map((net) => this.voltageOfNet(net)),
+        nets.segments.map((net) => this.voltageOfNet(net)),
+      );
+    }
+  }
+
+  /** A 7-segment display's signal nets, or null when not wired. */
+  private sevenSegmentNets(
+    partId: string,
+    digitCount: number,
+  ): { segments: number[]; digits: number[] } | null {
+    const netlist = this.currentNetlist;
+    const net = (pin: string): number => {
+      const found = netlist.pinNode.get(`${partId}:${pin}`);
+      return found === undefined ? GROUND : found;
+    };
+
+    const segments = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP'].map(net);
+    const digitPins =
+      digitCount > 1
+        ? Array.from({ length: digitCount }, (_, index) => `DIG${index + 1}`)
+        : ['COM.1'];
+    const digits = digitPins.map(net);
+
+    // Require at least one segment and one digit to be wired.
+    const hasSeg = segments.some((n) => n !== GROUND);
+    const hasDig = digits.some((n) => n !== GROUND);
+    if (!hasSeg || !hasDig) return null;
+
+    return { segments, digits };
+  }  private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
     const netlist = this.currentNetlist;
     const net = (pin: string): number => {
       const found = netlist.pinNode.get(`${partId}:${pin}`);
@@ -424,6 +478,20 @@ export class Engine {
   /** The character LCD on a part, or undefined when it is not one. */
   lcd(partId: string): Lcd1602 | undefined {
     return this.lcds.get(partId);
+  }
+
+  /**
+   * Arms every character LCD's edge detector without solving.
+   *
+   * A strobe is a low settle that arms followed by a high settle that latches.
+   * The low solve exists only to arm: data and enable levels are already known
+   * from the pin writes, and the voltages it produces are discarded except for
+   * the flag. Priming the flag directly skips one solve per nibble -- half the
+   * solves of an LCD-heavy loop -- with identical latching, because the high
+   * settle still observes the same levels.
+   */
+  primeLcdEdges(): void {
+    for (const partId of this.lcds.keys()) this.lcdStrobe.set(partId, true);
   }
 
   /** Net of a board pin by firmware pin number, or null when not routable. */
@@ -681,8 +749,6 @@ export class Engine {
     });
 
     this.solution = solution;
-    // eslint-disable-next-line no-console
-    console.log(`solve conv=${solution.converged} iters=${solution.iterations}`);
     // Both pumps run every solve: short-circuiting would starve one of them,
     // and one shared re-solve covers armature and transmission changes alike.
     const armaturesMoved = this.pumpRelays();
@@ -720,6 +786,7 @@ export class Engine {
     // than the previous step's.
     this.probes.capture(this.timeMs, (net) => this.voltageOfNet(net));
     this.pumpLcds();
+    this.pumpSevenSegments();
     return solution;
   }
 
