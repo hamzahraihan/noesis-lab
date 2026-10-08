@@ -348,10 +348,31 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
   },
   {
     id: '7segment',
-    name: '7-Segment Display',
+    name: '1-Digit 7-Segment Display',
     group: 'output',
     note: 'Common anode: a segment is lit by holding its line low while the common is high. Both COM pins are that same electrode.',
-    make: sevenSegmentDefinition,
+    make: () => sevenSegmentDefinition(1),
+  },
+  {
+    id: '7segment-2digit',
+    name: '2-Digit 7-Segment Display',
+    group: 'output',
+    note: 'Common anode, multiplexed. 11 pins (D1-D2, A-G, DP). Digit commons first, then segments.',
+    make: () => sevenSegmentDefinition(2),
+  },
+  {
+    id: '7segment-3digit',
+    name: '3-Digit 7-Segment Display',
+    group: 'output',
+    note: 'Common anode, multiplexed. 12 pins (D1-D3, A-G, DP). Digit commons first, then segments.',
+    make: () => sevenSegmentDefinition(3),
+  },
+  {
+    id: '7segment-4digit',
+    name: '4-Digit 7-Segment Display',
+    group: 'output',
+    note: '12 pins (D1-D4, A-G, DP). Common anode, multiplexed. D2-D13 on the Uno drives it via SevSeg library.',
+    make: () => sevenSegmentDefinition(4),
   },
   {
     id: 'ds1307-rtc',
@@ -449,6 +470,10 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   'led-ring-16': true,
   'ir-remote': true,
   'rotary-dialer': true,
+  '7segment': true,
+  '7segment-2digit': true,
+  '7segment-3digit': true,
+  '7segment-4digit': true,
 };
 
 export function isLargePart(id: string): boolean {
