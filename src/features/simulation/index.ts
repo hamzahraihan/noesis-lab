@@ -16,3 +16,4 @@ export * from './bus/log';
 export * from './firmware/interpreter';
 export * from './firmware/parser';
 export * from './firmware/python';
+export * from './firmware/project';
