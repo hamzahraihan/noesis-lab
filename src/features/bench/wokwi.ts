@@ -28,6 +28,7 @@ import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition, Rotation, SensorVariant } from '@/features/parts';
 import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from '@/features/parts';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from '@/features/parts';
+import { SevenSegment } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import type { DiodeProfile } from '@/features/simulation';
 import { WIPER_KNOB } from '@/features/parts';
@@ -118,6 +119,9 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   'slide-potentiometer': { tag: 'wokwi-slide-potentiometer', sizeMm: { w: 55, h: 29 } },
   keypad: { tag: 'wokwi-membrane-keypad', sizeMm: { w: 70.336, h: 91 } },
   '7segment': { tag: 'wokwi-7segment', sizeMm: { w: 12.55, h: 22 } },
+  '7segment-2digit': { tag: 'wokwi-7segment', sizeMm: { w: 19.65, h: 22 } },
+  '7segment-3digit': { tag: 'wokwi-7segment', sizeMm: { w: 26.75, h: 22 } },
+  '7segment-4digit': { tag: 'wokwi-7segment', sizeMm: { w: 33.85, h: 22 } },
   // Kept for inventory only: the rotary pot keeps its hand-authored renderer
   // because the element's pins (29/39/49 px, 5.3 mm span) do not land where
   // this bench's 10.16 mm header is, so adopting it would miswire it.
@@ -286,8 +290,10 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS['slide-potentiometer'];
     case 'keypad':
       return WOKWI_PARTS.keypad;
-    case '7segment':
-      return WOKWI_PARTS['7segment'];
+    case '7segment': {
+      const digits = definition.component.digits ?? 1;
+      return WOKWI_PARTS[`7segment${digits > 1 ? `-${digits}digit` : ''}`] ?? WOKWI_PARTS['7segment'];
+    }
     case 'i2c-sensor':
       return WOKWI_PARTS[definition.component.device];
     case 'lcd':
@@ -421,6 +427,10 @@ export function pushWokwiState(
      * bias the solver reports on each one -- exactly as a single LED is lit,
      * and for a display segment rather than a channel that matters twice over.
      */
+    if (kind === '7segment') {
+      const digits = definition.component.digits ?? 1;
+      set(element, 'digits', digits);
+    }
     pushSegmentLevels(element, definition, part, state);
     return;
   }
@@ -567,12 +577,13 @@ export function pushWokwiState(
 
 /**
  * Brightness for a package of diodes: the bar graph's ten segments and the
- * seven-segment display's eight.
+ * seven-segment display's digits.
  *
  * Each is driven from the forward bias its own diode shows, exactly as a
- * single LED is lit -- and for a display segment the measure matters twice
- * over, because a multiplexed display's brightness is the *product* of which
- * digit common and which segment line are held where, not one wire's level.
+ * single LED is lit. The Wokwi 7-segment element takes one flat array of
+ * `digits * 8` values in A, B, C, D, E, F, G, DP order per digit, so a
+ * multi-digit part reports every digit's eight segments rather than the one
+ * the multiplexer happens to be holding high this solve.
  */
 function pushSegmentLevels(
   element: HTMLElement,
@@ -581,7 +592,35 @@ function pushSegmentLevels(
   state: FootprintState,
 ): void {
   const volts = (pin: string): number => state.pinVolts.get(`${part.id}:${pin}`) ?? 0;
-  const anode = definition.component.kind === '7segment' ? volts('COM.1') : 0;
+  const isBarGraph = definition.component.kind === 'led-bar-graph';
+
+  if (!isBarGraph && definition.component.kind === '7segment') {
+    const digits = definition.component.digits ?? 1;
+    /*
+     * The whole latched frame, every push. The controller latches each digit
+     * while its common is asserted on every solve, so what goes across never
+     * depends on which digit a render happens to sample — sampling render
+     * instants can never observe a multiplexed strobe reliably, and pushing
+     * only the currently-lit digit flickers through one digit at a time.
+     */
+    const controller = state.displays?.get(part.id);
+    const patterns = controller instanceof SevenSegment ? controller.patterns() : null;
+    if (!patterns) return;
+    const levels: number[] = [];
+    for (let digit = 0; digit < digits; digit++) {
+      const byte = patterns[digit] ?? 0;
+      for (let index = 0; index < 8; index++) levels.push((byte >> index) & 1);
+    }
+    const previous = (element as unknown as { values?: readonly number[] }).values;
+    const same =
+      Array.isArray(previous) &&
+      previous.length === levels.length &&
+      previous.every((value, index) => value === levels[index]);
+    // A fresh array only on real change: the element re-renders on assignment,
+    // and a new identity every frame would redraw it sixty times a second.
+    if (!same) set(element, 'values', levels);
+    return;
+  }
 
   const levels = definition.pins
     .filter((pin) => pin.id !== 'COM.1' && pin.id !== 'COM.2')
@@ -589,10 +628,7 @@ function pushSegmentLevels(
       const cathode = volts(pin.id);
       // The bar graph's anodes are the A pins and its cathodes the C pins, so
       // the anode reference is whichever of the pair is higher.
-      const forward =
-        definition.component.kind === 'led-bar-graph'
-          ? Math.max(volts(pin.id.replace(/^C/, 'A')), 0) - cathode
-          : anode - cathode;
+      const forward = Math.max(volts(pin.id.replace(/^C/, 'A')), 0) - cathode;
       return Math.max(0, Math.min(1, (forward - 1.9) / 1.1));
     });
 
