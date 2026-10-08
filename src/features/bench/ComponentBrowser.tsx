@@ -79,7 +79,6 @@ export function ComponentBrowser({ onPlace, onClose }: ComponentBrowserProps) {
         showCloseButton={false}
         aria-describedby={undefined}
         className="flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden bg-slate-900"
-        aria-label="Component browser"
       >
         <DialogTitle className="sr-only">Component browser</DialogTitle>
         <DialogHeader className="flex shrink-0 flex-row items-center gap-2 border-b border-slate-800 p-3">

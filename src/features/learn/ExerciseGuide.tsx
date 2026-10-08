@@ -12,7 +12,7 @@
  * CardTitle headings) outrank expression.
  */
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -48,7 +48,6 @@ export function ExerciseGuide({
   // the previous one's progress — and closing then reopening the same exercise
   // keeps the steps already marked done.
   const [dontShow, setDontShow] = useState(() => isGuideDismissed(exercise.id));
-  const titleId = useId();
 
   // Esc closes through Radix (`onOpenChange` → `close`), and the background
   // stops scrolling while the dialog is up.
@@ -111,7 +110,7 @@ export function ExerciseGuide({
             <p className="font-mono text-[11px] tracking-wide text-slate-500">
               EXERCISE {exercise.id} · {exercise.difficulty.toUpperCase()} · {exercise.minutes.toUpperCase()}
             </p>
-            <h2 id={titleId} className="mt-0.5 text-lg font-semibold tracking-tight text-balance text-slate-100">
+            <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-balance text-slate-100">
               {exercise.title}
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">{exercise.module}</p>
