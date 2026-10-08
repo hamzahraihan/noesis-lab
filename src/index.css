@@ -181,10 +181,6 @@
    * Exponential ease-out, from an already-visible default — no bounce, no
    * stagger, nothing else on the bench moves.
    */
-  .guide-panel {
-    animation: guide-panel-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
   @keyframes guide-panel-in {
     from {
       opacity: 0;
@@ -204,6 +200,16 @@
 }
 
 /*
+ * The exercise guide's authored entrance: unlayered so it governs over the
+ * DialogContent base `animate-in fade-in-0 zoom-in-95` utilities (utilities
+ * layer beats components layer, which suppressed the spec-pinned 8px rise).
+ * Unlayered author CSS beats any layered rule.
+ */
+.guide-panel {
+  animation: guide-panel-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
  * Task 8 reduced-motion pin: Radix's `animate-in/out` utilities live in the
  * utilities cascade layer, so the components-layer `animation: none` above
  * loses to them under `prefers-reduced-motion` and the 200ms enter fade/zoom
@@ -212,6 +218,7 @@
  */
 @media (prefers-reduced-motion: reduce) {
   .guide-panel,
+  [data-slot='dialog-content'],
   [data-slot='dialog-overlay'] {
     animation: none;
   }
