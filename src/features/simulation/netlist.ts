@@ -472,18 +472,26 @@ function elementsForPart(
     /*
      * A multiplexed display: each segment is one diode between the digit's
      * common and its own line, so what lights a segment is which of the two is
-     * held where rather than the voltage on one wire. Both commons are the same
-     * electrode, joined in the part definition rather than here.
+     * held where rather than the voltage on one wire. A single digit brings
+     * its common out twice on the same electrode, joined in the part
+     * definition rather than here; each digit of a multi-digit part has its
+     * own common (DIG1..DIGn) sharing the one set of segment lines.
      */
     case '7segment': {
       const elements: Element[] = [];
-      for (const segment of SEVEN_SEGMENT_SEGMENTS) {
-        elements.push({
-          kind: 'diode',
-          a: nodeAt('COM.1'),
-          b: nodeAt(segment),
-          profile: DIODE_PROFILES.red,
-        });
+      const digits = component.digits ?? 1;
+      const commons = digits > 1
+        ? Array.from({ length: digits }, (_, i) => `DIG${i + 1}`)
+        : ['COM.1'];
+      for (const common of commons) {
+        for (const segment of SEVEN_SEGMENT_SEGMENTS) {
+          elements.push({
+            kind: 'diode',
+            a: nodeAt(common),
+            b: nodeAt(segment),
+            profile: DIODE_PROFILES.red,
+          });
+        }
       }
       return elements;
     }
