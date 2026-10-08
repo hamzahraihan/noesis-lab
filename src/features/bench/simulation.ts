@@ -19,7 +19,9 @@ import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import {
   FirmwareRunner,
+  toSingleFileProject,
   type FirmwareLanguage,
+  type FirmwareProject,
   type FirmwareServices,
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
@@ -159,6 +161,7 @@ export class Simulation {
   /** What the operator is doing to the parts, shared with the renderers. */
   readonly controls = new DynamicState();
   private firmwareSource = '';
+  private firmwareProject: FirmwareProject | null = null;
   /** Which grammar the loaded source is written in. */
   firmwareLanguage: FirmwareLanguage = 'arduino-cpp';
   private serialSnapshot: string[] = [];
@@ -285,9 +288,11 @@ export class Simulation {
 
 
   /** Loads firmware, reporting a syntax error instead of throwing at the UI. */
-  loadFirmware(source: string, language: FirmwareLanguage = this.firmwareLanguage): void {
-    this.firmwareSource = source;
-    this.firmwareLanguage = language;
+  loadFirmware(source: string | FirmwareProject, language: FirmwareLanguage = this.firmwareLanguage): void {
+    const project = typeof source === 'string' ? toSingleFileProject(source, language) : source;
+    this.firmwareProject = project;
+    this.firmwareSource = project.files.find((f) => f.name === project.activeName)?.content ?? '';
+    this.firmwareLanguage = project.language;
     this.serial = [];
     this.serialDirty = true;
     this.engine.timeMs = 0;
@@ -297,7 +302,7 @@ export class Simulation {
     this.pendingDelayMs = 0;
 
     try {
-      this.runner = new FirmwareRunner(source, this.services(), language);
+      this.runner = new FirmwareRunner(project, this.services(), project.language);
       this.firmwareError = null;
     } catch (error) {
       this.runner = null;
@@ -312,7 +317,7 @@ export class Simulation {
   }
 
   start(): void {
-    if (!this.runner) this.loadFirmware(this.firmwareSource);
+    if (!this.runner && this.firmwareProject) this.loadFirmware(this.firmwareProject);
     this.running = true;
   }
 
@@ -407,7 +412,7 @@ export class Simulation {
     this.mcu.reset();
     this.serial = [];
     this.runner = null;
-    this.loadFirmware(this.firmwareSource);
+    this.loadFirmware(this.firmwareProject ?? this.firmwareSource);
   }
 
   movePart(partId: string, x: number, y: number): void {
