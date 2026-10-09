@@ -10,6 +10,7 @@ describe('custom slot builds', () => {
     const compileUnit = vi.fn(async (source: string, headers: ReadonlyMap<string, string>) => {
       seen.push(source.slice(0, 12));
       seenHeaders.push(headers);
+      if (seenHeaders.length === 1) (headers as Map<string, string>).set('INJECTED', 'evil');
       return new Uint8Array([seen.length]);
     });
     const slot = {
@@ -31,6 +32,8 @@ describe('custom slot builds', () => {
     for (const headers of seenHeaders) {
       expect(headers.get('MyLib.h')).toBe('#pragma once\nint f();\n');
     }
+    expect(seenHeaders[0]).not.toBe(seenHeaders[1]);
+    expect(seenHeaders[1]?.has('INJECTED')).toBe(false);
   });
 
   it('reports header-only slots instead of failing', async () => {

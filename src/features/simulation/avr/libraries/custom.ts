@@ -4,9 +4,10 @@
 //   before anything else. The match is case-sensitive with a trailing slash,
 //   so `TEST/foo.cpp` still compiles while `test/foo.cpp` does not.
 // - Headers: every remaining `.h` file is keyed by basename (original casing
-//   preserved, first wins) and the full map is passed to every TU, so a
-//   quoted `#include "MyLib.h"` inside a custom `.cpp` resolves to its
-//   sibling slot header through the `compileUnit` seam.
+//   preserved, first wins) and a fresh copy of the full map is passed to
+//   every TU, so a quoted `#include "MyLib.h"` inside a custom `.cpp`
+//   resolves to its sibling slot header through the `compileUnit` seam, and
+//   a mutating callee cannot leak state across translation units.
 // - Lint: Plan L1 `lintPrototypes` is deliberately NOT surfaced here. Verified
 //   against packager.ts: applied per `.cpp` text alone it flags same-line
 //   defined-with-body functions (e.g. `int f(){return 1;}` reports `f` as a
@@ -53,7 +54,7 @@ export async function buildCustomObjects(
   }
   const objects: Uint8Array[] = [];
   for (const unit of units) {
-    objects.push(await compileUnit(unit.content, headers));
+    objects.push(await compileUnit(unit.content, new Map(headers)));
   }
   return { objects, diagnostics: [] };
 }
