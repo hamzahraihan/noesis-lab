@@ -33,7 +33,12 @@ export const CURATED_LIBRARIES: readonly CuratedLibrary[] = [
 ];
 
 export function libraryDeclarations(project: FirmwareProject): readonly ProjectLibrary[] {
-  return (project as { libraries?: readonly ProjectLibrary[] }).libraries ?? [];
+  return project.libraries ?? [];
+}
+
+/** Custom slot contents carried on the project itself (save/share/gallery). */
+export function projectSlots(project: FirmwareProject): readonly LibrarySlot[] {
+  return project.slots ?? [];
 }
 
 /** Declaration errors only; include resolution lives in resolve.ts. */

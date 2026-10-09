@@ -32,7 +32,7 @@ import {
   type FirmwareServices,
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
-import { validateLibraries } from '@/features/simulation';
+import { validateLibraries, projectSlots } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
 import { nextAutomaticWireColour, WIRE_COLOURS } from './wire-colours';
@@ -159,12 +159,24 @@ function deviceWireColour(pin: string, wireCount: number): string {
 /**
  * Reason text out of a worker rejection: an `Error`'s message, a
  * `CompileError`'s located message, or the thrown value stringified.
+ *
+ * A located rejection (non-empty `tab`, positive `line`) keeps its origin up
+ * front as `tab:line: message` — the same `file:line` shape the interpreter
+ * reports — so the editor can open the right tab, including a library slot
+ * file. Unlocated rejections read exactly as before.
  */
 function compileDetail(error: unknown): string {
   if (typeof error === 'string') return error;
   if (error !== null && typeof error === 'object' && 'message' in error) {
     const message = (error as { message: unknown }).message;
-    if (typeof message === 'string' && message !== '') return message;
+    if (typeof message === 'string' && message !== '') {
+      const tab = (error as { tab?: unknown }).tab;
+      const line = (error as { line?: unknown }).line;
+      if (typeof tab === 'string' && tab !== '' && typeof line === 'number' && Number.isInteger(line) && line > 0) {
+        return `${tab}:${line}: ${message}`;
+      }
+      return message;
+    }
   }
   if (error instanceof Error) return error.message;
   return String(error);
@@ -457,7 +469,7 @@ export class Simulation {
       return;
     }
 
-    const declarationErrors = validateLibraries(project, { slots: [] });
+    const declarationErrors = validateLibraries(project, { slots: projectSlots(project) });
     if (declarationErrors.length > 0) {
       // Offline-friendly: no worker traffic, straight to the interpreter fallback.
       this.loadFirmware(project);

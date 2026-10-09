@@ -10,7 +10,9 @@ export const CORRUPT_SAVE_NOTICE =
 
 export function saveBenchProject(boardId: string, project: FirmwareProject, storage: Storage = localStorage): void {
   try {
-    storage.setItem(benchProjectKey(boardId), JSON.stringify({ language: project.language, files: project.files, activeName: project.activeName }));
+    // `libraries`/`slots` ride along when present; JSON drops the undefined
+    // keys, so older single-file saves read exactly as before.
+    storage.setItem(benchProjectKey(boardId), JSON.stringify({ language: project.language, files: project.files, activeName: project.activeName, libraries: project.libraries, slots: project.slots }));
   } catch { /* quota or private mode: bench stays session-local */ }
 }
 
@@ -20,9 +22,10 @@ export function loadBenchProject(boardId: string, storage: Storage = localStorag
     if (!raw) return null;
     const parsed = JSON.parse(raw) as FirmwareProject;
     if (!Array.isArray(parsed.files) || parsed.files.length === 0) return null;
-    const candidate: FirmwareProject = { language: parsed.language, files: parsed.files, activeName: parsed.activeName };
-    // A save from an older shape, a hand-edited slot, or over-the-cap content
-    // never reaches the editor: it falls back the same way a corrupt one does.
+    const candidate: FirmwareProject = { language: parsed.language, files: parsed.files, activeName: parsed.activeName, libraries: parsed.libraries, slots: parsed.slots };
+    // A save from an older shape, a hand-edited slot, an unknown library
+    // shape, or over-the-cap content never reaches the editor: it falls back
+    // the same way a corrupt one does.
     if (validateProject(candidate).length > 0) return null;
     return candidate;
   } catch {

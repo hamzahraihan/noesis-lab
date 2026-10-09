@@ -23,3 +23,4 @@ export * from './avr/hex';
 export * from './avr/packager';
 export * from './avr/toolchain/client';
 export * from './avr/libraries/model';
+export * from './avr/libraries/provided';

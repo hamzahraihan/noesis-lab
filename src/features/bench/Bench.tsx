@@ -34,7 +34,7 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import { toSingleFileProject } from '@/features/simulation';
+import { TIER2_MANIFEST, toSingleFileProject } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
@@ -1495,6 +1495,10 @@ export default function Bench(props: BenchProps) {
               @horang-corp/avr-gcc-wasm 0.2.0
             </a>{' '}
             (GPLv3 toolchain — see its THIRD_PARTY_NOTICES.md).
+            <br />
+            Library builds {TIER2_MANIFEST.map((entry) => `${entry.name} ${entry.version}`).join(', ')}{' '}
+            ({[...new Set(TIER2_MANIFEST.map((entry) => entry.license))].join(', ')}; fetched once,
+            SHA-256-verified).
           </p>
         </main>
 

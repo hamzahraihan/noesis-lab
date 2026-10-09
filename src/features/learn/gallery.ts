@@ -18,6 +18,7 @@ import {
   toSingleFileProject,
   type FirmwareLanguage,
   type FirmwareProject,
+  type ProjectLibrary,
 } from '@/features/simulation';
 
 export interface GalleryBuild {
@@ -33,16 +34,25 @@ export interface GalleryBuild {
    * stay exactly as they are.
    */
   readonly files?: readonly { readonly name: string; readonly content: string }[];
+  /**
+   * Declared Arduino libraries, carried into the bench project. Versions stay
+   * unpinned here, so the manifest defaults apply at fetch time.
+   */
+  readonly libraries?: readonly ProjectLibrary[];
 }
 
 /** The runnable firmware for a build: one multi-file project or one sketch. */
 export function firmwareForBuild(build: GalleryBuild, language: FirmwareLanguage): FirmwareProject {
-  if (!build.files || build.files.length === 0) return toSingleFileProject(build.sketch, language);
+  if (!build.files || build.files.length === 0) {
+    const single = toSingleFileProject(build.sketch, language);
+    return build.libraries === undefined ? single : { ...single, libraries: build.libraries };
+  }
   const entry = ENTRY_BY_LANGUAGE[language];
   return {
     language,
     files: [{ name: entry, content: build.sketch }, ...build.files],
     activeName: entry,
+    ...(build.libraries === undefined ? {} : { libraries: build.libraries }),
   };
 }
 
@@ -627,6 +637,16 @@ void toneStop() {
 }
 `,
         },
+      ],
+      // The lineage of this port: urish's Wokwi original drives the glass
+      // through SevSeg and the RTC through RTClib. The sketch above
+      // reimplements both raw (GPIO multiplex, BCD over Wire), and these
+      // declarations name that reference — versions unpinned, so the manifest
+      // defaults apply. The sources hash covers files only, so the committed
+      // HEX still applies to the declared build.
+      libraries: [
+        { name: 'SevSeg', source: 'provided' },
+        { name: 'RTClib', source: 'provided' },
       ],
   setup: (simulation) => {
     simulation.clearExampleParts();

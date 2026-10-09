@@ -9,7 +9,7 @@ export const CORRUPT_SHARE_NOTICE =
   'That share link could not be read, so the bench opened a fresh project instead.';
 
 export function encodeProjectToShare(project: FirmwareProject): string {
-  return compressToEncodedURIComponent(JSON.stringify({ language: project.language, files: project.files }));
+  return compressToEncodedURIComponent(JSON.stringify({ language: project.language, files: project.files, libraries: project.libraries, slots: project.slots }));
 }
 
 /*
@@ -25,11 +25,12 @@ export function decodeShareToProject(payload: string): FirmwareProject | null {
   try {
     const raw = decompressFromEncodedURIComponent(payload);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { language: FirmwareProject['language']; files: { name: string; content: string }[] };
+    const parsed = JSON.parse(raw) as { language: FirmwareProject['language']; files: { name: string; content: string }[]; libraries?: FirmwareProject['libraries']; slots?: FirmwareProject['slots'] };
     if (!Array.isArray(parsed.files) || parsed.files.length === 0) return null;
-    const candidate: FirmwareProject = { language: parsed.language, files: parsed.files, activeName: parsed.files[0].name };
+    const candidate: FirmwareProject = { language: parsed.language, files: parsed.files, activeName: parsed.files[0].name, libraries: parsed.libraries, slots: parsed.slots };
     // A well-formed payload carrying an invalid project (wrong entry file,
-    // bad names, over the caps) falls back the same way a corrupt one does.
+    // bad names, unknown library shapes, over the caps) falls back the same
+    // way a corrupt one does.
     if (validateProject(candidate).length > 0) return null;
     return candidate;
   } catch {

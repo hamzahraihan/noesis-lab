@@ -57,6 +57,60 @@ describe('project store', () => {
   });
 });
 
+describe('library persistence', () => {
+  /*
+   * One shared backing map behind every `memStorage()` wrapper, so a save
+   * through one wrapper reads back through another — the same storage stub
+   * shape the tests above build inline, with the board key as the only state.
+   */
+  const sharedBacking = new Map<string, string>();
+  function memStorage(): Storage {
+    return {
+      getItem: (k: string) => sharedBacking.get(k) ?? null,
+      setItem: (k: string, v: string) => void sharedBacking.set(k, v),
+      removeItem: (k: string) => void sharedBacking.delete(k),
+    } as Storage;
+  }
+
+  it('round-trips libraries and slots through save/load', () => {
+    const project: FirmwareProject = {
+      ...toSingleFileProject('void setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
+      libraries: [{ name: 'SevSeg', source: 'provided' as const }],
+      slots: [{ id: 'm', name: 'MyLib', files: [{ path: 'MyLib.h', content: 'x' }] }],
+    };
+    saveBenchProject('uno-test', project, memStorage());
+    expect(loadBenchProject('uno-test', memStorage())?.libraries).toEqual(project.libraries);
+    expect(loadBenchProject('uno-test', memStorage())?.slots).toEqual(project.slots);
+  });
+
+  it('rejects saves with unknown library shapes like corrupt saves', () => {
+    const storage = memStorage();
+    const validFiles = [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }];
+    storage.setItem(
+      benchProjectKey('uno-shape'),
+      JSON.stringify({
+        language: 'arduino-cpp',
+        files: validFiles,
+        activeName: 'main.ino',
+        libraries: [{ name: 42, source: 'provided' }],
+      }),
+    );
+    expect(loadBenchProject('uno-shape', storage)).toBeNull();
+    storage.setItem(
+      benchProjectKey('uno-shape'),
+      JSON.stringify({
+        language: 'arduino-cpp',
+        files: validFiles,
+        activeName: 'main.ino',
+        slots: [{ id: 'm', name: 'MyLib', files: [{ path: '../evil.h', content: 'x' }] }],
+      }),
+    );
+    expect(loadBenchProject('uno-shape', storage)).toBeNull();
+    // The slots exist, so the seed still reports an unreadable save.
+    expect(hasBenchProject('uno-shape', storage)).toBe(true);
+  });
+});
+
 describe('resolveBenchSeed', () => {
   const starter = toSingleFileProject('void setup() {}\nvoid loop() {}\n', 'arduino-cpp');
   const saved: FirmwareProject = {

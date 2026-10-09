@@ -11,11 +11,20 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
+  CURATED_LIBRARIES,
   ENTRY_BY_LANGUAGE,
+  libraryDeclarations,
+  MAX_FILE_BYTES,
+  projectSlots,
   removeFile,
   renameFile,
+  TIER2_MANIFEST,
   updateFileContent,
+  validateLibraries,
+  validateSlotPath,
+  type LibrarySlot,
 } from '@/features/simulation';
+import { matchSlotFile, reasonFor, slotViewKey } from './library-ui';
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
@@ -304,6 +313,9 @@ function Row({ label, value }: { label: string; value: string }) {
  */
 const SERIAL_TAIL_LINES = 100;
 
+/** Tier-2 libraries download once and then cache: until then the bench is offline for them. */
+const NOT_FETCHED_NOTE = 'not fetched — needs network once';
+
 export const SerialMonitor = memo(function SerialMonitor({ lines }: { lines: readonly string[] }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -377,12 +389,32 @@ export function FirmwareEditor({
   const entry = ENTRY_BY_LANGUAGE[project.language];
 
   /*
+   * Declared libraries and custom slot contents, read off the project the
+   * same way the toolchain client reads them. Validation reasons come from
+   * `validateLibraries` verbatim, so a greyed row names the same failure the
+   * next compile would report.
+   */
+  const slots = projectSlots(project);
+  const declarations = libraryDeclarations(project);
+  const libraryProblems = validateLibraries(project, { slots });
+  const providedCatalog: readonly { readonly name: string; readonly tier: 'bundled' | 'fetch' }[] = [
+    ...CURATED_LIBRARIES.map((lib) => ({ name: lib.name, tier: 'bundled' as const })),
+    ...TIER2_MANIFEST.map((lib) => ({ name: lib.name, tier: 'fetch' as const })),
+  ];
+
+  /*
    * Helper-op failures (add/rename/delete, oversize edits) surface here in
    * the error bar rather than in a `window.alert`, so a rejected tab edit
    * reads like any other firmware error. Cleared by the next successful op
    * or Run; `window.prompt` stays for name input.
    */
   const [notice, setNotice] = useState<string | null>(null);
+
+  /* Whether the Libraries section is open under the sketch tabs. */
+  const [libsOpen, setLibsOpen] = useState(false);
+  /* Which custom slot (and file) the slot editor shows; null keeps the fallbacks below. */
+  const [slotId, setSlotId] = useState<string | null>(null);
+  const [slotPath, setSlotPath] = useState<string | null>(null);
 
   /*
    * One Monaco instance shows every tab, so each tab's cursor and scroll live
@@ -392,6 +424,12 @@ export function FirmwareEditor({
    */
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const viewStatesRef = useRef(new Map<string, unknown>());
+  /*
+   * The slot editor's own Monaco instance. Cursor and scroll keys are
+   * slot-scoped (`slot:<id>:<path>`) in the same map, so a slot file and a
+   * sketch tab can never trade view states.
+   */
+  const slotEditorRef = useRef<Parameters<OnMount>[0] | null>(null);
 
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
@@ -409,6 +447,49 @@ export function FirmwareEditor({
       }
     }
   }, [activeName]);
+
+  /*
+   * Which slot file the slot editor shows: the explicit pick, else the first
+   * slot and its first file, else nothing. A removed pick falls back rather
+   * than pointing at a file that is no longer there.
+   */
+  const selectedSlot = slots.find((slot) => slot.id === slotId) ?? slots[0] ?? null;
+  const activeSlotId = selectedSlot?.id ?? null;
+  const selectedSlotFile =
+    selectedSlot?.files.find((file) => file.path === slotPath) ?? selectedSlot?.files[0] ?? null;
+  const activeSlotPath = selectedSlotFile?.path ?? null;
+
+  const handleSlotMount: OnMount = (editor) => {
+    slotEditorRef.current = editor;
+  };
+
+  useEffect(() => {
+    const editor = slotEditorRef.current;
+    if (!editor || !activeSlotId || !activeSlotPath) return;
+    const saved = viewStatesRef.current.get(slotViewKey(activeSlotId, activeSlotPath));
+    if (saved) {
+      try {
+        editor.restoreViewState(saved as ReturnType<typeof editor.saveViewState>);
+      } catch {
+        // Dropped: the file still opens at the top, which is always correct.
+      }
+    }
+  }, [activeSlotId, activeSlotPath]);
+
+  /** Switches the slot editor, stashing the outgoing file's view state first. */
+  const selectSlotFile = (id: string, path: string | null) => {
+    const editor = slotEditorRef.current;
+    if (editor && activeSlotId && activeSlotPath && (id !== activeSlotId || path !== activeSlotPath)) {
+      try {
+        const state = editor.saveViewState();
+        if (state) viewStatesRef.current.set(slotViewKey(activeSlotId, activeSlotPath), state);
+      } catch {
+        // Dropped: the file still opens, which is what matters.
+      }
+    }
+    setSlotId(id);
+    setSlotPath(path);
+  };
 
   const selectFile = (name: string) => {
     const editor = editorRef.current;
@@ -469,12 +550,190 @@ export function FirmwareEditor({
     }
   };
 
+  /*
+   * Library declarations and custom slots, through the same notice pattern as
+   * the tab helpers: a rejected op reads like any other firmware error.
+   * Slot file paths keep their original casing (`MyLib.h` is legal here
+   * while a tab of that name is not), checked by the same rule the loader
+   * enforces on saves and shares.
+   */
+  const handleAddProvided = (name: string) => {
+    if (declarations.some((entry) => entry.name === name)) {
+      reportHelperError(`<${name}>: duplicate library`);
+      return;
+    }
+    onProjectChange({ ...project, libraries: [...declarations, { name, source: 'provided' }] });
+    setNotice(null);
+  };
+
+  const handleUndeclare = (name: string) => {
+    onProjectChange({ ...project, libraries: declarations.filter((entry) => entry.name !== name) });
+    setNotice(null);
+  };
+
+  const handleAddSlot = () => {
+    const name = window.prompt('New library name', 'MyLib');
+    if (!name || !name.trim()) return;
+    const id = name.trim();
+    if (slots.some((slot) => slot.id === id)) {
+      reportHelperError(`${id}: library already exists`);
+      return;
+    }
+    // A slot with no declaration compiles to nothing, so the declaration
+    // arrives with the slot; removing the slot below takes it back.
+    const declaration = `custom:${id}`;
+    onProjectChange({
+      ...project,
+      slots: [...slots, { id, name: id, files: [] }],
+      libraries: declarations.some((entry) => entry.name === declaration)
+        ? declarations
+        : [...declarations, { name: declaration, source: 'custom' }],
+    });
+    setSlotId(id);
+    setSlotPath(null);
+    setNotice(null);
+  };
+
+  const handleRemoveSlot = (id: string) => {
+    const declaration = `custom:${id}`;
+    onProjectChange({
+      ...project,
+      slots: slots.filter((slot) => slot.id !== id),
+      libraries: declarations.filter((entry) => entry.name !== declaration),
+    });
+    if (slotId === id) {
+      setSlotId(null);
+      setSlotPath(null);
+    }
+    setNotice(null);
+  };
+
+  const handleDeclareSlot = (id: string) => {
+    const declaration = `custom:${id}`;
+    if (declarations.some((entry) => entry.name === declaration)) return;
+    onProjectChange({ ...project, libraries: [...declarations, { name: declaration, source: 'custom' }] });
+    setNotice(null);
+  };
+
+  const slotPathProblem = (slot: LibrarySlot, path: string, except?: string): string | null => {
+    const trimmed = path.trim();
+    if (trimmed === '') return 'library file: path must not be empty';
+    const bad = validateSlotPath(trimmed);
+    if (bad) return bad;
+    if (slot.files.some((file) => file.path === trimmed && file.path !== except)) {
+      return `${trimmed}: file already exists`;
+    }
+    return null;
+  };
+
+  const handleAddSlotFile = (id: string) => {
+    const slot = slots.find((candidate) => candidate.id === id);
+    if (!slot) return;
+    const path = window.prompt('New library file path', 'MyLib.h');
+    if (!path || !path.trim()) return;
+    const problem = slotPathProblem(slot, path);
+    if (problem) {
+      reportHelperError(problem);
+      return;
+    }
+    const trimmed = path.trim();
+    onProjectChange({
+      ...project,
+      slots: slots.map((candidate) =>
+        candidate.id === id
+          ? { ...candidate, files: [...candidate.files, { path: trimmed, content: '' }] }
+          : candidate,
+      ),
+    });
+    selectSlotFile(id, trimmed);
+    setNotice(null);
+  };
+
+  const handleRenameSlotFile = (id: string, path: string) => {
+    const slot = slots.find((candidate) => candidate.id === id);
+    if (!slot) return;
+    const next = window.prompt('Rename library file', path);
+    if (!next || next.trim() === path) return;
+    const problem = slotPathProblem(slot, next, path);
+    if (problem) {
+      reportHelperError(problem);
+      return;
+    }
+    const trimmed = next.trim();
+    onProjectChange({
+      ...project,
+      slots: slots.map((candidate) =>
+        candidate.id === id
+          ? {
+              ...candidate,
+              files: candidate.files.map((file) => (file.path === path ? { ...file, path: trimmed } : file)),
+            }
+          : candidate,
+      ),
+    });
+    selectSlotFile(id, trimmed);
+    setNotice(null);
+  };
+
+  const handleRemoveSlotFile = (id: string, path: string) => {
+    onProjectChange({
+      ...project,
+      slots: slots.map((candidate) =>
+        candidate.id === id
+          ? { ...candidate, files: candidate.files.filter((file) => file.path !== path) }
+          : candidate,
+      ),
+    });
+    if (slotId === id && (slotPath === path || slotPath === null)) {
+      const slot = slots.find((candidate) => candidate.id === id);
+      const rest = slot?.files.filter((file) => file.path !== path) ?? [];
+      setSlotPath(rest[0]?.path ?? null);
+    }
+    setNotice(null);
+  };
+
+  const handleSlotContentChange = (id: string, path: string, next: string) => {
+    // Same 32 KB cap as sketch tabs: the edit is rejected by the controlled
+    // `value`, so surface it now rather than at the next Run.
+    if (next.length > MAX_FILE_BYTES) {
+      reportHelperError(`${path}: file is larger than 32 KB`);
+      return;
+    }
+    onProjectChange({
+      ...project,
+      slots: slots.map((candidate) =>
+        candidate.id === id
+          ? {
+              ...candidate,
+              files: candidate.files.map((file) => (file.path === path ? { ...file, content: next } : file)),
+            }
+          : candidate,
+      ),
+    });
+    setNotice(null);
+  };
+
   const handleRun = () => {
     setNotice(null);
     onRun();
   };
 
   const displayError = notice ?? error;
+
+  /*
+   * Library errors name their origin (`path:line`, as the worker reports
+   * them): open the Libraries section on that slot file, the same way Run
+   * opens the sketch tab an interpreter error names.
+   */
+  useEffect(() => {
+    const target = matchSlotFile(displayError, slots);
+    if (target !== null) {
+      setSlotId(target.slotId);
+      setSlotPath(target.path);
+      setLibsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayError]);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
@@ -649,6 +908,297 @@ export function FirmwareEditor({
               wordWrap: 'off',
             }}
           />
+          {/*
+           * Libraries: the curated provided set plus the project's own custom
+           * slots. Provided rows come from the Tier-1 bundle list and the
+           * Tier-2 manifest with add/remove buttons; declared-but-unknown
+           * names sit greyed with the validation reason, as do custom
+           * declarations whose slot is empty. Slot files edit in a second
+           * Monaco below, reusing the tab helpers and the notice pattern —
+           * paths keep their original casing throughout.
+           */}
+          <div className="shrink-0 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => setLibsOpen((open) => !open)}
+              aria-expanded={libsOpen}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase transition-colors hover:text-slate-200"
+            >
+              <CaretRightIcon
+                className={`icon-sm transition-transform ${libsOpen ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              />
+              Libraries
+              {declarations.length > 0 && (
+                <span className="num text-slate-500">{declarations.length}</span>
+              )}
+            </button>
+            {libsOpen && (
+              <div className="max-h-96 overflow-y-auto px-3 pb-3">
+                <div className="flex flex-col gap-1">
+                  {providedCatalog.map(({ name, tier }) => {
+                    const declared = declarations.some(
+                      (entry) => entry.name === name && entry.source === 'provided',
+                    );
+                    return (
+                      <div key={name} className="flex items-center gap-2 text-xs">
+                        <span className="font-mono text-slate-200">{name}</span>
+                        {tier === 'fetch' && (
+                          <span
+                            className="text-[11px] text-slate-500"
+                            title="Tier-2 libraries download once, then cache"
+                          >
+                            {NOT_FETCHED_NOTE}
+                          </span>
+                        )}
+                        <span className="flex-1" />
+                        {declared ? (
+                          <button
+                            type="button"
+                            onClick={() => handleUndeclare(name)}
+                            aria-label={`Remove ${name}`}
+                            title={`Remove ${name}`}
+                            className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleAddProvided(name)}
+                            aria-label={`Add ${name}`}
+                            title={`Add ${name}`}
+                            className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                          >
+                            Add
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {declarations
+                    .filter(
+                      (entry) =>
+                        entry.source === 'provided' &&
+                        !providedCatalog.some((known) => known.name === entry.name),
+                    )
+                    .map((entry) => (
+                      <div
+                        key={entry.name}
+                        className="flex items-center gap-2 text-xs text-slate-500"
+                      >
+                        <span className="font-mono">{entry.name}</span>
+                        <span className="text-[11px]">
+                          {reasonFor(entry.name, libraryProblems) ?? 'unknown provided library'}
+                        </span>
+                        <span className="flex-1" />
+                        <button
+                          type="button"
+                          onClick={() => handleUndeclare(entry.name)}
+                          aria-label={`Remove ${entry.name}`}
+                          title={`Remove ${entry.name}`}
+                          className="rounded-md px-1.5 py-0.5 text-[11px] transition-colors hover:text-red-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  {declarations
+                    .filter((entry) => entry.source === 'custom')
+                    .map((entry) => {
+                      const id = entry.name.startsWith('custom:')
+                        ? entry.name.slice('custom:'.length)
+                        : null;
+                      const slot =
+                        id !== null ? slots.find((candidate) => candidate.id === id) : undefined;
+                      const reason = reasonFor(entry.name, libraryProblems);
+                      return (
+                        <div
+                          key={entry.name}
+                          className={`flex items-center gap-2 text-xs ${
+                            slot === undefined ? 'text-slate-500' : 'text-slate-200'
+                          }`}
+                        >
+                          <span className="font-mono">{entry.name}</span>
+                          <span className="text-[11px] text-slate-500">
+                            {slot === undefined ? (reason ?? 'library slot is empty') : 'custom'}
+                          </span>
+                          <span className="flex-1" />
+                          <button
+                            type="button"
+                            onClick={() => handleUndeclare(entry.name)}
+                            aria-label={`Remove ${entry.name}`}
+                            title={`Remove ${entry.name}`}
+                            className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">
+                    Custom
+                  </span>
+                  <span className="flex-1" />
+                  <Button
+                    type="button"
+                    onClick={handleAddSlot}
+                    variant="secondary"
+                    size="icon-sm"
+                    className="shrink-0 font-mono"
+                    aria-label="New custom library"
+                    title="New custom library"
+                  >
+                    +
+                  </Button>
+                </div>
+                {slots.length === 0 ? (
+                  <p className="py-1 text-xs text-slate-600">
+                    No custom libraries. A new one starts empty — add headers and sources, then
+                    include them from the sketch.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {slots.map((slot) => {
+                      const declaration = `custom:${slot.id}`;
+                      const isDeclared = declarations.some(
+                        (entry) => entry.name === declaration,
+                      );
+                      const selected = slot.id === activeSlotId;
+                      return (
+                        <div
+                          key={slot.id}
+                          className={`flex shrink-0 items-center gap-2 rounded-md font-mono text-xs ${
+                            selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectSlotFile(slot.id, slot.files[0]?.path ?? null)}
+                            title={`${slot.name} — ${slot.files.length} files`}
+                            className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                          >
+                            {slot.name}
+                          </button>
+                          <span className="num text-[11px] text-slate-500">
+                            {slot.files.length}
+                          </span>
+                          {!isDeclared && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeclareSlot(slot.id)}
+                              aria-label={`Declare ${slot.name}`}
+                              title={`Declare ${slot.name}`}
+                              className="rounded-md px-1.5 py-0.5 font-sans text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                            >
+                              Declare
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSlot(slot.id)}
+                            aria-label={`Remove ${slot.name}`}
+                            title={`Remove ${slot.name}`}
+                            className="rounded-md px-1 py-1 font-sans text-slate-500 transition-colors hover:text-red-300"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedSlot && (
+                  <>
+                    <div
+                      role="tablist"
+                      aria-label="Library files"
+                      className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-y border-slate-800 px-2 py-1"
+                    >
+                      {selectedSlot.files.map((file) => {
+                        const selected = file.path === activeSlotPath;
+                        return (
+                          <div
+                            key={file.path}
+                            role="tab"
+                            aria-selected={selected}
+                            className={`flex shrink-0 items-center rounded-md font-mono text-xs ${
+                              selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => selectSlotFile(selectedSlot.id, file.path)}
+                              onDoubleClick={() => handleRenameSlotFile(selectedSlot.id, file.path)}
+                              title={`${file.path} — double-click to rename`}
+                              className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                            >
+                              {file.path}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSlotFile(selectedSlot.id, file.path)}
+                              aria-label={`Remove ${file.path}`}
+                              title={`Remove ${file.path}`}
+                              className="rounded-md px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                      <Button
+                        type="button"
+                        onClick={() => handleAddSlotFile(selectedSlot.id)}
+                        variant="secondary"
+                        size="icon-sm"
+                        className="shrink-0 font-mono"
+                        aria-label="Add library file"
+                        title="Add library file"
+                      >
+                        +
+                      </Button>
+                    </div>
+                    {selectedSlotFile && activeSlotId && activeSlotPath ? (
+                      <Editor
+                        height="12rem"
+                        language={FIRMWARE_LANGUAGE}
+                        theme={FIRMWARE_THEME}
+                        value={selectedSlotFile.content}
+                        onChange={(next) => {
+                          handleSlotContentChange(activeSlotId, activeSlotPath, next ?? '');
+                        }}
+                        onMount={handleSlotMount}
+                        options={{
+                          minimap: { enabled: false },
+                          fontSize: 12,
+                          lineHeight: 19,
+                          fontFamily:
+                            "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                          scrollBeyondLastLine: false,
+                          smoothScrolling: true,
+                          cursorBlinking: 'smooth',
+                          padding: { top: 10, bottom: 10 },
+                          renderLineHighlight: 'none',
+                          automaticLayout: true,
+                          tabSize: 2,
+                          wordWrap: 'off',
+                        }}
+                      />
+                    ) : (
+                      <p className="px-1 py-2 text-xs text-slate-600">
+                        Empty library: add a header and its sources above.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </>
       )}
 

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { PART_CATALOGUE, SevenSegment, breadboardDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
 import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById } from './gallery';
+import { TIER2_MANIFEST } from '@/features/simulation';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulation';
 import { pushWokwiState } from '@/features/bench/wokwi';
@@ -35,6 +37,24 @@ function partTerminals(simulation: Simulation): Set<number> {
  */
 function hexAvailable(): boolean {
   return existsSync(join(__dirname, '..', 'simulation', 'avr', 'hex', 'alarm-clock-uno.hex'));
+}
+
+/**
+ * Whether the Tier-2 fetch path answers at all. The declared build runs from
+ * the committed HEX, but its declarations name fetched libraries, so parity
+ * means nothing on a bench that could never fetch them. Any HTTP answer
+ * counts as reachable; only a network failure or timeout skips.
+ */
+async function tier2Reachable(): Promise<boolean> {
+  try {
+    const response = await fetch(TIER2_MANIFEST[0].url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.status > 0;
+  } catch {
+    return false;
+  }
 }
 
 describe('the project gallery', () => {
@@ -154,6 +174,98 @@ describe('the project gallery', () => {
   it('times the reaction game', () => {
     expect(galleryById('reaction')?.title).toBe('Reaction Timer');
   });
+
+  it('declares SevSeg and RTClib on the alarm build, unpinned', () => {
+    const build = galleryById('alarm-clock')!.builds[0]!;
+    expect(build.libraries).toEqual([
+      { name: 'SevSeg', source: 'provided' },
+      { name: 'RTClib', source: 'provided' },
+    ]);
+    // The bench project carries the declarations; versions unpinned means the
+    // manifest defaults apply at fetch time.
+    expect(firmwareForBuild(build, 'arduino-cpp').libraries).toEqual(build.libraries);
+  });
+
+  /*
+   * Live parity for the library-declared alarm build: the same glass, colon,
+   * and serial observables as the raw-GPIO build, running under `execution
+   * avr` with the declared libraries attached. Gated three ways — toolchain,
+   * Tier-2 fetch, committed HEX — with a skip-with-reason for each, the same
+   * pattern the other avr legs use.
+   */
+  it('runs the library-declared alarm build', async () => {
+    let pkg: string | null = null;
+    try {
+      pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
+    } catch { /* fall through to skip */ }
+    if (!pkg) {
+      console.warn('SKIP avr parity: toolchain absent');
+      return;
+    }
+    if (!hexAvailable()) {
+      console.warn('SKIP avr parity: no HEX');
+      return;
+    }
+    if (!(await tier2Reachable())) {
+      console.warn('SKIP avr parity: Tier-2 fetch unreachable');
+      return;
+    }
+    const build = galleryById('alarm-clock')!.builds[0]!;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    build.setup(simulation);
+    const firmware = firmwareForBuild(build, 'arduino-cpp');
+    expect(firmware.libraries, 'alarm build declares its libraries').toEqual([
+      { name: 'SevSeg', source: 'provided' },
+      { name: 'RTClib', source: 'provided' },
+    ]);
+    simulation.loadFirmware(firmware);
+    expect(simulation.firmwareError, 'alarm-clock firmware').toBeNull();
+    simulation.start();
+    const glass = (): string => {
+      const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+      const ctrl = simulation.displayControllers().get(seg.id) as unknown as SevenSegment;
+      return ctrl.getText();
+    };
+    // The glass itself, sampled like the live LCD leg: every digit holds '0'
+    // at midnight, and the colon blinks once a second beside them.
+    const colonSamples: boolean[] = [];
+    for (let frame = 0; frame < 120; frame++) {
+      simulation.tick(0.05);
+      if (frame % 20 === 19) {
+        const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+        const probe = {
+          values: [] as number[],
+          digits: 0,
+          colon: false,
+          colonValue: false,
+        } as unknown as HTMLElement;
+        pushWokwiState(probe, segPart.definition, segPart, {
+          pinVolts: simulation.pinVoltages(),
+          displays: simulation.displayControllers(),
+        } as unknown as FootprintState);
+        colonSamples.push((probe as unknown as { colonValue: boolean }).colonValue);
+      }
+    }
+    expect(new Set(colonSamples), 'declared build colon blinks once a second').toEqual(
+      new Set([false, true]),
+    );
+    // The digits themselves must move: midnight, then one minute later.
+    for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
+    expect(glass(), 'declared build idles at midnight').toBe('0000');
+    simulation.engine.timeMs += 61000;
+    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+    expect(glass(), 'declared build shows 00:01 a minute later').toBe('0001');
+    // The serial log carries one t=H:M:S line per loop: the seconds in them
+    // must advance, proving the RTC ticks under the display.
+    const seconds = [...simulation.serialLines().join('').matchAll(/t=\d+:\d+:(\d+)/g)].map(
+      (match) => Number(match[1]),
+    );
+    expect(new Set(seconds).size, 'declared build clock ticks').toBeGreaterThan(1);
+  }, 180_000);
 
   /*
    * Live on the bench, not just wired: the glass must show the project's own
