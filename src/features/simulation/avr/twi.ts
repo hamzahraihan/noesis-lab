@@ -13,6 +13,12 @@ export interface TwiCompleter {
 export interface TwiSink {
   writeByte(address: number, byte: number, isFirst: boolean): boolean;
   readByte(address: number, index: number): number;
+  /**
+   * Closes a write phase (STOP after a write connect). Optional so
+   * engine-direct sinks that do their own logging can skip it; reads and
+   * empty stops never trigger it.
+   */
+  writeEnd?(): void;
 }
 
 /**
@@ -30,6 +36,8 @@ export class TwiBridgeHandler implements TWIEventHandler {
   private readIndex = 0;
   private address = 0;
   private lastWriteClaimed: boolean | null = null;
+  /** True while the open phase is a write (set by connect, cleared by stop). */
+  private writePhase = false;
 
   constructor(completer: TwiCompleter, sink: TwiSink) {
     this.completer = completer;
@@ -39,20 +47,26 @@ export class TwiBridgeHandler implements TWIEventHandler {
   start(_repeated: boolean): void {}
 
   stop(): void {
+    // Flush the closing phase only when it was a write: a read or an
+    // empty stop has no staged bytes to report.
+    if (this.writePhase) this.sink.writeEnd?.();
     this.completer.completeStop();
     this.writeBuffer = [];
     this.readIndex = 0;
     this.lastWriteClaimed = null;
+    this.writePhase = false;
   }
 
   connectToSlave(addr: number, write: boolean): void {
     this.address = addr & 0x7f;
     if (write) {
       this.writeBuffer = [];
+      this.writePhase = true;
       this.completer.completeConnect(true);
       return;
     }
     this.readIndex = 0;
+    this.writePhase = false;
     this.completer.completeConnect(this.lastWriteClaimed ?? true);
   }
 

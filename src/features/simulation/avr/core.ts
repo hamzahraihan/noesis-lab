@@ -1,4 +1,4 @@
-import { CPU, avrInstruction } from 'avr8js';
+import { AVRTimer, CPU, avrInstruction, timer0Config } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import { attachGpioBridge } from './gpio';
@@ -14,6 +14,7 @@ export interface AvrHooks {
   readonly i2c: {
     writeByte(address: number, byte: number, isFirst: boolean): boolean;
     readByte(address: number, index: number): number;
+    writeEnd?(): void;
   };
 }
 
@@ -85,11 +86,15 @@ export class AvrBackend implements ExecutionBackend {
 
   private buildCpu(): CPU {
     const cpu = new CPU(new Uint16Array(this.programWords));
+    // Timer0 free-runs from the TCCR0B prescaler so stock-core millis() and
+    // delay(), which count its overflows, advance instead of hanging.
+    new AVRTimer(cpu, timer0Config);
     attachGpioBridge(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
     attachUsartBridge(cpu, this.hooks.serial);
     attachTwiBridge(cpu, {
       writeByte: (address, byte, isFirst) => this.hooks.i2c.writeByte(address, byte, isFirst),
       readByte: (address, index) => this.hooks.i2c.readByte(address, index),
+      writeEnd: () => this.hooks.i2c.writeEnd?.(),
     });
     const perMs = cyclesPerMs(UNO_CLOCK_HZ);
     const tickMs = (): void => {

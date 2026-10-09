@@ -366,16 +366,46 @@ export class Simulation {
         },
         onSettle: () => this.engine.settle(),
         serial: { serialWrite: (text) => this.pushSerial(text) },
-        i2c: {
-          writeByte: (address, byte, isFirst) => this.engine.writeI2C(address, byte, isFirst),
-          readByte: (address, index) => this.engine.requestI2C(address, index + 1)[index] ?? 0xff,
-        },
+        i2c: this.avrI2cSink(),
       });
       this.avrBackend = flashed;
     } catch (error) {
       this.avrBackend = null;
       this.firmwareError = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  /**
+   * The AVR core's I2C sink: each byte still goes to the engine (which
+   * decides the ACK and moves device state), and is also staged through
+   * the shared I2CBus so the closing writeEnd records the transfer in
+   * the bus log exactly like the interpreter path. Reads stay
+   * engine-direct.
+   */
+  private avrI2cSink(): {
+    writeByte(address: number, byte: number, isFirst: boolean): boolean;
+    readByte(address: number, index: number): number;
+    writeEnd(): void;
+  } {
+    return {
+      writeByte: (address, byte, isFirst) => {
+        if (isFirst) this.i2c.beginTransmission(address);
+        this.i2c.write(byte);
+        return this.engine.writeI2C(address, byte, isFirst);
+      },
+      readByte: (address, index) => this.engine.requestI2C(address, index + 1)[index] ?? 0xff,
+      writeEnd: () => {
+        const transfer = this.i2c.endTransmission();
+        this.busLog.record({
+          timeMs: this.engine.timeMs,
+          bus: 'i2c',
+          address: transfer.address,
+          bytes: transfer.bytes,
+          acknowledged: transfer.acknowledged,
+          micros: transfer.micros,
+        });
+      },
+    };
   }
 
   /** Appends serial text through the shared 400-entry cap. */

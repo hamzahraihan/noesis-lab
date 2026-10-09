@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CPU, AVRIOPort, portBConfig, portDConfig } from 'avr8js';
+import { CPU, AVRIOPort, portBConfig, portDConfig, timer0Config } from 'avr8js';
 import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -101,6 +101,25 @@ describe('avr timing core', () => {
   });
 });
 
+describe('avr timer0', () => {
+  it('free-runs TCNT0 from the prescaler so stock millis/delay can tick', () => {
+    const backend = new AvrBackend(new Uint16Array(64), {
+      mcu: new McuRuntime(arduinoUnoR3()),
+      nowMs: () => 0,
+      readPin: () => false,
+      onSettle: () => {},
+      serial: { serialWrite: () => {} },
+      i2c: { writeByte: () => true, readByte: () => 0xff },
+    });
+    // The backend owns its CPU; reach in for register-level driving.
+    const cpu = (backend as unknown as { cpu: CPU }).cpu;
+    expect(cpu.readData(timer0Config.TCNT)).toBe(0);
+    cpu.writeData(timer0Config.TCCRB, 0x03); // CS02:0 = 011: prescaler 64
+    backend.step(2);
+    expect(cpu.readData(timer0Config.TCNT)).not.toBe(0);
+  });
+});
+
 describe('avr integration fallback', () => {
   it('refuses avr on non-Uno boards', () => {
     const simulation = new Simulation(arduinoMega2560());
@@ -166,7 +185,7 @@ describe('hex asset gating', () => {
 
 import { avrInstruction } from 'avr8js';
 import { attachUsartBridge } from './usart';
-import { TwiBridgeHandler, attachTwiBridge, type TwiCompleter } from './twi';
+import { TwiBridgeHandler, attachTwiBridge, type TwiCompleter, type TwiSink } from './twi';
 
 function recorder() {
   const calls: string[] = [];
@@ -238,6 +257,95 @@ describe('twi bridge', () => {
     expect(() =>
       attachTwiBridge(cpu, { writeByte: () => true, readByte: () => 0xff }),
     ).not.toThrow();
+  });
+});
+
+describe('twi write phase close', () => {
+  function handlerWith(writeEnd: () => void, sink?: Partial<TwiSink>) {
+    const { completer } = recorder();
+    return new TwiBridgeHandler(completer, {
+      writeByte: () => true,
+      readByte: () => 0xff,
+      writeEnd,
+      ...sink,
+    });
+  }
+
+  it('fires writeEnd exactly once per write phase', () => {
+    let ends = 0;
+    const handler = handlerWith(() => ends++);
+    handler.start(false);
+    handler.connectToSlave(0x68, true);
+    handler.writeByte(0x00);
+    handler.writeByte(0x11);
+    handler.stop();
+    expect(ends).toBe(1);
+  });
+
+  it('stays silent for read-only phases', () => {
+    let ends = 0;
+    const handler = handlerWith(() => ends++);
+    handler.start(false);
+    handler.connectToSlave(0x68, false);
+    handler.readByte(true);
+    handler.stop();
+    expect(ends).toBe(0);
+  });
+
+  it('stays silent for an empty stop', () => {
+    let ends = 0;
+    const handler = handlerWith(() => ends++);
+    handler.start(false);
+    handler.stop();
+    expect(ends).toBe(0);
+  });
+
+  it('stays silent when the closing phase is a read after a write', () => {
+    let ends = 0;
+    const handler = handlerWith(() => ends++);
+    handler.start(false);
+    handler.connectToSlave(0x68, true);
+    handler.writeByte(0x00);
+    handler.start(true); // repeated start: register pointer set, now reading
+    handler.connectToSlave(0x68, false);
+    handler.readByte(false);
+    handler.stop();
+    expect(ends).toBe(0);
+  });
+
+  it('tolerates sinks without writeEnd', () => {
+    const { completer } = recorder();
+    const handler = new TwiBridgeHandler(completer, {
+      writeByte: () => true,
+      readByte: () => 0xff,
+    });
+    handler.start(false);
+    handler.connectToSlave(0x68, true);
+    handler.writeByte(0x00);
+    expect(() => handler.stop()).not.toThrow();
+  });
+});
+
+describe('avr i2c bus log', () => {
+  it('records an AVR-driven write transaction in the bus log', () => {
+    const simulation = new Simulation(arduinoUnoR3());
+    expect(simulation.busLines()).toHaveLength(0);
+    // The AVR sink is built inline where the HEX is flashed; reach it for
+    // wiring-level driving (no committed HEX exists in this checkout).
+    const sink = (
+      simulation as unknown as { avrI2cSink(): TwiSink }
+    ).avrI2cSink();
+    const { completer } = recorder();
+    const handler = new TwiBridgeHandler(completer, sink);
+    handler.start(false);
+    handler.connectToSlave(0x3c, true);
+    handler.writeByte(0x00);
+    handler.writeByte(0xaf);
+    handler.stop();
+    const entries = simulation.busLines().filter((entry) => entry.bus === 'i2c');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.address).toBe(0x3c);
+    expect([...(entries[0]?.bytes ?? [])]).toEqual([0x00, 0xaf]);
   });
 });
 
