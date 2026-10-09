@@ -162,10 +162,14 @@ if (hex === undefined) {
   process.exit(1);
 }
 
-// Step 4: commit-ready artifacts. `sha256` covers the exact bytes written so
-// `hex.test.ts` (which hashes the file) always agrees with the manifest.
+// Step 4: commit-ready artifacts. The toolchain emits CRLF line endings; normalize
+// to LF before writing so the file, the blob, and the manifest agree on every
+// checkout regardless of core.autocrlf (see .gitattributes `*.hex binary`,
+// which is belt-and-braces for the same hazard). `sha256` covers the exact
+// bytes written so `hex.test.ts` (which hashes the file) always agrees.
+const normalizedHex = hex.replace(/\r\n/g, '\n');
 await mkdir(dirname(HEX_PATH), { recursive: true });
-await writeFile(HEX_PATH, hex);
+await writeFile(HEX_PATH, normalizedHex);
 const bytes = readFileSync(HEX_PATH);
 await writeFile(
   MANIFEST_PATH,
