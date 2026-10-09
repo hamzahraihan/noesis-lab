@@ -178,6 +178,36 @@ describe('tier-2 build', () => {
     expect(stub.puts).toEqual([objectsKey, headersKey]);
   });
 
+  it('inflates large deflated entries without stalling the stream', async () => {
+    // Regression: inflateRaw used to await close() before the first read,
+    // which deadlocks once the output exceeds the readable queue (the real
+    // SevSeg.cpp inflates to ~19 KB). Under Node the stalled stream holds no
+    // event-loop handle, so the build died silently instead of failing.
+    const encoder = new TextEncoder();
+    const lines: string[] = [];
+    for (let i = 0; i < 800; i += 1) lines.push(`void tu_symbol_${i}(void) { volatile int v${i} = ${i}; }\n`);
+    const bigSource = `#include "SevSeg.h"\n${lines.join('')}`;
+    expect(encoder.encode(bigSource).length).toBeGreaterThan(16_384);
+    const zip = buildFixtureZip([
+      { name: 'SevSeg-3.7.0/SevSeg.cpp', data: encoder.encode(bigSource), method: 8 },
+      { name: 'SevSeg-3.7.0/SevSeg.h', data: encoder.encode('#pragma once\n'), method: 0 },
+    ]);
+    const entry = TIER2_MANIFEST[0];
+    const stub = stubCache(new Map([[tier2CacheKey(entry.name, entry.version, 'archive'), zip]]));
+    const seenSources: string[] = [];
+    const deps: Tier2Deps = {
+      fetch: async () => new Uint8Array([0]),
+      cache: stub.cache,
+      compileUnit: async (source) => {
+        seenSources.push(source);
+        return new Uint8Array([7]);
+      },
+    };
+    const result = await buildTier2Objects('SevSeg', undefined, deps);
+    expect(seenSources).toEqual([bigSource]);
+    expect([...result.objects.keys()]).toEqual(['SevSeg.o']);
+  }, 30_000);
+
   it('remaps Arduino 1.5 src/-rooted archives (RTClib)', async () => {
     const entry = TIER2_MANIFEST[1];
     const encoder = new TextEncoder();
