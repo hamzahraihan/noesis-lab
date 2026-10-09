@@ -119,9 +119,9 @@ export const WOKWI_PARTS: Readonly<Record<string, WokwiPart>> = {
   'slide-potentiometer': { tag: 'wokwi-slide-potentiometer', sizeMm: { w: 55, h: 29 } },
   keypad: { tag: 'wokwi-membrane-keypad', sizeMm: { w: 70.336, h: 91 } },
   '7segment': { tag: 'wokwi-7segment', sizeMm: { w: 12.55, h: 22 } },
-  '7segment-2digit': { tag: 'wokwi-7segment', sizeMm: { w: 19.65, h: 22 } },
-  '7segment-3digit': { tag: 'wokwi-7segment', sizeMm: { w: 26.75, h: 22 } },
-  '7segment-4digit': { tag: 'wokwi-7segment', sizeMm: { w: 33.85, h: 22 } },
+  '7segment-2digit': { tag: 'wokwi-7segment', sizeMm: { w: 25.1, h: 22 } },
+  '7segment-3digit': { tag: 'wokwi-7segment', sizeMm: { w: 37.65, h: 22 } },
+  '7segment-4digit': { tag: 'wokwi-7segment', sizeMm: { w: 50.2, h: 22 } },
   // Kept for inventory only: the rotary pot keeps its hand-authored renderer
   // because the element's pins (29/39/49 px, 5.3 mm span) do not land where
   // this bench's 10.16 mm header is, so adopting it would miswire it.
