@@ -65,6 +65,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
 import { decodeShareToProject, encodeProjectToShare, isShareable } from './share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './project-store';
+import { avrAvailableFor } from './avr-mode';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -387,6 +388,16 @@ export default function Bench(props: BenchProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
   const [exampleId, setExampleId] = useState<string | null>(null);
+  /*
+   * Which backend the next Run executes on. Uno-only: the AVR option
+   * disables with its reason everywhere else, and switching boards drops
+   * back to the interpreter, so a Mega can never inherit the Uno's mode.
+   */
+  const [avrMode, setAvrMode] = useState(false);
+  /* Whether a worker compile is in flight, driving the progress + cancel UI. */
+  const [compiling, setCompiling] = useState(false);
+  /* Guards the progress flag when a second Run supersedes the first. */
+  const compileSeq = useRef(0);
 
   /*
    * Switching boards reloads that board's tabs from its own autosave (or its
@@ -406,6 +417,9 @@ export default function Bench(props: BenchProps) {
     setProject(loadBenchProject(boardId) ?? starterFor(boardId));
     setExampleId(null);
     setShareError(null);
+    // AVR mode belongs to the Uno alone: a board switch drops back to the
+    // interpreter rather than carrying the mode onto a board that refuses it.
+    setAvrMode(false);
   }, [boardId, starterFor]);
 
   /*
@@ -932,15 +946,47 @@ export default function Bench(props: BenchProps) {
   };
 
   /*
+   * Whether this board can run the AVR backend, recomputed per render so the
+   * selector and the Run path track board switches together.
+   */
+  const avr = avrAvailableFor(boardId);
+
+  /*
    * Run loads the whole project, then opens the tab the error names: the bar
    * shows the message verbatim and the editor shows the file it came from, so
    * the operator never has to guess which tab broke.
+   *
+   * With AVR mode on an Uno, Run compiles in the worker first and flashes
+   * the fresh HEX onto the AVR core; every other board, or interpreter mode,
+   * loads straight into the interpreter as before. A cancelled compile stays
+   * stopped: there is nothing fresh to run.
    */
-  const handleRun = () => {
+  const handleRun = async () => {
     // A real firmware verdict replaces the corrupt-share notice: the bar
     // shows one thing at a time, and the run just produced something newer.
     setShareError(null);
-    simulation.loadFirmware(project);
+    if (avrMode && avr.ok) {
+      // A second Run supersedes the first: the new build aborts the previous
+      // one inside compileAndRun, and only the latest run clears progress or
+      // lands a verdict.
+      const seq = ++compileSeq.current;
+      setCompiling(true);
+      try {
+        await simulation.compileAndRun(project);
+      } finally {
+        if (compileSeq.current === seq) setCompiling(false);
+      }
+      if (compileSeq.current !== seq) return;
+      if (
+        typeof simulation.compileState === 'object' &&
+        simulation.compileState.error === 'compile cancelled'
+      ) {
+        forceRender((n) => n + 1);
+        return;
+      }
+    } else {
+      simulation.loadFirmware(project);
+    }
     const message = simulation.firmwareError;
     if (message) {
       const head = message.split(':')[0]?.trim() ?? '';
@@ -1080,6 +1126,65 @@ export default function Bench(props: BenchProps) {
             )}
             {simulation.running ? 'Pause' : 'Run'}
           </Button>
+
+          {/*
+           * Which backend the next Run executes on. The AVR option is
+           * Uno-only: disabled with its reason everywhere else, so a board
+           * that cannot compile never offers to.
+           */}
+          <label className="flex items-center gap-1.5">
+            <span className="sr-only">Execution backend</span>
+            <Select
+              value={avrMode && avr.ok ? 'avr' : 'interpreter'}
+              onValueChange={(next) => setAvrMode(next === 'avr')}
+            >
+              <SelectTrigger
+                className="h-7 text-xs"
+                aria-label="Execution backend"
+                title={
+                  avr.ok
+                    ? 'Which backend the next Run executes on'
+                    : avrMode
+                      ? avr.reason
+                      : 'Which backend the next Run executes on'
+                }
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="interpreter">Interpreter</SelectItem>
+                <SelectItem
+                  value="avr"
+                  disabled={!avr.ok}
+                  title={avr.ok ? 'Compile in the worker, run on the AVR core' : avr.reason}
+                >
+                  AVR (Uno)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+
+          {/*
+           * Worker-compile progress, in the same quiet dressing as the
+           * controls around it. Cancel aborts the in-flight build; the
+           * awaiting Run lands 'compile cancelled' and stays stopped.
+           */}
+          {compiling && (
+            <span className="flex items-center gap-1.5 text-xs text-slate-400" role="status">
+              Compiling for Uno…
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  simulation.cancelCompile();
+                }}
+                title="Abort the in-flight compile"
+              >
+                Cancel
+              </Button>
+            </span>
+          )}
 
 
           {/*
@@ -1374,6 +1479,23 @@ export default function Bench(props: BenchProps) {
               onLoadExample={loadExample}
             />
           </section>
+          {/*
+           * Toolchain provenance, one line for GPLv3 compliance: in-browser
+           * AVR builds run on the pinned WASM toolchain, whose own notices
+           * file carries the GPL terms for its compiler components.
+           */}
+          <p className="shrink-0 border-t border-slate-800 px-3 py-1 text-[11px] text-slate-500">
+            AVR compiles run in-browser via{' '}
+            <a
+              className="underline underline-offset-2 hover:text-slate-300"
+              href="https://www.npmjs.com/package/@horang-corp/avr-gcc-wasm"
+              target="_blank"
+              rel="noreferrer"
+            >
+              @horang-corp/avr-gcc-wasm 0.2.0
+            </a>{' '}
+            (GPLv3 toolchain — see its THIRD_PARTY_NOTICES.md).
+          </p>
         </main>
 
         <aside

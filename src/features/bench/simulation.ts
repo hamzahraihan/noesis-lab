@@ -435,6 +435,13 @@ export class Simulation {
    * way `loadFirmware` reports syntax errors. A new call aborts the previous
    * build via the stored controller.
    */
+  /**
+   * Aborts the in-flight worker build, if any. The awaiting `compileAndRun`
+   * lands `'compile cancelled'` and flashes nothing.
+   */
+  cancelCompile(): void {
+    this.compileAbort?.abort();
+  }
   async compileAndRun(project: FirmwareProject): Promise<void> {
     this.compileAbort?.abort();
     const controller = new AbortController();
