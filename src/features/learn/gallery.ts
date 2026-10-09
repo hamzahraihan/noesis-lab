@@ -11,15 +11,39 @@
 
 import type { BoardId } from './boardRegistry';
 import { EXAMPLE_DEVICES, LCD_LINES } from './examples';
-import { PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
+import { part } from './exercises/shared';
 import type { Simulation } from '@/features/bench';
+import {
+  ENTRY_BY_LANGUAGE,
+  toSingleFileProject,
+  type FirmwareLanguage,
+  type FirmwareProject,
+} from '@/features/simulation';
 
 export interface GalleryBuild {
   readonly board: BoardId;
   /** Places the parts and runs the jumpers on that board's headers. */
   readonly setup: (simulation: Simulation) => void;
-  /** The sketch in that board's language (Python on the Pi). */
+  /** The entry file's source (`main.ino` on Arduino builds). */
   readonly sketch: string;
+  /**
+   * Extra tabs merged with the entry as one multi-file project, Wokwi-style
+   * (`config.h`, module `.h`/`.cpp`). Names must already be bench-legal
+   * (lowercase); the entry keeps the `sketch` content so single-file builds
+   * stay exactly as they are.
+   */
+  readonly files?: readonly { readonly name: string; readonly content: string }[];
+}
+
+/** The runnable firmware for a build: one multi-file project or one sketch. */
+export function firmwareForBuild(build: GalleryBuild, language: FirmwareLanguage): FirmwareProject {
+  if (!build.files || build.files.length === 0) return toSingleFileProject(build.sketch, language);
+  const entry = ENTRY_BY_LANGUAGE[language];
+  return {
+    language,
+    files: [{ name: entry, content: build.sketch }, ...build.files],
+    activeName: entry,
+  };
 }
 
 export interface GalleryProject {
@@ -56,34 +80,58 @@ const ALARM_CLOCK: GalleryProject = {
       board: 'uno',
       sketch: `#include <Arduino.h>
 #include <Wire.h>
+#include "config.h"
+#include "button.h"
+#include "clock.h"
+#include "alarmtone.h"
 
-#define RTC_ADDR 0x68
-#define BUZZER_PIN 17
-#define HOURS_BTN 14
-#define MINS_BTN 15
-#define ALARM_BTN 16
+// Alarm Clock with RTC — main tab.
+//
+// A multi-file port of urish's Wokwi "alarm-clock.ino" project
+// (https://wokwi.com/projects/297787059514376717 — see
+// docs/wokwi-alarm-clock-reference.md), rewritten for what this bench models:
+//
+// - No classes or structs: one module per tab as plain functions + globals.
+// - No SevSeg library: the raw GPIO multiplex below, on the README pin
+//   table (DIG D2-D5, A-G on D6-D12, colon on D13).
+// - No RTClib: raw BCD reads over Wire in clock.cpp (USE_RTC 0 falls back
+//   to millis time).
+// - No tone(): the siren plays a customizable melody table in alarmtone.cpp.
+// - No colon pin on this bench's glass: the second digit's DP blinks instead.
+// - The host owns the RTC time: Hour/Minute retune a persisted offset, and
+//   the alarm itself persists in the DS1307 NVRAM bytes.
+
+#define ST_CLOCK 0
+#define ST_STATUS 1
+#define ST_ALTIME 2
+#define ST_RING 3
+#define ST_SNOOZE 4
+
+#define STATUS_MS 1000
+#define ALTIME_MS 2500
+#define SNOOZE_VIEW_MS 500
 
 byte digitPins[4] = {2, 3, 4, 5};
-byte segmentPins[8] = {6, 7, 13, 12, 11, 10, 9, 8};
+byte segmentPins[8] = {6, 7, 8, 9, 10, 11, 12, 13};
 
-int alarmH = 7;
-int alarmM = 30;
-byte alarmOn = 0;
-byte setting = 0;
-byte currentDigit = 0;
-int show0 = 0;
-int show1 = 0;
-int show2 = 0;
-int show3 = 0;
-byte lastH = 1;
-byte lastM = 1;
-byte lastA = 1;
+int dspShow0 = 0;
+int dspShow1 = 0;
+int dspShow2 = 0;
+int dspShow3 = 0;
+byte dspDigit = 0;
 
-int bcdToInt(byte bcd) {
-  return (bcd >> 4) * 10 + (bcd & 15);
+byte appState = 0;
+long appEntered = 0;
+long appLastTick = 0;
+
+// Integer tens without relying on float division.
+int dspTens(int v) {
+  return (v - (v % 10)) / 10;
 }
 
-byte patternFor(int d) {
+// Standard 7-segment encoding in A-G,DP bit order, plus the letters the
+// status views need: 10 o, 11 n, 12 F, 13 dash, 14 blank.
+int dspPatternFor(int d) {
   if (d == 0) return 0x3F;
   if (d == 1) return 0x06;
   if (d == 2) return 0x5B;
@@ -94,120 +142,503 @@ byte patternFor(int d) {
   if (d == 7) return 0x07;
   if (d == 8) return 0x7F;
   if (d == 9) return 0x6F;
+  if (d == 10) return 0x5C;
+  if (d == 11) return 0x54;
+  if (d == 12) return 0x71;
+  if (d == 13) return 0x40;
   return 0x00;
 }
 
-void setSegments(byte pattern) {
+void dspSetSegments(byte pattern) {
   for (int i = 0; i < 8; i++) {
     digitalWrite(segmentPins[i], (pattern & (1 << i)) ? LOW : HIGH);
   }
 }
 
-int digitValue(byte which) {
-  if (which == 0) return show0;
-  if (which == 1) return show1;
-  if (which == 2) return show2;
-  return show3;
+void dspShow(int a, int b, int c, int d) {
+  dspShow0 = a;
+  dspShow1 = b;
+  dspShow2 = c;
+  dspShow3 = d;
 }
 
-void refreshDisplay() {
+int dspDigitValue(byte which) {
+  if (which == 0) return dspShow0;
+  if (which == 1) return dspShow1;
+  if (which == 2) return dspShow2;
+  return dspShow3;
+}
+
+void dspRefresh(int seconds) {
   for (int i = 0; i < 4; i++) digitalWrite(digitPins[i], LOW);
-  byte pattern = patternFor(digitValue(currentDigit));
-  setSegments(pattern);
-  digitalWrite(digitPins[currentDigit], HIGH);
-  currentDigit = (currentDigit + 1) % 4;
+  byte pattern = dspPatternFor(dspDigitValue(dspDigit));
+  // The colon blink: HHMM rolls once a minute, so the second digit's DP
+  // ticks every second to prove the glass is alive.
+  if (dspDigit == 1 && (seconds % 2 == 0)) pattern |= 0x80;
+  dspSetSegments(pattern);
+  digitalWrite(digitPins[dspDigit], HIGH);
+  dspDigit = (dspDigit + 1) % 4;
+}
+
+void appEnter(byte s) {
+  btnClearAll();
+  appState = s;
+  appEntered = millis();
 }
 
 void setup() {
   for (int i = 0; i < 4; i++) pinMode(digitPins[i], OUTPUT);
   for (int i = 0; i < 8; i++) pinMode(segmentPins[i], OUTPUT);
-  pinMode(HOURS_BTN, INPUT_PULLUP);
-  pinMode(MINS_BTN, INPUT_PULLUP);
-  pinMode(ALARM_BTN, INPUT_PULLUP);
-  pinMode(BUZZER_PIN, OUTPUT);
+  buttonsBegin();
+  btnSetRepeat(0, 500, 200);
+  btnSetRepeat(1, 500, 200);
+  btnSetRepeat(2, 1000, -1);
+  toneBegin();
   Serial.begin(115200);
   Wire.begin();
+  clkBegin();
   Serial.println("clock up");
+  appEnter(ST_CLOCK);
 }
 
 void loop() {
-  Wire.beginTransmission(RTC_ADDR);
-  Wire.write(0x00);
-  Wire.endTransmission();
-  Wire.requestFrom(RTC_ADDR, 3);
-  int seconds = bcdToInt(Wire.read());
-  int minutes = bcdToInt(Wire.read());
-  int hours = bcdToInt(Wire.read());
+  // One digit per pass and no long delay anywhere: buttons are sampled every
+  // ~20 ms of sim time, so a human tap always overlaps several samples.
+  // (A delay(200) here used to blind the firmware for a wall-clock second or
+  // more, and no tap could ever register.) Time-based work below runs at
+  // 10 Hz; the siren tracks every pass so its steps stay even.
+  dspRefresh(clkS);
+  btnUpdate();
+  if (appState == ST_RING) tonePlay();
 
-  byte h = digitalRead(HOURS_BTN);
-  if (h == 0 && lastH == 1 && setting == 1) {
-    alarmH = alarmH + 1;
-    if (alarmH >= 24) alarmH = 0;
+  long now = millis();
+  if (now - appLastTick >= 100) {
+    appLastTick = now;
+    clkRead();
+    appTick();
+    Serial.print("t=");
+    Serial.print(clkH);
+    Serial.print(":");
+    Serial.print(clkM);
+    Serial.print(":");
+    Serial.println(clkS);
   }
-  lastH = h;
+  delay(20);
+}
 
-  byte m = digitalRead(MINS_BTN);
-  if (m == 0 && lastM == 1 && setting == 1) {
-    alarmM = alarmM + 1;
-    if (alarmM >= 60) alarmM = 0;
+void appTick() {
+  // The alarm fires on its own, whatever view is showing.
+  if (appState != ST_RING && clkDue() == 1) {
+    Serial.println("ringing");
+    appEnter(ST_RING);
   }
-  lastM = m;
 
-  byte a = digitalRead(ALARM_BTN);
-  if (a == 0 && lastA == 1) {
-    if (setting == 1) {
-      setting = 0;
-      alarmOn = 1;
-    } else {
-      setting = 1;
+  if (appState == ST_CLOCK) {
+    dspShow(dspTens(clkH), clkH % 10, dspTens(clkM), clkM % 10);
+    if (btnPressed(0) == 1) clkAdjHour(1);
+    if (btnPressed(1) == 1) clkAdjMin(1);
+    byte tapClock = btnTap(2);
+    if (tapClock == 1) {
+      clkToggle();
+      Serial.println("alarm toggled");
+      appEnter(ST_STATUS);
     }
-    digitalWrite(BUZZER_PIN, LOW);
+  } else if (appState == ST_STATUS) {
+    if (clkEnabled == 1) {
+      dspShow(14, 14, 10, 11);
+    } else {
+      dspShow(14, 10, 12, 12);
+    }
+    if (millis() - appEntered >= STATUS_MS) {
+      if (clkEnabled == 1) {
+        appEnter(ST_ALTIME);
+      } else {
+        appEnter(ST_CLOCK);
+      }
+    }
+  } else if (appState == ST_ALTIME) {
+    dspShow(dspTens(clkAlarmH), clkAlarmH % 10, dspTens(clkAlarmM), clkAlarmM % 10);
+    if (btnPressed(0) == 1) {
+      clkAlarmH = (clkAlarmH + 1) % 24;
+      nvSave();
+      appEntered = millis();
+    }
+    if (btnPressed(1) == 1) {
+      clkAlarmM = (clkAlarmM + 1) % 60;
+      nvSave();
+      appEntered = millis();
+    }
+    byte tapAlarm = btnTap(2);
+    if (tapAlarm == 1) appEnter(ST_CLOCK);
+    if (millis() - appEntered >= ALTIME_MS) appEnter(ST_CLOCK);
+  } else if (appState == ST_RING) {
+    dspShow(dspTens(clkH), clkH % 10, dspTens(clkM), clkM % 10);
+    byte tapRing = btnTap(2);
+    if (tapRing == 2) {
+      toneStop();
+      clkStop();
+      Serial.println("alarm stopped");
+      appEnter(ST_CLOCK);
+    } else if (tapRing == 1) {
+      toneStop();
+      clkSnooze();
+      Serial.println("snoozed");
+      appEnter(ST_SNOOZE);
+    }
+  } else if (appState == ST_SNOOZE) {
+    dspShow(10, 10, 10, 10);
+    if (millis() - appEntered >= SNOOZE_VIEW_MS) appEnter(ST_CLOCK);
   }
-  lastA = a;
-
-  if (setting == 1) {
-    show0 = (alarmH / 10) % 10;
-    show1 = alarmH % 10;
-    show2 = (alarmM / 10) % 10;
-    show3 = alarmM % 10;
-  } else {
-    show0 = (hours / 10) % 10;
-    show1 = hours % 10;
-    show2 = (minutes / 10) % 10;
-    show3 = minutes % 10;
-  }
-
-  byte ringing = 0;
-  if (alarmOn == 1 && setting == 0 && hours == alarmH && minutes == alarmM) ringing = 1;
-  digitalWrite(BUZZER_PIN, ringing == 1 && seconds % 2 == 0);
-
-  Serial.print("t=");
-  Serial.print(hours);
-  Serial.print(":");
-  Serial.print(minutes);
-  Serial.print(":");
-  Serial.println(seconds);
-
-  // One full multiplex cycle; the engine latches every digit while its
-  // common is asserted, and the last-driven digit stays lit through the
-  // delay below, so the glass holds a steady reading.
-  for (int i = 0; i < 4; i++) {
-    refreshDisplay();
-    delayMicroseconds(250);
-  }
-  delay(200);
 }
 `,
+      files: [
+        {
+          name: 'config.h',
+          content: `#include <Arduino.h>
+#include <Wire.h>
+
+// Shared wiring and timings (urish's config.h, adapted: no libraries,
+// default alarm 9:00, snooze 9 minutes).
+#define RTC_ADDR 0x68
+#define HOURS_BTN 14
+#define MINS_BTN 15
+#define ALARM_BTN 16
+#define BUZZER_PIN 17
+
+#define USE_RTC 1
+#define SNOOZE_MIN 9
+#define DEF_ALARM_H 9
+#define DEF_ALARM_M 0
+`,
+        },
+        {
+          name: 'button.h',
+          content: `// Debounced INPUT_PULLUP buttons with auto-repeat and long-press
+// (urish's Button.h, as plain functions: this bench has no classes).
+// 25 ms settles in about one loop pass, so quick taps register — the same
+// figure the safe and reaction builds use.
+#define BTN_DEBOUNCE_MS 25
+#define BTN_LONG_MS 1000
+#define BTN_HOURS 0
+#define BTN_MINS 1
+#define BTN_ALARM 2
+`,
+        },
+        {
+          name: 'button.cpp',
+          content: `#include "button.h"
+#include "config.h"
+
+// One slot per button: raw and settled levels, when the raw last moved,
+// when the hold started, when the next auto-repeat fires, and the repeat
+// cadence (gap <= 0 means no repeat: press edge plus release verdict only).
+byte btnPins[3] = {HOURS_BTN, MINS_BTN, ALARM_BTN};
+byte btnRaw[3] = {1, 1, 1};
+byte btnSettled[3] = {1, 1, 1};
+long btnChanged[3] = {0, 0, 0};
+long btnHoldStart[3] = {0, 0, 0};
+long btnRepeatAt[3] = {0, 0, 0};
+long btnRepDelay[3] = {500, 500, 1000};
+long btnRepGap[3] = {200, 200, -1};
+byte btnPressedFlag[3] = {0, 0, 0};
+byte btnLongFlag[3] = {0, 0, 0};
+
+void btnSetRepeat(byte w, long dly, long gap) {
+  btnRepDelay[w] = dly;
+  btnRepGap[w] = gap;
+}
+
+void buttonsBegin() {
+  for (int i = 0; i < 3; i++) pinMode(btnPins[i], INPUT_PULLUP);
+}
+
+void btnUpdate() {
+  long now = millis();
+  for (int i = 0; i < 3; i++) {
+    byte raw = digitalRead(btnPins[i]);
+    if (raw != btnRaw[i]) {
+      btnRaw[i] = raw;
+      btnChanged[i] = now;
+    }
+    if (raw != btnSettled[i] && now - btnChanged[i] >= BTN_DEBOUNCE_MS) {
+      btnSettled[i] = raw;
+      if (raw == 0) {
+        btnPressedFlag[i] = 1;
+        btnHoldStart[i] = now;
+        btnRepeatAt[i] = now + btnRepDelay[i];
+        btnLongFlag[i] = 0;
+      } else {
+        if (now - btnHoldStart[i] >= BTN_LONG_MS) btnLongFlag[i] = 1;
+      }
+    }
+    if (btnSettled[i] == 0 && btnRepGap[i] > 0 && now >= btnRepeatAt[i]) {
+      btnPressedFlag[i] = 1;
+      btnRepeatAt[i] = now + btnRepGap[i];
+    }
+  }
+}
+
+// Consumable press edge, including auto-repeat ticks. Hour/Minute adjust
+// on every tick, so a held button runs through the numbers.
+byte btnPressed(byte w) {
+  if (btnPressedFlag[w] == 1) {
+    btnPressedFlag[w] = 0;
+    return 1;
+  }
+  return 0;
+}
+
+// Release verdict for the Alarm button: 2 is a long hold, 1 a short tap,
+// 0 means still held or idle. Consumes whatever is pending.
+byte btnTap(byte w) {
+  if (btnLongFlag[w] == 1) {
+    btnLongFlag[w] = 0;
+    btnPressedFlag[w] = 0;
+    return 2;
+  }
+  if (btnPressedFlag[w] == 1 && btnSettled[w] == 1) {
+    btnPressedFlag[w] = 0;
+    return 1;
+  }
+  return 0;
+}
+
+void btnClearAll() {
+  for (int i = 0; i < 3; i++) {
+    btnPressedFlag[i] = 0;
+    btnLongFlag[i] = 0;
+  }
+}
+`,
+        },
+        {
+          name: 'clock.h',
+          content: `// RTC clock, alarm state and DS1307 NVRAM persist
+// (urish's Clock.h, as plain functions: no RTClib/DateTime here).
+#define NV_ENABLE 8
+#define NV_ALH 9
+#define NV_ALM 10
+#define NV_OFFLO 11
+#define NV_OFFHI 12
+#define NV_MAGIC 13
+#define NV_MAGIC_VALUE 165
+#define CLK_MAX_OFFSET 720
+`,
+        },
+        {
+          name: 'clock.cpp',
+          content: `#include "clock.h"
+#include "config.h"
+
+// Shown time = RTC time + offset. The host owns the RTC registers, so the
+// Hour/Minute buttons retune this offset (persisted) instead of rewriting
+// time the next solve would take back.
+byte clkAlarmH = 9;
+byte clkAlarmM = 0;
+byte clkEnabled = 0;
+int clkOffset = 0;
+byte clkH = 0;
+byte clkM = 0;
+byte clkS = 0;
+long clkSnoozeUntil = 0;
+
+int clkBcd(byte bcd) {
+  return (bcd >> 4) * 10 + (bcd & 15);
+}
+
+void nvWriteByte(int addr, int val) {
+  Wire.beginTransmission(RTC_ADDR);
+  Wire.write(addr);
+  Wire.write(val);
+  Wire.endTransmission();
+}
+
+int nvReadByte(int addr) {
+  Wire.beginTransmission(RTC_ADDR);
+  Wire.write(addr);
+  Wire.endTransmission();
+  Wire.requestFrom(RTC_ADDR, 1);
+  if (Wire.available() == 0) return -1;
+  return Wire.read();
+}
+
+// Enable, alarm HH:MM and offset (biased +720 into two bytes) in NVRAM,
+// sealed with a magic byte: a fresh chip reads all zeros, which would
+// otherwise validate as a real -720 minute offset.
+void nvSave() {
+  int biased = clkOffset + CLK_MAX_OFFSET;
+  nvWriteByte(NV_ENABLE, clkEnabled);
+  nvWriteByte(NV_ALH, clkAlarmH);
+  nvWriteByte(NV_ALM, clkAlarmM);
+  nvWriteByte(NV_OFFLO, biased % 256);
+  nvWriteByte(NV_OFFHI, (biased - (biased % 256)) / 256);
+  nvWriteByte(NV_MAGIC, NV_MAGIC_VALUE);
+}
+
+void nvDefaults() {
+  clkEnabled = 0;
+  clkAlarmH = DEF_ALARM_H;
+  clkAlarmM = DEF_ALARM_M;
+  clkOffset = 0;
+}
+
+void nvLoad() {
+  int magic = nvReadByte(NV_MAGIC);
+  if (magic != NV_MAGIC_VALUE) {
+    nvDefaults();
+    return;
+  }
+  int en = nvReadByte(NV_ENABLE);
+  int hh = nvReadByte(NV_ALH);
+  int mm = nvReadByte(NV_ALM);
+  int lo = nvReadByte(NV_OFFLO);
+  int hi = nvReadByte(NV_OFFHI);
+  if (en < 0 || en > 1 || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+    nvDefaults();
+    return;
+  }
+  if (lo < 0 || hi < 0) {
+    nvDefaults();
+    return;
+  }
+  int biased = hi * 256 + lo;
+  if (biased > 2 * CLK_MAX_OFFSET) {
+    nvDefaults();
+    return;
+  }
+  clkEnabled = en;
+  clkAlarmH = hh;
+  clkAlarmM = mm;
+  clkOffset = biased - CLK_MAX_OFFSET;
+}
+
+void clkBegin() {
+  Wire.begin();
+  nvLoad();
+}
+
+void clkRead() {
+  int h = 0;
+  int m = 0;
+  int s = 0;
+  if (USE_RTC == 1) {
+    Wire.beginTransmission(RTC_ADDR);
+    Wire.write(0x00);
+    Wire.endTransmission();
+    Wire.requestFrom(RTC_ADDR, 3);
+    if (Wire.available() < 3) return;
+    s = clkBcd(Wire.read());
+    m = clkBcd(Wire.read());
+    h = clkBcd(Wire.read());
+  } else {
+    long ms = millis();
+    long tot = (ms - (ms % 1000)) / 1000;
+    s = tot % 60;
+    long tm = (tot - (tot % 60)) / 60;
+    m = tm % 60;
+    h = ((tm - (tm % 60)) / 60) % 24;
+  }
+  int total = h * 60 + m + clkOffset;
+  if (total < 0) total = total + 1440;
+  if (total >= 1440) total = total - 1440;
+  clkS = s;
+  clkM = total % 60;
+  clkH = (total - (total % 60)) / 60;
+}
+
+void clkAdjHour(int d) {
+  clkOffset = clkOffset + d * 60;
+  if (clkOffset > CLK_MAX_OFFSET) clkOffset = CLK_MAX_OFFSET;
+  if (clkOffset < -CLK_MAX_OFFSET) clkOffset = -CLK_MAX_OFFSET;
+  nvSave();
+}
+
+void clkAdjMin(int d) {
+  clkOffset = clkOffset + d;
+  if (clkOffset > CLK_MAX_OFFSET) clkOffset = CLK_MAX_OFFSET;
+  if (clkOffset < -CLK_MAX_OFFSET) clkOffset = -CLK_MAX_OFFSET;
+  nvSave();
+}
+
+void clkToggle() {
+  if (clkEnabled == 1) {
+    clkEnabled = 0;
+  } else {
+    clkEnabled = 1;
+  }
+  nvSave();
+}
+
+byte clkDue() {
+  if (clkEnabled == 0) return 0;
+  if (millis() < clkSnoozeUntil) return 0;
+  if (clkH == clkAlarmH && clkM == clkAlarmM) return 1;
+  return 0;
+}
+
+void clkSnooze() {
+  clkSnoozeUntil = millis() + SNOOZE_MIN * 60000;
+  nvSave();
+}
+
+void clkStop() {
+  clkEnabled = 0;
+  nvSave();
+}
+`,
+        },
+        {
+          name: 'alarmtone.h',
+          content: `// Non-blocking melody siren (urish's AlarmTone.h: no tone() here, so each
+// melody step holds the buzzer for one loop pass instead of 500 ms).
+// 1 = sound on: edit the table to customize the alarm, even into melodies.
+#define TONE_STEPS 8
+`,
+        },
+        {
+          name: 'alarmtone.cpp',
+          content: `#include "alarmtone.h"
+#include "config.h"
+
+int toneMelody[8] = {1, 1, 0, 0, 1, 1, 0, 0};
+int toneStep = 0;
+
+void toneBegin() {
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+// One melody step per loop pass: with the ~20 ms loop this beats roughly
+// twice a second, alternating sound and silence through the table above.
+void tonePlay() {
+  byte level = toneMelody[toneStep % TONE_STEPS];
+  toneStep = toneStep + 1;
+  digitalWrite(BUZZER_PIN, level);
+}
+
+void toneStop() {
+  digitalWrite(BUZZER_PIN, LOW);
+}
+`,
+        },
+      ],
   setup: (simulation) => {
     simulation.clearExampleParts();
     const supply = simulation.boardTerminal('5V');
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    simulation.placeExampleDevice('ds1307', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
+    // One compact clock block, fully inside the initial viewport
+    // (x -12..416): RTC + display share a top row below the breadboard,
+    // three buttons form one control row beneath, buzzer closes the block.
+    const BLOCK_X = 100;
+    const BLOCK_Y = 70;
+    simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
 
-    // 4-digit 7-segment display: digit commons D1-D4, then segments A-G, DP.
-    const seg = simulation.addPart(part('4-Digit 7-Segment Display'), PART_X, PART_Y + PART_STEP);
+    // 4-digit 7-segment display on the README pin table: digit commons
+    // DIG1-DIG4, segments A-G, and the colon line on D13 (this bench's
+    // glass carries DP there, so the DP blink stands in for the colon).
+    const seg = simulation.addPart(part('4-Digit 7-Segment Display'), BLOCK_X + 35, BLOCK_Y);
     const segWires: Array<[string, string]> = [
       ['DIG1', 'D2'],
       ['DIG2', 'D3'],
@@ -215,12 +646,12 @@ void loop() {
       ['DIG4', 'D5'],
       ['A', 'D6'],
       ['B', 'D7'],
-      ['DP', 'D8'],
-      ['G', 'D9'],
-      ['F', 'D10'],
-      ['E', 'D11'],
-      ['D', 'D12'],
-      ['C', 'D13'],
+      ['C', 'D8'],
+      ['D', 'D9'],
+      ['E', 'D10'],
+      ['F', 'D11'],
+      ['G', 'D12'],
+      ['DP', 'D13'],
     ];
     for (const [segPin, boardPin] of segWires) {
       const from = simulation.pinAt(seg, segPin);
@@ -231,13 +662,14 @@ void loop() {
 
     // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
     // The sketch uses the internal pull-ups, so a held button reads LOW.
+    // One control row under the clock pair, 14mm pitch for 6mm bodies.
     const buttons: Array<[string, string]> = [
       ['Hours', 'A0'],
       ['Minutes', 'A1'],
       ['Alarm', 'A2'],
     ];
     buttons.forEach(([label, pin], index) => {
-      const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + (2 + index) * PART_STEP);
+      const button = simulation.addPart(part('Tactile Button'), BLOCK_X + index * 14, BLOCK_Y + 30);
       const boardPin = simulation.boardTerminal(pin);
       const legA = simulation.pinAt(button, 'a');
       const legB = simulation.pinAt(button, 'b');
@@ -247,7 +679,7 @@ void loop() {
       void label;
     });
 
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), PART_X, PART_Y + 5 * PART_STEP);
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 46);
     const buzzPin = simulation.boardTerminal('A3');
     const positive = simulation.pinAt(buzzer, 'positive');
     const negative = simulation.pinAt(buzzer, 'negative');
@@ -258,9 +690,9 @@ void loop() {
   },
   ],
   working: [
-    'The 7-segment display shows HHMM from the RTC, ticking once a minute.',
-    'Press Alarm to set the alarm time with Hours and Minutes, press Alarm again to arm it.',
-    'The buzzer beeps when the clock reaches the armed alarm time.',
+    'The 7-segment display shows HHMM from the RTC, with the second digit’s dot blinking once a second.',
+    'Hour and Minute retune the shown time; Alarm arms or disarms, then shows " on"/" off" and the alarm time.',
+    'At the alarm hour the siren sounds: a short Alarm press snoozes 9 minutes (four circles), a long hold stops it.',
   ],
 };
 
@@ -407,11 +839,13 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    // The three code buttons, each: one leg to its pin, one to ground. The
-    // sketch uses the internal pull-ups, so a held button reads LOW.
+    // One compact combination block: three code buttons in a row, the two
+    // indicator pairs beside each other under them, buzzer closing the block.
+    const BLOCK_X = 100;
+    const BLOCK_Y = 70;
     const codePins = ['D2', 'D3', 'D4'];
     codePins.forEach((pin, index) => {
-      const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + index * PART_STEP);
+      const button = simulation.addPart(part('Tactile Button'), BLOCK_X + index * 14, BLOCK_Y);
       const boardPin = simulation.boardTerminal(pin);
       const legA = simulation.pinAt(button, 'a');
       const legB = simulation.pinAt(button, 'b');
@@ -426,11 +860,11 @@ void loop() {
       { led: 'Green LED', pin: 'D8' },
     ];
     aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), PART_X, PART_Y + (3 + index) * PART_STEP);
+      const led = simulation.addPart(part(ledName), BLOCK_X + index * 32, BLOCK_Y + 16);
       const resistor = simulation.addPart(
         part('220 Resistor'),
-        PART_X + 62,
-        PART_Y + (3 + index) * PART_STEP,
+        BLOCK_X + 14 + index * 32,
+        BLOCK_Y + 16,
       );
       const boardPin = simulation.boardTerminal(pin);
       const anode = simulation.pinAt(led, 'anode');
@@ -443,7 +877,7 @@ void loop() {
       simulation.routeWire(legB, boardPin);
     });
 
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), PART_X, PART_Y + 5 * PART_STEP);
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 38);
     const buzzPin = simulation.boardTerminal('D9');
     const positive = simulation.pinAt(buzzer, 'positive');
     const negative = simulation.pinAt(buzzer, 'negative');
@@ -520,9 +954,13 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    simulation.placeExampleDevice('servo', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
+    // One compact dash block: servo top, slide pot under it, the three
+    // indicator pairs in a row beneath.
+    const BLOCK_X = 100;
+    const BLOCK_Y = 70;
+    simulation.placeExampleDevice('servo', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
 
-    const pot = simulation.addPart(part('Slide Potentiometer'), PART_X, PART_Y + PART_STEP);
+    const pot = simulation.addPart(part('Slide Potentiometer'), BLOCK_X, BLOCK_Y + 38);
     const knob = simulation.boardTerminal('A0');
     const endA = simulation.pinAt(pot, 'endA');
     const wiper = simulation.pinAt(pot, 'wiper');
@@ -538,11 +976,11 @@ void loop() {
       { led: 'Red LED', pin: 'D8' },
     ];
     aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), PART_X, PART_Y + (2 + index) * PART_STEP);
+      const led = simulation.addPart(part(ledName), BLOCK_X + index * 30, BLOCK_Y + 74);
       const resistor = simulation.addPart(
         part('220 Resistor'),
-        PART_X + 62,
-        PART_Y + (2 + index) * PART_STEP,
+        BLOCK_X + 14 + index * 30,
+        BLOCK_Y + 74,
       );
       const boardPin = simulation.boardTerminal(pin);
       const anode = simulation.pinAt(led, 'anode');
@@ -638,7 +1076,11 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    const sonar = simulation.addPart(part('Ultrasonic Sensor (HC-SR04)'), PART_X, PART_Y);
+    // One compact ranger block: sonar and buzzer share the top row, the
+    // three distance LEDs sit in a row beneath.
+    const BLOCK_X = 100;
+    const BLOCK_Y = 70;
+    const sonar = simulation.addPart(part('Ultrasonic Sensor (HC-SR04)'), BLOCK_X, BLOCK_Y);
     const sonarVcc = simulation.pinAt(sonar, 'VCC');
     const sonarTrig = simulation.pinAt(sonar, 'TRIG');
     const sonarEcho = simulation.pinAt(sonar, 'ECHO');
@@ -651,7 +1093,7 @@ void loop() {
     simulation.routeWire(trig, sonarTrig);
     simulation.routeWire(echo, sonarEcho);
 
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), PART_X, PART_Y + PART_STEP);
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X + 52, BLOCK_Y);
     const buzzPin = simulation.boardTerminal('D9');
     const positive = simulation.pinAt(buzzer, 'positive');
     const negative = simulation.pinAt(buzzer, 'negative');
@@ -665,11 +1107,11 @@ void loop() {
       { led: 'Red LED', pin: 'D12' },
     ];
     aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), PART_X, PART_Y + (2 + index) * PART_STEP);
+      const led = simulation.addPart(part(ledName), BLOCK_X + index * 30, BLOCK_Y + 32);
       const resistor = simulation.addPart(
         part('220 Resistor'),
-        PART_X + 62,
-        PART_Y + (2 + index) * PART_STEP,
+        BLOCK_X + 14 + index * 30,
+        BLOCK_Y + 32,
       );
       const boardPin = simulation.boardTerminal(pin);
       const anode = simulation.pinAt(led, 'anode');
@@ -750,9 +1192,12 @@ void loop() {
     const ground = simulation.boardTerminal('GND');
     if (!supply || !ground) return;
 
-    simulation.placeExampleDevice('lcd1602', PART_X, PART_Y, EXAMPLE_DEVICES, LCD_LINES);
+    // One compact station block: the LCD on top, the sensor tucked under it.
+    const BLOCK_X = 100;
+    const BLOCK_Y = 70;
+    simulation.placeExampleDevice('lcd1602', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
 
-    const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), PART_X, PART_Y + PART_STEP);
+    const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), BLOCK_X, BLOCK_Y + 42);
     const data = simulation.boardTerminal('D10');
     const vcc = simulation.pinAt(sensor, 'VCC');
     const sda = simulation.pinAt(sensor, 'SDA');
@@ -857,7 +1302,10 @@ void loop() {
         const ground = simulation.boardTerminal('GND');
         if (!supply || !ground) return;
 
-        const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y);
+        // One compact timer block: button, LED and resistor side by side.
+        const BLOCK_X = 100;
+        const BLOCK_Y = 70;
+        const button = simulation.addPart(part('Tactile Button'), BLOCK_X, BLOCK_Y);
         const boardPin = simulation.boardTerminal('D2');
         const legA = simulation.pinAt(button, 'a');
         const legB = simulation.pinAt(button, 'b');
@@ -865,8 +1313,8 @@ void loop() {
         simulation.routeWire(boardPin, legA);
         simulation.routeWire(legB, ground);
 
-        const led = simulation.addPart(part('Red LED'), PART_X, PART_Y + PART_STEP);
-        const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + PART_STEP);
+        const led = simulation.addPart(part('Red LED'), BLOCK_X + 12, BLOCK_Y);
+        const resistor = simulation.addPart(part('220 Resistor'), BLOCK_X + 26, BLOCK_Y);
         const ledPin = simulation.boardTerminal('D8');
         const anode = simulation.pinAt(led, 'anode');
         const cathode = simulation.pinAt(led, 'cathode');
