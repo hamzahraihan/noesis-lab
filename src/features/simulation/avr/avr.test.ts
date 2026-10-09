@@ -375,3 +375,35 @@ describe('usart bridge', () => {
     expect(out.join('')).toContain('A');
   });
 });
+
+import { lintPrototypes, packageSketch } from './packager';
+
+const project = {
+  language: 'arduino-cpp',
+  activeName: 'main.ino',
+  files: [
+    { name: 'main.ino', content: '#include <Arduino.h>\n#include "cfg.h"\nvoid loop() {}\n' },
+    { name: 'cfg.h', content: '#define X 1\n' },
+  ],
+} as const;
+
+describe('sketch packager', () => {
+  it('concatenates tabs with local includes stripped', () => {
+    const packed = packageSketch(project);
+    expect(packed.source).toBe('#define X 1\n#include <Arduino.h>\nvoid loop() {}\n');
+    expect(packed.lineMap[0]).toEqual({ file: 'cfg.h', line: 1 });
+    expect(packed.lineMap[1]).toEqual({ file: 'main.ino', line: 1 });
+  });
+
+  it('ensures Arduino.h with a mapped marker line', () => {
+    const packed = packageSketch({ language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void loop() {}\n' }] });
+    expect(packed.source.startsWith('#include <Arduino.h>\n')).toBe(true);
+    expect(packed.lineMap[0]).toEqual({ file: '<packager>', line: 0 });
+  });
+
+  it('flags calls with no prior declaration', () => {
+    const hits = lintPrototypes('void loop() {\n  appTick();\n}\nvoid appTick() {}\n');
+    expect(hits).toEqual([{ line: 2, name: 'appTick' }]);
+    expect(lintPrototypes('void appTick() {}\nvoid loop() {\n  appTick();\n}\n')).toEqual([]);
+  });
+});
