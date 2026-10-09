@@ -357,8 +357,7 @@ export class Simulation {
       const hexText = hexForSourcesHash(sourcesHashForProject(project));
       if (hexText === null) return;
       const program = parseIntelHex(hexText);
-      let flashed: AvrBackend | null = null;
-      flashed = new AvrBackend(program, {
+      const flashed = new AvrBackend(program, {
         mcu: this.mcu,
         nowMs: () => this.engine.timeMs,
         readPin: (gpio) => {
@@ -366,36 +365,10 @@ export class Simulation {
           return this.engine.readDigital(gpio);
         },
         onSettle: () => this.engine.settle(),
-        mmio: {
-          serialWrite: (text) => this.pushSerial(text),
-          // Backend clock, not engine time: the engine only advances after
-          // the step, so a shim delay() watching engine time would spin
-          // forever inside one frame.
-          millis: () => flashed?.millis() ?? this.engine.timeMs,
-          i2cWrite: (address, bytes) => {
-            this.i2c.beginTransmission(address);
-            for (const byte of bytes) this.i2c.write(byte);
-            const transfer = this.i2c.endTransmission();
-            this.busLog.record({
-              timeMs: this.engine.timeMs,
-              bus: 'i2c',
-              address: transfer.address,
-              bytes: transfer.bytes,
-              acknowledged: transfer.acknowledged,
-              micros: transfer.micros,
-            });
-            this.engine.settle();
-          },
-          i2cRead: (address, count) => {
-            this.i2c.requestFrom(address, count);
-            const out: number[] = [];
-            for (;;) {
-              const byte = this.i2c.read();
-              if (byte < 0) break;
-              out.push(byte);
-            }
-            return out;
-          },
+        serial: { serialWrite: (text) => this.pushSerial(text) },
+        i2c: {
+          writeByte: (address, byte, isFirst) => this.engine.writeI2C(address, byte, isFirst),
+          readByte: (address, index) => this.engine.requestI2C(address, index + 1)[index] ?? 0xff,
         },
       });
       this.avrBackend = flashed;

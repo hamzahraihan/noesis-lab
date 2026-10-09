@@ -16,7 +16,7 @@ function sourcesHash(): string {
 describe('avr hex assets', () => {
   it('ships a manifest whose hashes match the files and the sketch sources', () => {
     if (!existsSync(HEX) || !existsSync(MANIFEST)) {
-      console.warn('SKIP: HEX assets absent (build with scripts/build-avr-hex.sh)');
+      console.warn('SKIP: HEX assets absent (build with scripts/build-avr-hex.mjs)');
       return;
     }
     const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as {
