@@ -77,13 +77,13 @@ describe('avr timing core', () => {
   });
 });
 
-import { SERIAL_TX_ADDR, MILLIS_ADDR, attachMmioTrap } from './trap';
+import { SERIAL_TX_ADDR, MILLIS_ADDR, WIRE_TX_ADDR, WIRE_RX_ADDR, attachMmioTrap } from './trap';
 
 describe('mmio trap serial path', () => {
   it('forwards serial bytes as text', () => {
     const cpu = new CPU(new Uint16Array(64));
     const out: string[] = [];
-    attachMmioTrap(cpu, { serialWrite: (t) => out.push(t), millis: () => 0 });
+    attachMmioTrap(cpu, { serialWrite: (t) => out.push(t), millis: () => 0, i2cWrite: () => {}, i2cRead: () => [] });
     cpu.writeData(SERIAL_TX_ADDR, 65); // 'A'
     cpu.writeData(SERIAL_TX_ADDR, 66); // 'B'
     expect(out.join('')).toBe('AB');
@@ -91,8 +91,40 @@ describe('mmio trap serial path', () => {
 
   it('serves millis as LE32 across four reads', () => {
     const cpu = new CPU(new Uint16Array(64));
-    attachMmioTrap(cpu, { serialWrite: () => {}, millis: () => 0x01020304 });
+    attachMmioTrap(cpu, { serialWrite: () => {}, millis: () => 0x01020304, i2cWrite: () => {}, i2cRead: () => [] });
     const bytes = [0, 1, 2, 3].map((i) => cpu.readData(MILLIS_ADDR + i));
     expect(bytes).toEqual([0x04, 0x03, 0x02, 0x01]);
+  });
+});
+
+describe('mmio trap wire path', () => {
+  it('frames an I2C write transaction', () => {
+    const cpu = new CPU(new Uint16Array(64));
+    const writes: Array<{ address: number; bytes: number[] }> = [];
+    attachMmioTrap(cpu, {
+      serialWrite: () => {},
+      millis: () => 0,
+      i2cWrite: (address, bytes) => writes.push({ address, bytes }),
+      i2cRead: () => [],
+    });
+    cpu.writeData(WIRE_TX_ADDR, 0x68);
+    cpu.writeData(WIRE_TX_ADDR, 2);
+    cpu.writeData(WIRE_TX_ADDR, 0x00);
+    cpu.writeData(WIRE_TX_ADDR, 0x11);
+    expect(writes).toEqual([{ address: 0x68, bytes: [0x00, 0x11] }]);
+  });
+
+  it('stages an I2C read response', () => {
+    const cpu = new CPU(new Uint16Array(64));
+    attachMmioTrap(cpu, {
+      serialWrite: () => {},
+      millis: () => 0,
+      i2cWrite: () => {},
+      i2cRead: (address, count) => (address === 0x68 ? [1, 2, 3].slice(0, count) : []),
+    });
+    cpu.writeData(WIRE_RX_ADDR, 0x68);
+    cpu.writeData(WIRE_RX_ADDR, 3);
+    expect([cpu.readData(WIRE_RX_ADDR), cpu.readData(WIRE_RX_ADDR), cpu.readData(WIRE_RX_ADDR)]).toEqual([1, 2, 3]);
+    expect(cpu.readData(WIRE_RX_ADDR)).toBe(0x00);
   });
 });
