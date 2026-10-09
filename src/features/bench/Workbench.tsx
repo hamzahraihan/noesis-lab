@@ -255,6 +255,18 @@ type DragState =
   | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
   | { kind: 'move'; partId: string; grabDx: number; grabDy: number }
   /**
+   * Holding down a momentary contact (tactile button, joystick select).
+   *
+   * The Wokwi artwork for these parts is pointer-transparent so bench drags
+   * and wiring keep working, which means the element's own press events can
+   * never fire -- without this gesture a button on the canvas could be moved
+   * and wired but never actually pressed. Press wins on the body; a press on
+   * the part's own pins still routes a wire, and a press that starts moving
+   * past click slop converts to an ordinary move-drag (releasing first, so a
+   * dragged button never sticks down).
+   */
+  | { kind: 'press'; partId: string; grabDx: number; grabDy: number }
+  /**
    * Reshaping a placed wire by dragging one of its own waypoints.
    *
    * Distinct from `move` because the thing under the pointer is a waypoint
@@ -555,6 +567,23 @@ export function Workbench({
 
     const part = bench.parts.find((candidate) => candidate.id === partId);
     if (!part) return;
+    if (
+      event.button === 0 &&
+      !event.shiftKey &&
+      wireAnchor === null &&
+      part.definition.momentary === true &&
+      !pressHitsOwnPin(part, bench.terminals, world, HOLE_PICK_RADIUS_MM)
+    ) {
+      dragRef.current = {
+        kind: 'press',
+        partId,
+        grabDx: world.x - part.x,
+        grabDy: world.y - part.y,
+      };
+      onTogglePressed(partId, true);
+      (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+      return;
+    }
     dragRef.current = {
       kind: 'move',
       partId,
@@ -663,10 +692,24 @@ export function Workbench({
       return;
     }
 
+    /*
+     * A press that starts moving becomes an ordinary move-drag: the press
+     * releases first so a dragged button never sticks down, and the grab
+     * offsets carried from press-down keep the part under the pointer.
+     */
+    if (drag.kind === 'press') {
+      onTogglePressed(drag.partId, false);
+      const moved = { kind: 'move' as const, partId: drag.partId, grabDx: drag.grabDx, grabDy: drag.grabDy };
+      dragRef.current = moved;
+      onMovePart(moved.partId, world.x - moved.grabDx, world.y - moved.grabDy);
+      return;
+    }
+
     onMovePart(drag.partId, world.x - drag.grabDx, world.y - drag.grabDy);
   };
 
   const endDrag = (event: React.PointerEvent) => {
+    if (dragRef.current?.kind === 'press') onTogglePressed(dragRef.current.partId, false);
     dragRef.current = null;
     pressRef.current = null;
     const target = event.currentTarget as Element;
