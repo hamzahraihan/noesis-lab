@@ -7,7 +7,7 @@
  * a device was wired to the wrong pins and the writes are going nowhere.
  */
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { BusEntry } from '@/features/simulation';
 import { EraserIcon, SewingPinIcon } from '@radix-ui/react-icons';
 import { Button, CardTitle } from '@/components';
@@ -15,12 +15,22 @@ import { Button, CardTitle } from '@/components';
 /** How many bytes one line shows before it elides the rest. */
 const BYTES_PER_LINE = 8;
 
+/**
+ * How many transfers reach the DOM. The full log stays in state (and clears
+ * from the header action); the list pins to the newest entry anyway.
+ */
+const VISIBLE_ENTRIES = 50;
+
 export interface BusMonitorProps {
   entries: readonly BusEntry[];
   onClear(): void;
 }
 
-export function BusMonitor({ entries, onClear }: BusMonitorProps) {
+/**
+ * The bus log, memoised like the serial monitor: entries keep their identity
+ * until a transfer lands, so idle frames skip 200 rows of diodes and spans.
+ */
+export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMonitorProps) {
   const listRef = useRef<HTMLUListElement>(null);
 
   // Follows the newest transfer, the way a terminal does. Pinned to the bottom
@@ -58,7 +68,7 @@ export function BusMonitor({ entries, onClear }: BusMonitorProps) {
             Nothing yet. Wire.beginTransmission and SPI.transfer land here as the sketch makes them.
           </li>
         ) : (
-          entries.map((entry, index) => (
+          entries.slice(-VISIBLE_ENTRIES).map((entry, index) => (
             <li key={`${entry.timeMs}-${index}`} className="flex gap-2 whitespace-pre">
               <span className="num shrink-0 text-slate-600">{formatTime(entry.timeMs)}</span>
               <span className={entry.bus === 'i2c' ? 'shrink-0 text-amber-400' : 'shrink-0 text-sky-400'}>
@@ -78,7 +88,7 @@ export function BusMonitor({ entries, onClear }: BusMonitorProps) {
       </ul>
     </section>
   );
-}
+});
 
 /** Bytes as hex, elided once a transfer is longer than one screenful. */
 function formatBytes(bytes: readonly number[]): string {
