@@ -46,11 +46,14 @@ export function packageSketch(project: FirmwareProject): PackedSketch {
 export function lintPrototypes(source: string): Array<{ line: number; name: string }> {
   const defined = new Set<string>();
   const hits: Array<{ line: number; name: string }> = [];
-  const definition = /^\s*(?:[\w:<>*&]+\s+)+(\w+)\s*\([^;]*\)\s*\{?\}?\s*;?\s*$/;
-  const keywords = new Set(['if', 'for', 'while', 'switch', 'return', 'sizeof']);
+  const definition = /^\s*((?:[\w:<>*&]+\s+)+)(\w+)\s*\([^;]*\)\s*\{?\}?\s*;?\s*$/;
+  const keywords = new Set(['if', 'for', 'while', 'switch', 'return', 'sizeof', 'else']);
   source.split('\n').forEach((text, index) => {
     const def = text.match(definition);
-    if (def && !keywords.has(def[1])) defined.add(def[1]);
+    if (def) {
+      const firstWord = def[1].trim().split(/\s+/)[0];
+      if (!keywords.has(def[2]) && !keywords.has(firstWord!)) defined.add(def[2]);
+    }
     const calls = new RegExp('\\b([A-Za-z_]\\w*)\\s*\\(', 'g');
     let match: RegExpExecArray | null;
     while ((match = calls.exec(text)) !== null) {

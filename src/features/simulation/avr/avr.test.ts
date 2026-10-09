@@ -410,4 +410,9 @@ describe('sketch packager', () => {
   it('treats prototype declarations as defined', () => {
     expect(lintPrototypes('void appTick();\nvoid loop() {\n  appTick();\n}\n')).toEqual([]);
   });
+
+  it('does not treat keyword-led call lines as definitions', () => {
+    expect(lintPrototypes('void loop() {\n  return foo();\n}\n')).toEqual([{ line: 2, name: 'foo' }]);
+    expect(lintPrototypes('void loop() {\n  if (x) {\n  } else foo();\n}\n')).toEqual([{ line: 3, name: 'foo' }]);
+  });
 });
