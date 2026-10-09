@@ -83,6 +83,18 @@ describe('avr timing core', () => {
     expect(backend.cycles).toBe(40 * 16_000);
     expect(backend.clampedMs).toBeGreaterThan(0);
   });
+
+  it('steps 20ms of core time within budget', () => {
+    const backend = new AvrBackend(new Uint16Array(8192), {
+      mcu: new McuRuntime(arduinoUnoR3()),
+      nowMs: () => 0,
+      readPin: () => false,
+      onSettle: () => {},
+    });
+    const start = performance.now();
+    backend.step(20);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
 });
 
 describe('mmio trap serial path', () => {
