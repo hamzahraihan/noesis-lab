@@ -102,11 +102,11 @@ export class SevenSegment {
     return this.latched.slice();
   }
 
-  /** Decoded characters, for tests and readouts. */
+  /** Decoded characters, for tests and readouts. DP is blink state, not text. */
   getText(): string {
     let out = '';
     for (let digit = 0; digit < this.digitCount; digit++) {
-      const pattern = this.latched[digit];
+      const pattern = this.latched[digit] & 0x7f;
       let char = ' ';
       for (const [candidate, bits] of Object.entries(SEGMENT_MAP)) {
         if (bits === pattern) {
