@@ -377,6 +377,8 @@ describe('usart bridge', () => {
 });
 
 import { lintPrototypes, packageSketch } from './packager';
+import { toSingleFileProject } from '../firmware/project';
+import type { CompileResult } from './toolchain/client';
 
 const project = {
   language: 'arduino-cpp',
@@ -414,5 +416,62 @@ describe('sketch packager', () => {
   it('does not treat keyword-led call lines as definitions', () => {
     expect(lintPrototypes('void loop() {\n  return foo();\n}\n')).toEqual([{ line: 2, name: 'foo' }]);
     expect(lintPrototypes('void loop() {\n  if (x) {\n  } else foo();\n}\n')).toEqual([{ line: 3, name: 'foo' }]);
+  });
+});
+
+describe('avr compile fallback matrix', () => {
+  const blink = () => toSingleFileProject('void setup() {}\nvoid loop() {}\n', 'arduino-cpp');
+
+  it('refuses non-Uno before compiling', async () => {
+    let calls = 0;
+    const stub = async (): Promise<CompileResult> => {
+      calls += 1;
+      throw new Error('worker must not run for non-Uno boards');
+    };
+    const simulation = new Simulation(arduinoMega2560(), { avrCompile: stub });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun(blink());
+    expect(calls, 'worker never runs for a Mega').toBe(0);
+    expect(simulation.firmwareError).toBe('AVR backend needs an Uno board');
+    expect(simulation.compileState).toEqual({ error: 'AVR backend needs an Uno board' });
+    expect(simulation.runner, 'mega falls back to the interpreter').not.toBeNull();
+  });
+
+  it('falls back to interpreter with reason on build failure', async () => {
+    const stub = async (): Promise<CompileResult> => {
+      throw new Error('compile failed: boom');
+    };
+    const simulation = new Simulation(arduinoUnoR3(), { avrCompile: stub });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun(blink());
+    expect(simulation.firmwareError).toContain('compile failed');
+    expect(simulation.compileState).toEqual({ error: expect.stringContaining('compile failed') });
+    expect(simulation.runner, 'uno without HEX runs the interpreter').not.toBeNull();
+    expect(
+      (simulation as unknown as { avrBackend: unknown }).avrBackend,
+      'failed build flashes nothing',
+    ).toBeNull();
+  });
+
+  it('cancelling a build flashes nothing', async () => {
+    const stub = (
+      _source: string,
+      _onProgress: (stage: string) => void,
+      signal: AbortSignal,
+    ): Promise<CompileResult> =>
+      new Promise<CompileResult>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('compile cancelled')), { once: true });
+      });
+    const simulation = new Simulation(arduinoUnoR3(), { avrCompile: stub });
+    simulation.execution = 'avr';
+    const pending = simulation.compileAndRun(blink());
+    (simulation as unknown as { compileAbort: AbortController | null }).compileAbort?.abort();
+    await pending;
+    expect(
+      (simulation as unknown as { avrBackend: unknown }).avrBackend,
+      'cancelled build flashes nothing',
+    ).toBeNull();
+    expect(simulation.firmwareError ?? '').toMatch(/cancel/i);
+    expect(simulation.compileState).toEqual({ error: expect.stringMatching(/cancel/i) });
   });
 });

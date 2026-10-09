@@ -20,3 +20,5 @@ export * from './firmware/project';
 export * from './avr/backend';
 export * from './avr/core';
 export * from './avr/hex';
+export * from './avr/packager';
+export * from './avr/toolchain/client';

@@ -19,6 +19,12 @@ import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { AvrBackend, hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '@/features/simulation';
 import {
+  compileInWorker as builtinCompileInWorker,
+  lintPrototypes,
+  packageSketch,
+  type CompileResult,
+} from '@/features/simulation';
+import {
   FirmwareRunner,
   toSingleFileProject,
   type FirmwareLanguage,
@@ -149,6 +155,37 @@ function deviceWireColour(pin: string, wireCount: number): string {
   }
 }
 
+/**
+ * Reason text out of a worker rejection: an `Error`'s message, a
+ * `CompileError`'s located message, or the thrown value stringified.
+ */
+function compileDetail(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error !== null && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string' && message !== '') return message;
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+/**
+ * Where a worker compile stands. A plain public field, read the way Bench
+ * already reads `firmwareError`: after `await compileAndRun` it holds the
+ * verdict, and while the worker runs it holds `'compiling'`.
+ */
+export type CompileState = 'idle' | 'compiling' | 'ready' | { error: string };
+
+/**
+ * Seam for the worker compile client. Production uses the real in-worker
+ * client; tests inject a stub that counts calls, rejects, or hangs until
+ * abort — the same way the class already wraps its `I2CBus`/`SpiBus`
+ * instances rather than reaching for a global.
+ */
+export interface SimulationDeps {
+  readonly avrCompile?: typeof builtinCompileInWorker;
+}
+
 export class Simulation {
   readonly builder = new BenchBuilder();
   readonly mcu: McuRuntime;
@@ -156,6 +193,7 @@ export class Simulation {
 
   runner: FirmwareRunner | null = null;
   firmwareError: string | null = null;
+  compileState: CompileState = 'idle';
   serial: string[] = [];
   running = false;
 
@@ -184,6 +222,9 @@ export class Simulation {
   }
   /** Live AVR core while execution is `'avr'` with a flashed HEX; null otherwise. */
   private avrBackend: AvrBackend | null = null;
+  private readonly avrCompile: typeof builtinCompileInWorker;
+  /** In-flight worker build, so a new `compileAndRun` aborts the previous. */
+  private compileAbort: AbortController | null = null;
   private serialSnapshot: string[] = [];
 
   /**
@@ -207,9 +248,10 @@ export class Simulation {
   private examplePartIds: string[] = [];
   private serialDirty = true;
 
-  constructor(board: PartDefinition) {
+  constructor(board: PartDefinition, deps?: SimulationDeps) {
     this.mcu = new McuRuntime(board);
     this.engine = new Engine({ bench: this.builder.build(), mcu: this.mcu, dynamicState: this.controls });
+    this.avrCompile = deps?.avrCompile ?? builtinCompileInWorker;
   }
   get bench(): Bench {
     return this.builder.build();
@@ -356,23 +398,132 @@ export class Simulation {
       if (!project) return;
       const hexText = hexForSourcesHash(sourcesHashForProject(project));
       if (hexText === null) return;
-      const program = parseIntelHex(hexText);
-      const flashed = new AvrBackend(program, {
-        mcu: this.mcu,
-        nowMs: () => this.engine.timeMs,
-        readPin: (gpio) => {
-          this.engine.settle();
-          return this.engine.readDigital(gpio);
-        },
-        onSettle: () => this.engine.settle(),
-        serial: { serialWrite: (text) => this.pushSerial(text) },
-        i2c: this.avrI2cSink(),
-      });
-      this.avrBackend = flashed;
+      this.flashAvrWords(parseIntelHex(hexText));
     } catch (error) {
       this.avrBackend = null;
       this.firmwareError = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  /** Builds an AVR core from flash words over the same hooks `tryFlashAvr` uses. */
+  private flashAvrWords(program: Uint16Array): void {
+    const flashed = new AvrBackend(program, {
+      mcu: this.mcu,
+      nowMs: () => this.engine.timeMs,
+      readPin: (gpio) => {
+        this.engine.settle();
+        return this.engine.readDigital(gpio);
+      },
+      onSettle: () => this.engine.settle(),
+      serial: { serialWrite: (text) => this.pushSerial(text) },
+      i2c: this.avrI2cSink(),
+    });
+    this.avrBackend = flashed;
+  }
+
+  /**
+   * Compiles a project in the worker and runs it on the AVR core, falling
+   * back rather than leaving the bench dark.
+   *
+   * The chain: non-Uno boards are refused before the worker is even touched
+   * (the interpreter runs the sketch instead); lint hints are notices and
+   * never block; a worker success flashes the fresh HEX; a worker, build, or
+   * parse failure runs the bundled HEX when its sources hash is fresh for
+   * this exact project, else the interpreter; a cancelled build flashes
+   * nothing. Every branch lands `compileState` and `firmwareError` with its
+   * own message. Never rejects: failures report through those fields, the
+   * way `loadFirmware` reports syntax errors. A new call aborts the previous
+   * build via the stored controller.
+   */
+  async compileAndRun(project: FirmwareProject): Promise<void> {
+    this.compileAbort?.abort();
+    const controller = new AbortController();
+    this.compileAbort = controller;
+    const signal = controller.signal;
+
+    if (this.mcu.board.id !== 'uno') {
+      this.loadFirmware(project);
+      this.firmwareError = 'AVR backend needs an Uno board';
+      this.compileState = { error: 'AVR backend needs an Uno board' };
+      if (this.compileAbort === controller) this.compileAbort = null;
+      return;
+    }
+
+    // Lint hints stay notices: the IDE auto-prototypes, so a flagged call
+    // still compiles — this only informs, it never blocks the worker.
+    lintPrototypes(packageSketch(project).source);
+
+    const packed = packageSketch(project);
+    this.compileState = 'compiling';
+    let compiled: CompileResult;
+    try {
+      compiled = await this.avrCompile(packed.source, () => {
+        this.compileState = 'compiling';
+      }, signal);
+    } catch (error) {
+      // A newer build owns the verdict now; the stale one stays silent.
+      if (this.compileAbort !== controller) return;
+      this.compileAbort = null;
+      if (signal.aborted) {
+        this.firmwareError = 'compile cancelled';
+        this.compileState = { error: 'compile cancelled' };
+        return;
+      }
+      this.landCompileFailure(project, compileDetail(error));
+      return;
+    }
+
+    if (this.compileAbort !== controller || signal.aborted) {
+      // Superseded by a newer build, or aborted while awaiting: a stale
+      // success must not overwrite the newer run, and a cancelled build
+      // flashes nothing.
+      if (signal.aborted && this.compileAbort === controller) {
+        this.compileAbort = null;
+        this.firmwareError = 'compile cancelled';
+        this.compileState = { error: 'compile cancelled' };
+      }
+      return;
+    }
+    this.compileAbort = null;
+    // The fresh HEX wins: rebuild the interpreter base, then overlay the
+    // core, so serial, timing, and the runner start from t=0 together.
+    this.loadFirmware(project);
+    try {
+      this.flashAvrWords(compiled.hex);
+    } catch (error) {
+      this.landCompileFailure(project, compileDetail(error));
+      return;
+    }
+    this.firmwareError = null;
+    this.compileState = 'ready';
+  }
+
+  /**
+   * Worker/build/parse failure landing: the bundled HEX when its staged
+   * sources hash to this exact project, else the interpreter. `loadFirmware`
+   * always re-establishes the interpreter runner; the bundled branch overlays
+   * its core on top, the interpreter branch pins `avrBackend` to null.
+   */
+  private landCompileFailure(project: FirmwareProject, detail: string): void {
+    const bundled = hexForSourcesHash(sourcesHashForProject(project));
+    if (bundled !== null) {
+      try {
+        const program = parseIntelHex(bundled);
+        this.loadFirmware(project);
+        this.flashAvrWords(program);
+        const message = `compile failed, running bundled HEX: ${detail}`;
+        this.firmwareError = message;
+        this.compileState = { error: message };
+        return;
+      } catch {
+        // A corrupt committed HEX falls through to the interpreter below.
+      }
+    }
+    this.loadFirmware(project);
+    this.avrBackend = null;
+    const message = detail.includes('compile failed') ? detail : `compile failed: ${detail}`;
+    this.firmwareError = message;
+    this.compileState = { error: message };
   }
 
   /**
