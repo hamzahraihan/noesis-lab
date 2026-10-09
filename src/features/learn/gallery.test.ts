@@ -268,6 +268,94 @@ describe('the project gallery', () => {
   }, 180_000);
 
   /*
+   * Live Tier-2 runtime proof: a NEW fixture sketch (the gallery sketch above
+   * stays raw-GPIO) that includes the recorded Tier-2 headers, instantiates
+   * their objects, and calls their API every loop — SevSeg multiplexing plus
+   * an RTC read. Every name used exists in the recorded sources (SevSeg
+   * 3.7.0: `SevSeg`, `begin(COMMON_ANODE, ...)`, `setNumber`,
+   * `refreshDisplay`; RTClib 2.1.4: `RTC_DS1307`, `begin`, `now`, `DateTime`
+   * `hour`/`minute`). The bench reuses the alarm wiring so the digit commons
+   * sit on D2-D5. Gated on toolchain + Tier-2 fetch with the same
+   * skip-with-reason pattern; on skip the test passes vacuously.
+   */
+  it('runs a Tier-2 SevSeg+RTClib fixture live on the bench', async () => {
+    let pkg: string | null = null;
+    try {
+      pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
+    } catch { /* fall through to skip */ }
+    if (!pkg) {
+      console.warn('SKIP Tier-2 fixture: toolchain absent');
+      return;
+    }
+    if (!(await tier2Reachable())) {
+      console.warn('SKIP Tier-2 fixture: Tier-2 fetch unreachable');
+      return;
+    }
+    const alarmSetup = galleryById('alarm-clock')!.builds[0]!.setup;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    alarmSetup(simulation);
+    const fixture = `#include <Arduino.h>
+#include <Wire.h>
+#include <SevSeg.h>
+#include <RTClib.h>
+
+SevSeg sevseg;
+RTC_DS1307 rtc;
+
+byte digitPins[4] = {2, 3, 4, 5};
+byte segmentPins[8] = {6, 7, 8, 9, 10, 11, 12, 13};
+
+void setup() {
+  Wire.begin();
+  rtc.begin();
+  sevseg.begin(COMMON_ANODE, 4, digitPins, segmentPins, false, false, false);
+  sevseg.setBrightness(90);
+}
+
+void loop() {
+  DateTime t = rtc.now();
+  sevseg.setNumber(t.hour() * 100 + t.minute());
+  sevseg.refreshDisplay();
+}
+`;
+    const firmware = firmwareForBuild(
+      {
+        board: 'uno',
+        setup: alarmSetup,
+        sketch: fixture,
+        libraries: [
+          { name: 'SevSeg', source: 'provided' },
+          { name: 'RTClib', source: 'provided' },
+        ],
+      },
+      'arduino-cpp',
+    );
+    await simulation.compileAndRun(firmware);
+    expect(simulation.compileState, 'Tier-2 fixture compiles').toBe('ready');
+    expect(simulation.firmwareError, 'Tier-2 fixture firmware').toBeNull();
+    simulation.start();
+    // D2-D5 are the four digit commons; COMMON_ANODE drives the selected
+    // digit HIGH, sampled the same way as the raw-GPIO multiplexing legs.
+    let digitSeenHigh = false;
+    for (let frame = 0; frame < 120; frame++) {
+      simulation.tick(0.05);
+      if (simulation.firmwareError !== null) break;
+      for (const gpio of [2, 3, 4, 5]) {
+        if (simulation.engine.readDigital(gpio)) digitSeenHigh = true;
+      }
+    }
+    expect(digitSeenHigh, 'Tier-2 SevSeg multiplexes its digits').toBe(true);
+    expect(simulation.firmwareError, 'Tier-2 fixture runs without fault').toBeNull();
+    // Budget: a cold Tier-2 build compiles eight translation units through
+    // the wasm toolchain (measured ~2 min, not seconds); the browser reuses
+    // its versioned cache across sessions, Node rebuilds every run.
+  }, 1_500_000);
+
+  /*
    * Live on the bench, not just wired: the glass must show the project's own
    * text and keep showing new text as time moves. This is the test that would
    * have caught the D2 pin collision (blank/garbled LCD) and the frozen RTC

@@ -191,18 +191,26 @@ function crc32(data: Uint8Array): number {
 
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const stream = new DecompressionStream('deflate-raw');
-  const writer = stream.writable.getWriter();
   const input = new Uint8Array(data.length);
   input.set(data);
+  // The read loop starts BEFORE the write: the readable queue is bounded,
+  // so awaiting close() before the first read deadlocks once the output
+  // exceeds it — and under Node the stalled stream holds no event-loop
+  // handle, so the process exits silently instead of hanging loudly.
+  const reader = stream.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  const pump = (async (): Promise<void> => {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+  })();
+  const writer = stream.writable.getWriter();
   await writer.write(input);
   await writer.close();
-  const chunks: Uint8Array[] = [];
-  const reader = stream.readable.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
+  writer.releaseLock();
+  await pump;
   let total = 0;
   for (const chunk of chunks) total += chunk.length;
   const out = new Uint8Array(total);

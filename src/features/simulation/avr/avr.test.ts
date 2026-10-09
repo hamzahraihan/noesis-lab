@@ -505,4 +505,52 @@ describe('avr compile fallback matrix', () => {
     );
     expect(calls, 'undeclared Servo.h reaches the worker').toBe(1);
   });
+
+  it('builds declared-library projects through the multi-TU entry', async () => {
+    let singleCalls = 0;
+    let multiCalls = 0;
+    const single = async (): Promise<CompileResult> => {
+      singleCalls += 1;
+      throw new Error('single-TU entry must not run for declared builds');
+    };
+    const multi = async (): Promise<CompileResult> => {
+      multiCalls += 1;
+      return { hex: new Uint16Array(64), warnings: [] };
+    };
+    const simulation = new Simulation(arduinoUnoR3(), { avrCompile: single, avrProjectCompile: multi });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun({
+      ...blink(),
+      libraries: [{ name: 'SevSeg', source: 'provided' }],
+    } as FirmwareProject);
+    expect(multiCalls, 'declared build reaches the multi-TU entry').toBe(1);
+    expect(singleCalls, 'declared build skips the single-TU entry').toBe(0);
+    expect(simulation.compileState).toBe('ready');
+    expect(simulation.firmwareError).toBeNull();
+    expect(
+      (simulation as unknown as { avrBackend: unknown }).avrBackend,
+      'returned HEX flashes onto a live core',
+    ).not.toBeNull();
+  });
+
+  it('keeps the flashed core across start() when the interpreter cannot parse library types', async () => {
+    const multi = async (): Promise<CompileResult> => ({ hex: new Uint16Array(64), warnings: [] });
+    const simulation = new Simulation(arduinoUnoR3(), { avrProjectCompile: multi });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun({
+      ...toSingleFileProject('SevSeg sevseg;\nvoid setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
+      libraries: [{ name: 'SevSeg', source: 'provided' }],
+    } as FirmwareProject);
+    expect(simulation.compileState).toBe('ready');
+    // The interpreter rejects the real library type, so no interpreter
+    // runner exists — but the multi-TU HEX flashed onto a live core.
+    expect(simulation.runner, 'interpreter cannot model SevSeg').toBeNull();
+    simulation.start();
+    expect(
+      (simulation as unknown as { avrBackend: unknown }).avrBackend,
+      'start() preserves the flashed library core',
+    ).not.toBeNull();
+    expect(simulation.firmwareError, 'no interpreter fault surfaces').toBeNull();
+    expect(simulation.running).toBe(true);
+  });
 });

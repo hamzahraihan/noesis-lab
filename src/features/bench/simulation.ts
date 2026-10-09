@@ -20,6 +20,8 @@ import { McuRuntime } from '@/features/simulation';
 import { AvrBackend, hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '@/features/simulation';
 import {
   compileInWorker as builtinCompileInWorker,
+  compileProjectWithLibraries as builtinCompileProjectWithLibraries,
+  createProjectLibraryContext,
   lintPrototypes,
   packageSketch,
   type CompileResult,
@@ -32,7 +34,7 @@ import {
   type FirmwareServices,
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
-import { validateLibraries, projectSlots } from '@/features/simulation';
+import { validateLibraries, libraryDeclarations, projectSlots } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
 import { nextAutomaticWireColour, WIRE_COLOURS } from './wire-colours';
@@ -190,6 +192,16 @@ function compileDetail(error: unknown): string {
 export type CompileState = 'idle' | 'compiling' | 'ready' | { error: string };
 
 /**
+ * Whether a project builds through the multi-TU library path: any declared
+ * libraries (provided Tier-2 entries or custom refs), or custom slots
+ * carrying files. Everything else keeps the exact single-TU path.
+ */
+function hasLibraryBuild(project: FirmwareProject): boolean {
+  if (libraryDeclarations(project).length > 0) return true;
+  return projectSlots(project).some((slot) => slot.files.length > 0);
+}
+
+/**
  * Seam for the worker compile client. Production uses the real in-worker
  * client; tests inject a stub that counts calls, rejects, or hangs until
  * abort — the same way the class already wraps its `I2CBus`/`SpiBus`
@@ -197,6 +209,7 @@ export type CompileState = 'idle' | 'compiling' | 'ready' | { error: string };
  */
 export interface SimulationDeps {
   readonly avrCompile?: typeof builtinCompileInWorker;
+  readonly avrProjectCompile?: typeof builtinCompileProjectWithLibraries;
 }
 
 export class Simulation {
@@ -236,6 +249,7 @@ export class Simulation {
   /** Live AVR core while execution is `'avr'` with a flashed HEX; null otherwise. */
   private avrBackend: AvrBackend | null = null;
   private readonly avrCompile: typeof builtinCompileInWorker;
+  private readonly avrProjectCompile: typeof builtinCompileProjectWithLibraries;
   /** In-flight worker build, so a new `compileAndRun` aborts the previous. */
   private compileAbort: AbortController | null = null;
   private serialSnapshot: string[] = [];
@@ -265,6 +279,7 @@ export class Simulation {
     this.mcu = new McuRuntime(board);
     this.engine = new Engine({ bench: this.builder.build(), mcu: this.mcu, dynamicState: this.controls });
     this.avrCompile = deps?.avrCompile ?? builtinCompileInWorker;
+    this.avrProjectCompile = deps?.avrProjectCompile ?? builtinCompileProjectWithLibraries;
   }
   get bench(): Bench {
     return this.builder.build();
@@ -488,9 +503,23 @@ export class Simulation {
     this.compileState = 'compiling';
     let compiled: CompileResult;
     try {
-      compiled = await this.avrCompile(packed.source, () => {
-        this.compileState = 'compiling';
-      }, signal);
+      if (hasLibraryBuild(project)) {
+        // Declared libraries build across translation units: the firmware TU
+        // plus library TUs linked with prebuilt Tier-2 objects. Same result
+        // shape and same landing as the single-TU path below.
+        compiled = await this.avrProjectCompile(
+          project,
+          createProjectLibraryContext(projectSlots(project)),
+          () => {
+            this.compileState = 'compiling';
+          },
+          signal,
+        );
+      } else {
+        compiled = await this.avrCompile(packed.source, () => {
+          this.compileState = 'compiling';
+        }, signal);
+      }
     } catch (error) {
       // A newer build owns the verdict now; the stale one stays silent.
       if (this.compileAbort !== controller) return;
@@ -599,7 +628,11 @@ export class Simulation {
   }
 
   start(): void {
-    if (!this.runner && this.firmwareProject) this.loadFirmware(this.firmwareProject);
+    // A flashed AVR core counts as a loaded runner: library sketches use
+    // real library types the interpreter cannot parse, so reloading here
+    // would discard the fresh HEX for a syntax error and leave the bench
+    // dark. Only reload when neither runner exists.
+    if (!this.runner && !this.avrBackend && this.firmwareProject) this.loadFirmware(this.firmwareProject);
     this.running = true;
   }
 
