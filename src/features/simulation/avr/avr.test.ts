@@ -216,3 +216,22 @@ describe('hex asset gating', () => {
     expect(hexForSourcesHash('0'.repeat(64))).toBeNull();
   });
 });
+
+import { avrInstruction } from 'avr8js';
+import { attachUsartBridge } from './usart';
+
+describe('usart bridge', () => {
+  it('forwards a UDR0 byte as serial text', () => {
+    const cpu = new CPU(new Uint16Array(256));
+    const out: string[] = [];
+    attachUsartBridge(cpu, { serialWrite: (t) => out.push(t) });
+    cpu.writeData(0xc1, 0x08); // UCSR0B: TXEN
+    cpu.writeData(0xc4, 103); // UBRR0L: 9600 baud at 16MHz
+    cpu.writeData(0xc6, 65); // UDR0: 'A'
+    for (let i = 0; i < 200_000; i++) {
+      avrInstruction(cpu);
+      cpu.tick();
+    }
+    expect(out.join('')).toContain('A');
+  });
+});
