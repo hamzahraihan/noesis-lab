@@ -25,9 +25,23 @@ describe('gpio push path', () => {
     new AVRIOPort(cpu, portBConfig);
     new AVRIOPort(cpu, portDConfig);
     const mcu = new McuRuntime(arduinoUnoR3());
-    attachGpioBridge(cpu, mcu, () => 0);
+    attachGpioBridge(cpu, mcu, () => 0, () => false);
     cpu.writeData(36, 0x20); // DDRB bit 5: output
     cpu.writeData(37, 0x20); // PORTB bit 5: high
     expect(mcu.configurationOf(mcu.pinIdForGpio(13)!).direction).toBe('output');
+  });
+});
+
+describe('gpio read path', () => {
+  it('serves PINB bit 5 from the injected reader', () => {
+    const cpu = new CPU(new Uint16Array(64));
+    new AVRIOPort(cpu, portBConfig);
+    new AVRIOPort(cpu, portDConfig);
+    const mcu = new McuRuntime(arduinoUnoR3());
+    let pressed = false;
+    attachGpioBridge(cpu, mcu, () => 0, (gpio) => (gpio === 13 ? pressed : false));
+    expect(cpu.readData(35) & 0x20).toBe(0);
+    pressed = true;
+    expect(cpu.readData(35) & 0x20).toBe(0x20);
   });
 });
