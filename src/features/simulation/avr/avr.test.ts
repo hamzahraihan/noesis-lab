@@ -76,3 +76,23 @@ describe('avr timing core', () => {
     expect(backend.clampedMs).toBeGreaterThan(0);
   });
 });
+
+import { SERIAL_TX_ADDR, MILLIS_ADDR, attachMmioTrap } from './trap';
+
+describe('mmio trap serial path', () => {
+  it('forwards serial bytes as text', () => {
+    const cpu = new CPU(new Uint16Array(64));
+    const out: string[] = [];
+    attachMmioTrap(cpu, { serialWrite: (t) => out.push(t), millis: () => 0 });
+    cpu.writeData(SERIAL_TX_ADDR, 65); // 'A'
+    cpu.writeData(SERIAL_TX_ADDR, 66); // 'B'
+    expect(out.join('')).toBe('AB');
+  });
+
+  it('serves millis as LE32 across four reads', () => {
+    const cpu = new CPU(new Uint16Array(64));
+    attachMmioTrap(cpu, { serialWrite: () => {}, millis: () => 0x01020304 });
+    const bytes = [0, 1, 2, 3].map((i) => cpu.readData(MILLIS_ADDR + i));
+    expect(bytes).toEqual([0x04, 0x03, 0x02, 0x01]);
+  });
+});
