@@ -216,7 +216,18 @@ describe('twi bridge', () => {
     handler.writeByte(0x11);
     handler.stop();
     expect(delivered).toEqual([0x00, 0x11]);
-    expect(calls).toEqual(['connect:1', 'write:1', 'write:1', 'stop']);
+    expect(calls).toEqual(['start', 'connect:1', 'write:1', 'write:1', 'stop']);
+  });
+
+  it('twi start completes', () => {
+    const { calls, completer } = recorder();
+    const handler = new TwiBridgeHandler(completer, {
+      writeByte: () => true,
+      readByte: () => 0xff,
+    });
+    handler.start(false);
+    handler.start(true);
+    expect(calls).toEqual(['start', 'start']);
   });
 
   it('serves read bytes per index and resets on stop', () => {
@@ -231,7 +242,7 @@ describe('twi bridge', () => {
     handler.readByte(true);
     handler.readByte(false);
     handler.stop();
-    expect(calls).toEqual(['connect:1', 'read:10', 'read:20', 'read:30', 'stop']);
+    expect(calls).toEqual(['start', 'connect:1', 'read:10', 'read:20', 'read:30', 'stop']);
     handler.start(false);
     handler.connectToSlave(0x68, false);
     handler.readByte(true);
@@ -249,7 +260,7 @@ describe('twi bridge', () => {
     handler.writeByte(0x00);
     handler.start(true);
     handler.connectToSlave(0x68, false);
-    expect(calls).toEqual(['connect:1', 'write:0', 'connect:0']);
+    expect(calls).toEqual(['start', 'connect:1', 'write:0', 'start', 'connect:0']);
   });
 
   it('attaches the TWI peripheral to a CPU', () => {

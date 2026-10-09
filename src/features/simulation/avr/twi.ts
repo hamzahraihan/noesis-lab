@@ -44,7 +44,9 @@ export class TwiBridgeHandler implements TWIEventHandler {
     this.sink = sink;
   }
 
-  start(_repeated: boolean): void {}
+  start(_repeated: boolean): void {
+    this.completer.completeStart();
+  }
 
   stop(): void {
     // Flush the closing phase only when it was a write: a read or an
