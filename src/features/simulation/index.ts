@@ -17,3 +17,6 @@ export * from './firmware/interpreter';
 export * from './firmware/parser';
 export * from './firmware/python';
 export * from './firmware/project';
+export * from './avr/backend';
+export * from './avr/core';
+export * from './avr/hex';

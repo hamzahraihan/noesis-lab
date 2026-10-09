@@ -2,12 +2,18 @@ import { CPU, avrInstruction } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import { attachGpioBridge } from './gpio';
+import { attachMmioTrap, type MmioSink } from './trap';
 
 export interface AvrHooks {
   readonly mcu: McuRuntime;
   readonly nowMs: () => number;
   readonly readPin: (gpio: number) => boolean;
   readonly onSettle: () => void;
+  /**
+   * Shim trap sink (Serial/millis/Wire). Optional so the bare-metal timing
+   * tests can run a core with no trap map; Simulation always provides one.
+   */
+  readonly mmio?: MmioSink;
 }
 
 /** Single step clamp, mirroring MAX_FRAME_MS in bench/simulation.ts. */
@@ -79,6 +85,7 @@ export class AvrBackend implements ExecutionBackend {
   private buildCpu(): CPU {
     const cpu = new CPU(new Uint16Array(this.programWords));
     attachGpioBridge(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
+    if (this.hooks.mmio) attachMmioTrap(cpu, this.hooks.mmio);
     const perMs = cyclesPerMs(UNO_CLOCK_HZ);
     const tickMs = (): void => {
       this.msCounter += 1;
