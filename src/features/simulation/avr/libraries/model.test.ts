@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CURATED_LIBRARIES, validateLibraries, type ProjectLibrary } from './model';
+import { CURATED_LIBRARIES, libraryDeclarations, validateLibraries, type ProjectLibrary } from './model';
 
 function projectWith(libraries: readonly ProjectLibrary[]) {
   return { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: '' }], libraries } as const;
@@ -37,5 +37,11 @@ describe('library model', () => {
     expect(
       validateLibraries(projectWith([{ name: 'Servo', source: 'provided', version: '1.2.3' }]), { slots: [] }),
     ).toEqual([]);
+  });
+
+  it('leaves projects without declarations byte-identical', () => {
+    const bare = { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: '#include <Servo.h>\nvoid setup(){}\nvoid loop(){}\n' }] } as const;
+    expect(validateLibraries(bare, { slots: [] })).toEqual([]);
+    expect(libraryDeclarations(bare)).toEqual([]);
   });
 });
