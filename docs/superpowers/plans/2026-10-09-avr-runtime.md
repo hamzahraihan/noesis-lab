@@ -800,13 +800,21 @@ Undo semantics (explicit deviation from spec §4): history snapshots bench geome
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 describe('avr integration fallback', () => {
   it('refuses avr on non-Uno boards', () => { /* mega + execution avr → runner is interpreter, firmwareError null */ });
   it('refuses avr when no HEX is available', () => { /* uno + execution avr, no hex → interpreter */ });
   it('rejects unsupported HEX records', () => {
     expect(() => parseIntelHex(':020000040800F2\n:00000001FF')).toThrow('unsupported HEX record');
   });
-  it('ignores EEPROM/peripheral use with a logged refusal, never hangs', () => { /* placeholder-free: construct backend over a program containing WDR? No — shim has no EEPROM API, so this test asserts the shim header lacks eeprom symbols: read shim.h, expect no 'eeprom' match */ });
+  it('has no EEPROM/peripheral surface to hang on', () => {
+    const header = readFileSync(join(__dirname, 'shim', 'shim.h'), 'utf8').toLowerCase();
+    for (const symbol of ['eeprom', 'adc', 'analogread', 'spi.', 'attachinterrupt']) {
+      expect(header, `shim exposes no ${symbol}`).not.toContain(symbol);
+    }
+  });
 });
 ```
 
