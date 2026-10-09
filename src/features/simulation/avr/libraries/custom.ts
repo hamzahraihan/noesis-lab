@@ -36,10 +36,19 @@ function isPruned(path: string): boolean {
   return PRUNED_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
-export async function buildCustomObjects(
-  slot: LibrarySlot,
-  compileUnit: CustomCompileUnit,
-): Promise<{ objects: Uint8Array[]; diagnostics: string[] }> {
+/**
+ * A worker-ready translation unit: basename object name, full source, and a
+ * private copy of every live slot header (basename -> content, first wins).
+ * `path` is the originating slot path for per-file error mapping.
+ */
+export interface CustomUnit {
+  readonly name: string;
+  readonly path: string;
+  readonly source: string;
+  readonly headers: ReadonlyMap<string, string>;
+}
+
+export function collectCustomUnits(slot: LibrarySlot): { units: CustomUnit[]; diagnostics: string[] } {
   const live = slot.files.filter((file) => !isPruned(file.path));
   const headers = new Map<string, string>();
   for (const file of live) {
@@ -48,13 +57,32 @@ export async function buildCustomObjects(
       if (!headers.has(name)) headers.set(name, file.content);
     }
   }
-  const units = live.filter((file) => file.path.endsWith('.cpp'));
+  const sources = live.filter((file) => file.path.endsWith('.cpp'));
+  if (sources.length === 0) {
+    return { units: [], diagnostics: [`<${slot.name}>: no compilable sources`] };
+  }
+  return {
+    units: sources.map((unit) => ({
+      name: baseName(unit.path),
+      path: unit.path,
+      source: unit.content,
+      headers: new Map(headers),
+    })),
+    diagnostics: [],
+  };
+}
+
+export async function buildCustomObjects(
+  slot: LibrarySlot,
+  compileUnit: CustomCompileUnit,
+): Promise<{ objects: Uint8Array[]; diagnostics: string[] }> {
+  const { units, diagnostics } = collectCustomUnits(slot);
   if (units.length === 0) {
-    return { objects: [], diagnostics: [`<${slot.name}>: no compilable sources`] };
+    return { objects: [], diagnostics };
   }
   const objects: Uint8Array[] = [];
   for (const unit of units) {
-    objects.push(await compileUnit(unit.content, new Map(headers)));
+    objects.push(await compileUnit(unit.source, unit.headers));
   }
   return { objects, diagnostics: [] };
 }

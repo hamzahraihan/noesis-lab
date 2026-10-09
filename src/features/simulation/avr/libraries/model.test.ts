@@ -39,6 +39,13 @@ describe('library model', () => {
     ).toEqual([]);
   });
 
+  it('accepts pinned Tier-2 provided names', () => {
+    expect(validateLibraries(projectWith([{ name: 'SevSeg', source: 'provided' }]), { slots: [] })).toEqual([]);
+    expect(
+      validateLibraries(projectWith([{ name: 'RTClib', source: 'provided', version: '2.1.4' }]), { slots: [] }),
+    ).toEqual([]);
+  });
+
   it('leaves projects without declarations byte-identical', () => {
     const bare = { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: '#include <Servo.h>\nvoid setup(){}\nvoid loop(){}\n' }] } as const;
     expect(validateLibraries(bare, { slots: [] })).toEqual([]);

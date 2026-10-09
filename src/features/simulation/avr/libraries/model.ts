@@ -1,4 +1,5 @@
 import type { FirmwareProject } from '@/features/simulation/firmware/project';
+import { tier2ByName } from './provided';
 
 export interface ProjectLibrary {
   readonly name: string;
@@ -49,7 +50,10 @@ export function validateLibraries(
     }
     seen.add(entry.name);
     if (entry.source === 'provided') {
-      if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name)) {
+      // Tier-1 (bundled in the toolchain) and Tier-2 (fetched, SHA-verified,
+      // version-pinned in provided.ts) are both provided libraries. Versions
+      // are ignored here, as for Tier-1; the build enforces exact pins.
+      if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name) && tier2ByName(entry.name) === null) {
         errors.push(`<${entry.name}>: unknown provided library`);
       }
     } else {

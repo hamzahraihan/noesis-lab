@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCustomObjects } from './custom';
+import { buildCustomObjects, collectCustomUnits } from './custom';
 
 const cpp = (name: string, body: string) => ({ path: name, content: body });
 
@@ -43,5 +43,25 @@ describe('custom slot builds', () => {
     );
     expect(out.objects).toEqual([]);
     expect(out.diagnostics).toEqual(['<H>: no compilable sources']);
+  });
+
+  it('enumerates units with per-TU header copies', () => {
+    const slot = {
+      id: 'm',
+      name: 'MyLib',
+      files: [
+        cpp('MyLib.h', '#pragma once\nint f();\n'),
+        cpp('MyLib.cpp', '#include "MyLib.h"\nint f(){return 1;}\n'),
+        cpp('extra.cpp', 'int g(){return 2;}\n'),
+      ],
+    };
+    const { units, diagnostics } = collectCustomUnits(slot);
+    expect(diagnostics).toEqual([]);
+    expect(units.map((unit) => unit.name)).toEqual(['MyLib.cpp', 'extra.cpp']);
+    expect(units.map((unit) => unit.path)).toEqual(['MyLib.cpp', 'extra.cpp']);
+    expect(units[0]?.source).toBe('#include "MyLib.h"\nint f(){return 1;}\n');
+    expect(units[0]?.headers.get('MyLib.h')).toBe('#pragma once\nint f();\n');
+    expect(units[1]?.headers.get('MyLib.h')).toBe('#pragma once\nint f();\n');
+    expect(units[0]?.headers).not.toBe(units[1]?.headers);
   });
 });
