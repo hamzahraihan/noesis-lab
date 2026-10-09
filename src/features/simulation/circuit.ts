@@ -47,6 +47,38 @@ export interface Solution {
  */
 const JUNCTION_LIMIT_STEP_VOLTS = 0.25;
 
+/**
+ * Grow-only shared solve buffers. The single shared instance is what makes
+ * repeated solves allocation-free; sizes only ever grow to the largest bench
+ * seen, so a smaller bench reuses the same store without reallocating.
+ */
+interface SolveScratch {
+  size: number;
+  matrix: Float64Array;
+  rhs: Float64Array;
+  working: Float64Array;
+  solved: Float64Array;
+  lu: Float64Array;
+  pivots: Int32Array;
+}
+
+let scratch: SolveScratch | null = null;
+
+function scratchFor(size: number): SolveScratch {
+  if (!scratch || scratch.size < size) {
+    scratch = {
+      size,
+      matrix: new Float64Array(size * size),
+      rhs: new Float64Array(size),
+      working: new Float64Array(size),
+      solved: new Float64Array(size),
+      lu: new Float64Array(size * size),
+      pivots: new Int32Array(size),
+    };
+  }
+  return scratch;
+}
+
 export function solveCircuit(
   elements: readonly Element[],
   options: SolveOptions,
@@ -66,15 +98,20 @@ export function solveCircuit(
   }
   const size = nodeCount + sourceCount;
 
-  const matrix = new Float64Array(size * size);
-  const rhs = new Float64Array(size);
-  const working = new Float64Array(size);
-  const solved = new Float64Array(size);
+  // Shared solve buffers, grown once and reused across every solve. A bench
+  // re-solves dozens of times per frame on hundreds of nets, and allocating
+  // fresh size² Float64Arrays per solve (plus one more per Newton iteration
+  // inside LU) churned megabytes per frame through the GC — the lag and the
+  // ever-growing heap. The math below is untouched; only the backing store
+  // is shared. Single-threaded use only: solves never interleave.
+  const scratch = scratchFor(size);
+  const { matrix, rhs, working, solved } = scratch;
 
   // Capacitor history is the previous *timestep*, which must stay fixed while
   // Newton iterates within the current one.
   const previousStep = options.previousVoltages ?? new Float64Array(nodeCount);
-  if (options.previousVoltages) working.set(options.previousVoltages);
+  working.fill(0, 0, size);
+  if (options.previousVoltages) working.set(options.previousVoltages.subarray(0, size));
 
   const junctionBias = (element: Extract<Element, { kind: 'diode' }>): number =>
     (element.a >= 0 ? working[element.a] : 0) - (element.b >= 0 ? working[element.b] : 0);
@@ -159,7 +196,7 @@ export function solveCircuit(
 
     let result: Float64Array;
     try {
-      result = new LUDecomposition(matrix, size).solve(rhs, solved);
+      result = new LUDecomposition(matrix, size, scratch).solve(rhs, solved);
     } catch (error) {
       if (error instanceof SingularMatrixError) return snapshot(false);
       throw error;
