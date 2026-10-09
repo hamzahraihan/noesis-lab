@@ -377,7 +377,7 @@ describe('usart bridge', () => {
 });
 
 import { lintPrototypes, packageSketch } from './packager';
-import { toSingleFileProject } from '../firmware/project';
+import { toSingleFileProject, type FirmwareProject } from '../firmware/project';
 import type { CompileResult } from './toolchain/client';
 
 const project = {
@@ -473,5 +473,36 @@ describe('avr compile fallback matrix', () => {
     ).toBeNull();
     expect(simulation.firmwareError ?? '').toMatch(/cancel/i);
     expect(simulation.compileState).toEqual({ error: expect.stringMatching(/cancel/i) });
+  });
+
+  it('refuses declared-but-unknown libraries before touching the worker', async () => {
+    let calls = 0;
+    const stub = async (): Promise<CompileResult> => {
+      calls += 1;
+      throw new Error('worker must not run for invalid declarations');
+    };
+    const simulation = new Simulation(arduinoUnoR3(), { avrCompile: stub });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun({
+      ...blink(),
+      libraries: [{ name: 'Nope', source: 'provided' }],
+    } as FirmwareProject);
+    expect(calls, 'worker never runs for unknown declarations').toBe(0);
+    expect(simulation.firmwareError ?? '').toContain('<Nope>: unknown provided library');
+    expect(simulation.runner, 'invalid declarations fall back to the interpreter').not.toBeNull();
+  });
+
+  it('leaves undeclared-but-bundled includes to the toolchain gate', async () => {
+    let calls = 0;
+    const stub = async (): Promise<CompileResult> => {
+      calls += 1;
+      throw new Error('compile failed: boom');
+    };
+    const simulation = new Simulation(arduinoUnoR3(), { avrCompile: stub });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun(
+      toSingleFileProject('#include <Servo.h>\nvoid setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
+    );
+    expect(calls, 'undeclared Servo.h reaches the worker').toBe(1);
   });
 });

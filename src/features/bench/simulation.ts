@@ -32,6 +32,7 @@ import {
   type FirmwareServices,
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
+import { validateLibraries } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
 import { nextAutomaticWireColour, WIRE_COLOURS } from './wire-colours';
@@ -452,6 +453,17 @@ export class Simulation {
       this.loadFirmware(project);
       this.firmwareError = 'AVR backend needs an Uno board';
       this.compileState = { error: 'AVR backend needs an Uno board' };
+      if (this.compileAbort === controller) this.compileAbort = null;
+      return;
+    }
+
+    const declarationErrors = validateLibraries(project, { slots: [] });
+    if (declarationErrors.length > 0) {
+      // Offline-friendly: no worker traffic, straight to the interpreter fallback.
+      this.loadFirmware(project);
+      const reason = `declared libraries invalid: ${declarationErrors.join('; ')}`;
+      this.firmwareError = reason;
+      this.compileState = { error: reason };
       if (this.compileAbort === controller) this.compileAbort = null;
       return;
     }
