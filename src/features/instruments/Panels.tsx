@@ -7,7 +7,7 @@
  */
 
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
@@ -293,7 +293,18 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SerialMonitor({ lines }: { lines: readonly string[] }) {
+/**
+ * The serial log, memoised on the lines array itself: the bench hands out the
+ * same array until new output arrives, so most animation frames skip this
+ * subtree entirely instead of re-joining 400 lines of scrollback.
+ *
+ * Only the tail reaches the DOM. The full log stays in state (and in tests);
+ * this panel autoscrolls to the newest line anyway, so older lines are never
+ * seen -- only reconciled, sixty times a second in dev.
+ */
+const SERIAL_TAIL_LINES = 100;
+
+export const SerialMonitor = memo(function SerialMonitor({ lines }: { lines: readonly string[] }) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -318,13 +329,14 @@ export function SerialMonitor({ lines }: { lines: readonly string[] }) {
         ) : (
           // Serial.print fragments concatenate; only println breaks the line,
           // so the stream is joined before rendering rather than split per write.
-          lines.join('')
+          // The tail only: see above.
+          lines.slice(-SERIAL_TAIL_LINES).join('')
         )}
         <div ref={endRef} />
       </div>
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 
