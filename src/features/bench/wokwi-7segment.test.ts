@@ -39,7 +39,12 @@ describe('multiplexed 7-segment frame', () => {
   it('holds every digit after one multiplex cycle', () => {
     const definition = sevenSegmentDefinition(4);
     const { part, controller, state } = bench4();
-    const element = { digits: 0, values: [] as number[] } as unknown as HTMLElement;
+    const element = {
+      digits: 0,
+      values: [] as number[],
+      colon: false,
+      colonValue: false,
+    } as unknown as HTMLElement;
 
     // '1' is segments B and C: mask 0x06. Blank the other commons first,
     // the way correct firmware does before moving the segments.
@@ -55,6 +60,30 @@ describe('multiplexed 7-segment frame', () => {
     const afterSecond = [...(element as unknown as { values: number[] }).values];
     expect(afterSecond.slice(0, 8)).toEqual([0, 1, 1, 0, 0, 0, 0, 0]);
     expect(afterSecond.slice(8, 16)).toEqual([1, 1, 0, 1, 1, 0, 1, 0]);
+  });
+
+  it('drives the colon from COM/CLN, active-low', () => {
+    const definition = sevenSegmentDefinition(4);
+    const { part, controller, state } = bench4();
+    const element = {
+      digits: 0,
+      values: [] as number[],
+      colon: false,
+      colonValue: false,
+    } as unknown as HTMLElement;
+
+    drive(controller, 1, 0x3f);
+    controller.update([5, 0, 0, 0], [0, 0, 0, 0, 0, 0, 5, 5], 5, 0);
+    expect(controller.colonLit).toBe(true);
+    pushWokwiState(element, definition, part, state);
+    const target = element as unknown as { colon: boolean; colonValue: boolean };
+    expect(target.colon).toBe(true);
+    expect(target.colonValue).toBe(true);
+
+    controller.update([5, 0, 0, 0], [0, 0, 0, 0, 0, 0, 5, 5], 5, 5);
+    expect(controller.colonLit).toBe(false);
+    pushWokwiState(element, definition, part, state);
+    expect(target.colonValue).toBe(false);
   });
 
   it('leaves the element alone with nothing modeled yet', () => {

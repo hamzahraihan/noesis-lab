@@ -14,6 +14,10 @@
  * ever touches a digit whose common is currently high, and correct firmware
  * blanks all commons before moving the segments — exactly as real hardware
  * requires.
+ *
+ * The 4-digit clock glass carries a colon between digit 2 and 3 on its own
+ * COM/CLN pins (KW4-56NALB pins 7/8): COM to 5V, CLN low lights it. It is
+ * not multiplexed, so it follows the live forward bias rather than latching.
  */
 
 /** Segment lines in bit order: bit i of a pattern is SEGMENT_ORDER[i]. */
@@ -61,6 +65,7 @@ export class SevenSegment {
   private readonly prevDigits: Uint8Array;
   private readonly lastSeg: Float64Array;
   private segSeen = false;
+  private colonOn = false;
 
   constructor(digitCount = 4) {
     const count = Math.min(Math.max(Math.floor(digitCount), 1), 4);
@@ -74,8 +79,15 @@ export class SevenSegment {
    * Feeds one solved step. `digitVolts` holds one entry per digit common and
    * `segVolts` eight entries in SEGMENT_ORDER — raw solved volts, so the
    * relative forward bias decides rather than an absolute level that sags.
+   * `comVolts`/`clnVolts` carry the colon pair when the glass has one
+   * (4-digit): COM high with CLN low lights it, active-low like the digits.
    */
-  update(digitVolts: readonly number[], segVolts: readonly number[]): void {
+  update(
+    digitVolts: readonly number[],
+    segVolts: readonly number[],
+    comVolts?: number,
+    clnVolts?: number,
+  ): void {
     const segChanged =
       !this.segSeen || segVolts.some((value, index) => value !== this.lastSeg[index]);
     for (let digit = 0; digit < this.digitCount; digit++) {
@@ -95,6 +107,14 @@ export class SevenSegment {
     segVolts.forEach((value, index) => {
       this.lastSeg[index] = value;
     });
+    if (comVolts !== undefined && clnVolts !== undefined) {
+      this.colonOn = comVolts - clnVolts > LIT_THRESHOLD_VOLTS;
+    }
+  }
+
+  /** Whether the colon is currently lit (4-digit glass only). */
+  get colonLit(): boolean {
+    return this.colonOn;
   }
 
   /** Latched lit-masks, one byte per digit in SEGMENT_ORDER bit order. */
@@ -124,5 +144,6 @@ export class SevenSegment {
     this.latched.fill(0);
     this.prevDigits.fill(0);
     this.segSeen = false;
+    this.colonOn = false;
   }
 }

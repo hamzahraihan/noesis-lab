@@ -602,10 +602,15 @@ function pushSegmentLevels(
      * depends on which digit a render happens to sample — sampling render
      * instants can never observe a multiplexed strobe reliably, and pushing
      * only the currently-lit digit flickers through one digit at a time.
+     * The 4-digit glass also carries a colon on COM/CLN, pushed separately.
      */
     const controller = state.displays?.get(part.id);
     const patterns = controller instanceof SevenSegment ? controller.patterns() : null;
     if (!patterns) return;
+    if (digits === 4 && controller instanceof SevenSegment) {
+      set(element, 'colon', true);
+      set(element, 'colonValue', controller.colonLit);
+    }
     const levels: number[] = [];
     for (let digit = 0; digit < digits; digit++) {
       const byte = patterns[digit] ?? 0;
