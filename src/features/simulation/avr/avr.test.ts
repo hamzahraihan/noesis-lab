@@ -219,6 +219,80 @@ describe('hex asset gating', () => {
 
 import { avrInstruction } from 'avr8js';
 import { attachUsartBridge } from './usart';
+import { TwiBridgeHandler, attachTwiBridge, type TwiCompleter } from './twi';
+
+function recorder() {
+  const calls: string[] = [];
+  const completer: TwiCompleter = {
+    completeStart: () => calls.push('start'),
+    completeStop: () => calls.push('stop'),
+    completeConnect: (ack) => calls.push(`connect:${ack ? 1 : 0}`),
+    completeWrite: (ack) => calls.push(`write:${ack ? 1 : 0}`),
+    completeRead: (v) => calls.push(`read:${v}`),
+  };
+  return { calls, completer };
+}
+
+describe('twi bridge', () => {
+  it('forwards a write transaction byte by byte with ACKs', () => {
+    const { calls, completer } = recorder();
+    const delivered: number[] = [];
+    const handler = new TwiBridgeHandler(completer, {
+      writeByte: (_addr, byte) => {
+        delivered.push(byte);
+        return true;
+      },
+      readByte: () => 0xff,
+    });
+    handler.start(false);
+    handler.connectToSlave(0x68, true);
+    handler.writeByte(0x00);
+    handler.writeByte(0x11);
+    handler.stop();
+    expect(delivered).toEqual([0x00, 0x11]);
+    expect(calls).toEqual(['connect:1', 'write:1', 'write:1', 'stop']);
+  });
+
+  it('serves read bytes per index and resets on stop', () => {
+    const { calls, completer } = recorder();
+    const handler = new TwiBridgeHandler(completer, {
+      writeByte: () => true,
+      readByte: (_addr, index) => [10, 20, 30][index] ?? 0xff,
+    });
+    handler.start(false);
+    handler.connectToSlave(0x68, false);
+    handler.readByte(true);
+    handler.readByte(true);
+    handler.readByte(false);
+    handler.stop();
+    expect(calls).toEqual(['connect:1', 'read:10', 'read:20', 'read:30', 'stop']);
+    handler.start(false);
+    handler.connectToSlave(0x68, false);
+    handler.readByte(true);
+    expect(calls.at(-1)).toBe('read:10');
+  });
+
+  it('NACKs a read connect after a NACKed write', () => {
+    const { calls, completer } = recorder();
+    const handler = new TwiBridgeHandler(completer, {
+      writeByte: () => false,
+      readByte: () => 0xff,
+    });
+    handler.start(false);
+    handler.connectToSlave(0x68, true);
+    handler.writeByte(0x00);
+    handler.start(true);
+    handler.connectToSlave(0x68, false);
+    expect(calls).toEqual(['connect:1', 'write:0', 'connect:0']);
+  });
+
+  it('attaches the TWI peripheral to a CPU', () => {
+    const cpu = new CPU(new Uint16Array(256));
+    expect(() =>
+      attachTwiBridge(cpu, { writeByte: () => true, readByte: () => 0xff }),
+    ).not.toThrow();
+  });
+});
 
 describe('usart bridge', () => {
   it('forwards a UDR0 byte as serial text', () => {
