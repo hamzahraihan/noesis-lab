@@ -31,10 +31,19 @@ export class LUDecomposition {
   private readonly n: number;
   private singular = false;
 
-  constructor(matrix: Float64Array, size: number) {
+  constructor(matrix: Float64Array, size: number, reuse?: { lu: Float64Array; pivots: Int32Array }) {
     this.n = size;
-    this.lu = Float64Array.from(matrix);
-    this.pivots = new Int32Array(size);
+    if (reuse && reuse.lu.length >= size * size && reuse.pivots.length >= size) {
+      // Hot path: copy into the shared buffers instead of allocating. The
+      // copy is a memcpy either way; what it avoids is a size² heap object
+      // per Newton iteration, which is what kept the GC from ever settling.
+      this.lu = reuse.lu;
+      this.lu.set(matrix.subarray(0, size * size));
+      this.pivots = reuse.pivots;
+    } else {
+      this.lu = Float64Array.from(matrix);
+      this.pivots = new Int32Array(size);
+    }
     this.factor();
   }
 
