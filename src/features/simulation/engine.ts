@@ -410,8 +410,13 @@ export class Engine {
    * Render instants can never observe a multiplexed strobe reliably, so the
    * latch lives here — fed every solve — and the renderer reads the held
    * frame. Single-digit parts use COM.1; multi-digit parts use DIG1..DIGn.
-   * Volts go across raw so the relative forward bias decides, which holds up
-   * while the commons sag under load.
+   *
+   * Levels come from the firmware's own pin states (Wokwi-style digital
+   * drive), not the solved analog volts: the Thevenin source impedance sags
+   * a loaded digit common to ~2.8V and lit segments up to ~0.7V, which is
+   * correct for the scope but leaves the latch living on threshold margins.
+   * A net no firmware output drives falls back to the solved volts, so an
+   * unwired or miswired display still reads dark/wrong instead of working.
    */
   private pumpSevenSegments(): void {
     for (const [partId, controller] of this.displays) {
@@ -419,10 +424,29 @@ export class Engine {
       const nets = this.sevenSegmentNets(partId, controller.digitCount);
       if (!nets) continue;
       controller.update(
-        nets.digits.map((net) => this.voltageOfNet(net)),
-        nets.segments.map((net) => this.voltageOfNet(net)),
+        nets.digits.map((net) => this.mcuOutputLevelOfNet(net) ?? this.voltageOfNet(net)),
+        nets.segments.map((net) => this.mcuOutputLevelOfNet(net) ?? this.voltageOfNet(net)),
       );
     }
+  }
+
+  /**
+   * Ideal firmware level driving a net, or null when none does.
+   *
+   * The same `levelOf` the solver stamps behind the output impedance, minus
+   * the sag — exactly what a digital peripheral like Wokwi's 7-segment
+   * element reads. Inputs, pull-ups and floating nets are not firmware
+   * outputs and correctly report null here.
+   */
+  private mcuOutputLevelOfNet(net: number): number | null {
+    if (net === GROUND || !this.mcuPart) return null;
+    const netlist = this.currentNetlist;
+    for (const pin of this.mcu.pins()) {
+      if (this.mcu.configurationOf(pin.id).direction !== 'output') continue;
+      if ((netlist.pinNode.get(`${this.mcuPart.id}:${pin.id}`) ?? GROUND) !== net) continue;
+      return this.mcu.levelOf(pin.id, this.timeMs) * this.mcu.board.logicVolts;
+    }
+    return null;
   }
 
   /** A 7-segment display's signal nets, or null when not wired. */
@@ -620,6 +644,22 @@ export class Engine {
   voltageOfNet(net: number): number {
     if (net === GROUND || !this.solution) return 0;
     return this.solution.voltages[net] ?? 0;
+  }
+
+  /**
+   * True while time advance must stay on the fine 2 ms grid: live PWM
+   * switches faster than coarse chunks may skip, and a watched probe must
+   * observe what passes even when the circuit itself is settled. Capacitors
+   * alone (a piezo disc, stray decoupling) ride coarse chunks: Backward
+   * Euler is stable at any step and their edges still solve exactly, because
+   * every firmware event settles on its own.
+   */
+  get needsFineSteps(): boolean {
+    if (this.isBeingProbed) return true;
+    for (const pin of this.mcu.pins()) {
+      if (this.mcu.configurationOf(pin.id).pwm) return true;
+    }
+    return false;
   }
 
   /**
