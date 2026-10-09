@@ -121,11 +121,13 @@ TM1637 / HT16K33 / MAX7219 would save pins but need different code.
 
 ## 10. Porting assessment — running this on the noesis-lab bench
 
-Local counterpart: `src/features/learn/gallery.ts:43` (`ALARM_CLOCK`,
-"Alarm Clock with RTC") — a **single-file** sketch doing the same job with
-**raw GPIO multiplexing + raw `Wire` I2C** (no libraries), DP-blink instead of
-colon, `digitalWrite` buzzer. So the bench already proves the hardware path;
-what's missing is urish's *software* approach. Gaps, easiest first:
+Local counterpart: `src/features/learn/gallery.ts` (`ALARM_CLOCK`,
+"Alarm Clock with RTC") — a multi-file sketch doing the same job with
+**raw GPIO multiplexing + raw `Wire` I2C** (no libraries), colon blink,
+`digitalWrite` buzzer. Wiring follows the pin table exactly: DIG1–DIG4
+(device pins 14/11/10/6) on D2–D5, A–G (13/9/4/2/1/12/5) on D6–D12, colon
+CLN (pin 8) on D13 with COM (pin 7) to 5V, buttons on A0/A1/A2, buzzer on
+A3, RTC on A4/A5. Gaps, easiest first:
 
 1. **Multi-file: supported.** `FirmwareProject` holds up to 8 files
    (`src/features/simulation/firmware/project.ts:10`) and
@@ -143,20 +145,16 @@ what's missing is urish's *software* approach. Gaps, easiest first:
    raw GPIO + `Wire` (moderate work; `DateTime`/`TimeSpan` arithmetic is the bulk);
    or (b) keep the port at the local gallery's level (raw multiplex + raw BCD `Wire`,
    as `gallery.ts:57-203` already does).
-3. **Parts: mostly ready.** DS1307 exists with register-level I2C including
+3. **Parts: ready.** DS1307 exists with register-level I2C including
    NVRAM `0x08–0x1F` as plain storage (`src/features/parts/devices/ds1307.ts:51-56`);
    3× `Tactile Button` + `Piezo Buzzer` exist (`src/features/parts/catalogue.ts:343`).
-   **Two deltas:** the bench 4-digit 7-seg exposes `D1–D4, A–G, DP`
-   (`catalogue.ts:369-374`) — **no colon pin and no COM** (Wokwi part has
-   `CLN`+`COM`) — so `setColon`/pin-13 logic must become DP-blink (exactly what the
-   local sketch does at `gallery.ts:118`); and `tone()`/`noTone()` have **no**
-   firmware implementation, so `AlarmTone` must be rewritten to `digitalWrite`
-   beeps (local sketch rings with `digitalWrite(BUZZER_PIN, seconds % 2 == 0)`,
-   `gallery.ts:185`).
-4. **Wiring reuse:** buttons A0/A1/A2, buzzer A3 (=17), digit commons D2–D5 already
-   match the local `setup()` (`gallery.ts:204-260`). Only the segment order differs:
-   urish A–G → D6–D12 + colon → D13; local maps A,B → D6,D7 then DP,G,F,E,D,C →
-   D8–D13. A faithful port re-routes 6 jumpers.
+   The bench 4-digit 7-seg exposes all 14 KW4-56NALB pins (`D1–D4, A–G, DP`,
+   `COM`+`CLN`); the colon is a COM/CLN diode driven active-low from D13,
+   and `tone()`/`noTone()` have **no** firmware implementation, so `AlarmTone`
+   is rewritten to `digitalWrite` beeps.
+4. **Wiring reuse:** buttons A0/A1/A2, buzzer A3 (=17), digit commons D2–D5,
+   segments A–G on D6–D12, colon on D13 all match urish's table one to one —
+   no re-routing needed for a faithful port.
 
 **Bottom line:** the bench can host a faithful *behavioral* port today (multi-file
 works after renames), but a line-for-line port needs either `SevSeg`+`RTClib`

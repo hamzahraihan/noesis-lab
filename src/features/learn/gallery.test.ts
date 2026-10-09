@@ -72,7 +72,7 @@ describe('the project gallery', () => {
 
   it('wires every build onto its board bench without throwing', () => {
     const wireFloors: Record<string, number> = {
-      'alarm-clock': 24,
+      'alarm-clock': 25,
       safe: 14,
       dashboard: 14,
       parking: 15,
@@ -173,7 +173,7 @@ describe('the project gallery', () => {
           // here keeps the sampling loop honest about what is on the bench.
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-        const dpSamples: number[] = [];
+        const colonSamples: boolean[] = [];
         for (let frame = 0; frame < 120; frame++) {
           simulation.tick(0.05);
           // D2-D5 are the four digit commons; the last-driven one persists
@@ -182,22 +182,32 @@ describe('the project gallery', () => {
             if (simulation.engine.readDigital(gpio)) digitSeenHigh = true;
           }
           if (frame % 20 === 19) {
-            const probe = { values: [] as number[], digits: 0 } as unknown as HTMLElement;
+            const probe = {
+              values: [] as number[],
+              digits: 0,
+              colon: false,
+              colonValue: false,
+            } as unknown as HTMLElement;
             pushWokwiState(probe, segPartEarly().definition, segPartEarly(), {
               pinVolts: simulation.pinVoltages(),
               displays: simulation.displayControllers(),
             } as unknown as FootprintState);
-            const probeValues = (probe as unknown as { values: number[] }).values;
-            if (probeValues.length === 32) dpSamples.push(probeValues[1 * 8 + 7]);
+            const target = probe as unknown as { colonValue: boolean };
+            colonSamples.push(target.colonValue);
           }
         }
         expect(digitSeenHigh, `${id} multiplexes its digits`).toBe(true);
         // The glass itself: push the solved state into the Wokwi element and
         // read back all four digits. The bench starts at midnight, so every
-        // digit holds '0' — segments A-F lit, G dark. Digit 2 carries a
-        // once-a-second blink on DP, so its DP toggles while the rest holds.
+        // digit holds '0' — segments A-F lit, G dark, DP dark. The colon
+        // blinks once a second beside them.
         const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-        const element = { values: [] as number[], digits: 0 } as unknown as HTMLElement;
+        const element = {
+          values: [] as number[],
+          digits: 0,
+          colon: false,
+          colonValue: false,
+        } as unknown as HTMLElement;
         pushWokwiState(element, segPart.definition, segPart, {
           pinVolts: simulation.pinVoltages(),
           displays: simulation.displayControllers(),
@@ -206,15 +216,14 @@ describe('the project gallery', () => {
         expect(values).toHaveLength(32);
         for (let d = 0; d < 4; d++) {
           const slice = values.slice(d * 8, d * 8 + 8);
-          if (d === 1) {
-            expect(slice.slice(0, 7), `${id} digit ${d + 1} shows 0`).toEqual([1, 1, 1, 1, 1, 1, 0]);
-            expect(slice[7], `${id} digit ${d + 1} DP blinks`).toBeGreaterThanOrEqual(0);
-          } else {
-            expect(slice, `${id} digit ${d + 1} shows 0`).toEqual([1, 1, 1, 1, 1, 1, 0, 0]);
-          }
+          expect(slice, `${id} digit ${d + 1} shows 0`).toEqual([1, 1, 1, 1, 1, 1, 0, 0]);
         }
+        const colonState = element as unknown as { colon: boolean; colonValue: boolean };
+        expect(colonState.colon, `${id} colon enabled`).toBe(true);
         // The blink proves the glass moves every second, not just once a minute.
-        expect(new Set(dpSamples), `${id} DP blinks once a second`).toEqual(new Set([0, 1]));
+        expect(new Set(colonSamples), `${id} colon blinks once a second`).toEqual(
+          new Set([false, true]),
+        );
         // Buttons rest HIGH on their pull-ups; the disarmed buzzer rests LOW.
         expect(simulation.engine.readDigital(14), `${id} hours button released`).toBe(true);
         expect(simulation.engine.readDigital(15), `${id} minutes button released`).toBe(true);

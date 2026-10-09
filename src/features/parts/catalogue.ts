@@ -371,7 +371,7 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     id: '7segment-4digit',
     name: '4-Digit 7-Segment Display',
     group: 'output',
-    note: '12 pins (D1-D4, A-G, DP). Common anode, multiplexed. D2-D13 on the Uno drives it via SevSeg library.',
+    note: '14 pins (D1-D4, A-G, DP, COM, CLN). Common anode, multiplexed. D2-D5 digits, D6-D12 segments, D13 colon, COM to 5V.',
     make: () => sevenSegmentDefinition(4),
   },
   {

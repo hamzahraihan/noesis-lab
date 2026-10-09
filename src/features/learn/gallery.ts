@@ -93,11 +93,10 @@ const ALARM_CLOCK: GalleryProject = {
 //
 // - No classes or structs: one module per tab as plain functions + globals.
 // - No SevSeg library: the raw GPIO multiplex below, on the README pin
-//   table (DIG D2-D5, A-G on D6-D12, colon on D13).
+//   table (DIG D2-D5, A-G on D6-D12, colon CLN on D13, COM to 5V).
 // - No RTClib: raw BCD reads over Wire in clock.cpp (USE_RTC 0 falls back
 //   to millis time).
 // - No tone(): the siren plays a customizable melody table in alarmtone.cpp.
-// - No colon pin on this bench's glass: the second digit's DP blinks instead.
 // - The host owns the RTC time: Hour/Minute retune a persisted offset, and
 //   the alarm itself persists in the DS1307 NVRAM bytes.
 
@@ -112,7 +111,8 @@ const ALARM_CLOCK: GalleryProject = {
 #define SNOOZE_VIEW_MS 500
 
 byte digitPins[4] = {2, 3, 4, 5};
-byte segmentPins[8] = {6, 7, 8, 9, 10, 11, 12, 13};
+byte segmentPins[7] = {6, 7, 8, 9, 10, 11, 12};
+byte colonPin = 13;
 
 int dspShow0 = 0;
 int dspShow1 = 0;
@@ -129,7 +129,7 @@ int dspTens(int v) {
   return (v - (v % 10)) / 10;
 }
 
-// Standard 7-segment encoding in A-G,DP bit order, plus the letters the
+// Standard 7-segment encoding in A-G bit order, plus the letters the
 // status views need: 10 o, 11 n, 12 F, 13 dash, 14 blank.
 int dspPatternFor(int d) {
   if (d == 0) return 0x3F;
@@ -150,7 +150,7 @@ int dspPatternFor(int d) {
 }
 
 void dspSetSegments(byte pattern) {
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 7; i++) {
     digitalWrite(segmentPins[i], (pattern & (1 << i)) ? LOW : HIGH);
   }
 }
@@ -172,10 +172,14 @@ int dspDigitValue(byte which) {
 void dspRefresh(int seconds) {
   for (int i = 0; i < 4; i++) digitalWrite(digitPins[i], LOW);
   byte pattern = dspPatternFor(dspDigitValue(dspDigit));
-  // The colon blink: HHMM rolls once a minute, so the second digit's DP
-  // ticks every second to prove the glass is alive.
-  if (dspDigit == 1 && (seconds % 2 == 0)) pattern |= 0x80;
   dspSetSegments(pattern);
+  // The colon blink: HHMM rolls once a minute, so the colon ticks every
+  // second to prove the glass is alive. Active-low: LOW lights it.
+  if (seconds % 2 == 0) {
+    digitalWrite(colonPin, LOW);
+  } else {
+    digitalWrite(colonPin, HIGH);
+  }
   digitalWrite(digitPins[dspDigit], HIGH);
   dspDigit = (dspDigit + 1) % 4;
 }
@@ -188,7 +192,9 @@ void appEnter(byte s) {
 
 void setup() {
   for (int i = 0; i < 4; i++) pinMode(digitPins[i], OUTPUT);
-  for (int i = 0; i < 8; i++) pinMode(segmentPins[i], OUTPUT);
+  for (int i = 0; i < 7; i++) pinMode(segmentPins[i], OUTPUT);
+  pinMode(colonPin, OUTPUT);
+  digitalWrite(colonPin, HIGH);
   buttonsBegin();
   btnSetRepeat(0, 500, 200);
   btnSetRepeat(1, 500, 200);
@@ -635,9 +641,10 @@ void toneStop() {
     const BLOCK_Y = 70;
     simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
 
-    // 4-digit 7-segment display on the README pin table: digit commons
-    // DIG1-DIG4, segments A-G, and the colon line on D13 (this bench's
-    // glass carries DP there, so the DP blink stands in for the colon).
+    // 4-digit 7-segment display on the pin table: digit commons DIG1-DIG4
+    // (device pins 14/11/10/6) on D2-D5, segments A-G (13/9/4/2/1/12/5) on
+    // D6-D12, colon CLN (pin 8) on D13, COM (pin 7) to 5V. RTC on A4/A5,
+    // buttons on A0-A2, buzzer on A3.
     const seg = simulation.addPart(part('4-Digit 7-Segment Display'), BLOCK_X + 35, BLOCK_Y);
     const segWires: Array<[string, string]> = [
       ['DIG1', 'D2'],
@@ -651,13 +658,18 @@ void toneStop() {
       ['E', 'D10'],
       ['F', 'D11'],
       ['G', 'D12'],
-      ['DP', 'D13'],
+      ['CLN', 'D13'],
     ];
     for (const [segPin, boardPin] of segWires) {
       const from = simulation.pinAt(seg, segPin);
       const to = simulation.boardTerminal(boardPin);
       if (!from || !to) return;
       simulation.routeWire(from, to);
+    }
+    {
+      const com = simulation.pinAt(seg, 'COM');
+      if (!com || !supply) return;
+      simulation.routeWire(com, supply);
     }
 
     // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
@@ -690,7 +702,7 @@ void toneStop() {
   },
   ],
   working: [
-    'The 7-segment display shows HHMM from the RTC, with the second digit’s dot blinking once a second.',
+    'The 7-segment display shows HHMM from the RTC, with the colon blinking once a second.',
     'Hour and Minute retune the shown time; Alarm arms or disarms, then shows " on"/" off" and the alarm time.',
     'At the alarm hour the siren sounds: a short Alarm press snoozes 9 minutes (four circles), a long hold stops it.',
   ],
