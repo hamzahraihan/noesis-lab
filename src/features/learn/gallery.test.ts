@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { PART_CATALOGUE } from '@/features/parts';
-import { breadboardDefinition } from '@/features/parts';
+import { PART_CATALOGUE, SevenSegment, breadboardDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
-import { GALLERY, boardsFor, buildFor, galleryById } from './gallery';
+import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById } from './gallery';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulation';
 import { pushWokwiState } from '@/features/bench/wokwi';
@@ -65,7 +64,7 @@ describe('the project gallery', () => {
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
         const simulation = freshBench(build.board);
-        simulation.loadFirmware(build.sketch, boardOption(build.board).language);
+        simulation.loadFirmware(firmwareForBuild(build, boardOption(build.board).language));
         expect(simulation.firmwareError, `${entry.id}/${build.board}: ${simulation.firmwareError}`).toBeNull();
       }
     }
@@ -164,11 +163,17 @@ describe('the project gallery', () => {
       simulation.addPart(board, 0, 0);
       simulation.addPart(breadboardDefinition(), 230, 0);
       build.setup(simulation);
-      simulation.loadFirmware(build.sketch, 'arduino-cpp');
+      simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
       expect(simulation.firmwareError, `${id} firmware`).toBeNull();
       simulation.start();
       if (id === 'alarm-clock') {
         let digitSeenHigh = false;
+        const segPartEarly = (): NonNullable<ReturnType<Simulation['bench']['parts']['find']>> =>
+          // Resolved per frame: the part list is stable, but looking it up
+          // here keeps the sampling loop honest about what is on the bench.
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+        const dpSamples: number[] = [];
         for (let frame = 0; frame < 120; frame++) {
           simulation.tick(0.05);
           // D2-D5 are the four digit commons; the last-driven one persists
@@ -176,11 +181,21 @@ describe('the project gallery', () => {
           for (const gpio of [2, 3, 4, 5]) {
             if (simulation.engine.readDigital(gpio)) digitSeenHigh = true;
           }
+          if (frame % 20 === 19) {
+            const probe = { values: [] as number[], digits: 0 } as unknown as HTMLElement;
+            pushWokwiState(probe, segPartEarly().definition, segPartEarly(), {
+              pinVolts: simulation.pinVoltages(),
+              displays: simulation.displayControllers(),
+            } as unknown as FootprintState);
+            const probeValues = (probe as unknown as { values: number[] }).values;
+            if (probeValues.length === 32) dpSamples.push(probeValues[1 * 8 + 7]);
+          }
         }
         expect(digitSeenHigh, `${id} multiplexes its digits`).toBe(true);
         // The glass itself: push the solved state into the Wokwi element and
         // read back all four digits. The bench starts at midnight, so every
-        // digit holds '0' — segments A-F lit, G and DP dark.
+        // digit holds '0' — segments A-F lit, G dark. Digit 2 carries a
+        // once-a-second blink on DP, so its DP toggles while the rest holds.
         const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
         const element = { values: [] as number[], digits: 0 } as unknown as HTMLElement;
         pushWokwiState(element, segPart.definition, segPart, {
@@ -190,10 +205,16 @@ describe('the project gallery', () => {
         const values = (element as unknown as { values: number[] }).values;
         expect(values).toHaveLength(32);
         for (let d = 0; d < 4; d++) {
-          expect(values.slice(d * 8, d * 8 + 8), `${id} digit ${d + 1} shows 0`).toEqual([
-            1, 1, 1, 1, 1, 1, 0, 0,
-          ]);
+          const slice = values.slice(d * 8, d * 8 + 8);
+          if (d === 1) {
+            expect(slice.slice(0, 7), `${id} digit ${d + 1} shows 0`).toEqual([1, 1, 1, 1, 1, 1, 0]);
+            expect(slice[7], `${id} digit ${d + 1} DP blinks`).toBeGreaterThanOrEqual(0);
+          } else {
+            expect(slice, `${id} digit ${d + 1} shows 0`).toEqual([1, 1, 1, 1, 1, 1, 0, 0]);
+          }
         }
+        // The blink proves the glass moves every second, not just once a minute.
+        expect(new Set(dpSamples), `${id} DP blinks once a second`).toEqual(new Set([0, 1]));
         // Buttons rest HIGH on their pull-ups; the disarmed buzzer rests LOW.
         expect(simulation.engine.readDigital(14), `${id} hours button released`).toBe(true);
         expect(simulation.engine.readDigital(15), `${id} minutes button released`).toBe(true);
@@ -205,6 +226,21 @@ describe('the project gallery', () => {
           (match) => Number(match[1]),
         );
         expect(new Set(seconds).size, `${id} clock ticks`).toBeGreaterThan(1);
+        // A tap on Alarm exercises the multi-file path end to end: the
+        // button module's release verdict, the clock module's toggle plus
+        // NVRAM save over real I2C writes, and the status view switch.
+        const alarmButton = simulation.bench.parts.filter(
+          (p) => p.definition.name === 'Tactile Button',
+        )[2]!;
+        simulation.setPressed(alarmButton.id, true);
+        for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+        simulation.setPressed(alarmButton.id, false);
+        for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+        expect(simulation.firmwareError, `${id} still runs after the tap`).toBeNull();
+        expect(
+          simulation.serialLines().join(''),
+          `${id} alarm toggles on a short press`,
+        ).toContain('alarm toggled');
         continue;
       }
       const glasses: string[] = [];
@@ -220,5 +256,42 @@ describe('the project gallery', () => {
         expect(glass, `${id} glass shows humidity`).toMatch(/rh \d/);
       }
     }
+  }, 60_000);
+
+  /*
+   * The digits themselves must move — over RTC time and under the buttons.
+   * Idle glass, DP blink and serial ticks all passed while the numbers never
+   * budged, which is exactly the reported symptom, so this test watches the
+   * decoded text: midnight, one minute later, then an Hour tap on top.
+   */
+  it('moves the alarm-clock digits over time and on button taps', () => {
+    const build = galleryById('alarm-clock')!.builds[0];
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    build.setup(simulation);
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError, 'alarm-clock firmware').toBeNull();
+    simulation.start();
+    const glass = (): string => {
+      const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+      const ctrl = simulation.displayControllers().get(seg.id) as unknown as SevenSegment;
+      return ctrl.getText();
+    };
+    for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
+    expect(glass(), 'idle shows midnight').toBe('0000');
+    // A minute of RTC time must move the minute digits.
+    simulation.engine.timeMs += 61000;
+    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+    expect(glass(), 'a minute later shows 00:01').toBe('0001');
+    // An Hour tap retunes the shown time through the persisted offset. The
+    // hold may additionally trip one auto-repeat tick, so either +1 or +2.
+    const hours = simulation.bench.parts.filter((p) => p.definition.name === 'Tactile Button')[0]!;
+    simulation.setPressed(hours.id, true);
+    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+    simulation.setPressed(hours.id, false);
+    for (let frame = 0; frame < 22; frame++) simulation.tick(0.05);
+    expect(glass(), 'hour tap moves the hour digits').toMatch(/^0[12]01$/);
   }, 60_000);
 });
