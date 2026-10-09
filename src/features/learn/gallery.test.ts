@@ -28,9 +28,10 @@ function partTerminals(simulation: Simulation): Set<number> {
 }
 
 /**
- * Whether the Task 7 committed HEX is on disk. The avr parity legs run the
- * same assertions against the flashed HEX; while the toolchain build is
- * pending they skip with a reason instead of weakening any assertion.
+ * Whether the committed alarm HEX is on disk. The avr parity legs run the
+ * same assertions against the flashed HEX; where the HEX is absent (e.g. an
+ * environment whose install never fetched the toolchain) they skip with a
+ * reason instead of weakening any assertion.
  */
 function hexAvailable(): boolean {
   return existsSync(join(__dirname, '..', 'simulation', 'avr', 'hex', 'alarm-clock-uno.hex'));
@@ -280,7 +281,10 @@ describe('the project gallery', () => {
       }
     }
     }
-  }, 60_000);
+    // Budget covers the newly-live avr legs: cycle-accurate 16 MHz
+    // simulation of 120 frames x 4 combos costs ~40 s solo, more under
+    // full-suite load (the 60 s budget dates from when avr legs skipped).
+  }, 180_000);
 
   /*
    * The digits themselves must move — over RTC time and under the buttons.
