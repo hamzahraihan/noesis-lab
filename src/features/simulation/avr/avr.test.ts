@@ -4,6 +4,7 @@ import { McuRuntime } from '@/features/simulation/mcu';
 import { arduinoUnoR3 } from '@/features/parts/boards';
 import { UNO_GPIO_MAP, UNO_CLOCK_HZ, cyclesPerMs } from './backend';
 import { attachGpioBridge } from './gpio';
+import { AvrBackend } from './core';
 
 describe('avr seam', () => {
   it('maps every Uno digital gpio to its port bit', () => {
@@ -43,5 +44,35 @@ describe('gpio read path', () => {
     expect(cpu.readData(35) & 0x20).toBe(0);
     pressed = true;
     expect(cpu.readData(35) & 0x20).toBe(0x20);
+  });
+});
+
+describe('avr timing core', () => {
+  it('advances 16000 cycles per ms and settles per ms', () => {
+    let settles = 0;
+    const backend = new AvrBackend(new Uint16Array(64), {
+      mcu: new McuRuntime(arduinoUnoR3()),
+      nowMs: () => 0,
+      readPin: () => false,
+      onSettle: () => settles++,
+    });
+    backend.step(2.5);
+    expect(backend.cycles).toBe(40_000);
+    expect(settles).toBe(2);
+    backend.step(0.5);
+    expect(settles).toBe(3); // carried 0.5 + 0.5 completes the ms
+  });
+
+  it('clamps a single step to 40ms', () => {
+    let settles = 0;
+    const backend = new AvrBackend(new Uint16Array(64), {
+      mcu: new McuRuntime(arduinoUnoR3()),
+      nowMs: () => 0,
+      readPin: () => false,
+      onSettle: () => settles++,
+    });
+    backend.step(1000);
+    expect(backend.cycles).toBe(40 * 16_000);
+    expect(backend.clampedMs).toBeGreaterThan(0);
   });
 });
