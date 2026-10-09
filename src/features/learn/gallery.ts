@@ -207,31 +207,6 @@ void setup() {
   appEnter(ST_CLOCK);
 }
 
-void loop() {
-  // One digit per pass and no long delay anywhere: buttons are sampled every
-  // ~20 ms of sim time, so a human tap always overlaps several samples.
-  // (A delay(200) here used to blind the firmware for a wall-clock second or
-  // more, and no tap could ever register.) Time-based work below runs at
-  // 10 Hz; the siren tracks every pass so its steps stay even.
-  dspRefresh(clkS);
-  btnUpdate();
-  if (appState == ST_RING) tonePlay();
-
-  long now = millis();
-  if (now - appLastTick >= 100) {
-    appLastTick = now;
-    clkRead();
-    appTick();
-    Serial.print("t=");
-    Serial.print(clkH);
-    Serial.print(":");
-    Serial.print(clkM);
-    Serial.print(":");
-    Serial.println(clkS);
-  }
-  delay(20);
-}
-
 void appTick() {
   // The alarm fires on its own, whatever view is showing.
   if (appState != ST_RING && clkDue() == 1) {
@@ -295,6 +270,31 @@ void appTick() {
     dspShow(10, 10, 10, 10);
     if (millis() - appEntered >= SNOOZE_VIEW_MS) appEnter(ST_CLOCK);
   }
+}
+
+void loop() {
+  // One digit per pass and no long delay anywhere: buttons are sampled every
+  // ~20 ms of sim time, so a human tap always overlaps several samples.
+  // (A delay(200) here used to blind the firmware for a wall-clock second or
+  // more, and no tap could ever register.) Time-based work below runs at
+  // 10 Hz; the siren tracks every pass so its steps stay even.
+  dspRefresh(clkS);
+  btnUpdate();
+  if (appState == ST_RING) tonePlay();
+
+  long now = millis();
+  if (now - appLastTick >= 100) {
+    appLastTick = now;
+    clkRead();
+    appTick();
+    Serial.print("t=");
+    Serial.print(clkH);
+    Serial.print(":");
+    Serial.print(clkM);
+    Serial.print(":");
+    Serial.println(clkS);
+  }
+  delay(20);
 }
 `,
       files: [
