@@ -344,6 +344,10 @@ describe('7-segment display', () => {
         expect(definition.pins.map((pin) => pin.id)).toContain(segment);
       }
     }
+    // The 4-digit clock glass (KW4-56NALB) adds the colon pair.
+    const four = sevenSegmentDefinition(4);
+    expect(four.pins.map((pin) => pin.id)).toContain('CLN');
+    expect(four.pins.map((pin) => pin.id)).toContain('COM');
   });
 
   it('clamps the digit count into the Wokwi element\u2019s range', () => {
@@ -360,14 +364,14 @@ describe('7-segment display', () => {
     expect(four.heightMm).toBe(22);
     const top = four.pins.filter((pin) => pin.y < 10).map((pin) => pin.id);
     const bottom = four.pins.filter((pin) => pin.y > 10).map((pin) => pin.id);
-    expect(top).toEqual(['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B']);
-    expect(bottom).toEqual(['E', 'D', 'DP', 'C', 'G', 'DIG4']);
+    expect(top).toEqual(['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B', 'CLN']);
+    expect(bottom).toEqual(['E', 'D', 'DP', 'C', 'G', 'DIG4', 'COM']);
     expect(sevenSegmentDefinition(2).widthMm).toBeCloseTo(25.1, 10);
     expect(sevenSegmentDefinition(3).widthMm).toBeCloseTo(37.65, 10);
   });
 
   it('stamps one diode per segment per digit', () => {
-    for (const digits of [1, 2, 4] as const) {
+    for (const digits of [1, 2, 3] as const) {
       const builder = new BenchBuilder();
       builder.addPart(sevenSegmentDefinition(digits), 0, 0);
       const netlist = buildNetlist(builder.build(), new DynamicState());
@@ -375,5 +379,11 @@ describe('7-segment display', () => {
       // Eight segments, each tied to every digit common on the part.
       expect(diodes.length).toBe(digits * 8);
     }
+    // The 4-digit clock glass adds one colon diode on COM/CLN.
+    const builder = new BenchBuilder();
+    builder.addPart(sevenSegmentDefinition(4), 0, 0);
+    const netlist = buildNetlist(builder.build(), new DynamicState());
+    const diodes = netlist.elements.filter((element) => element.kind === 'diode');
+    expect(diodes.length).toBe(4 * 8 + 1);
   });
 });

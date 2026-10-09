@@ -493,6 +493,17 @@ function elementsForPart(
           });
         }
       }
+      // The 4-digit clock glass (KW4-56NALB) carries a colon on its own
+      // COM/CLN pair: COM to 5V, CLN low lights it. Modelled as one more
+      // diode so the solver sees its load and the scope reads it correctly.
+      if (digits === 4) {
+        elements.push({
+          kind: 'diode',
+          a: nodeAt('COM'),
+          b: nodeAt('CLN'),
+          profile: DIODE_PROFILES.red,
+        });
+      }
       return elements;
     }
 

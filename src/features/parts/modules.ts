@@ -777,13 +777,14 @@ export function sevenSegmentDefinition(digits = 1): PartDefinition {
 
   if (isMulti) {
     // Top row first, then bottom, both left to right as the element draws
-    // them. The outer holes on three- and four-digit glass (COM, CLN) have
-    // no terminal: nothing on this bench drives them.
+    // them. Three-digit glass leaves one hole empty (no pin 6); four-digit
+    // glass fills all 14 (KW4-56NALB: DIG1(14) A(13) F(12) DIG2(11) DIG3(10)
+    // B(9) CLN(8) up top, E(1) D(2) DP(3) C(4) G(5) DIG4(6) COM(7) below).
     const rows: string[][] =
       digits === 4
         ? [
-            ['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B'],
-            ['E', 'D', 'DP', 'C', 'G', 'DIG4'],
+            ['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B', 'CLN'],
+            ['E', 'D', 'DP', 'C', 'G', 'DIG4', 'COM'],
           ]
         : digits === 3
           ? [

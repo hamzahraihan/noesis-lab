@@ -17,6 +17,7 @@ import {
 } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
+import { AvrBackend, hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '@/features/simulation';
 import {
   FirmwareRunner,
   toSingleFileProject,
@@ -164,6 +165,25 @@ export class Simulation {
   private firmwareProject: FirmwareProject | null = null;
   /** Which grammar the loaded source is written in. */
   firmwareLanguage: FirmwareLanguage = 'arduino-cpp';
+  /**
+   * Which backend runs loaded firmware. `'avr'` needs a Uno board and a
+   * committed HEX whose staged sources hash to the loaded project; anything
+   * missing falls back to `'interpreter'` silently. Leaving `'avr'` waits
+   * for the next `loadFirmware`, which is where the HEX is matched and
+   * flashed; returning to `'interpreter'` drops a live AVR core at once.
+   */
+  private executionMode: 'interpreter' | 'avr' = 'interpreter';
+  get execution(): 'interpreter' | 'avr' {
+    return this.executionMode;
+  }
+  set execution(mode: 'interpreter' | 'avr') {
+    this.executionMode = mode;
+    // The interpreter runner below was never stepped while the AVR core owned
+    // the frame, so it resumes pristine.
+    if (mode === 'interpreter') this.avrBackend = null;
+  }
+  /** Live AVR core while execution is `'avr'` with a flashed HEX; null otherwise. */
+  private avrBackend: AvrBackend | null = null;
   private serialSnapshot: string[] = [];
 
   /**
@@ -313,7 +333,84 @@ export class Simulation {
             ? error.message
             : String(error);
     }
+    // An AVR run needs a flashed core on top of the interpreter runner above;
+    // anything missing falls back to that runner silently.
+    this.avrBackend = null;
+    if (this.executionMode === 'avr') this.tryFlashAvr();
     this.rebuild();
+  }
+
+  /**
+   * Flashes the committed HEX matching the loaded project onto an AVR core.
+   *
+   * Gated twice: only a Uno board can run it, and only a HEX whose staged
+   * sources hash to this exact project applies — a stale HEX falls back
+   * rather than running yesterday's firmware. A parse or construction failure
+   * reports through `firmwareError` while the interpreter runner above keeps
+   * the bench alive.
+   */
+  private tryFlashAvr(): void {
+    try {
+      if (this.mcu.board.id !== 'uno') return;
+      const project = this.firmwareProject;
+      if (!project) return;
+      const hexText = hexForSourcesHash(sourcesHashForProject(project));
+      if (hexText === null) return;
+      const program = parseIntelHex(hexText);
+      let flashed: AvrBackend | null = null;
+      flashed = new AvrBackend(program, {
+        mcu: this.mcu,
+        nowMs: () => this.engine.timeMs,
+        readPin: (gpio) => {
+          this.engine.settle();
+          return this.engine.readDigital(gpio);
+        },
+        onSettle: () => this.engine.settle(),
+        mmio: {
+          serialWrite: (text) => this.pushSerial(text),
+          // Backend clock, not engine time: the engine only advances after
+          // the step, so a shim delay() watching engine time would spin
+          // forever inside one frame.
+          millis: () => flashed?.millis() ?? this.engine.timeMs,
+          i2cWrite: (address, bytes) => {
+            this.i2c.beginTransmission(address);
+            for (const byte of bytes) this.i2c.write(byte);
+            const transfer = this.i2c.endTransmission();
+            this.busLog.record({
+              timeMs: this.engine.timeMs,
+              bus: 'i2c',
+              address: transfer.address,
+              bytes: transfer.bytes,
+              acknowledged: transfer.acknowledged,
+              micros: transfer.micros,
+            });
+            this.engine.settle();
+          },
+          i2cRead: (address, count) => {
+            this.i2c.requestFrom(address, count);
+            const out: number[] = [];
+            for (;;) {
+              const byte = this.i2c.read();
+              if (byte < 0) break;
+              out.push(byte);
+            }
+            return out;
+          },
+        },
+      });
+      this.avrBackend = flashed;
+    } catch (error) {
+      this.avrBackend = null;
+      this.firmwareError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /** Appends serial text through the shared 400-entry cap. */
+  private pushSerial(text: string): void {
+    this.serial.push(text);
+    // Cap the buffer so a chatty sketch cannot grow it without limit.
+    if (this.serial.length > 400) this.serial.splice(0, this.serial.length - 400);
+    this.serialDirty = true;
   }
 
   start(): void {
@@ -933,6 +1030,17 @@ export class Simulation {
 
     let slice = 0;
     while (this.engine.timeMs < frameEnd && slice++ < MAX_SLICES_PER_FRAME) {
+      if (this.avrBackend) {
+        this.avrBackend.step(Math.max(frameEnd - this.engine.timeMs, 0));
+        this.engine.settle();
+        if (this.avrBackend.fault) {
+          this.firmwareError = this.avrBackend.fault;
+          this.avrBackend = null;
+          this.execution = 'interpreter';
+        }
+        this.advanceBy(frameEnd - this.engine.timeMs);
+        return;
+      }
       // A delay still in flight blocks the firmware outright. Spending only
       // what fits in this frame and then resuming would let a 400 ms delay
       // complete in 400/frame-budget frames while the sketch carried on as
@@ -1481,10 +1589,7 @@ export class Simulation {
       },
       serialBegin: () => {},
       serialWrite: (text) => {
-        this.serial.push(text);
-        // Cap the buffer so a chatty sketch cannot grow it without limit.
-        if (this.serial.length > 400) this.serial.splice(0, this.serial.length - 400);
-        this.serialDirty = true;
+        this.pushSerial(text);
       },
     };
   }

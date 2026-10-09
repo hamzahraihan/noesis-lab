@@ -410,6 +410,8 @@ export class Engine {
    * Render instants can never observe a multiplexed strobe reliably, so the
    * latch lives here — fed every solve — and the renderer reads the held
    * frame. Single-digit parts use COM.1; multi-digit parts use DIG1..DIGn.
+   * The 4-digit glass also carries a colon on COM/CLN, which follows the
+   * live levels rather than latching.
    *
    * Levels come from the firmware's own pin states (Wokwi-style digital
    * drive), not the solved analog volts: the Thevenin source impedance sags
@@ -423,9 +425,34 @@ export class Engine {
       if (!(controller instanceof SevenSegment)) continue;
       const nets = this.sevenSegmentNets(partId, controller.digitCount);
       if (!nets) continue;
+      // A floating segment cannot sink current, so it reads dark (HIGH on a
+      // common-anode glass); a floating digit common selects nothing (LOW).
+      // Only nets wired to more than their own pin fall back to solved volts,
+      // which is what keeps a segment strapped to GND lit and one to 5V dark.
+      const terminalCount = (net: number): number =>
+        this.currentNetlist.nets.find((entry) => entry.index === net)?.terminals.length ?? 0;
+      const high = this.mcu.board.logicVolts;
+      const segmentLevel = (net: number): number =>
+        this.mcuOutputLevelOfNet(net) ??
+        (terminalCount(net) <= 1 ? high : this.voltageOfNet(net));
+      const digitLevel = (net: number): number =>
+        this.mcuOutputLevelOfNet(net) ??
+        (terminalCount(net) <= 1 ? 0 : this.voltageOfNet(net));
+      const com =
+        nets.colon !== null
+          ? (this.mcuOutputLevelOfNet(nets.colon.com) ??
+            (terminalCount(nets.colon.com) <= 1 ? 0 : this.voltageOfNet(nets.colon.com)))
+          : undefined;
+      const cln =
+        nets.colon !== null
+          ? (this.mcuOutputLevelOfNet(nets.colon.cln) ??
+            (terminalCount(nets.colon.cln) <= 1 ? high : this.voltageOfNet(nets.colon.cln)))
+          : undefined;
       controller.update(
-        nets.digits.map((net) => this.mcuOutputLevelOfNet(net) ?? this.voltageOfNet(net)),
-        nets.segments.map((net) => this.mcuOutputLevelOfNet(net) ?? this.voltageOfNet(net)),
+        nets.digits.map((net) => digitLevel(net)),
+        nets.segments.map((net) => segmentLevel(net)),
+        com,
+        cln,
       );
     }
   }
@@ -453,12 +480,13 @@ export class Engine {
   private sevenSegmentNets(
     partId: string,
     digitCount: number,
-  ): { segments: number[]; digits: number[] } | null {
+  ): { segments: number[]; digits: number[]; colon: { com: number; cln: number } | null } | null {
     const netlist = this.currentNetlist;
     const net = (pin: string): number => {
       const found = netlist.pinNode.get(`${partId}:${pin}`);
       return found === undefined ? GROUND : found;
     };
+    const hasPin = (pin: string): boolean => netlist.pinNode.has(`${partId}:${pin}`);
 
     const segments = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP'].map(net);
     const digitPins =
@@ -472,7 +500,9 @@ export class Engine {
     const hasDig = digits.some((n) => n !== GROUND);
     if (!hasSeg || !hasDig) return null;
 
-    return { segments, digits };
+    const colon =
+      digitCount === 4 && hasPin('COM') && hasPin('CLN') ? { com: net('COM'), cln: net('CLN') } : null;
+    return { segments, digits, colon };
   }  private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
     const netlist = this.currentNetlist;
     const net = (pin: string): number => {
