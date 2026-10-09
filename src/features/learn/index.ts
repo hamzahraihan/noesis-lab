@@ -8,7 +8,7 @@ export { ProjectPage } from './ProjectPages';
 export { ExerciseGuide } from './ExerciseGuide';
 export { EXERCISES, exerciseById, exerciseBoard, exerciseLanguage } from './exercises';
 export type { Exercise } from './exercises';
-export { buildFor, galleryById } from './gallery';
+export { buildFor, firmwareForBuild, galleryById } from './gallery';
 export type { GalleryBuild, GalleryProject } from './gallery';
 export {
   BLINK_EXAMPLE,
