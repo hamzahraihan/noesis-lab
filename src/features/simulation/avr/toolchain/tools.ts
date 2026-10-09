@@ -323,5 +323,6 @@ export async function buildProjectHex(request: ProjectBuildRequest, signal?: Abo
     },
     '/build/HorangFirmware.hex',
   );
+  check();
   return new TextDecoder().decode(hexBytes);
 }

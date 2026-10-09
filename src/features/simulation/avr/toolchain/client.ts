@@ -459,6 +459,7 @@ async function buildProjectInNode(assembled: AssembledProject, signal: AbortSign
   const hexText = await withToolchainFetch(() =>
     buildProjectHex({ units, prebuiltObjects: assembled.prebuiltObjects }, signal),
   );
+  if (signal.aborted) throw new Error('compile cancelled');
   if (hexText.length === 0) throw new Error('toolchain returned no HEX');
   return hexText;
 }
