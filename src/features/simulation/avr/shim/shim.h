@@ -31,10 +31,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Reserved SRAM trap map. ATmega328P SRAM starts at 0x100, so these never
 // collide with registers or IO space. They sit above the alarm firmware's
 // .data/.bss (about 150 bytes of globals); keep firmware globals small or
@@ -57,10 +53,6 @@ extern "C" {
 // real DDR/PORT/PIN registers (digital) and the trap map (timing). Listed
 // here so the surface is reviewable in one place:
 //   pinMode, digitalWrite, digitalRead, millis, delay.
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
 
 #ifdef __cplusplus
 
