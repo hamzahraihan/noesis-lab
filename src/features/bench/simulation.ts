@@ -948,15 +948,16 @@ export class Simulation {
       const requested = this.runner.step();
       if (requested === null) break;
       this.pendingDelayMs = requested;
+      // One settle per step, not per pin write: a display refresh alone is a
+      // dozen writes, and only this final state is ever observed.
+      this.engine.settle();
     }
 
     // Whatever budget the firmware did not use still keeps the circuit
-    // resolving, so a paused sketch shows a live, settled bench.
-    let guard = 0;
-    while (this.engine.timeMs < frameEnd && guard++ < MAX_SLICES_PER_FRAME) {
-      const remainingMs = frameEnd - this.engine.timeMs;
-      this.engine.step(Math.min(remainingMs, 2) / 1000);
-    }
+    // resolving, so a paused sketch shows a live, settled bench. One call:
+    // advanceBy jumps for free when nothing can have moved and otherwise
+    // paces itself, so this costs solves only where they can change answers.
+    this.advanceBy(frameEnd - this.engine.timeMs);
   }
 
   /** Simulated milliseconds a firmware `delay` still owes before it resumes. */
@@ -978,11 +979,13 @@ export class Simulation {
       return;
     }
 
+    // Otherwise pace it: fine steps only while PWM or probes need them.
+    const chunkMs = this.engine.needsFineSteps ? 2 : 10;
     const endTime = this.engine.timeMs + ms;
     let guard = 0;
     while (this.engine.timeMs < endTime && guard++ < 4000) {
       const remaining = endTime - this.engine.timeMs;
-      this.engine.step(Math.min(remaining, 2) / 1000);
+      this.engine.step(Math.min(remaining, chunkMs) / 1000);
     }
   }
 
@@ -1313,12 +1316,14 @@ export class Simulation {
       map: this.map,
       nowMs: () => this.engine.timeMs,
       pinMode: (pin, mode) => {
+        // No settle here: pin writes only retarget future solves, and the
+        // slice loop settles once per step below. Settling per write meant a
+        // 13-write display refresh paid 13 full solves, most of them on
+        // intermediate states nothing ever observes.
         this.mcu.setDirection(pin, mode === 0 ? 'input' : mode === 2 ? 'inputPullUp' : 'output');
-        this.engine.settle();
       },
       digitalWrite: (pin, level) => {
         this.mcu.writeDigital(pin, level !== 0, this.engine.timeMs);
-        this.engine.settle();
       },
       digitalRead: (pin) => {
         this.engine.settle();
@@ -1326,7 +1331,6 @@ export class Simulation {
       },
       analogWrite: (pin, value) => {
         this.mcu.writeAnalog(pin, value, this.engine.timeMs);
-        this.engine.settle();
       },
       analogRead: (pin) => {
         this.engine.settle();
