@@ -437,14 +437,15 @@ function contentTypeFor(path: string): string {
  */
 async function buildInNode(source: string, signal: AbortSignal): Promise<string> {
   if (signal.aborted) throw new Error('compile cancelled');
-  return withToolchainFetch(async () => {
+  const hexText = await withToolchainFetch(async () => {
     const toolchain = await import(/* @vite-ignore */ '@horang-corp/avr-gcc-wasm');
     toolchain.setAssetsBase(CDN_BASE);
     const result = await toolchain.buildFirmware({ source });
-    if (signal.aborted) throw new Error('compile cancelled');
     if (typeof result.hex !== 'string' || result.hex.length === 0) throw new Error('toolchain returned no HEX');
     return result.hex;
   });
+  if (signal.aborted) throw new Error('compile cancelled');
+  return hexText;
 }
 
 /** Multi-TU node fallback: same shim, shared tools.ts driver, abort between stages. */
