@@ -6,10 +6,10 @@
 // pinned table in cache.ts): the fetch shim below routes all requests by URL
 // pathname relative to CDN_BASE, and the package's own `assetsBase` support
 // points its tools/assets fetches at CDN_BASE.
-import { CDN_BASE, FetchCache, MemoryBackend, SRI } from './cache';
+import { CDN_BASE, FetchCache, SRI, createProductionBackend } from './cache';
 
 const realFetch = globalThis.fetch.bind(globalThis);
-const cache = new FetchCache(new MemoryBackend(), realFetch, SRI);
+const cache = new FetchCache(createProductionBackend(), realFetch, SRI);
 
 function cachePathFor(requestURL: string): string {
   const basePath = new URL(CDN_BASE).pathname;

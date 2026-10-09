@@ -34,6 +34,107 @@ export class MemoryBackend implements IDBBackend {
   }
 }
 
+/** Thrown when stored or fetched bytes fail the SRI check. Retried exactly once. */
+export class IntegrityError extends Error {
+  constructor(path: string) {
+    super(`toolchain integrity check failed for ${path}`);
+    this.name = 'IntegrityError';
+  }
+}
+
+export const IDB_DB_NAME = 'avr-toolchain-cache';
+export const IDB_STORE_NAME = 'toolchain-files';
+export const IDB_DB_VERSION = 1;
+
+export interface IndexedDBBackendOptions {
+  dbName?: string;
+  storeName?: string;
+  version?: number;
+  idb?: IDBFactory;
+}
+
+function idbRequest<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => {
+      resolve(request.result);
+    };
+    request.onerror = () => {
+      reject(request.error ?? new Error('indexedDB request failed'));
+    };
+  });
+}
+
+/**
+ * Production IDBBackend over the standard IndexedDB API: one versioned
+ * database, one object store, keyed by the existing
+ * `${CACHE_VERSION}:${path}` keys (so a CACHE_VERSION bump makes older
+ * entries invisible exactly once — no migration, no re-fetch loop).
+ * Uint8Array values round-trip via structured clone.
+ */
+export class IndexedDBBackend implements IDBBackend {
+  private dbName: string;
+  private storeName: string;
+  private version: number;
+  private idb: IDBFactory;
+  private dbPromise: Promise<IDBDatabase> | undefined;
+  constructor(options?: IndexedDBBackendOptions) {
+    this.dbName = options?.dbName ?? IDB_DB_NAME;
+    this.storeName = options?.storeName ?? IDB_STORE_NAME;
+    this.version = options?.version ?? IDB_DB_VERSION;
+    const factory = options?.idb ?? (typeof indexedDB !== 'undefined' ? indexedDB : undefined);
+    if (factory === undefined) throw new Error('indexedDB is unavailable');
+    this.idb = factory;
+  }
+  private open(): Promise<IDBDatabase> {
+    if (this.dbPromise === undefined) {
+      const storeName = this.storeName;
+      this.dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+        const request = this.idb.open(this.dbName, this.version);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName);
+        };
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+        request.onerror = () => {
+          reject(request.error ?? new Error(`indexedDB open failed for ${this.dbName}`));
+        };
+      });
+    }
+    return this.dbPromise;
+  }
+  async get(key: string): Promise<Uint8Array | null> {
+    const db = await this.open();
+    const store = db.transaction(this.storeName, 'readonly').objectStore(this.storeName);
+    const value: unknown = await idbRequest(store.get(key));
+    if (value === undefined || value === null) return null;
+    if (value instanceof Uint8Array) return value;
+    if (value instanceof ArrayBuffer) return new Uint8Array(value);
+    return null;
+  }
+  async put(key: string, value: Uint8Array): Promise<void> {
+    const db = await this.open();
+    const store = db.transaction(this.storeName, 'readwrite').objectStore(this.storeName);
+    await idbRequest(store.put(value, key));
+  }
+  async delete(key: string): Promise<void> {
+    const db = await this.open();
+    const store = db.transaction(this.storeName, 'readwrite').objectStore(this.storeName);
+    await idbRequest(store.delete(key));
+  }
+}
+
+/**
+ * Production backend: real IndexedDB where available (browser window and
+ * module worker), in-memory fallback elsewhere (Node/vitest). Tests keep
+ * using MemoryBackend directly.
+ */
+export function createProductionBackend(): IDBBackend {
+  if (typeof indexedDB !== 'undefined') return new IndexedDBBackend();
+  return new MemoryBackend();
+}
+
 export const SRI: Readonly<Record<string, string>> = {
   "tools/avr-as.mjs": "sha384-U+rvoWFAO4mGO8ruBUUYVKCp1NZr252A4rGO6H6Xa1kObbYavJkGapqZMGUz5AbF",
   "tools/avr-as.wasm": "sha384-dXRJb5gdz0z+oKA6DUr/+eLHeokvH1TnFUQ+BJud4rzklMDABqZSb1TEJM4eDtcG",
@@ -604,10 +705,10 @@ async function verifyIntegrity(path: string, bytes: Uint8Array, sri: Readonly<Re
   copy.set(bytes);
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-384', copy.buffer));
   const want = decodePin(expected);
-  if (digest.length !== want.length) throw new Error(`toolchain integrity check failed for ${path}`);
+  if (digest.length !== want.length) throw new IntegrityError(path);
   let diff = 0;
   for (let i = 0; i < digest.length; i += 1) diff |= digest[i] ^ want[i];
-  if (diff !== 0) throw new Error(`toolchain integrity check failed for ${path}`);
+  if (diff !== 0) throw new IntegrityError(path);
 }
 
 export class FetchCache {
@@ -619,16 +720,51 @@ export class FetchCache {
     this.fetchFn = fetchFn;
     this.sri = sri;
   }
+  /**
+   * Read-through with corrupt-cache auto-recovery. This is the single choke
+   * point where toolchain bytes enter the build (both the worker fetch shim
+   * and the client shims funnel through it): every cached hit is re-verified
+   * against the SRI table, so corrupt pinned bytes never reach WASM
+   * instantiation. A failed verification invalidates the entry and retries
+   * the network fetch exactly once; a second integrity failure degrades with
+   * a distinct corrupt-cache error. Never loops, never boots corrupt bytes,
+   * never caches bad bytes. Non-integrity failures (HTTP status, network)
+   * throw immediately with no retry.
+   */
   async fetch(path: string): Promise<Uint8Array> {
     const key = cacheKey(path);
     const hit = await this.backend.get(key);
-    if (hit !== null) return hit;
+    if (hit !== null) {
+      try {
+        await verifyIntegrity(path, hit, this.sri);
+        return hit;
+      } catch (error) {
+        if (!(error instanceof IntegrityError)) throw error;
+        await this.backend.delete(key);
+      }
+    }
+    try {
+      return await this.fetchOnce(path, key);
+    } catch (error) {
+      if (!(error instanceof IntegrityError)) throw error;
+      return await this.refetchOnce(path, key);
+    }
+  }
+  private async fetchOnce(path: string, key: string): Promise<Uint8Array> {
     const res = await this.fetchFn(`${CDN_BASE}${path}`);
     if (!res.ok) throw new Error(`toolchain fetch failed for ${path}: ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     await verifyIntegrity(path, bytes, this.sri);
     await this.backend.put(key, bytes);
     return bytes;
+  }
+  private async refetchOnce(path: string, key: string): Promise<Uint8Array> {
+    try {
+      return await this.fetchOnce(path, key);
+    } catch (error) {
+      if (!(error instanceof IntegrityError)) throw error;
+      throw new Error(`toolchain cache corrupt; refetch failed for ${path}`);
+    }
   }
   async invalidate(path: string): Promise<void> {
     await this.backend.delete(cacheKey(path));

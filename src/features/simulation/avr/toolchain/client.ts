@@ -3,7 +3,7 @@
 //
 // The client owns everything testable. The worker file holds only the fetch
 // shim plus the dynamic toolchain import and `buildFirmware` call.
-import { CDN_BASE, FetchCache, MemoryBackend, SRI } from './cache';
+import { CDN_BASE, FetchCache, SRI, createProductionBackend } from './cache';
 import { parseIntelHex } from '../hex';
 import type { PackedLine } from '../packager';
 
@@ -64,7 +64,7 @@ let supportedPromise: Promise<Set<string>> | undefined;
 /** Loads the package manifest through the same FetchCache/CDN path as the build. */
 export function loadSupportedHeaders(): Promise<Set<string>> {
   supportedPromise ??= (async () => {
-    const cache = new FetchCache(new MemoryBackend(), globalThis.fetch.bind(globalThis), SRI);
+    const cache = new FetchCache(createProductionBackend(), globalThis.fetch.bind(globalThis), SRI);
     const bytes = await cache.fetch('assets/manifest.json');
     const manifest = JSON.parse(new TextDecoder().decode(bytes)) as { headerFiles?: unknown };
     if (!Array.isArray(manifest.headerFiles)) throw new Error('toolchain manifest has no headerFiles');
@@ -211,7 +211,7 @@ function contentTypeFor(path: string): string {
 async function buildInNode(source: string, signal: AbortSignal): Promise<string> {
   if (signal.aborted) throw new Error('compile cancelled');
   const realFetch = globalThis.fetch.bind(globalThis);
-  const cache = new FetchCache(new MemoryBackend(), limitConcurrency(realFetch, 6), SRI);
+  const cache = new FetchCache(createProductionBackend(), limitConcurrency(realFetch, 6), SRI);
   const previousFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
