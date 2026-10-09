@@ -351,6 +351,21 @@ describe('7-segment display', () => {
     expect(sevenSegmentDefinition(9).id).toBe('7segment-4digit');
   });
 
+  it('lays multi-digit pins in the element\u2019s two physical rows', () => {
+    // The installed wokwi-7segment draws 12.55 mm per digit with the header
+    // in two rows (KW4-56NALB and friends); a single-row idealization leaves
+    // every wire landing beside the hole the artwork draws.
+    const four = sevenSegmentDefinition(4);
+    expect(four.widthMm).toBeCloseTo(50.2, 10);
+    expect(four.heightMm).toBe(22);
+    const top = four.pins.filter((pin) => pin.y < 10).map((pin) => pin.id);
+    const bottom = four.pins.filter((pin) => pin.y > 10).map((pin) => pin.id);
+    expect(top).toEqual(['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B']);
+    expect(bottom).toEqual(['E', 'D', 'DP', 'C', 'G', 'DIG4']);
+    expect(sevenSegmentDefinition(2).widthMm).toBeCloseTo(25.1, 10);
+    expect(sevenSegmentDefinition(3).widthMm).toBeCloseTo(37.65, 10);
+  });
+
   it('stamps one diode per segment per digit', () => {
     for (const digits of [1, 2, 4] as const) {
       const builder = new BenchBuilder();
