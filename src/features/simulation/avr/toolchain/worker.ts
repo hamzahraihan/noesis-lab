@@ -7,6 +7,7 @@
 // pathname relative to CDN_BASE, and the package's own `assetsBase` support
 // points its tools/assets fetches at CDN_BASE.
 import { CDN_BASE, FetchCache, SRI, createProductionBackend } from './cache';
+import { buildProjectHex } from './tools';
 
 const realFetch = globalThis.fetch.bind(globalThis);
 const cache = new FetchCache(createProductionBackend(), realFetch, SRI);
@@ -40,6 +41,27 @@ export interface CompileRequest {
   readonly source: string;
 }
 
+export interface ProjectUnitPayload {
+  readonly name: string;
+  readonly source: string;
+  readonly headers: Readonly<Record<string, string>>;
+}
+
+/**
+ * Extended payload, same protocol: the client owns orchestration (Tier-2
+ * fetch, custom-slot enumeration, header merging) and posts firmware plus
+ * library translation units with their headers, prebuilt Tier-2 objects, and
+ * optional manifest object paths. The worker compiles every unit
+ * (cc1plus+as), links all objects, and returns HEX — or per-unit GCC errors
+ * naming /build/<unit> frames for client-side mapping.
+ */
+export interface ProjectCompileRequest {
+  readonly id: number;
+  readonly units: readonly ProjectUnitPayload[];
+  readonly prebuiltObjects?: readonly Uint8Array[];
+  readonly manifestObjects?: readonly string[];
+}
+
 export interface CompileResponse {
   readonly id: number;
   readonly ok: boolean;
@@ -57,15 +79,34 @@ async function handle(source: string): Promise<string> {
   return result.hex;
 }
 
+async function handleProject(request: ProjectCompileRequest): Promise<string> {
+  const hexText = await buildProjectHex({
+    units: request.units.map((unit) => ({
+      name: unit.name,
+      source: unit.source,
+      headers: new Map(Object.entries(unit.headers ?? {})),
+    })),
+    prebuiltObjects: request.prebuiltObjects ?? [],
+    manifestObjects: request.manifestObjects,
+  });
+  if (hexText.length === 0) throw new Error('toolchain returned no HEX');
+  return hexText;
+}
+
+function isProjectRequest(data: CompileRequest | ProjectCompileRequest): data is ProjectCompileRequest {
+  return Array.isArray((data as ProjectCompileRequest).units);
+}
+
 self.addEventListener('message', (event: MessageEvent) => {
-  const { id, source } = event.data as CompileRequest;
-  handle(source).then(
+  const data = event.data as CompileRequest | ProjectCompileRequest;
+  const work = isProjectRequest(data) ? handleProject(data) : handle((data as CompileRequest).source);
+  work.then(
     (hexText: string) => {
-      self.postMessage({ id, ok: true, hexText } satisfies CompileResponse);
+      self.postMessage({ id: data.id, ok: true, hexText } satisfies CompileResponse);
     },
     (error: unknown) => {
       const errors = error instanceof Error ? error.message : String(error);
-      self.postMessage({ id, ok: false, errors } satisfies CompileResponse);
+      self.postMessage({ id: data.id, ok: false, errors } satisfies CompileResponse);
     },
   );
 });
