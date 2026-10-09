@@ -758,43 +758,52 @@ export function sevenSegmentDefinition(digits = 1): PartDefinition {
   if (digits > 4) digits = 4;
 
   const isMulti = digits > 1;
-  const widthMm = isMulti ? 9.5 + digits * 7.1 : 12.55;
+  // The element draws 12.55 mm per digit with the header in two rows, like
+  // the single digit above: top row first, then bottom, both on the 2.54 mm
+  // pitch the part is drilled on. Orders are the element's own per-model
+  // pinouts (CL5621C / SP420281N / KW4-56NALB), read left to right.
+  const widthMm = isMulti ? 12.55 * digits : 12.55;
   const heightMm = 22;
   const pitch = 2.54;
-  const headerX = 2.54;
+  // The pin cluster is centred in the artwork, so the first column starts
+  // wherever centring leaves it rather than at the part's own edge: the x
+  // here is exact on purpose, where snapping it to the grid would pull every
+  // wire up to a millimetre off the hole the artwork draws.
+  const cols = digits === 4 ? 7 : digits === 3 ? 6 : 5;
+  const headerX = (widthMm - cols * pitch) / 2 + 1.27;
   const headerY = 1.27;
 
   const pins: PinSpec[] = [];
 
   if (isMulti) {
-    // Digit commons first, matching the Wokwi element's DIG1..DIGn pin names,
-    // then the shared segment lines.
-    for (let d = 1; d <= digits; d++) {
-      pins.push({
-        id: `DIG${d}`,
-        label: `D${d}`,
-        x: headerX + (d - 1) * pitch,
-        y: headerY,
+    // Top row first, then bottom, both left to right as the element draws
+    // them. The outer holes on three- and four-digit glass (COM, CLN) have
+    // no terminal: nothing on this bench drives them.
+    const rows: string[][] =
+      digits === 4
+        ? [
+            ['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B'],
+            ['E', 'D', 'DP', 'C', 'G', 'DIG4'],
+          ]
+        : digits === 3
+          ? [
+              ['DIG1', 'A', 'F', 'DIG2', 'DIG3', 'B'],
+              ['E', 'D', 'DP', 'C', 'G'],
+            ]
+          : [
+              ['A', 'B', 'DIG1', 'DIG2', 'F'],
+              ['C', 'DP', 'E', 'D', 'G'],
+            ];
+    rows.forEach((row, rowIndex) => {
+      row.forEach((id, column) => {
+        pins.push({
+          id,
+          label: id.startsWith('DIG') ? `D${id.slice(3)}` : id,
+          x: headerX + column * pitch,
+          y: headerY + rowIndex * (19.05 - 1.27),
+        });
       });
-    }
-    const segmentOrder = [
-      { id: 'A', label: 'A' },
-      { id: 'B', label: 'B' },
-      { id: 'DP', label: 'DP' },
-      { id: 'G', label: 'G' },
-      { id: 'F', label: 'F' },
-      { id: 'E', label: 'E' },
-      { id: 'D', label: 'D' },
-      { id: 'C', label: 'C' },
-    ];
-    for (let i = 0; i < 8; i++) {
-      pins.push({
-        id: segmentOrder[i].id,
-        label: segmentOrder[i].label,
-        x: headerX + (digits + i) * pitch,
-        y: headerY,
-      });
-    }
+    });
   } else {
     pins.push(
       { id: 'G', label: 'G', x: 1.27, y: 1.27 },
