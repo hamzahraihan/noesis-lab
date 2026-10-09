@@ -1,12 +1,11 @@
 // Regenerates .avr-stage/alarm/ from the gallery alarm-clock sources.
 //
 // The staged tree is what scripts/build-avr-hex.sh compiles: alarm.ino (the
-// gallery `sketch` content verbatim), one file per gallery tab verbatim, plus
-// shim.h/shim.cpp copied byte for byte. Sources are copied WITHOUT rewrites
-// — byte for byte, including whatever line endings the gallery file holds —
-// so the HEX manifest's sourcesHash (over the staged bytes) always matches
-// the hex.test.ts hash (over the gallery strings) on the same checkout. Any
-// drift fails loudly here instead of shipping a stale HEX.
+// gallery `sketch` content), one file per gallery tab, plus shim.h/shim.cpp
+// copies. Staged gallery sources are normalized to LF (see rule below) so
+// the HEX manifest's sourcesHash (over the staged bytes) always matches the
+// hex.test.ts hash (over the gallery strings). Any drift fails loudly here
+// instead of shipping a stale HEX.
 //
 // Line-ending rule: staged files are normalized to LF. The runtime gallery
 // strings (hence both hashes) always carry LF: Vite/esbuild normalizes every

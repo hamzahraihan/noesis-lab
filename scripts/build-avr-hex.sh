@@ -4,8 +4,9 @@ set -euo pipefail
 # Usage: bash scripts/build-avr-hex.sh
 node scripts/stage-avr-sketch.mjs
 arduino-cli compile --fqbn arduino:avr:uno \
-  --build-property compiler.cpp.extra_flags="-I src/features/simulation/avr/shim" \
+  --build-property compiler.cpp.extra_flags="-I src/features/simulation/avr/shim -include shim.h" \
   --output-dir .avr-stage/build .avr-stage/alarm
+mkdir -p src/features/simulation/avr/hex
 python3 - <<'EOF'
 import hashlib, json
 order = ['alarm.ino', 'config.h', 'button.h', 'button.cpp', 'clock.h', 'clock.cpp', 'alarmtone.h', 'alarmtone.cpp']
