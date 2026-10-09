@@ -15,26 +15,38 @@ the default; the AVR core is an opt-in alternate backend.
 
 Success: the two live alarm-clock gallery tests pass unmodified under both
 backends — `0000` at midnight, `0001` a minute later, colon blinking once a
-second, `t=H:M:S` serial ticking, alarm-toggle tap working.
+second, `t=H:M:S` serial ticking, alarm-toggle tap working. User sketches
+compile in-browser to HEX and run on the core.
 
-Non-goals (milestone one): in-browser compilation, non-Uno boards, user
-sketches on the core, cycle-accurate USART/TWI hardware.
+Non-goals (milestone one): non-Uno boards, cycle-accurate USART/TWI
+hardware (Serial/Wire stay paravirtualized per §1).
 
-## §1 — Architecture
+## §1 — Architecture (revised)
 
-New module `src/features/simulation/avr/`. `AvrBackend` exposes the same
-`FirmwareServices` surface `Simulation.services()` already provides, so
-`Simulation`, `Engine`, `McuRuntime`, and all device models are untouched.
+New module `src/features/simulation/avr/`, organized around one new seam:
 
-- `GpioBridge`: PORTx/DDRx edges → `mcu.setDirection`/`writeDigital`
-  (Uno map: PORTD→gpio 0–7, PORTB→8–13, PORTC→14–19); PINx reads settle then
-  sample `engine.readDigital`.
-- `MmioTrap`: reserved SRAM addresses targeted by the shim core for Serial
-  bytes and Wire packets; forwards to the serial buffer and
-  `engine.writeI2C`/`requestI2C` against the existing `Ds1307` model.
-- Timing: core advances 16,000 cycles per simulated ms, timesliced with
-  `engine.settle()` at ≤1ms boundaries. Each multiplex digit holds 20ms, so
-  every digit strobe is captured by the existing latch.
+- `ExecutionBackend` interface — `step(budgetMs)`, `reset()`, readonly
+  `fault`. `Simulation` programs to this. The interpreter gets a thin
+  adapter wrapping `FirmwareRunner`; `AvrBackend` implements it natively.
+  What the backends share is not a call surface but the device seams:
+  `McuRuntime` intent, `engine.settle()`, the serial buffer,
+  `engine.writeI2C`/`requestI2C`, and the `Ds1307` model.
+- `AvrBackend` owns `CPU` + port/timer instances + cycle budget.
+  `GpioBridge` pushes PORTx/DDRx edges into `McuRuntime` (Uno map:
+  PORTD→gpio 0–7, PORTB→8–13, PORTC→14–19) and serves PINx reads via
+  settle-then-sample. `MmioTrap` forwards Serial/Wire to the shared seams.
+- Timing: cycles/ms derived from the board clock (Uno 16MHz → 16,000), not
+  a constant. Timeslice settles at ≤1ms boundaries bound button latency and
+  keep `delay(20)` accurate to ~5%; display capture is independent of this
+  rate because the digit latch reads `McuRuntime` intent, which persists
+  between solves. Timer0 (`millis`) advances via avr8js clock events inside
+  the same `avrInstruction`+`tick` loop the spike proved — no separate timer
+  thread.
+- `Toolchain` (in-browser compilation): WASM-packaged AVR GCC + avr-libc +
+  Arduino core running in a worker. Sketch + shim headers in, HEX out;
+  compiled cores cached in IndexedDB. If the toolchain is unavailable or a
+  build fails, bundled precompiled HEX (built offline, checked in) keeps the
+  gallery running — compilation degrades, execution does not.
 
 ## §2 — Components
 
@@ -52,14 +64,21 @@ All new, inside `src/features/simulation/avr/`:
   in as `avr/shim/` plus an offline `arduino-cli` build script; HEX assets
   under `avr/hex/`.
 - `BackendSelect`: `Simulation` flag `execution: 'interpreter' | 'avr'`,
-  default `'interpreter'`; avr allowed only for Uno with a bundled HEX
-  present. Interpreter path unchanged byte-for-byte.
+  default `'interpreter'`; avr allowed only for Uno with HEX available
+  (bundled or just compiled). Interpreter path unchanged byte-for-byte.
+- `Toolchain` (worker): accepts sketch sources + board id, returns HEX bytes
+  or structured errors mapped to source lines where possible. Compiled
+  Arduino core + bundled libraries cached; per-sketch builds link against
+  the cache. Runs off the UI thread; progress + cancellation surfaced.
 
 ## §3 — Data flow
 
-One 20ms alarm-loop pass:
+Edit → compile → flash → run:
 
-1. `Simulation.tick` → `AvrBackend.step(budgetMs)` instead of
+1. `loadFirmware` with `execution: 'avr'`: `Toolchain.compile(sources)`
+   (worker, cached core) → HEX → `AvrBackend.flash(hex)` (loads progMem,
+   resets CPU). Bundled gallery builds may skip to flash with checked-in HEX.
+2. `Simulation.tick` → `AvrBackend.step(budgetMs)` instead of
    `FirmwareRunner.step`.
 2. Core runs ~320k cycles; GPIO edges update `McuRuntime` intent only
    (no per-write settle — same batching rationale as today's pin writes).
@@ -93,10 +112,15 @@ One 20ms alarm-loop pass:
 - Fault tests: corrupt HEX refused; illegal opcode → fallback +
   `firmwareError`; MMIO counter trips.
 - Perf guard: existing 60s timeouts hold; per-tick budget asserted.
+- Toolchain tests: compile a Blink fixture → byte-identical HEX to the
+  checked-in reference; error fixture (missing `setup`) → structured error
+  with source line; core cache hit avoids recompiling the core on a second
+  build.
 - No-touch rule: all 638 current tests stay green on the default backend.
 
 ## Open items (for the plan, not the design)
 
 - Exact MMIO addresses and packet encoding.
-- Offline HEX build/verify procedure and asset naming.
+- WASM toolchain packaging choice (avr-gcc build vs. prebuilt bundle) and
+  IndexedDB cache schema.
 - Shim `millis`/`delay` timer0 prescaler wiring.
