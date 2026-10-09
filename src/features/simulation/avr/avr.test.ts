@@ -406,4 +406,8 @@ describe('sketch packager', () => {
     expect(hits).toEqual([{ line: 2, name: 'appTick' }]);
     expect(lintPrototypes('void appTick() {}\nvoid loop() {\n  appTick();\n}\n')).toEqual([]);
   });
+
+  it('treats prototype declarations as defined', () => {
+    expect(lintPrototypes('void appTick();\nvoid loop() {\n  appTick();\n}\n')).toEqual([]);
+  });
 });

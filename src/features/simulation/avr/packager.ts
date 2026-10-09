@@ -46,7 +46,7 @@ export function packageSketch(project: FirmwareProject): PackedSketch {
 export function lintPrototypes(source: string): Array<{ line: number; name: string }> {
   const defined = new Set<string>();
   const hits: Array<{ line: number; name: string }> = [];
-  const definition = /^\s*(?:[\w:<>*&]+\s+)+(\w+)\s*\([^;]*\)\s*\{?\}?\s*$/;
+  const definition = /^\s*(?:[\w:<>*&]+\s+)+(\w+)\s*\([^;]*\)\s*\{?\}?\s*;?\s*$/;
   const keywords = new Set(['if', 'for', 'while', 'switch', 'return', 'sizeof']);
   source.split('\n').forEach((text, index) => {
     const def = text.match(definition);
