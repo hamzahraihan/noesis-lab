@@ -19,6 +19,7 @@ import {
   exerciseById,
   ExerciseGuide,
   exerciseLanguage,
+  firmwareForBuild,
   galleryById,
   isBoardId,
   isGuideDismissed,
@@ -41,6 +42,7 @@ export default function BenchRoute() {
       exerciseById={exerciseById}
       exerciseLanguage={exerciseLanguage}
       buildFor={buildFor}
+      firmwareForBuild={firmwareForBuild}
       galleryById={galleryById}
       ExerciseGuide={ExerciseGuide}
       isGuideDismissed={isGuideDismissed}
