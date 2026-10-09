@@ -229,6 +229,10 @@ export interface BenchProps {
   readonly exerciseById: (id: string) => Exercise | null;
   readonly exerciseLanguage: (exercise: Exercise) => FirmwareLanguage;
   readonly buildFor: (project: GalleryProject, board: BoardId) => GalleryBuild | null;
+  readonly firmwareForBuild: (
+    build: GalleryBuild,
+    language: FirmwareLanguage,
+  ) => FirmwareProject;
   readonly galleryById: (id: string) => GalleryProject | null;
   readonly ExerciseGuide: ComponentType<{
     exercise: Exercise;
@@ -252,6 +256,7 @@ export default function Bench(props: BenchProps) {
     exerciseById,
     exerciseLanguage,
     buildFor,
+    firmwareForBuild,
     galleryById,
     ExerciseGuide,
     isGuideDismissed,
@@ -340,7 +345,7 @@ export default function Bench(props: BenchProps) {
       exercise !== null
         ? toSingleFileProject(exercise.sketch, exerciseLanguage(exercise))
         : projectBuild !== null
-          ? toSingleFileProject(projectBuild.sketch, boardOption(boardId).language)
+          ? firmwareForBuild(projectBuild, boardOption(boardId).language)
           : starterFor(boardId);
     return resolveBenchSeed({
       starter,
@@ -378,7 +383,7 @@ export default function Bench(props: BenchProps) {
    * state, so there is a single "instruments" question rather than two.
    */
   const [instrumentsOpen, setInstrumentsOpen] = useState(true);
-  const [, forceRender] = useState(0);
+  const [frameTick, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
   const [exampleId, setExampleId] = useState<string | null>(null);
@@ -465,7 +470,7 @@ export default function Bench(props: BenchProps) {
         created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       } else if (projectBuild) {
         projectBuild.setup(created);
-        created.loadFirmware(projectBuild.sketch, boardOption(boardId).language);
+        created.loadFirmware(firmwareForBuild(projectBuild, boardOption(boardId).language));
       } else {
         buildStartingBench(created, STARTER_WIRING[boardId]);
         created.loadFirmware(
@@ -480,7 +485,7 @@ export default function Bench(props: BenchProps) {
       // "running" over a simulation nobody had started.
       return created;
     },
-    [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE],
+    [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild],
   );
 
   const [baud, setBaud] = useState(9600);
@@ -699,11 +704,14 @@ export default function Bench(props: BenchProps) {
   const bench = simulation.bench;
 
   /*
-   * Rebuilt when the bench changes, not only when the simulation does, because
-   * an example adds its parts to a simulation that already exists: keyed on the
-   * simulation alone this map would never learn about a display that arrived
-   * later, and its artwork would sit on the bench showing whatever it was
-   * constructed with.
+   * Rebuilt every frame while running, not only when the bench changes.
+   *
+   * An example adds its parts to a simulation that already exists, so this
+   * cannot key on the simulation alone — but it also cannot key on the bench
+   * alone: ticking the simulation advances voltages and display frames without
+   * touching the bench at all. Keying on the frame counter keeps the glass,
+   * the Inspector and the LEDs live while running, and still refreshes when
+   * parts are added while stopped.
    */
   const renderState = useMemo<FootprintState>(
     () => ({
@@ -719,7 +727,8 @@ export default function Bench(props: BenchProps) {
       // the simulation.
       parts: bench.parts.length,
     }),
-    [simulation, bench],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [simulation, bench, frameTick],
   );
 
 
@@ -863,6 +872,8 @@ export default function Bench(props: BenchProps) {
     (partId: string, pressed: boolean) => simulation.setPressed(partId, pressed),
     [simulation],
   );
+
+  const clearBusLog = useCallback(() => simulation.clearBusLog(), [simulation]);
 
   /**
    * Loads an example: the sketch, and the bench it expects to find.
@@ -1433,7 +1444,7 @@ export default function Bench(props: BenchProps) {
             onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
             isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
           />
-          <BusMonitor entries={simulation.busLines()} onClear={() => simulation.clearBusLog()} />
+          <BusMonitor entries={simulation.busLines()} onClear={clearBusLog} />
           <MultimeterPanel
             pins={meterPins}
             redPinId={meterRedPin}
