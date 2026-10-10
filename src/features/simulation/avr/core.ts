@@ -1,4 +1,4 @@
-import { AVRTimer, CPU, avrInstruction, timer0Config } from 'avr8js';
+import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import { attachGpioBridge } from './gpio';
@@ -97,6 +97,9 @@ export class AvrBackend implements ExecutionBackend {
     // Timer0 free-runs from the TCCR0B prescaler so stock-core millis() and
     // delay(), which count its overflows, advance instead of hanging.
     new AVRTimer(cpu, timer0Config);
+    // Timer2 drives Arduino tone()/noTone() (compare ISR toggles PORT, which
+    // the GPIO bridge already syncs); Timer0 keeps millis()/delay().
+    new AVRTimer(cpu, timer2Config);
     attachGpioBridge(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
     attachUsartBridge(cpu, this.hooks.serial);
     attachTwiBridge(cpu, {

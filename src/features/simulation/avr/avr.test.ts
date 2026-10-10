@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CPU, AVRIOPort, portBConfig, portDConfig, timer0Config } from 'avr8js';
+import { CPU, AVRIOPort, portBConfig, portDConfig, timer0Config, timer2Config } from 'avr8js';
 import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -135,6 +135,22 @@ describe('avr timer0', () => {
     cpu.writeData(timer0Config.TCCRB, 0x03); // CS02:0 = 011: prescaler 64
     backend.step(2);
     expect(cpu.readData(timer0Config.TCNT)).not.toBe(0);
+  });
+
+  it('free-runs TCNT2 from the prescaler so tone() can tick', () => {
+    const backend = new AvrBackend(new Uint16Array(64), {
+      mcu: new McuRuntime(arduinoUnoR3()),
+      nowMs: () => 0,
+      readPin: () => false,
+      onSettle: () => {},
+      serial: { serialWrite: () => {} },
+      i2c: { writeByte: () => true, readByte: () => 0xff },
+    });
+    const cpu = (backend as unknown as { cpu: CPU }).cpu;
+    expect(cpu.readData(timer2Config.TCNT)).toBe(0);
+    cpu.writeData(timer2Config.TCCRB, 0x04); // CS22:0 = 100: prescaler 64
+    backend.step(2);
+    expect(cpu.readData(timer2Config.TCNT)).not.toBe(0);
   });
 });
 
