@@ -30,6 +30,6 @@ export { partTransform } from './wiring/part-transform';
 export { PartFootprint } from './wokwi/footprints';
 export type { FootprintState } from './wokwi/footprints';
 export { HardwareDefs } from './wokwi/hardware';
-export { PartPreview } from './PartPreview';
+export { PartPreview } from './components/PartPreview';
 export { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wiring/wire-colours';
 export type { WireColour } from './wiring/wire-colours';

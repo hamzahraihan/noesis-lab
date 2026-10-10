@@ -7,7 +7,7 @@
 // src/routes/** may import it deep. Passing learn content as props (rather
 // than letting Bench import it) is what keeps the bench → learn value
 // direction at zero — the boundary gate forbids it.
-import Bench from '@/features/bench/Bench';
+import Bench from '@/features/bench/components/Bench';
 import {
   BLINK_EXAMPLE,
   BOARDS,

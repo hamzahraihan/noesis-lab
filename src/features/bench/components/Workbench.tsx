@@ -12,13 +12,13 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Bench, Terminal, Wire, WireEnd } from '@/features/simulation';
-import { PartFootprint, type FootprintState } from './wokwi/footprints';
-import { HardwareDefs, SILKSCREEN_FONT } from './wokwi/hardware';
-import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from './wiring/wire-route';
-import { artworkBox } from './wokwi/wokwi';
-import { partTransform } from './wiring/part-transform';
-import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from './wiring/hit-test';
-import { useWorkbenchStore, type ViewBox } from './store/workbench-store';
+import { PartFootprint, type FootprintState } from '../wokwi/footprints';
+import { HardwareDefs, SILKSCREEN_FONT } from '../wokwi/hardware';
+import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from '../wiring/wire-route';
+import { artworkBox } from '../wokwi/wokwi';
+import { partTransform } from '../wiring/part-transform';
+import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from '../wiring/hit-test';
+import { useWorkbenchStore, type ViewBox } from '../store/workbench-store';
 
 /**
  * Name for the jumper that is only half drawn. It lives in a map of its own

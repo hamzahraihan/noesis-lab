@@ -12,7 +12,7 @@ import {
   Badge,
   Button,
 } from '@/components';
-import { PartPreview } from '../PartPreview';
+import { PartPreview } from '../components/PartPreview';
 import { PlusIcon } from '@radix-ui/react-icons';
 
 export function CatalogueGrid({

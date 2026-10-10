@@ -14,8 +14,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { isLargePart, type CatalogueEntry } from '@/features/parts';
-import { Sidebar } from './ide/Sidebar';
-import { CatalogueGrid } from './ide/CatalogueGrid';
+import { Sidebar } from '../ide/Sidebar';
+import { CatalogueGrid } from '../ide/CatalogueGrid';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
@@ -23,16 +23,16 @@ import type { PartDefinition } from '@/features/parts';
 import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
 import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
-import { TopBar } from './ide/TopBar';
-import { ActivityBar } from './ide/ActivityBar';
-import type { FootprintState } from './wokwi/footprints';
-import { Simulation } from './simulations/simulation';
-import { CenterTabs } from './ide/CenterTabs';
-import { BottomPanel } from './ide/BottomPanel';
-import { ResizeHandle } from './ide/ResizeHandle';
-import { WokwiLibrary } from './wokwi/WokwiLibrary';
-import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from './store/shell-state';
-import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from './store/bench-store';
+import { TopBar } from '../ide/TopBar';
+import { ActivityBar } from '../ide/ActivityBar';
+import type { FootprintState } from '../wokwi/footprints';
+import { Simulation } from '../simulations/simulation';
+import { CenterTabs } from '../ide/CenterTabs';
+import { BottomPanel } from '../ide/BottomPanel';
+import { ResizeHandle } from '../ide/ResizeHandle';
+import { WokwiLibrary } from '../wokwi/WokwiLibrary';
+import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from '../store/shell-state';
+import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from '../store/bench-store';
 import type {
   BoardId,
   BoardOption,
@@ -50,7 +50,7 @@ import {
   SerialMonitor,
   StatusBar,
 } from '@/features/instruments';
-import { WIRE_COLOURS } from './wiring/wire-colours';
+import { WIRE_COLOURS } from '../wiring/wire-colours';
 import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
 import { MultimeterPanel } from '@/features/instruments';
@@ -71,9 +71,9 @@ import {
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
-import { decodeShareToProject, encodeProjectToShare, isShareable } from './utils/share-codec';
-import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './store/project-store';
-import { avrAvailableFor } from './simulations/avr-mode';
+import { decodeShareToProject, encodeProjectToShare, isShareable } from '../utils/share-codec';
+import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
+import { avrAvailableFor } from '../simulations/avr-mode';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
