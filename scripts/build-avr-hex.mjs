@@ -25,8 +25,13 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STAGE = join(ROOT, '.avr-stage');
 const PKG_DIR = join(ROOT, 'node_modules', '@horang-corp', 'avr-gcc-wasm');
-const HEX_PATH = join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-uno.hex');
-const MANIFEST_PATH = join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'manifest.json');
+const variant = (process.argv.find((a) => a.startsWith('--variant=')) ?? '').split('=')[1] === 'library' ? 'library' : undefined;
+const HEX_PATH = variant === 'library'
+  ? join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-lib-uno.hex')
+  : join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-uno.hex');
+const MANIFEST_PATH = variant === 'library'
+  ? join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-lib-manifest.json')
+  : join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'manifest.json');
 
 if (!existsSync(join(PKG_DIR, 'firmware-builder.js'))) {
   console.error(
@@ -54,7 +59,7 @@ function contentType(path) {
 await mkdir(STAGE, { recursive: true });
 
 // Step 1: verbatim gallery sources via the committed extractor.
-runViteNode(join('scripts', 'extract-alarm-sources.mts'));
+runViteNode(join('scripts', 'extract-alarm-sources.mts'), variant === 'library' ? ['library'] : []);
 
 // Step 2: package the TU + hash the sources with the real repo modules.
 // vite-node 6 has no `-e` evaluation flag, so the snippet is materialized as
@@ -62,17 +67,17 @@ runViteNode(join('scripts', 'extract-alarm-sources.mts'));
 // which resolves the `@/` alias exactly like vitest does.
 const packagerSnippet = `import { writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { firmwareForBuild, galleryById } from '../src/features/learn/gallery';
+import { buildFor, firmwareForBuild, galleryById } from '../src/features/learn/gallery';
 import { packageSketch } from '../src/features/simulation/avr/packager';
 
-const build = galleryById('alarm-clock')!.builds[0]!;
+const build = buildFor(galleryById('alarm-clock')!, 'uno', VARIANT)!;
 const tu = packageSketch(firmwareForBuild(build, 'arduino-cpp'));
 const parts = [build.sketch, ...(build.files ?? []).map((f) => \`\${f.name}\\n\${f.content}\`)];
 writeFileSync('.avr-stage/tu.json', JSON.stringify({
   source: tu.source,
   sourcesHash: createHash('sha256').update(parts.join('\\n')).digest('hex'),
 }));
-`;
+`.replace('VARIANT', variant === 'library' ? "'library'" : 'undefined');
 const PACKAGER_SNIPPET = join(STAGE, 'package-tu.mts');
 await writeFile(PACKAGER_SNIPPET, packagerSnippet);
 runViteNode(join('.avr-stage', 'package-tu.mts'));
@@ -175,7 +180,7 @@ await writeFile(
   MANIFEST_PATH,
   `${JSON.stringify(
     {
-      file: 'alarm-clock-uno.hex',
+      file: variant === 'library' ? 'alarm-clock-lib-uno.hex' : 'alarm-clock-uno.hex',
       sha256: createHash('sha256').update(bytes).digest('hex'),
       sourcesHash,
     },
