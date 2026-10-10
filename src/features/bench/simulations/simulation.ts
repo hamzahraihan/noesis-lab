@@ -454,6 +454,7 @@ export class Simulation {
         return this.engine.readDigital(gpio);
       },
       onSettle: () => this.engine.settle(),
+      isProbed: () => this.engine.isBeingProbed,
       serial: { serialWrite: (text) => this.pushSerial(text) },
       i2c: this.avrI2cSink(),
     });
@@ -717,6 +718,8 @@ export class Simulation {
 
   setMeterMode(mode: MeterMode): void {
     this.meter.mode = mode;
+    // Mode changes the meter's stamp: invalidate the solve cache first.
+    this.engine.touch();
     this.engine.settle();
   }
 
@@ -728,6 +731,8 @@ export class Simulation {
     if (!found) return;
     if (this.meter.mode === 'amps') this.meter.ampRange = found as AmpRange;
     else this.meter.ohmRange = found as OhmRange;
+    // Range changes the meter's stamp: invalidate the solve cache first.
+    this.engine.touch();
     this.engine.settle();
   }
 
@@ -1347,7 +1352,11 @@ export class Simulation {
     }
 
     // Otherwise pace it: fine steps only while PWM or probes need them.
-    const chunkMs = this.engine.needsFineSteps ? 2 : 10;
+    // Coarse chunks stay wide (a whole frame at most): capacitors alone ride
+    // Backward Euler stably at any step, and every firmware event settles on
+    // its own — so one 40 ms step answers what four 10 ms steps did, at a
+    // quarter of the solves.
+    const chunkMs = this.engine.needsFineSteps ? 2 : 40;
     const endTime = this.engine.timeMs + ms;
     let guard = 0;
     while (this.engine.timeMs < endTime && guard++ < 4000) {
@@ -1768,6 +1777,9 @@ export class Simulation {
           const servo = this.servoOnPin(pin);
           if (!servo) return;
           servo.write(angle);
+          // The servo load is stamped around the netlist: same nets, new
+          // circuit, so the solve cache must not reuse the pre-write answer.
+          this.engine.touch();
           this.engine.settle();
         },
         read: (pin) => this.servoOnPin(pin)?.angle ?? 0,
