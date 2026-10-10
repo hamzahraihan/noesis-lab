@@ -1613,6 +1613,70 @@ export default function Bench(props: BenchProps) {
             ({[...new Set(TIER2_MANIFEST.map((entry) => entry.license))].join(', ')}; fetched once,
             SHA-256-verified).
           </p>
+          {/*
+           * The bottom panel lives in the center column, under the canvas and
+           * code, the way VS Code centers its panel under the editor group:
+           * the sidebar and the inspector rail run full height beside it.
+           */}
+          {bottomOpen && (
+            <ResizeHandle
+              axis="y"
+              onResize={(delta) => nudgeLayout('bottomHeight', -delta)}
+              onReset={() => resetLayoutKey('bottomHeight')}
+              label="Resize bottom panel"
+            />
+          )}
+          <BottomPanel
+            tab={bottomTab}
+            open={bottomOpen}
+            height={layout.bottomHeight}
+            hasError={(simulation.firmwareError ?? shareError) !== null}
+            onTab={setBottomTab}
+            onToggle={() => setBottomOpen((open) => !open)}
+            serial={<SerialMonitor lines={simulation.serialLines()} />}
+            scope={
+              <ScopePanel
+                pins={probePins}
+                baud={baud}
+                probePinId={simulation.probePinId}
+                samples={simulation.probeTrace()}
+                logicVolts={simulation.mcu.board.logicVolts}
+                onProbe={(pinId: string | null) => simulation.setProbePin(pinId)}
+                onBaud={setBaud}
+              />
+            }
+            logic={
+              <LogicAnalyser
+                pins={probePins}
+                traces={simulation.analyserTraces()}
+                logicVolts={simulation.mcu.board.logicVolts}
+                onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
+                isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
+              />
+            }
+            bus={<BusMonitor entries={simulation.busLines()} onClear={clearBusLog} />}
+            meter={
+              <MultimeterPanel
+                pins={meterPins}
+                redPinId={meterRedPin}
+                blackPinId={meterBlackPin}
+                onRedPin={setMeterRedPin}
+                onBlackPin={setMeterBlackPin}
+                mode={simulation.meterMode}
+                reading={simulation.meterReading()}
+                redLabel={meterRedLabel ?? 'not clipped'}
+                blackLabel={meterBlackLabel ?? 'ground'}
+                rangeId={simulation.meterRangeId}
+                onMode={(mode) => simulation.setMeterMode(mode)}
+                onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
+              />
+            }
+            problems={
+              <p className="px-3 py-2 font-mono text-xs text-red-300">
+                {simulation.firmwareError ?? shareError ?? 'No problems.'}
+              </p>
+            }
+          />
         </main>
 
         {instrumentsOpen && (
@@ -1692,66 +1756,6 @@ export default function Bench(props: BenchProps) {
       )}
 
       </div>
-
-      {bottomOpen && (
-        <ResizeHandle
-          axis="y"
-          onResize={(delta) => nudgeLayout('bottomHeight', -delta)}
-          onReset={() => resetLayoutKey('bottomHeight')}
-          label="Resize bottom panel"
-        />
-      )}
-      <BottomPanel
-        tab={bottomTab}
-        open={bottomOpen}
-        height={layout.bottomHeight}
-        hasError={(simulation.firmwareError ?? shareError) !== null}
-        onTab={setBottomTab}
-        onToggle={() => setBottomOpen((open) => !open)}
-        serial={<SerialMonitor lines={simulation.serialLines()} />}
-        scope={
-          <ScopePanel
-            pins={probePins}
-            baud={baud}
-            probePinId={simulation.probePinId}
-            samples={simulation.probeTrace()}
-            logicVolts={simulation.mcu.board.logicVolts}
-            onProbe={(pinId: string | null) => simulation.setProbePin(pinId)}
-            onBaud={setBaud}
-          />
-        }
-        logic={
-          <LogicAnalyser
-            pins={probePins}
-            traces={simulation.analyserTraces()}
-            logicVolts={simulation.mcu.board.logicVolts}
-            onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
-            isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
-          />
-        }
-        bus={<BusMonitor entries={simulation.busLines()} onClear={clearBusLog} />}
-        meter={
-          <MultimeterPanel
-            pins={meterPins}
-            redPinId={meterRedPin}
-            blackPinId={meterBlackPin}
-            onRedPin={setMeterRedPin}
-            onBlackPin={setMeterBlackPin}
-            mode={simulation.meterMode}
-            reading={simulation.meterReading()}
-            redLabel={meterRedLabel ?? 'not clipped'}
-            blackLabel={meterBlackLabel ?? 'ground'}
-            rangeId={simulation.meterRangeId}
-            onMode={(mode) => simulation.setMeterMode(mode)}
-            onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
-          />
-        }
-        problems={
-          <p className="px-3 py-2 font-mono text-xs text-red-300">
-            {simulation.firmwareError ?? shareError ?? 'No problems.'}
-          </p>
-        }
-      />
 
       <StatusBar
         timeMs={simulation.engine.timeMs}
