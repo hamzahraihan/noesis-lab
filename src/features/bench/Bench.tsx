@@ -14,7 +14,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { isLargePart, type CatalogueEntry } from '@/features/parts';
-import { ComponentBrowser } from './ComponentBrowser';
+import { Sidebar } from './ide/Sidebar';
+import { CatalogueGrid } from './ide/CatalogueGrid';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
@@ -27,7 +28,6 @@ import { ActivityBar } from './ide/ActivityBar';
 import type { Activity } from './ide/shell-state';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
-import { Sidebar } from './ide/Sidebar';
 import { WokwiLibrary } from './WokwiLibrary';
 import { centerKeyForFile, type CenterKey } from './ide/shell-state';
 import type {
@@ -41,7 +41,6 @@ import type {
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import { ENTRY_BY_LANGUAGE, TIER2_MANIFEST, toSingleFileProject } from '@/features/simulation';
-import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
   Inspector,
@@ -381,7 +380,6 @@ export default function Bench(props: BenchProps) {
     const timer = setTimeout(() => saveBenchProject(boardId, project), 500);
     return () => clearTimeout(timer);
   }, [boardId, project]);
-  const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activity, setActivity] = useState<Activity>('components');
   const [activeCenter, setActiveCenter] = useState<CenterKey>('circuit');
@@ -694,7 +692,8 @@ export default function Bench(props: BenchProps) {
           setSidebarOpen((open) => !open);
           break;
         case 'c':
-          setBrowserOpen(true);
+          setActivity('components');
+          setSidebarOpen(true);
           break;
         case 'i':
           setInstrumentsOpen((open) => !open);
@@ -711,8 +710,7 @@ export default function Bench(props: BenchProps) {
         case 'Escape':
           // Escape backs out of whatever is open, deepest first, so it never
           // leaves the bench in a state with no way back.
-          if (browserOpen) setBrowserOpen(false);
-          else if (paletteFor) setPaletteFor(null);
+          if (paletteFor) setPaletteFor(null);
           else if (selectedId) setSelectedId(null);
           else if (firmwareOpen) setFirmwareOpen(false);
           break;
@@ -722,7 +720,7 @@ export default function Bench(props: BenchProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [simulation, browserOpen, paletteFor, selectedId, selectedWireId, firmwareOpen, removeWire, stepHistory]);
+  }, [simulation, paletteFor, selectedId, selectedWireId, firmwareOpen, removeWire, stepHistory]);
 
 
   const bench = simulation.bench;
@@ -1297,7 +1295,10 @@ export default function Bench(props: BenchProps) {
             type="button"
             variant="default"
             size="sm"
-            onClick={() => setBrowserOpen(true)}
+            onClick={() => {
+              setActivity('components');
+              setSidebarOpen(true);
+            }}
             title="Browse every part the bench can hold (C)"
           >
             <PlusIcon className="icon" aria-hidden="true" />
@@ -1358,14 +1359,10 @@ export default function Bench(props: BenchProps) {
             }}
             onProjectChange={setProject}
             componentsPane={
-              <PartSearch
+              <CatalogueGrid
                 onPlace={(def, entry) => {
                   onPlacePart(def, entry);
                   setActiveCenter('circuit');
-                }}
-                onBrowse={() => {
-                  setActivity('components');
-                  setSidebarOpen(true);
                 }}
               />
             }
@@ -1596,16 +1593,6 @@ export default function Bench(props: BenchProps) {
             onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
           />
         </aside>
-
-      {browserOpen && (
-        <ComponentBrowser
-          onPlace={(definition, entry) => {
-            onPlacePart(definition, entry);
-            setBrowserOpen(false);
-          }}
-          onClose={() => setBrowserOpen(false)}
-        />
-      )}
 
       {!instrumentsOpen && (
         <aside className="hidden w-9 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
