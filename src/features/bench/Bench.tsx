@@ -27,6 +27,9 @@ import { ActivityBar } from './ide/ActivityBar';
 import type { Activity } from './ide/shell-state';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
+import { Sidebar } from './ide/Sidebar';
+import { WokwiLibrary } from './WokwiLibrary';
+import { centerKeyForFile, type CenterKey } from './ide/shell-state';
 import type {
   BoardId,
   BoardOption,
@@ -37,7 +40,7 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import { TIER2_MANIFEST, toSingleFileProject } from '@/features/simulation';
+import { ENTRY_BY_LANGUAGE, TIER2_MANIFEST, toSingleFileProject } from '@/features/simulation';
 import { PartSearch } from './PartSearch';
 import {
   FirmwareEditor,
@@ -381,6 +384,9 @@ export default function Bench(props: BenchProps) {
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activity, setActivity] = useState<Activity>('components');
+  const [activeCenter, setActiveCenter] = useState<CenterKey>('circuit');
+  // Read by CenterTabs in Task 5; referenced here so noUnusedLocals stays green meanwhile.
+  void activeCenter;
   /*
    * The right-hand rails — Inspector + Serial, and Scope + Logic + Bus +
    * Multimeter — collapse together under one toggle, mirroring the parts rail
@@ -1340,33 +1346,32 @@ export default function Bench(props: BenchProps) {
 
       <div className="flex min-h-0 flex-1">
         <ActivityBar activity={activity} onActivity={setActivity} />
-        {/*
-         * The parts rail. It used to step aside under the `lg` breakpoint, which
-         * meant a laptop could reach the bench but could not reach the parts list
-         * at all. A rail costs almost nothing and keeps the toggle discoverable.
-         */}
-        <aside
-          className={`flex shrink-0 flex-col border-r border-slate-800 bg-slate-900 transition-[width] ${
-            sidebarOpen ? 'w-56' : 'w-9'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => setSidebarOpen((open) => !open)}
-            aria-expanded={sidebarOpen}
-            aria-label={sidebarOpen ? 'Collapse the parts sidebar' : 'Expand the parts sidebar'}
-            title={`${sidebarOpen ? 'Collapse' : 'Expand'} sidebar (B)`}
-            className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
-          >
-            <CaretLeftIcon
-              className={`icon transition-transform ${sidebarOpen ? '' : 'rotate-180'}`}
-              aria-hidden="true"
-            />
-          </button>
-          {sidebarOpen && (
-            <PartSearch onPlace={onPlacePart} onBrowse={() => setBrowserOpen(true)} />
-          )}
-        </aside>
+        {sidebarOpen && (
+          <Sidebar
+            activity={activity}
+            project={project}
+            entryName={ENTRY_BY_LANGUAGE[project.language]}
+            activeName={project.activeName}
+            onSelectFile={(name) => {
+              setActiveCenter(centerKeyForFile(name));
+              setProject((previous) => ({ ...previous, activeName: name }));
+            }}
+            onProjectChange={setProject}
+            componentsPane={
+              <PartSearch
+                onPlace={(def, entry) => {
+                  onPlacePart(def, entry);
+                  setActiveCenter('circuit');
+                }}
+                onBrowse={() => {
+                  setActivity('components');
+                  setSidebarOpen(true);
+                }}
+              />
+            }
+            libraryPane={<WokwiLibrary />}
+          />
+        )}
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
