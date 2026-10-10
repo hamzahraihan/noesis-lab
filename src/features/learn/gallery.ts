@@ -78,6 +78,78 @@ export interface GalleryProject {
  * Alarm Clock with RTC — DS1307 + 4-digit 7-segment + buttons + buzzer
  * ------------------------------------------------------------------ */
 
+function alarmClockSetup(simulation: Simulation) {
+    simulation.clearExampleParts();
+    const supply = simulation.boardTerminal('5V');
+    const ground = simulation.boardTerminal('GND');
+    if (!supply || !ground) return;
+
+    // One compact clock block, fully inside the initial viewport
+    // (x -12..416): RTC + display share a top row below the breadboard,
+    // three buttons form one control row beneath, buzzer closes the block.
+    const BLOCK_X = 100;
+    const BLOCK_Y = 70;
+    simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
+
+    // 4-digit 7-segment display on the pin table: digit commons DIG1-DIG4
+    // (device pins 14/11/10/6) on D2-D5, segments A-G (13/9/4/2/1/12/5) on
+    // D6-D12, colon CLN (pin 8) on D13, COM (pin 7) to 5V. RTC on A4/A5,
+    // buttons on A0-A2, buzzer on A3.
+    const seg = simulation.addPart(part('4-Digit 7-Segment Display'), BLOCK_X + 35, BLOCK_Y);
+    const segWires: Array<[string, string]> = [
+      ['DIG1', 'D2'],
+      ['DIG2', 'D3'],
+      ['DIG3', 'D4'],
+      ['DIG4', 'D5'],
+      ['A', 'D6'],
+      ['B', 'D7'],
+      ['C', 'D8'],
+      ['D', 'D9'],
+      ['E', 'D10'],
+      ['F', 'D11'],
+      ['G', 'D12'],
+      ['CLN', 'D13'],
+    ];
+    for (const [segPin, boardPin] of segWires) {
+      const from = simulation.pinAt(seg, segPin);
+      const to = simulation.boardTerminal(boardPin);
+      if (!from || !to) return;
+      simulation.routeWire(from, to);
+    }
+    {
+      const com = simulation.pinAt(seg, 'COM');
+      if (!com || !supply) return;
+      simulation.routeWire(com, supply);
+    }
+
+    // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
+    // The sketch uses the internal pull-ups, so a held button reads LOW.
+    // One control row under the clock pair, 14mm pitch for 6mm bodies.
+    const buttons: Array<[string, string]> = [
+      ['Hours', 'A0'],
+      ['Minutes', 'A1'],
+      ['Alarm', 'A2'],
+    ];
+    buttons.forEach(([label, pin], index) => {
+      const button = simulation.addPart(part('Tactile Button'), BLOCK_X + index * 14, BLOCK_Y + 30);
+      const boardPin = simulation.boardTerminal(pin);
+      const legA = simulation.pinAt(button, 'a');
+      const legB = simulation.pinAt(button, 'b');
+      if (!boardPin || !legA || !legB) return;
+      simulation.routeWire(boardPin, legA);
+      simulation.routeWire(legB, ground);
+      void label;
+    });
+
+    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 46);
+    const buzzPin = simulation.boardTerminal('A3');
+    const positive = simulation.pinAt(buzzer, 'positive');
+    const negative = simulation.pinAt(buzzer, 'negative');
+    if (!buzzPin || !positive || !negative) return;
+    simulation.routeWire(buzzPin, positive);
+    simulation.routeWire(negative, ground);
+}
+
 const ALARM_CLOCK: GalleryProject = {
   id: 'alarm-clock',
   title: 'Alarm Clock with RTC',
@@ -652,77 +724,662 @@ void toneStop() {
         { name: 'SevSeg', source: 'provided' },
         { name: 'RTClib', source: 'provided' },
       ],
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
+  setup: alarmClockSetup,
+  },
+  {
+      board: 'uno',
+      variant: 'library',
+      execution: 'avr',
+      sketch: `#include <SevSeg.h>
+#include "Button.h"
+#include "AlarmTone.h"
+#include "Clock.h"
+#include "config.h"
 
-    // One compact clock block, fully inside the initial viewport
-    // (x -12..416): RTC + display share a top row below the breadboard,
-    // three buttons form one control row beneath, buzzer closes the block.
-    const BLOCK_X = 100;
-    const BLOCK_Y = 70;
-    simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
+const int COLON_PIN = 13;
+const int SPEAKER_PIN = A3;
 
-    // 4-digit 7-segment display on the pin table: digit commons DIG1-DIG4
-    // (device pins 14/11/10/6) on D2-D5, segments A-G (13/9/4/2/1/12/5) on
-    // D6-D12, colon CLN (pin 8) on D13, COM (pin 7) to 5V. RTC on A4/A5,
-    // buttons on A0-A2, buzzer on A3.
-    const seg = simulation.addPart(part('4-Digit 7-Segment Display'), BLOCK_X + 35, BLOCK_Y);
-    const segWires: Array<[string, string]> = [
-      ['DIG1', 'D2'],
-      ['DIG2', 'D3'],
-      ['DIG3', 'D4'],
-      ['DIG4', 'D5'],
-      ['A', 'D6'],
-      ['B', 'D7'],
-      ['C', 'D8'],
-      ['D', 'D9'],
-      ['E', 'D10'],
-      ['F', 'D11'],
-      ['G', 'D12'],
-      ['CLN', 'D13'],
-    ];
-    for (const [segPin, boardPin] of segWires) {
-      const from = simulation.pinAt(seg, segPin);
-      const to = simulation.boardTerminal(boardPin);
-      if (!from || !to) return;
-      simulation.routeWire(from, to);
+Button hourButton(A0);
+Button minuteButton(A1);
+Button alarmButton(A2);
+
+AlarmTone alarmTone;
+Clock clock;
+SevSeg sevseg;
+
+enum DisplayState {
+  DisplayClock,
+  DisplayAlarmStatus,
+  DisplayAlarmTime,
+  DisplayAlarmActive,
+  DisplaySnooze,
+};
+
+DisplayState displayState = DisplayClock;
+long lastStateChange = 0;
+
+void changeDisplayState(DisplayState newValue) {
+  displayState = newValue;
+  lastStateChange = millis();
+}
+
+long millisSinceStateChange() {
+  return millis() - lastStateChange;
+}
+
+void setColon(bool value) {
+  digitalWrite(COLON_PIN, value ? LOW : HIGH);
+}
+
+void displayTime() {
+  DateTime now = clock.now();
+  bool blinkState = now.second() % 2 == 0;
+  sevseg.setNumber(now.hour() * 100 + now.minute());
+  setColon(blinkState);
+}
+
+void clockState() {
+  displayTime();
+
+  if (alarmButton.read() == Button::RELEASED && clock.alarmActive()) {
+    // Read alarmButton has_changed() to clear its state
+    alarmButton.has_changed();
+    changeDisplayState(DisplayAlarmActive);
+    return;
+  }
+
+  if (hourButton.pressed()) {
+    clock.incrementHour();
+  }
+  if (minuteButton.pressed()) {
+    clock.incrementMinute();
+  }
+  if (alarmButton.pressed()) {
+    clock.toggleAlarm();
+    changeDisplayState(DisplayAlarmStatus);
+  }
+}
+
+void alarmStatusState() {
+  setColon(false);
+  sevseg.setChars(clock.alarmEnabled() ? " on" : " off");
+  if (millisSinceStateChange() > ALARM_STATUS_DISPLAY_TIME) {
+    changeDisplayState(clock.alarmEnabled() ? DisplayAlarmTime : DisplayClock);
+    return;
+  }
+}
+
+void alarmTimeState() {
+  DateTime alarm = clock.alarmTime();
+  sevseg.setNumber(alarm.hour() * 100 + alarm.minute(), -1);
+
+  if (millisSinceStateChange() > ALARM_HOUR_DISPLAY_TIME || alarmButton.pressed()) {
+    changeDisplayState(DisplayClock);
+    return;
+  }
+
+  if (hourButton.pressed()) {
+    clock.incrementAlarmHour();
+    lastStateChange = millis();
+  }
+  if (minuteButton.pressed()) {
+    clock.incrementAlarmMinute();
+    lastStateChange = millis();
+  }
+  if (alarmButton.pressed()) {
+    changeDisplayState(DisplayClock);
+  }
+}
+
+void alarmState() {
+  displayTime();
+
+  if (alarmButton.read() == Button::RELEASED) {
+    alarmTone.play();
+  }
+  if (alarmButton.pressed()) {
+    alarmTone.stop();
+  }
+  if (alarmButton.released()) {
+    alarmTone.stop();
+    bool longPress = alarmButton.repeat_count() > 0;
+    if (longPress) {
+      clock.stopAlarm();
+      changeDisplayState(DisplayClock);
+    } else {
+      clock.snooze();
+      changeDisplayState(DisplaySnooze);
     }
-    {
-      const com = simulation.pinAt(seg, 'COM');
-      if (!com || !supply) return;
-      simulation.routeWire(com, supply);
-    }
+  }
+}
 
-    // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
-    // The sketch uses the internal pull-ups, so a held button reads LOW.
-    // One control row under the clock pair, 14mm pitch for 6mm bodies.
-    const buttons: Array<[string, string]> = [
-      ['Hours', 'A0'],
-      ['Minutes', 'A1'],
-      ['Alarm', 'A2'],
-    ];
-    buttons.forEach(([label, pin], index) => {
-      const button = simulation.addPart(part('Tactile Button'), BLOCK_X + index * 14, BLOCK_Y + 30);
-      const boardPin = simulation.boardTerminal(pin);
-      const legA = simulation.pinAt(button, 'a');
-      const legB = simulation.pinAt(button, 'b');
-      if (!boardPin || !legA || !legB) return;
-      simulation.routeWire(boardPin, legA);
-      simulation.routeWire(legB, ground);
-      void label;
-    });
+void snoozeState() {
+  sevseg.setChars("****");
+  if (millisSinceStateChange() > SNOOZE_DISPLAY_TIME) {
+    changeDisplayState(DisplayClock);
+    return;
+  }
+}
 
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 46);
-    const buzzPin = simulation.boardTerminal('A3');
-    const positive = simulation.pinAt(buzzer, 'positive');
-    const negative = simulation.pinAt(buzzer, 'negative');
-    if (!buzzPin || !positive || !negative) return;
-    simulation.routeWire(buzzPin, positive);
-    simulation.routeWire(negative, ground);
-    },
+void setup() {
+  Serial.begin(115200);
+
+  clock.begin();
+
+  hourButton.begin();
+  hourButton.set_repeat(500, 200);
+
+  minuteButton.begin();
+  minuteButton.set_repeat(500, 200);
+
+  alarmButton.begin();
+  alarmButton.set_repeat(1000, -1);
+
+  alarmTone.begin(SPEAKER_PIN);
+
+  pinMode(COLON_PIN, OUTPUT);
+
+  byte digits = 4;
+  byte digitPins[] = {2, 3, 4, 5};
+  byte segmentPins[] = {6, 7, 8, 9, 10, 11, 12};
+  bool resistorsOnSegments = false;
+  bool updateWithDelays = false;
+  bool leadingZeros = true;
+  bool disableDecPoint = true;
+  sevseg.begin(DISPLAY_TYPE, digits, digitPins, segmentPins, resistorsOnSegments,
+               updateWithDelays, leadingZeros, disableDecPoint);
+  sevseg.setBrightness(90);
+}
+
+void loop() {
+  sevseg.refreshDisplay();
+
+  switch (displayState) {
+    case DisplayClock:
+      clockState();
+      break;
+
+    case DisplayAlarmStatus:
+      alarmStatusState();
+      break;
+
+    case DisplayAlarmTime:
+      alarmTimeState();
+      break;
+
+    case DisplayAlarmActive:
+      alarmState();
+      break;
+
+    case DisplaySnooze:
+      snoozeState();
+      break;
+  }
+}
+`,
+      files: [
+    { name: 'config.h', content: `/**
+   Arduino Digital Alarm Clock
+
+   Copyright (C) 2020, Uri Shaked.
+   Released under the MIT License.
+
+   Clock Configuration File.
+*/
+
+#ifndef __CONFIG_H__
+#define __CONFIG_H__
+
+/**
+   Change to 0 for running without an external RTC (Real time clock)
+*/
+#define USE_RTC 1
+
+/**
+   Your 7-Segment display type: COMMON_ANODE or COMMON_CATHODE
+*/
+#define DISPLAY_TYPE COMMON_ANODE
+
+/**
+   For how long should we show the alarm status (on/off)?
+*/
+const int ALARM_STATUS_DISPLAY_TIME = 1000; /* ms */
+
+/**
+   For how long should we show the alarm hour?
+*/
+const int ALARM_HOUR_DISPLAY_TIME = 2500; /* ms */
+
+/**
+   For how long should we display the snooze screen?
+*/
+const int SNOOZE_DISPLAY_TIME = 500; /* ms */
+
+/**
+   How many minutes to snooze the alarm for?
+*/
+const int SNOOZE_TIME = 9; /* minutes */
+
+/**
+   The default Alarm hour (for non-RTC mode)
+*/
+const int DEFAULT_ALARM_HOUR = 9;
+
+#endif /* __CONFIG_H__ */` },
+    { name: 'button.h', content: `/*
+	Button - a small library for Arduino to handle button debouncing
+
+	MIT licensed.
+*/
+
+#ifndef Button_h
+#define Button_h
+#include "Arduino.h"
+
+class Button
+{
+	public:
+		Button(uint8_t pin, uint16_t debounce_ms = 100);
+		void begin();
+		bool read();
+		bool toggled();
+		bool pressed();
+		bool released();
+		bool has_changed();
+		uint16_t repeat_count();
+		void set_repeat(int16_t delay_ms, int16_t repeat_ms);
+
+		const static bool PRESSED = LOW;
+		const static bool RELEASED = HIGH;
+
+	private:
+		uint16_t repeats_since_press();
+
+		uint8_t  _pin;
+		uint16_t _delay;
+		bool     _state;
+		uint32_t _ignore_until;
+		bool     _has_changed;
+		uint16_t _reported_repeats;
+		int16_t  _repeat_delay_ms;
+		int16_t  _repeat_ms;
+};
+
+#endif` },
+    { name: 'clock.h', content: `#ifndef __CLOCK_H__
+#define __CLOCK_H__
+
+#include <RTClib.h>
+#include "config.h"
+
+enum AlarmState {
+  ALARM_DISABLED,
+  ALARM_OFF,
+  ALARM_ACTIVE,
+  ALARM_SNOOZED,
+  ALARM_STOPPED,
+};
+
+class Clock {
+public:
+  Clock();
+  void begin();
+
+  /* Clock management */
+  DateTime now();
+  void incrementMinute();
+  void incrementHour();
+
+  /* Alarm Management */
+  bool alarmEnabled();
+  DateTime alarmTime();
+  bool alarmActive();
+  void toggleAlarm();
+  void snooze();
+  void stopAlarm();
+  void incrementAlarmHour();
+  void incrementAlarmMinute();
+
+protected:
+  bool _isAlarmDueTime();
+
+  #if USE_RTC
+    RTC_DS1307 _rtc;
+  #else /* USE_RTC */
+    RTC_Millis _rtc;
+  #endif /* USE_RTC */
+
+  byte _alarm_hour;
+  byte _alarm_minute;
+  AlarmState _alarm_state;
+  unsigned long _alarm_snooze_time;
+};
+
+#endif /* __CLOCK_H__ */` },
+    { name: 'alarmtone.h', content: `#ifndef __ALARM_TONE_H__
+#define __ALARM_TONE_H__
+
+class AlarmTone {
+  public:
+    AlarmTone();
+    void begin(uint8_t pin);
+    void play();
+    void stop();
+
+  private:
+    uint8_t _pin;
+    bool _playing;
+    uint8_t _tone_index;
+    unsigned long _last_tone_time;
+};
+
+#endif /* __ALARM_TONE_H */` },
+    { name: 'button.cpp', content: `/*
+	Button - a small library for Arduino to handle button debouncing
+
+	MIT licensed.
+*/
+
+#include "Button.h"
+#include <Arduino.h>
+
+Button::Button(uint8_t pin, uint16_t debounce_ms)
+:  _pin(pin)
+,  _delay(debounce_ms)
+,  _state(HIGH)
+,  _ignore_until(0)
+,  _has_changed(false)
+,  _reported_repeats(0)
+,  _repeat_delay_ms(-1)
+,  _repeat_ms(-1)
+{
+}
+
+void Button::begin()
+{
+	pinMode(_pin, INPUT_PULLUP);
+}
+
+//
+// public methods
+//
+
+bool Button::read()
+{
+	// ignore pin changes until after this delay time
+	if (_ignore_until > millis())
+	{
+		// ignore any changes during this period
+	}
+
+	// pin has changed
+	else if (digitalRead(_pin) != _state)
+	{
+		_state = !_state;
+
+		if (_state == RELEASED)
+		{
+			_reported_repeats = repeats_since_press();
+		}
+
+		else
+		{
+			_reported_repeats = 0;
+		}
+
+		_ignore_until = millis() + _delay;
+		_has_changed = true;
+	}
+
+	return _state;
+}
+
+// has the button been toggled from on -> off, or vice versa
+bool Button::toggled()
+{
+	read();
+	return has_changed();
+}
+
+// mostly internal, tells you if a button has changed after calling the read() function
+bool Button::has_changed()
+{
+	if (_has_changed)
+	{
+		_has_changed = false;
+		return true;
+	}
+	return false;
+}
+
+// how many repeated press events occured since the button was pressed
+uint16_t Button::repeat_count()
+{
+	return _state == PRESSED ? repeats_since_press() : _reported_repeats;
+}
+
+// has the button gone from off -> on or pressed repeatedly
+bool Button::pressed()
+{
+	if (read() == PRESSED)
+	{
+		uint16_t old_repeats = _reported_repeats;
+		_reported_repeats = repeats_since_press();
+		return (has_changed() || old_repeats != _reported_repeats);
+	}
+	else
+	{
+		return false;
+	}
+}
+
+// has the button gone from on -> off
+bool Button::released()
+{
+	return (read() == RELEASED && has_changed());
+}
+
+void Button::set_repeat(int16_t delay_ms, int16_t repeat_ms)
+{
+	_repeat_delay_ms = delay_ms > _delay ? delay_ms - _delay : 0;
+	_repeat_ms = repeat_ms;
+}
+
+uint16_t Button::repeats_since_press()
+{
+ 	if (_repeat_delay_ms == -1 || millis() < _ignore_until + _repeat_delay_ms)
+	{
+		return 0;
+	}
+
+	if (_repeat_ms <= 0)
+	{
+		return 1;
+	}
+
+	uint32_t press_time = millis() - _ignore_until;
+	return 1 + (press_time - _repeat_delay_ms) / _repeat_ms;
+}` },
+    { name: 'clock.cpp', content: `#include <Arduino.h>
+#include "Clock.h"
+
+#define MINUTE 60 * 1000L /* ms */
+#define TIMESPAN_DAY TimeSpan(1, 0, 0, 0)
+
+#define NVRAM_ADDR_ALARM_ENABLED 0
+#define NVRAM_ADDR_ALARM_HOUR    1
+#define NVRAM_ADDR_ALARM_MINUTE  2
+
+
+Clock::Clock()
+  : _alarm_state(ALARM_OFF)
+  , _alarm_snooze_time(0)
+  , _alarm_hour(DEFAULT_ALARM_HOUR)
+  , _alarm_minute(0) {
+}
+
+void Clock::begin() {
+# if USE_RTC
+  if (!_rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    abort();
+  }
+  _alarm_state = _rtc.readnvram(NVRAM_ADDR_ALARM_ENABLED) ? ALARM_OFF : ALARM_DISABLED;
+  _alarm_hour = _rtc.readnvram(NVRAM_ADDR_ALARM_HOUR) % 24;
+  _alarm_minute = _rtc.readnvram(NVRAM_ADDR_ALARM_MINUTE) % 60;
+# else /* USE_RTC */
+  DateTime zeroTime;
+  _rtc.begin(zeroTime);
+# endif
+}
+
+/***** Clock management *****/
+
+DateTime Clock::now() {
+  return _rtc.now();
+}
+
+void Clock::incrementMinute() {
+  DateTime now = _rtc.now();
+  DateTime newTime = DateTime(now.year(), now.month(), now.day(), now.hour(),
+                              (now.minute() + 1) % 60);
+  _rtc.adjust(newTime);
+}
+
+void Clock::incrementHour() {
+  DateTime now = _rtc.now();
+  DateTime newTime = DateTime(now.year(), now.month(), now.day(),
+                              (now.hour() + 1) % 24, now.minute());
+  _rtc.adjust(newTime);
+}
+
+/***** Alarm management *****/
+bool Clock::_isAlarmDueTime() {
+  auto currentTime = now();
+  auto alarm = alarmTime();
+  return ((currentTime.hour() == alarm.hour())
+          && (currentTime.minute() == alarm.minute()));
+}
+
+bool Clock::alarmEnabled() {
+  return _alarm_state != ALARM_DISABLED;
+}
+
+bool Clock::alarmActive() {
+  switch (_alarm_state) {
+    case ALARM_DISABLED:
+      return false;
+
+    case ALARM_OFF:
+      if (_isAlarmDueTime()) {
+        _alarm_state = ALARM_ACTIVE;
+        return true;
+      }
+      return false;
+
+    case ALARM_ACTIVE:
+      return true;
+
+    case ALARM_SNOOZED:
+      if (millis() >= _alarm_snooze_time) {
+        _alarm_state = ALARM_ACTIVE;
+        return true;
+      }
+      return false;
+
+    case ALARM_STOPPED:
+      if (!_isAlarmDueTime()) {
+        _alarm_state = ALARM_OFF;
+      }
+      return false;
+
+    default:
+      return false;
+  }
+}
+
+
+void Clock::toggleAlarm() {
+  bool enabled = !alarmEnabled();
+  _alarm_state = enabled ? ALARM_OFF : ALARM_DISABLED;
+# if USE_RTC
+  _rtc.writenvram(NVRAM_ADDR_ALARM_ENABLED, enabled);
+# endif
+}
+
+DateTime Clock::alarmTime() {
+  DateTime now = _rtc.now();
+  DateTime alarm = DateTime(now.year(), now.month(), now.day(), _alarm_hour, _alarm_minute);
+  return alarm >= now ? alarm : alarm + TIMESPAN_DAY;
+}
+
+void Clock::snooze() {
+  _alarm_state = ALARM_SNOOZED;
+  _alarm_snooze_time = millis() + SNOOZE_TIME * MINUTE;
+}
+
+void Clock::stopAlarm() {
+  _alarm_state = ALARM_STOPPED;
+}
+
+void Clock::incrementAlarmHour() {
+  _alarm_hour = (_alarm_hour + 1) % 24;
+  _alarm_state = ALARM_OFF;
+# if USE_RTC
+  _rtc.writenvram(NVRAM_ADDR_ALARM_HOUR, _alarm_hour);
+# endif
+}
+
+void Clock::incrementAlarmMinute() {
+  _alarm_minute = (_alarm_minute + 1) % 60;
+  _alarm_state = ALARM_OFF;
+# if USE_RTC
+  _rtc.writenvram(NVRAM_ADDR_ALARM_MINUTE, _alarm_minute);
+# endif
+}` },
+    { name: 'alarmtone.cpp', content: `#include <Arduino.h>
+#include "AlarmTone.h"
+
+#define TONE_TIME 500 /* ms */
+#define TONE_SPACING 100 /* ms */
+
+static const uint16_t TONES[] = {
+  500,
+  800,
+};
+const uint16_t NUM_TONES = sizeof(TONES) / sizeof(TONES[0]);
+
+AlarmTone::AlarmTone()
+: _playing(false)
+, _tone_index(0)
+, _last_tone_time(0) {
+}
+
+void AlarmTone::begin(uint8_t pin) {
+  _pin = pin;
+  pinMode(_pin, OUTPUT);
+}
+
+void AlarmTone::play() {
+  if (!_playing || _last_tone_time + TONE_TIME + TONE_SPACING < millis()) {
+    tone(_pin, TONES[_tone_index], TONE_TIME);
+    _tone_index = (_tone_index + 1) % NUM_TONES;
+    _last_tone_time = millis();
+  }
+  _playing = true;
+}
+
+void AlarmTone::stop() {
+  noTone(_pin);
+  _tone_index = 0;
+  _playing = false;
+}` },
+      ],
+      libraries: [
+        { name: 'SevSeg', source: 'provided' },
+        { name: 'RTClib', source: 'provided' },
+      ],
+  setup: alarmClockSetup,
   },
   ],
   working: [

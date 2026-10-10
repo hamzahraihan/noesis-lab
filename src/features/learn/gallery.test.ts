@@ -104,9 +104,19 @@ describe('the project gallery', () => {
       for (const build of entry.builds) {
         const simulation = freshBench(build.board);
         simulation.loadFirmware(firmwareForBuild(build, boardOption(build.board).language));
+        if (build.execution === 'avr') continue;
         expect(simulation.firmwareError, `${entry.id}/${build.board}: ${simulation.firmwareError}`).toBeNull();
       }
     }
+    const lib = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
+    expect(lib.execution).toBe('avr');
+    const libSim = freshBench('uno');
+    libSim.loadFirmware(firmwareForBuild(lib, 'arduino-cpp'));
+    // Verbatim upstream tabs keep their capitalized quoted includes
+    // ("Button.h") while bench-legal filenames are lowercase, so the
+    // case-sensitive interpreter stops at the unresolved include before it
+    // ever reaches the classes. Either rejection proves the build is AVR-only.
+    expect(libSim.firmwareError ?? '').toMatch(/expected a type|not found/);
   });
 
   it('wires every build onto its board bench without throwing', () => {
