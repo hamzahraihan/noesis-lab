@@ -29,8 +29,9 @@ import type { Activity } from './ide/shell-state';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
 import { CenterTabs } from './ide/CenterTabs';
+import { BottomPanel } from './ide/BottomPanel';
 import { WokwiLibrary } from './WokwiLibrary';
-import { centerKeyForFile, type CenterKey } from './ide/shell-state';
+import { bottomTabForError, centerKeyForFile, type BottomKey, type CenterKey } from './ide/shell-state';
 import type {
   BoardId,
   BoardOption,
@@ -385,12 +386,13 @@ export default function Bench(props: BenchProps) {
   const [activity, setActivity] = useState<Activity>('components');
   const [activeCenter, setActiveCenter] = useState<CenterKey>('circuit');
   /*
-   * The right-hand rails — Inspector + Serial, and Scope + Logic + Bus +
-   * Multimeter — collapse together under one toggle, mirroring the parts rail
-   * on the left. They keep separate breakpoints (lg vs xl) but one piece of
-   * state, so there is a single "instruments" question rather than two.
+   * The right-hand rail holds the Inspector alone now that Serial, Scope,
+   * Logic, Bus and the Multimeter live in the bottom panel. One toggle, one
+   * question.
    */
   const [instrumentsOpen, setInstrumentsOpen] = useState(true);
+  const [bottomTab, setBottomTab] = useState<BottomKey>('serial');
+  const [bottomOpen, setBottomOpen] = useState(true);
   const [frameTick, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
@@ -696,6 +698,9 @@ export default function Bench(props: BenchProps) {
         case 'i':
           setInstrumentsOpen((open) => !open);
           break;
+        case 'j':
+          setBottomOpen((open) => !open);
+          break;
         case 'Delete':
         case 'Backspace':
           // Only a picked wire answers to this. With nothing picked the key is
@@ -994,6 +999,10 @@ export default function Bench(props: BenchProps) {
     }
     const message = simulation.firmwareError;
     if (message) {
+      // A real firmware verdict opens Problems, the way Run opens the tab an
+      // error names: the failure is visible without hunting for it.
+      setBottomTab(bottomTabForError(message));
+      setBottomOpen(true);
       const head = message.split(':')[0]?.trim() ?? '';
       if (head !== '' && head !== project.activeName && project.files.some((file) => file.name === head)) {
         const failed = head;
@@ -1575,48 +1584,6 @@ export default function Bench(props: BenchProps) {
               rotation={selected ? simulation.partRotation(selected.id) : 0}
             />
           </div>
-
-          <div className="h-40 shrink-0 border-t border-slate-800">
-            <SerialMonitor lines={simulation.serialLines()} />
-          </div>
-        </aside>
-
-        <aside
-          className={`shrink-0 overflow-y-auto border-l border-slate-800 bg-slate-900 ${
-            instrumentsOpen ? 'hidden w-72 xl:block' : 'hidden'
-          }`}
-        >
-          <ScopePanel
-            pins={probePins}
-            baud={baud}
-            probePinId={simulation.probePinId}
-            samples={simulation.probeTrace()}
-            logicVolts={simulation.mcu.board.logicVolts}
-            onProbe={(pinId: string | null) => simulation.setProbePin(pinId)}
-            onBaud={setBaud}
-          />
-          <LogicAnalyser
-            pins={probePins}
-            traces={simulation.analyserTraces()}
-            logicVolts={simulation.mcu.board.logicVolts}
-            onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
-            isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
-          />
-          <BusMonitor entries={simulation.busLines()} onClear={clearBusLog} />
-          <MultimeterPanel
-            pins={meterPins}
-            redPinId={meterRedPin}
-            blackPinId={meterBlackPin}
-            onRedPin={setMeterRedPin}
-            onBlackPin={setMeterBlackPin}
-            mode={simulation.meterMode}
-            reading={simulation.meterReading()}
-            redLabel={meterRedLabel ?? 'not clipped'}
-            blackLabel={meterBlackLabel ?? 'ground'}
-            rangeId={simulation.meterRangeId}
-            onMode={(mode) => simulation.setMeterMode(mode)}
-            onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
-          />
         </aside>
 
       {!instrumentsOpen && (
@@ -1644,6 +1611,57 @@ export default function Bench(props: BenchProps) {
       )}
 
       </div>
+
+      <BottomPanel
+        tab={bottomTab}
+        open={bottomOpen}
+        hasError={(simulation.firmwareError ?? shareError) !== null}
+        onTab={setBottomTab}
+        onToggle={() => setBottomOpen((open) => !open)}
+        serial={<SerialMonitor lines={simulation.serialLines()} />}
+        scope={
+          <ScopePanel
+            pins={probePins}
+            baud={baud}
+            probePinId={simulation.probePinId}
+            samples={simulation.probeTrace()}
+            logicVolts={simulation.mcu.board.logicVolts}
+            onProbe={(pinId: string | null) => simulation.setProbePin(pinId)}
+            onBaud={setBaud}
+          />
+        }
+        logic={
+          <LogicAnalyser
+            pins={probePins}
+            traces={simulation.analyserTraces()}
+            logicVolts={simulation.mcu.board.logicVolts}
+            onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
+            isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
+          />
+        }
+        bus={<BusMonitor entries={simulation.busLines()} onClear={clearBusLog} />}
+        meter={
+          <MultimeterPanel
+            pins={meterPins}
+            redPinId={meterRedPin}
+            blackPinId={meterBlackPin}
+            onRedPin={setMeterRedPin}
+            onBlackPin={setMeterBlackPin}
+            mode={simulation.meterMode}
+            reading={simulation.meterReading()}
+            redLabel={meterRedLabel ?? 'not clipped'}
+            blackLabel={meterBlackLabel ?? 'ground'}
+            rangeId={simulation.meterRangeId}
+            onMode={(mode) => simulation.setMeterMode(mode)}
+            onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
+          />
+        }
+        problems={
+          <p className="px-3 py-2 font-mono text-xs text-red-300">
+            {simulation.firmwareError ?? shareError ?? 'No problems.'}
+          </p>
+        }
+      />
 
       <StatusBar
         timeMs={simulation.engine.timeMs}
