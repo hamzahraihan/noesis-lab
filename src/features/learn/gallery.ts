@@ -23,6 +23,10 @@ import {
 
 export interface GalleryBuild {
   readonly board: BoardId;
+  /** Build flavor on one board (`'library'`); absent means the default build. */
+  readonly variant?: string;
+  /** Backend this build needs; default `'interpreter'`. */
+  readonly execution?: 'interpreter' | 'avr';
   /** Places the parts and runs the jumpers on that board's headers. */
   readonly setup: (simulation: Simulation) => void;
   /** The entry file's source (`main.ino` on Arduino builds). */
@@ -1372,10 +1376,12 @@ export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
 }
 
-export function buildFor(project: GalleryProject, board: BoardId): GalleryBuild | null {
-  return project.builds.find((build) => build.board === board) ?? null;
+export function buildFor(project: GalleryProject, board: BoardId, variant?: string): GalleryBuild | null {
+  const onBoard = project.builds.filter((build) => build.board === board);
+  if (variant === undefined) return onBoard[0] ?? null;
+  return onBoard.find((build) => build.variant === variant) ?? onBoard[0] ?? null;
 }
 
 export function boardsFor(project: GalleryProject): readonly BoardId[] {
-  return project.builds.map((build) => build.board);
+  return [...new Set(project.builds.map((build) => build.board))];
 }

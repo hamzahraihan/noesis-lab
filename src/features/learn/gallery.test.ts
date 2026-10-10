@@ -73,12 +73,19 @@ describe('the project gallery', () => {
 
   it('resolves builds per board and none where none exist', () => {
     for (const entry of GALLERY) {
-      expect(boardsFor(entry)).toEqual(entry.builds.map((build) => build.board));
+      expect(boardsFor(entry)).toEqual([...new Set(entry.builds.map((build) => build.board))]);
       for (const board of boardsFor(entry)) {
         expect(buildFor(entry, board)?.board).toBe(board);
       }
       expect(buildFor(entry, 'mega')).toBeNull();
     }
+    const alarm = galleryById('alarm-clock')!;
+    expect(buildFor(alarm, 'uno')?.sketch).toBe(alarm.builds[0]!.sketch);
+    expect(buildFor(alarm, 'uno', 'nope')).toBe(alarm.builds[0]!);
+    // Unknown variant falls back to the default build, never a blank bench —
+    // 'library' has no build yet, so it resolves to the default too. (Task 2
+    // strengthens this once the library build exists.)
+    expect(buildFor(alarm, 'uno', 'library')).not.toBeNull();
   });
 
   it('names only parts the catalogue stocks and says what running shows', () => {
