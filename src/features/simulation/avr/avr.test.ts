@@ -71,8 +71,26 @@ describe('avr timing core', () => {
     expect(settles).toBe(3); // carried 0.5 + 0.5 completes the ms
   });
 
-  it('clamps a single step to 40ms', () => {
+  it('settles every 4ms when nothing is probed, every ms when probed', () => {
     let settles = 0;
+    const hooks = (isProbed: boolean) => ({
+      mcu: new McuRuntime(arduinoUnoR3()),
+      nowMs: () => 0,
+      readPin: () => false,
+      onSettle: () => settles++,
+      isProbed: () => isProbed,
+      serial: { serialWrite: () => {} },
+      i2c: { writeByte: () => true, readByte: () => 0xff },
+    });
+    new AvrBackend(new Uint16Array(64), hooks(false)).step(8);
+    // A 20 ms multiplexed digit is still sampled five times over.
+    expect(settles).toBe(2);
+    settles = 0;
+    new AvrBackend(new Uint16Array(64), hooks(true)).step(2.5);
+    expect(settles).toBe(2);
+  });
+
+  it('clamps a single step to 40ms', () => {    let settles = 0;
     const backend = new AvrBackend(new Uint16Array(64), {
       mcu: new McuRuntime(arduinoUnoR3()),
       nowMs: () => 0,
