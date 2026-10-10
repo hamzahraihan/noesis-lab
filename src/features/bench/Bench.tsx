@@ -31,7 +31,7 @@ import { Simulation } from './simulation';
 import { CenterTabs } from './ide/CenterTabs';
 import { BottomPanel } from './ide/BottomPanel';
 import { WokwiLibrary } from './WokwiLibrary';
-import { bottomTabForError, centerKeyForFile, type BottomKey, type CenterKey } from './ide/shell-state';
+import { bottomTabForError, centerKeyForFile, nextActivity, repairCenterKey, resolveErrorCenter, type BottomKey, type CenterKey } from './ide/shell-state';
 import type {
   BoardId,
   BoardOption,
@@ -385,6 +385,17 @@ export default function Bench(props: BenchProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activity, setActivity] = useState<Activity>('components');
   const [activeCenter, setActiveCenter] = useState<CenterKey>('circuit');
+  /*
+   * The center key must name the canvas or a file that exists. File ops
+   * (sidebar remove/rename, example loads, language and board switches)
+   * replace `project.files` without touching the center, so a stale key would
+   * highlight no tab while the editor showed another file. Repairing against
+   * the list covers every mutation site at once; explicit selections above
+   * already set what they mean, and an unchanged key bails out of the update.
+   */
+  useEffect(() => {
+    setActiveCenter((current) => repairCenterKey(current, project.files, project.activeName));
+  }, [project]);
   /*
    * The right-hand rail holds the Inspector alone now that Serial, Scope,
    * Logic, Bus and the Multimeter live in the bottom panel. One toggle, one
@@ -1004,12 +1015,18 @@ export default function Bench(props: BenchProps) {
       setBottomTab(bottomTabForError(message));
       setBottomOpen(true);
       const head = message.split(':')[0]?.trim() ?? '';
-      if (head !== '' && head !== project.activeName && project.files.some((file) => file.name === head)) {
-        const failed = head;
-        setProject((previous) => ({ ...previous, activeName: failed }));
-        // The center follows the failure: the bar names the file, the editor
-        // shows it, so the operator never guesses which tab broke.
-        setActiveCenter(centerKeyForFile(failed));
+      // The center follows the failure even when it names the tab already
+      // open: Run is usually pressed from the canvas, and Problems alone never
+      // shows the line that broke.
+      const failed = resolveErrorCenter(
+        head,
+        project.files.map((file) => file.name),
+      );
+      if (failed !== null) {
+        setActiveCenter(failed);
+        if (failed !== project.activeName) {
+          setProject((previous) => ({ ...previous, activeName: failed }));
+        }
       }
     }
     simulation.start();
@@ -1355,7 +1372,16 @@ export default function Bench(props: BenchProps) {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <ActivityBar activity={activity} onActivity={setActivity} />
+        <ActivityBar
+          activity={activity}
+          onActivity={(next) => {
+            // Re-clicking the active icon collapses the sidebar; picking
+            // another icon switches to it and opens. Keyboard B still toggles.
+            const result = nextActivity(activity, next, sidebarOpen);
+            setActivity(result.activity);
+            setSidebarOpen(result.sidebarOpen);
+          }}
+        />
         {sidebarOpen && (
           <Sidebar
             activity={activity}

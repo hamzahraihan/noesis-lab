@@ -27,3 +27,32 @@ export function nextActivity(
   if (clicked === current) return { activity: current, sidebarOpen: !sidebarOpen };
   return { activity: clicked, sidebarOpen: true };
 }
+
+/**
+ * Which center tab a firmware error head belongs to, if any.
+ *
+ * Error heads name files (`helpers.h:12: ...`) but also libraries and boards
+ * (`Servo: ...`), which have no tab. Null means "not a file tab, stay put".
+ */
+export function resolveErrorCenter(head: string, fileNames: readonly string[]): CenterKey | null {
+  if (head === '' || !fileNames.includes(head)) return null;
+  return centerKeyForFile(head);
+}
+
+/**
+ * Repairs a center key against the current file list.
+ *
+ * File ops (sidebar remove/rename, example loads, language and board
+ * switches) replace `project.files` without touching the center, so a key
+ * naming a deleted file would highlight no tab while the editor showed
+ * another file. Returns the key untouched when it still resolves.
+ */
+export function repairCenterKey(
+  active: CenterKey,
+  files: ReadonlyArray<{ name: string }>,
+  fallback: string,
+): CenterKey {
+  if (isCircuitKey(active)) return active;
+  if (files.some((file) => file.name === active)) return active;
+  return centerKeyForFile(fallback);
+}
