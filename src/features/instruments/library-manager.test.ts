@@ -4,8 +4,10 @@
 // the repo, established pattern).
 import { describe, expect, it } from 'vitest';
 import {
+  applyIndexInstall,
   badgeFor,
   buildRowLabel,
+  fetchIndexArchive,
   indexCategories,
   indexLicenseNote,
   searchPlaceholder,
@@ -81,5 +83,66 @@ describe('library manager uninstall', () => {
         toolchainHeaders: new Set(['Servo.h']),
       }),
     ).toEqual({ kind: 'toolchain' });
+  });
+});
+
+describe('library manager async install landing', () => {
+  const base = {
+    language: 'arduino-cpp',
+    activeName: 'main.ino',
+    files: [{ name: 'main.ino', content: '' }],
+    libraries: [{ name: 'Servo', source: 'index', version: '5.0.0' }],
+  } as const;
+
+  it('lands on the latest project so concurrent edits survive', () => {
+    // Install starts against `base`; while it awaits network+compile the
+    // user adds an unrelated declaration. Landing via the fresh project
+    // (projectRef.current in the panel) must keep that edit.
+    const latest = {
+      ...base,
+      libraries: [...base.libraries, { name: 'Other', source: 'provided' as const }],
+    };
+    const landed = applyIndexInstall(latest, 'SevSeg', '3.2.0');
+    expect(landed.libraries).toEqual([
+      { name: 'Servo', source: 'index', version: '5.0.0' },
+      { name: 'Other', source: 'provided' },
+      { name: 'SevSeg', source: 'index', version: '3.2.0' },
+    ]);
+    // Untouched fields carry over byte-identical.
+    expect(landed.files).toBe(latest.files);
+  });
+
+  it('re-pins same-name rows instead of duplicating', () => {
+    const landed = applyIndexInstall({ ...base, libraries: [...base.libraries] }, 'Servo', '5.0.1');
+    expect(landed.libraries).toEqual([{ name: 'Servo', source: 'index', version: '5.0.1' }]);
+  });
+});
+
+describe('library manager archive fetch', () => {
+  it('passes the abort signal into the fetch init', async () => {
+    const seen: { init: { signal: AbortSignal } | null } = { init: null };
+    const controller = new AbortController();
+    const bytes = await fetchIndexArchive(
+      'http://example.invalid/lib.zip',
+      (async (url: string, init: { signal: AbortSignal }) => {
+        seen.init = init;
+        expect(url).toBe('http://example.invalid/lib.zip');
+        return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([1, 2]).buffer as ArrayBuffer };
+      }),
+      controller.signal,
+    );
+    expect(seen.init?.signal).toBe(controller.signal);
+    expect(bytes).toEqual(new Uint8Array([1, 2]));
+  });
+
+  it('names HTTP failures with url and status', async () => {
+    const controller = new AbortController();
+    await expect(
+      fetchIndexArchive(
+        'http://example.invalid/missing.zip',
+        (async () => ({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) })),
+        controller.signal,
+      ),
+    ).rejects.toThrow('library fetch failed for http://example.invalid/missing.zip: 404');
   });
 });

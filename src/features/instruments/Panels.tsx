@@ -37,7 +37,9 @@ import {
 import { matchSlotFile, reasonFor, slotViewKey } from './library-ui';
 import {
   badgeFor,
+  applyIndexInstall,
   buildRowLabel,
+  fetchIndexArchive,
   indexCategories,
   indexLicenseNote,
   searchPlaceholder,
@@ -450,6 +452,15 @@ export function FirmwareEditor({
   const [pinnedVersion, setPinnedVersion] = useState<string | null>(null);
   const [installing, setInstalling] = useState<{ name: string; version: string } | null>(null);
   const installAbortRef = useRef<AbortController | null>(null);
+  /*
+   * Fresh project for the async install landing: `handleInstallIndex`
+   * awaits seconds of network+compile, so the `project` value it closed
+   * over is stale by land time. This ref tracks the latest render's
+   * project; the landing spreads `projectRef.current` (fresh declarations
+   * included) instead of the stale closure.
+   */
+  const projectRef = useRef(project);
+  projectRef.current = project;
   const [installedIndex, setInstalledIndex] = useState<
     ReadonlyMap<string, { version: string; headers: readonly string[] }>
   >(new Map());
@@ -731,9 +742,9 @@ export function FirmwareEditor({
       const backend = createProductionBackend();
       const fetchArchive = async (url: string): Promise<Uint8Array> => {
         if (controller.signal.aborted) throw new Error('install cancelled');
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
-        return new Uint8Array(await res.arrayBuffer());
+        // Signal wired into the transfer itself: cancel aborts a large
+        // download instead of waiting it out.
+        return fetchIndexArchive(url, fetch, controller.signal);
       };
       const cache = {
         get: (key: string) => backend.get(key),
@@ -757,10 +768,8 @@ export function FirmwareEditor({
       const headers = [...built.headers.keys()];
       setInstalledIndex((previous) => new Map(previous).set(name, { version, headers }));
       // Same-name rows replace, so reinstalls re-pin rather than duplicate.
-      onProjectChange({
-        ...project,
-        libraries: [...declarations.filter((entry) => entry.name !== name), { name, source: 'index', version }],
-      });
+      // Lands on projectRef.current (fresh), not the stale closed-over project.
+      onProjectChange(applyIndexInstall(projectRef.current, name, version));
       setNotice(null);
     } catch (cause) {
       reportHelperError(cause);
