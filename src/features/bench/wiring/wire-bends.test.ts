@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from '../simulation';
+import { Simulation } from '../simulations/simulation';
 import { routeWireViaCorners, type Point } from './wire-route';
 import { esp32DevKitV1 } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';

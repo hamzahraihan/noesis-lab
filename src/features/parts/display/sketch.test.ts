@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from '@/features/bench/simulations/simulation';
 import { BLINK_SKETCH } from '@/features/learn/examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '../breadboard';
 import { esp32DevKitV1 } from '../boards';

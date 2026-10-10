@@ -7,7 +7,7 @@
 // (`src/app/**`, `src/routes/**`). Bench.tsx pulls instruments/Panels into
 // monaco-editor, which crashes vitest node collection (Task 5 reviewer), so
 // the shell must never transitively enter this barrel.
-export { Simulation } from './simulation';
+export { Simulation } from './simulations/simulation';
 export {
   routeWire,
   routeWireCorners,

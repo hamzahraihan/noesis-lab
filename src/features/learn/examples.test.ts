@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from '@/features/bench/simulations/simulation';
 import { EXAMPLES, I2C_CLOCK_EXAMPLE, LCD_EXAMPLE, SERVO_EXAMPLE } from './examples';
 import { esp32DevKitV1 } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';

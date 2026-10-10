@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { arduinoUnoR3 } from '@/features/parts/boards';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from '@/features/bench/simulations/simulation';
 import { toSingleFileProject, type FirmwareProject } from '../firmware/project';
 import { fetchIndex } from './libraries/index';
 import { selectIndexRelease } from './libraries/index-build';

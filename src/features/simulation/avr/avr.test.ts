@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { McuRuntime } from '@/features/simulation/mcu';
 import { arduinoMega2560, arduinoUnoR3 } from '@/features/parts/boards';
 import { firmwareForBuild, galleryById } from '@/features/learn/gallery';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from '@/features/bench/simulations/simulation';
 import { UNO_GPIO_MAP, UNO_CLOCK_HZ, cyclesPerMs } from './backend';
 import { attachGpioBridge } from './gpio';
 import { AvrBackend } from './core';

@@ -40,7 +40,7 @@ import { FirmwareSyntaxError } from '@/features/simulation';
 import { validateLibraries, libraryDeclarations, projectSlots } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
-import { nextAutomaticWireColour, WIRE_COLOURS } from './wiring/wire-colours';
+import { nextAutomaticWireColour, WIRE_COLOURS } from '../wiring/wire-colours';
 
 import { GROUND } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds } from '@/features/parts';
@@ -49,8 +49,8 @@ import { pixelCount, type PixelColor } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import { Ili9341, type PanelRotation } from '@/features/parts';
-import { TileFetcher } from './utils/map-fetcher';
-import { TILE_SIZE, TileStore } from './utils/map-tiles';
+import { TileFetcher } from '../utils/map-fetcher';
+import { TILE_SIZE, TileStore } from '../utils/map-tiles';
 import type { MapPort, TftPort } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
@@ -72,7 +72,7 @@ import {
 } from '@/features/simulation';
 
 import { DynamicState } from '@/features/parts';
-import { routeWireViaCorners } from './wiring/wire-route';
+import { routeWireViaCorners } from '../wiring/wire-route';
 /** Longest slice of simulated time one rendered frame may cover. */
 const MAX_FRAME_MS = 40;
 /** Upper bound on generator steps per frame, so a runaway loop cannot hang. */

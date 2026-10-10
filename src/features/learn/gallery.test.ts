@@ -7,7 +7,7 @@ import { boardOption, type BoardId } from './boardRegistry';
 import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById } from './gallery';
 import { TIER2_MANIFEST } from '@/features/simulation';
 import { previewBench } from './exercise-preview-data';
-import { Simulation } from '@/features/bench/simulation';
+import { Simulation } from '@/features/bench/simulations/simulation';
 import { pushWokwiState } from '@/features/bench/wokwi/wokwi';
 import type { FootprintState } from '@/features/bench/wokwi/footprints';
 

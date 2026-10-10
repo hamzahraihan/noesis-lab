@@ -26,7 +26,7 @@ import { Workbench } from './Workbench';
 import { TopBar } from './ide/TopBar';
 import { ActivityBar } from './ide/ActivityBar';
 import type { FootprintState } from './wokwi/footprints';
-import { Simulation } from './simulation';
+import { Simulation } from './simulations/simulation';
 import { CenterTabs } from './ide/CenterTabs';
 import { BottomPanel } from './ide/BottomPanel';
 import { ResizeHandle } from './ide/ResizeHandle';
@@ -73,7 +73,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
 import { decodeShareToProject, encodeProjectToShare, isShareable } from './utils/share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './store/project-store';
-import { avrAvailableFor } from './avr-mode';
+import { avrAvailableFor } from './simulations/avr-mode';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
