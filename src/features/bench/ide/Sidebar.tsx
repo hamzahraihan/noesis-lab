@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { addFile, removeFile, renameFile, type FirmwareProject } from '@/features/simulation';
 import { Button } from '@/components';
-import type { Activity } from './shell-state';
+import type { Activity } from '../store/shell-state';
 
 export function Sidebar({
   activity,

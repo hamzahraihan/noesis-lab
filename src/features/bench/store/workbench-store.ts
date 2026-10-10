@@ -6,7 +6,7 @@
 // the view to direct patches, saving a line at every call site.
 import { create } from 'zustand';
 import type { Terminal } from '@/features/simulation';
-import type { Point } from './wiring/wire-route';
+import type { Point } from '../wiring/wire-route';
 
 export interface ViewBox {
   x: number;

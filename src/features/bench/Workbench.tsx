@@ -18,7 +18,7 @@ import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from '
 import { artworkBox } from './wokwi/wokwi';
 import { partTransform } from './wiring/part-transform';
 import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from './wiring/hit-test';
-import { useWorkbenchStore, type ViewBox } from './workbench-store';
+import { useWorkbenchStore, type ViewBox } from './store/workbench-store';
 
 /**
  * Name for the jumper that is only half drawn. It lives in a map of its own

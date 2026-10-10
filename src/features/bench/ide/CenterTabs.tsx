@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Component1Icon } from '@radix-ui/react-icons';
-import type { CenterKey } from './shell-state';
-import { isCircuitKey } from './shell-state';
+import type { CenterKey } from '../store/shell-state';
+import { isCircuitKey } from '../store/shell-state';
 
 export function CenterTabs({
   active,

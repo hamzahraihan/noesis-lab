@@ -31,8 +31,8 @@ import { CenterTabs } from './ide/CenterTabs';
 import { BottomPanel } from './ide/BottomPanel';
 import { ResizeHandle } from './ide/ResizeHandle';
 import { WokwiLibrary } from './wokwi/WokwiLibrary';
-import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from './ide/shell-state';
-import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from './ide/bench-store';
+import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from './store/shell-state';
+import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from './store/bench-store';
 import type {
   BoardId,
   BoardOption,
@@ -72,7 +72,7 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
 import { decodeShareToProject, encodeProjectToShare, isShareable } from './utils/share-codec';
-import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './project-store';
+import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './store/project-store';
 import { avrAvailableFor } from './avr-mode';
 
 

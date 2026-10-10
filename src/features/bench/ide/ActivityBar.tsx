@@ -1,5 +1,5 @@
 import { CodeIcon, CubeIcon, ReaderIcon } from '@radix-ui/react-icons';
-import type { Activity } from './shell-state';
+import type { Activity } from '../store/shell-state';
 
 const ITEMS: ReadonlyArray<{ id: Activity; label: string; title: string; Icon: typeof CodeIcon }> = [
   { id: 'files', label: 'Files', title: 'Explorer — firmware files', Icon: CodeIcon },

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { CaretRightIcon, CrossCircledIcon } from '@radix-ui/react-icons';
-import type { BottomKey } from './shell-state';
+import type { BottomKey } from '../store/shell-state';
 
 const TABS: ReadonlyArray<{ id: BottomKey; label: string }> = [
   { id: 'serial', label: 'Serial' },

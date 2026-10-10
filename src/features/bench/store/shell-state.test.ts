@@ -1,4 +1,4 @@
-// src/features/bench/ide/shell-state.test.ts
+// src/features/bench/store/shell-state.test.ts
 import { describe, expect, it } from 'vitest';
 import { bottomTabForError, centerKeyForFile, clampLayoutSizes, DEFAULT_LAYOUT, isCircuitKey, loadLayoutSizes, nextActivity, repairCenterKey, resolveErrorCenter, saveLayoutSizes } from './shell-state';
 

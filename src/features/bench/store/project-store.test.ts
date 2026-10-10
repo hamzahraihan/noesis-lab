@@ -1,4 +1,4 @@
-// src/features/bench/project-store.test.ts
+// src/features/bench/store/project-store.test.ts
 import { describe, expect, it } from 'vitest';
 import {
   benchProjectKey,
