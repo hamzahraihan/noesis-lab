@@ -110,6 +110,20 @@ export class McuRuntime {
   private readonly configurations = new Map<string, PinConfiguration>();
   /** Simulated time each pin's PWM phase was last restarted at. */
   private readonly pwmEpochMs = new Map<string, number>();
+  /**
+   * Bumped on every pin-intent mutation, so the solver can tell a redundant
+   * re-solve (same intents, same instant) from one that must run.
+   *
+   * Guarded by equality: a write that changes nothing (the AVR bridge syncs
+   * all twenty GPIOs on every port change) must not count as a mutation, or
+   * the dedupe never hits.
+   */
+  private mutationCount = 0;
+
+  /** Mutations so far; compared by the engine against the last solve. */
+  get revision(): number {
+    return this.mutationCount;
+  }
 
   constructor(definition: PartDefinition) {
     if (definition.component.kind !== 'mcu') {
@@ -181,11 +195,14 @@ export class McuRuntime {
     if (direction === 'output' && pin.canDrive === false) return;
 
     const existing = this.configurations.get(pinId);
-    this.configurations.set(pinId, {
+    const next: PinConfiguration = {
       direction,
       pwm: direction === 'output' ? (existing?.pwm ?? false) : false,
       duty: direction === 'output' ? (existing?.duty ?? 0) : 0,
-    });
+    };
+    if (existing?.direction === next.direction && existing.pwm === next.pwm && existing.duty === next.duty) return;
+    this.configurations.set(pinId, next);
+    this.mutationCount++;
   }
 
   writeDigital(gpio: number, high: boolean, timeMs: number): void {
@@ -199,10 +216,14 @@ export class McuRuntime {
     if (existing?.direction === 'output' && existing.pwm) {
       // Writing HIGH/LOW to a PWM pin overrides the duty outright, which is
       // what the real PWM peripheral does when the duty register is assigned.
+      if (existing.duty === (high ? 1 : 0)) return;
       this.configurations.set(pinId, { direction: 'output', pwm: false, duty: high ? 1 : 0 });
+      this.mutationCount++;
       return;
     }
+    if (existing?.direction === 'output' && !existing.pwm && existing.duty === (high ? 1 : 0)) return;
     this.configurations.set(pinId, { direction: 'output', pwm: false, duty: high ? 1 : 0 });
+    this.mutationCount++;
     if (existing?.pwm) this.pwmEpochMs.set(pinId, timeMs);
   }
 
@@ -216,11 +237,15 @@ export class McuRuntime {
 
     const clamped = Math.min(255, Math.max(0, value));
     const wasPwm = this.configurations.get(pinId)?.pwm ?? false;
+    const duty = clamped / 255;
+    const existing = this.configurations.get(pinId);
+    if (existing?.direction === 'output' && existing.pwm && existing.duty === duty) return;
     this.configurations.set(pinId, {
       direction: 'output',
       pwm: true,
-      duty: clamped / 255,
+      duty,
     });
+    this.mutationCount++;
     // Restart the phase on the rising edge of PWM so a fresh duty does not
     // inherit the middle of the previous period.
     if (!wasPwm) this.pwmEpochMs.set(pinId, timeMs);
@@ -247,5 +272,6 @@ export class McuRuntime {
   reset(): void {
     this.configurations.clear();
     this.pwmEpochMs.clear();
+    this.mutationCount++;
   }
 }
