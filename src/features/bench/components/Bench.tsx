@@ -237,7 +237,7 @@ export interface BenchProps {
   readonly exerciseBoard: (exercise: Exercise) => BoardId;
   readonly exerciseById: (id: string) => Exercise | null;
   readonly exerciseLanguage: (exercise: Exercise) => FirmwareLanguage;
-  readonly buildFor: (project: GalleryProject, board: BoardId) => GalleryBuild | null;
+  readonly buildFor: (project: GalleryProject, board: BoardId, variant?: string) => GalleryBuild | null;
   readonly firmwareForBuild: (
     build: GalleryBuild,
     language: FirmwareLanguage,
@@ -310,9 +310,10 @@ export default function Bench(props: BenchProps) {
    * means one thing.
    */
   const requestedProject = search.get('project');
+  const requestedVariant = search.get('variant');
   const foundProject = requestedProject === null ? null : galleryById(requestedProject);
   const projectBuild =
-    exercise === null && foundProject !== null ? buildFor(foundProject, boardId) : null;
+    exercise === null && foundProject !== null ? buildFor(foundProject, boardId, requestedVariant ?? undefined) : null;
 
   /*
    * The firmware project: every tab, the language they are written in, and
@@ -403,7 +404,7 @@ export default function Bench(props: BenchProps) {
    * disables with its reason everywhere else, and switching boards drops
    * back to the interpreter, so a Mega can never inherit the Uno's mode.
    */
-  const [avrMode, setAvrMode] = useState(false);
+  const [avrMode, setAvrMode] = useState(projectBuild?.execution === 'avr');
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
   /* Guards the progress flag when a second Run supersedes the first. */

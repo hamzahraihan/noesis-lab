@@ -140,6 +140,18 @@ export function ProjectPage() {
                     Open on bench
                     <ArrowRightIcon className="icon-sm" aria-hidden="true" />
                   </Link>
+                  {entry.builds
+                    .filter((b) => b.board === project.board && b.variant !== undefined)
+                    .map((b) => (
+                      <Link
+                        key={b.variant}
+                        to={`/bench/${project.board}?project=${entry.id}&variant=${b.variant}`}
+                        className="inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-sky-400"
+                      >
+                        Open {b.variant} build (AVR)
+                        <ArrowRightIcon className="icon-sm" aria-hidden="true" />
+                      </Link>
+                    ))}
                 </span>
               </li>
             ))}
