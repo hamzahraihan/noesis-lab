@@ -7,24 +7,39 @@
  */
 
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
+  buildIndexObjects,
+  compileToolchainUnit,
+  createProductionBackend,
   CURATED_LIBRARIES,
   ENTRY_BY_LANGUAGE,
+  fetchIndex,
   libraryDeclarations,
   MAX_FILE_BYTES,
   projectSlots,
+  refreshIndex,
   removeFile,
   renameFile,
+  searchIndex,
+  selectIndexRelease,
   TIER2_MANIFEST,
   updateFileContent,
   validateLibraries,
   validateSlotPath,
+  type IndexLibrary,
   type LibrarySlot,
 } from '@/features/simulation';
 import { matchSlotFile, reasonFor, slotViewKey } from './library-ui';
+import {
+  badgeFor,
+  buildRowLabel,
+  indexCategories,
+  indexLicenseNote,
+  searchPlaceholder,
+} from './library-manager';
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
@@ -46,6 +61,7 @@ import {
 import {
   Button,
   CardTitle,
+  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -396,7 +412,6 @@ export function FirmwareEditor({
    */
   const slots = projectSlots(project);
   const declarations = libraryDeclarations(project);
-  const libraryProblems = validateLibraries(project, { slots });
   const providedCatalog: readonly { readonly name: string; readonly tier: 'bundled' | 'fetch' }[] = [
     ...CURATED_LIBRARIES.map((lib) => ({ name: lib.name, tier: 'bundled' as const })),
     ...TIER2_MANIFEST.map((lib) => ({ name: lib.name, tier: 'fetch' as const })),
@@ -415,6 +430,27 @@ export function FirmwareEditor({
   /* Which custom slot (and file) the slot editor shows; null keeps the fallbacks below. */
   const [slotId, setSlotId] = useState<string | null>(null);
   const [slotPath, setSlotPath] = useState<string | null>(null);
+
+  /*
+   * Library Manager browse + install state. The index loads lazily on first
+   * Browse open — the manager never fetches unless opened — and installs pin
+   * their version on the declaration while the verified build's headers feed
+   * validation and resolution for the session (Task 5 owns persistence; the
+   * IDB object cache itself already outlives it).
+   */
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [indexLibs, setIndexLibs] = useState<readonly IndexLibrary[] | null>(null);
+  const [indexLoading, setIndexLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [category, setCategory] = useState('all');
+  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [pinnedVersion, setPinnedVersion] = useState<string | null>(null);
+  const [installing, setInstalling] = useState<{ name: string; version: string } | null>(null);
+  const installAbortRef = useRef<AbortController | null>(null);
+  const [installedIndex, setInstalledIndex] = useState<
+    ReadonlyMap<string, { version: string; headers: readonly string[] }>
+  >(new Map());
 
   /*
    * One Monaco instance shows every tab, so each tab's cursor and scroll live
@@ -549,6 +585,178 @@ export function FirmwareEditor({
       reportHelperError(cause);
     }
   };
+
+  /*
+   * Installed index builds for validation: name → headers from the verified
+   * build, the `indexInstalled` shape Task 3 added. Declared-but-unbuilt
+   * index entries stay unknown, greyed with the validation reason below.
+   */
+  const indexInstalled = useMemo(() => {
+    const map = new Map<string, { headers: readonly string[] }>();
+    for (const [name, entry] of installedIndex) map.set(name, { headers: entry.headers });
+    return map;
+  }, [installedIndex]);
+  const libraryProblems = validateLibraries(project, { slots, indexInstalled });
+
+  /* Debounced browse input: the index holds tens of thousands of rows, so typing filters on a delay. */
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  /*
+   * Lazy index load on first Browse open. A fresh cache serves immediately
+   * with zero fetches; the background refresh is an explicit refreshIndex()
+   * call (Task 1 contract), landing only while the browse is still open.
+   */
+  useEffect(() => {
+    if (!browseOpen || indexLibs !== null || indexLoading) return;
+    let cancelled = false;
+    setIndexLoading(true);
+    const store = createProductionBackend();
+    fetchIndex({ store })
+      .then((libs) => {
+        if (cancelled) return;
+        setIndexLibs(libs);
+        setIndexLoading(false);
+        void refreshIndex({ store })
+          .then((fresh) => {
+            if (!cancelled) setIndexLibs(fresh);
+          })
+          .catch(() => {
+            // Stale rows stay; the next open retries the refresh.
+          });
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        setIndexLoading(false);
+        reportHelperError(cause);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [browseOpen, indexLibs, indexLoading]);
+
+  const categories = useMemo(
+    () => (indexLibs === null ? [] : indexCategories(indexLibs)),
+    [indexLibs],
+  );
+  const browseResults = useMemo(
+    () =>
+      indexLibs === null
+        ? []
+        : searchIndex(indexLibs, debouncedQuery.trim(), category === 'all' ? undefined : { category }),
+    [indexLibs, debouncedQuery, category],
+  );
+  const selectedLib =
+    selectedName === null ? null : (indexLibs?.find((lib) => lib.name === selectedName) ?? null);
+  const selectedLatest = selectedLib === null ? null : (selectIndexRelease(selectedLib)?.version ?? null);
+  const effectivePin = pinnedVersion ?? selectedLatest;
+
+  /** Declared index version for a name, else null (browse rows then badge 'install'). */
+  const installedVersionOf = (name: string): string | null => {
+    const declared = declarations.find((entry) => entry.name === name && entry.source === 'index');
+    return declared?.version ?? null;
+  };
+
+  /** Latest index version for a name, else null when the index is unloaded or releaseless. */
+  const latestVersionOf = (name: string): string | null => {
+    const lib = indexLibs?.find((candidate) => candidate.name === name) ?? null;
+    if (lib === null) return null;
+    return selectIndexRelease(lib)?.version ?? null;
+  };
+
+  /*
+   * Pinned index install through the Tier-2 pipeline, through the same
+   * notice pattern as the tab helpers: progress reads like the compile
+   * progress in the bench header, and a cancelled install lands 'install
+   * cancelled' and stays undeclared, the way a cancelled compile stays
+   * stopped. The version is pinned on the declaration; the verified build's
+   * headers join the session's installed map for validation.
+   */
+  const handleInstallIndex = async (name: string, version: string) => {
+    const lib = indexLibs?.find((candidate) => candidate.name === name) ?? null;
+    const release = lib === null ? null : selectIndexRelease(lib, version);
+    if (release === null) {
+      // Requested version absent from the index: name it, never silently install latest.
+      reportHelperError(`<${name}>: version ${version} is not in the index`);
+      return;
+    }
+    if (installing !== null) {
+      reportHelperError(`<${name}>: install already in progress`);
+      return;
+    }
+    const controller = new AbortController();
+    installAbortRef.current = controller;
+    setInstalling({ name, version });
+    setNotice(null);
+    try {
+      const backend = createProductionBackend();
+      const built = await buildIndexObjects(
+        { name, release },
+        {
+          fetch: async (url: string) => {
+            if (controller.signal.aborted) throw new Error('install cancelled');
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
+            return new Uint8Array(await res.arrayBuffer());
+          },
+          cache: {
+            get: (key: string) => backend.get(key),
+            put: (key: string, value: Uint8Array) => backend.put(key, value),
+          },
+          compileUnit: (source: string, headers: ReadonlyMap<string, string>) => {
+            if (controller.signal.aborted) return Promise.reject(new Error('install cancelled'));
+            // Same two-stage cc1plus→as unit build Tier-2 installs use; the
+            // toolchain assets load over plain fetch here because the browser
+            // UI thread carries no FetchCache shim (cf. client.ts, in-worker only).
+            return compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers });
+          },
+        },
+      );
+      if (controller.signal.aborted) throw new Error('install cancelled');
+      const headers = [...built.headers.keys()];
+      setInstalledIndex((previous) => new Map(previous).set(name, { version, headers }));
+      // Same-name rows replace, so reinstalls re-pin rather than duplicate.
+      onProjectChange({
+        ...project,
+        libraries: [...declarations.filter((entry) => entry.name !== name), { name, source: 'index', version }],
+      });
+      setNotice(null);
+    } catch (cause) {
+      reportHelperError(cause);
+    } finally {
+      if (installAbortRef.current === controller) {
+        installAbortRef.current = null;
+        setInstalling(null);
+      }
+    }
+  };
+
+  const handleCancelInstall = () => {
+    installAbortRef.current?.abort();
+  };
+
+  const handleUninstallIndex = (name: string) => {
+    // Uninstall drops the declaration while the cached objects stay shared
+    // in IDB — they are simply never referenced again.
+    setInstalledIndex((previous) => {
+      if (!previous.has(name)) return previous;
+      const next = new Map(previous);
+      next.delete(name);
+      return next;
+    });
+    handleUndeclare(name);
+  };
+
+  const installedIndexEntries = declarations.filter((entry) => entry.source === 'index');
+  const indexFootnote = indexLicenseNote(
+    installedIndexEntries.map((entry) => ({
+      name: entry.name,
+      version: entry.version ?? installedIndex.get(entry.name)?.version ?? 'unknown',
+      // No license field: the index advertises none, so no terms are claimed.
+    })),
+  );
 
   /*
    * Library declarations and custom slots, through the same notice pattern as
@@ -935,6 +1143,197 @@ export function FirmwareEditor({
             </button>
             {libsOpen && (
               <div className="max-h-96 overflow-y-auto px-3 pb-3">
+                {/*
+                 * Library Manager browse: lazy index search (debounced input,
+                 * category filter, 50-row pages from the search cap), detail,
+                 * and pinned installs. The index loads on first open only.
+                 */}
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">
+                    Index
+                  </span>
+                  <span className="flex-1" />
+                  <Button
+                    type="button"
+                    onClick={() => setBrowseOpen((open) => !open)}
+                    variant="secondary"
+                    size="sm"
+                    aria-expanded={browseOpen}
+                    title="Browse the Arduino library index"
+                  >
+                    {browseOpen ? 'Close browse' : 'Browse…'}
+                  </Button>
+                </div>
+                {browseOpen && (
+                  <div className="mt-1 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="search"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder={searchPlaceholder}
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-label="Search libraries"
+                        className="h-7 text-xs"
+                      />
+                      <label className="flex shrink-0 items-center gap-1.5">
+                        <span className="sr-only">Category filter</span>
+                        <Select value={category} onValueChange={setCategory}>
+                          <SelectTrigger className="h-7 text-xs" aria-label="Category filter">
+                            <SelectValue placeholder="All categories" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All categories</SelectItem>
+                            {categories.map((name) => (
+                              <SelectItem key={name} value={name}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    </div>
+                    {indexLoading ? (
+                      <p className="py-1 text-xs text-slate-600" role="status">
+                        Loading the library index…
+                      </p>
+                    ) : indexLibs === null ? (
+                      <p className="py-1 text-xs text-slate-600">
+                        The index loads when Browse opens, and never before.
+                      </p>
+                    ) : browseResults.length === 0 ? (
+                      <p className="py-1 text-xs text-slate-600">
+                        No libraries match “{debouncedQuery.trim()}”.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[11px] text-slate-600">
+                          {browseResults.length} match{browseResults.length === 1 ? '' : 'es'}
+                          {browseResults.length >= 50 ? ' — first 50, refine the search' : ''}
+                        </p>
+                        <div className="flex flex-col gap-1">
+                          {browseResults.map((lib) => {
+                            const latest = selectIndexRelease(lib)?.version ?? null;
+                            const installed = installedVersionOf(lib.name);
+                            const selected = lib.name === selectedName;
+                            return (
+                              <div
+                                key={lib.name}
+                                className={`flex shrink-0 items-center gap-2 rounded-md text-xs ${
+                                  selected ? 'bg-slate-800 text-slate-100' : ''
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedName(lib.name);
+                                    setPinnedVersion(null);
+                                  }}
+                                  title={lib.sentence}
+                                  className="truncate rounded-md px-2 py-1 font-mono text-slate-200 transition-colors hover:text-slate-100"
+                                >
+                                  {lib.name}
+                                </button>
+                                <span className="truncate text-[11px] text-slate-500">{lib.sentence}</span>
+                                <span className="flex-1" />
+                                <span className="shrink-0 text-[11px] text-slate-500">
+                                  {latest === null ? 'no releases' : badgeFor({ installed, latest })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                    {selectedLib !== null && (
+                      <div className="rounded-md border border-slate-800 p-2">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-mono text-slate-100">{selectedLib.name}</span>
+                          <span className="flex-1" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedName(null);
+                              setPinnedVersion(null);
+                            }}
+                            aria-label={`Close ${selectedLib.name} details`}
+                            title="Close details"
+                            className="rounded-md px-1 py-0.5 text-slate-500 transition-colors hover:text-slate-100"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-400">{selectedLib.sentence}</p>
+                        <p className="text-[11px] text-slate-500">
+                          by {selectedLib.author} · {selectedLib.category} ·{' '}
+                          {selectedLib.architectures.join(', ')}
+                        </p>
+                        {/* No license line: the index advertises none, so none is claimed. */}
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <label className="flex items-center gap-1.5">
+                            <span className="sr-only">Version to install</span>
+                            <Select
+                              value={effectivePin ?? undefined}
+                              onValueChange={(next) => setPinnedVersion(next)}
+                            >
+                              <SelectTrigger className="h-7 text-xs" aria-label="Version to install">
+                                <SelectValue placeholder="Pick a version" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {selectedLib.versions.map((release) => (
+                                  <SelectItem key={release.version} value={release.version}>
+                                    {release.version}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </label>
+                          {installing !== null && installing.name === selectedLib.name ? (
+                            /*
+                             * Install progress reuses the compile progress +
+                             * cancel UX: quiet status text with an abort beside
+                             * it, in the same dressing as the bench header.
+                             */
+                            <span
+                              className="flex items-center gap-1.5 text-xs text-slate-400"
+                              role="status"
+                            >
+                              Installing {installing.name}@{installing.version}…
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={handleCancelInstall}
+                                title="Abort the in-flight install"
+                              >
+                                Cancel
+                              </Button>
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={effectivePin === null}
+                              onClick={() => {
+                                if (effectivePin !== null) void handleInstallIndex(selectedLib.name, effectivePin);
+                              }}
+                              title={
+                                effectivePin === null
+                                  ? 'No indexed releases to install'
+                                  : installedVersionOf(selectedLib.name) === null
+                                    ? `Install ${selectedLib.name}@${effectivePin}, pinned`
+                                    : `Rebuild ${selectedLib.name}@${effectivePin}`
+                              }
+                            >
+                              {installedVersionOf(selectedLib.name) === null ? 'Install' : 'Reinstall'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex flex-col gap-1">
                   {providedCatalog.map(({ name, tier }) => {
                     const declared = declarations.some(
@@ -1037,6 +1436,81 @@ export function FirmwareEditor({
                       );
                     })}
                 </div>
+
+                {/*
+                 * Installed index builds, one row per declaration in link
+                 * order: `Name@version ✓ cached` after a verified build.
+                 * Declared-but-unbuilt entries sit greyed with the validation
+                 * reason, the way unknown provided names do.
+                 */}
+                {installedIndexEntries.length > 0 && (
+                  <>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">
+                        Installed
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {installedIndexEntries.map((entry) => {
+                        const built = installedIndex.get(entry.name);
+                        const version = entry.version ?? built?.version ?? null;
+                        const latest = latestVersionOf(entry.name);
+                        return (
+                          <div
+                            key={entry.name}
+                            className={`flex items-center gap-2 text-xs ${
+                              built === undefined ? 'text-slate-500' : ''
+                            }`}
+                          >
+                            <span className="font-mono text-slate-200">
+                              {version === null ? entry.name : buildRowLabel(entry.name, version)}
+                            </span>
+                            {built === undefined ? (
+                              <span className="text-[11px]">
+                                {reasonFor(entry.name, libraryProblems) ?? 'unknown index library'}
+                              </span>
+                            ) : (
+                              latest !== null && (
+                                <span className="text-[11px] text-slate-500">
+                                  {badgeFor({ installed: built.version, latest })}
+                                </span>
+                              )
+                            )}
+                            <span className="flex-1" />
+                            {built !== undefined && version !== null && (
+                              <button
+                                type="button"
+                                onClick={() => void handleInstallIndex(entry.name, version)}
+                                aria-label={`Rebuild ${entry.name}`}
+                                title={`Rebuild ${entry.name}@${version}`}
+                                className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                              >
+                                Reinstall
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleUninstallIndex(entry.name)}
+                              aria-label={`Remove ${entry.name}`}
+                              title={`Remove ${entry.name}`}
+                              className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/*
+                     * Index license footnote: terms only ever come from
+                     * advertised text, so with nothing advertised there is no
+                     * line at all rather than a guess.
+                     */}
+                    {indexFootnote !== null && (
+                      <p className="mt-1 text-[11px] text-slate-500">{indexFootnote}</p>
+                    )}
+                  </>
+                )}
 
                 <div className="mt-2 flex items-center gap-2">
                   <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">

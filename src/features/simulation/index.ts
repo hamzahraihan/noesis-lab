@@ -25,3 +25,11 @@ export * from './avr/toolchain/client';
 export * from './avr/libraries/model';
 export * from './avr/libraries/provided';
 export * from './avr/libraries/resolve';
+// Task 4 consumes the index search/version/install names from instruments
+// (bare `@/features/simulation` — the boundary gate forbids deep imports
+// outside the owning feature). Cache/tools stay narrow named re-exports so
+// the FetchCache/SRI internals do not join the public surface.
+export * from './avr/libraries/index';
+export * from './avr/libraries/index-build';
+export { createProductionBackend } from './avr/toolchain/cache';
+export { compileToolchainUnit } from './avr/toolchain/tools';
