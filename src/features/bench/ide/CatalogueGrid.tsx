@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CATALOGUE_GROUPS, type CatalogueEntry } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
-import { matchCatalogue } from '../catalogue-filter';
+import { matchCatalogue } from '../utils/catalogue-filter';
 import {
   Input,
   Select,

@@ -71,7 +71,7 @@ import {
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
-import { decodeShareToProject, encodeProjectToShare, isShareable } from './share-codec';
+import { decodeShareToProject, encodeProjectToShare, isShareable } from './utils/share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from './project-store';
 import { avrAvailableFor } from './avr-mode';
 

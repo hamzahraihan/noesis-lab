@@ -3,7 +3,7 @@ import { Simulation } from './simulation';
 import { breadboardDefinition } from '@/features/parts';
 import { boardOption } from '@/features/learn';
 import { EXERCISES, exerciseById } from '@/features/learn';
-import { TILE_SIZE, TileStore, tileForLatLon, pixelInTile } from './map-tiles';
+import { TILE_SIZE, TileStore, tileForLatLon, pixelInTile } from './utils/map-tiles';
 import type { Ili9341 } from '@/features/parts';
 
 /**

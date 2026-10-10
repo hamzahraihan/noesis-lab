@@ -1,6 +1,6 @@
 // src/features/bench/project-store.ts
 import { validateProject, type FirmwareProject } from '@/features/simulation';
-import { CORRUPT_SHARE_NOTICE } from './share-codec';
+import { CORRUPT_SHARE_NOTICE } from './utils/share-codec';
 
 export const benchProjectKey = (boardId: string) => `noesis:bench:${boardId}:project`;
 

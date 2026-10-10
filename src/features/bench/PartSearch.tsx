@@ -18,7 +18,7 @@ import { PART_CATALOGUE, type CatalogueEntry } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import { Button, Input } from '@/components';
 import { PartPreview } from './PartPreview';
-import { matchCatalogue } from './catalogue-filter';
+import { matchCatalogue } from './utils/catalogue-filter';
 
 /**
  * The parts you reach for every time.
