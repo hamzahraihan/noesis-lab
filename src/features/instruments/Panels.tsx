@@ -7,7 +7,7 @@
  */
 
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
@@ -31,10 +31,10 @@ import {
   updateFileContent,
   validateLibraries,
   validateSlotPath,
-  type IndexLibrary,
   type LibrarySlot,
 } from '@/features/simulation';
 import { matchSlotFile, reasonFor, slotViewKey } from './library-ui';
+import { useFirmwareEditorStore } from './editor-store';
 import {
   badgeFor,
   applyIndexInstall,
@@ -436,14 +436,15 @@ export function FirmwareEditor({
    * reads like any other firmware error. Cleared by the next successful op
    * or Run; `window.prompt` stays for name input.
    */
-  const [notice, setNotice] = useState<string | null>(null);
-
-  /* Whether the Libraries popup is open over the editor. */
-  const [libsPopupOpen, setLibsPopupOpen] = useState(false);
+  const {
+    notice, setNotice, libsPopupOpen, setLibsPopupOpen, slotId, slotPath, pickSlotFile,
+    browseOpen, indexLibs, setIndexLibs, indexLoading, setIndexLoading,
+    query, setQuery, debouncedQuery, setDebouncedQuery, category, setCategory,
+    selectedName, setSelectedName, pinnedVersion, setPinnedVersion,
+    installing, setInstalling, installedIndex, mergeInstalled, setInstalled, removeInstalled,
+    toggleLibsPopup, toggleBrowse,
+  } = useFirmwareEditorStore();
   const libsPopupRef = useRef<HTMLDivElement>(null);
-  /* Which custom slot (and file) the slot editor shows; null keeps the fallbacks below. */
-  const [slotId, setSlotId] = useState<string | null>(null);
-  const [slotPath, setSlotPath] = useState<string | null>(null);
 
   /*
    * Library Manager browse + install state. The index loads lazily on first
@@ -452,15 +453,6 @@ export function FirmwareEditor({
    * validation and resolution for the session (Task 5 owns persistence; the
    * IDB object cache itself already outlives it).
    */
-  const [browseOpen, setBrowseOpen] = useState(false);
-  const [indexLibs, setIndexLibs] = useState<readonly IndexLibrary[] | null>(null);
-  const [indexLoading, setIndexLoading] = useState(false);
-  const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [category, setCategory] = useState('all');
-  const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [pinnedVersion, setPinnedVersion] = useState<string | null>(null);
-  const [installing, setInstalling] = useState<{ name: string; version: string } | null>(null);
   const installAbortRef = useRef<AbortController | null>(null);
   /*
    * Fresh project for the async install landing: `handleInstallIndex`
@@ -471,9 +463,6 @@ export function FirmwareEditor({
    */
   const projectRef = useRef(project);
   projectRef.current = project;
-  const [installedIndex, setInstalledIndex] = useState<
-    ReadonlyMap<string, { version: string; headers: readonly string[] }>
-  >(new Map());
 
   /*
    * One Monaco instance shows every tab, so each tab's cursor and scroll live
@@ -546,10 +535,8 @@ export function FirmwareEditor({
         // Dropped: the file still opens, which is what matters.
       }
     }
-    setSlotId(id);
-    setSlotPath(path);
+    pickSlotFile(id, path);
   };
-
   const selectFile = (name: string) => {
     const editor = editorRef.current;
     if (editor && active && name !== active.name) {
@@ -564,7 +551,7 @@ export function FirmwareEditor({
   };
 
   const reportHelperError = (cause: unknown) => {
-    setNotice(cause instanceof Error ? cause.message : String(cause));
+    useFirmwareEditorStore.getState().setNotice(cause instanceof Error ? cause.message : String(cause));
   };
 
   const handleAddFile = () => {
@@ -638,13 +625,7 @@ export function FirmwareEditor({
     void restoreInstalledIndex(wanted, createProductionBackend())
       .then((restored) => {
         if (cancelled || restored.size === 0) return;
-        setInstalledIndex((previous) => {
-          const next = new Map(previous);
-          for (const [name, entry] of restored) {
-            if (!next.has(name)) next.set(name, entry);
-          }
-          return next;
-        });
+        mergeInstalled(restored);
       })
       .catch(() => {
         // Stays grey with the validation reason; reinstall rebuilds.
@@ -652,13 +633,13 @@ export function FirmwareEditor({
     return () => {
       cancelled = true;
     };
-  }, [declarations, installedIndex]);
+  }, [declarations, installedIndex, mergeInstalled]);
 
   /* Debounced browse input: the index holds tens of thousands of rows, so typing filters on a delay. */
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 200);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, setDebouncedQuery]);
 
   /*
    * Lazy index load on first Browse open. A fresh cache serves immediately
@@ -691,7 +672,7 @@ export function FirmwareEditor({
     return () => {
       cancelled = true;
     };
-  }, [browseOpen, indexLibs, indexLoading]);
+  }, [browseOpen, indexLibs, indexLoading, setIndexLibs, setIndexLoading]);
 
   const categories = useMemo(
     () => (indexLibs === null ? [] : indexCategories(indexLibs)),
@@ -776,7 +757,7 @@ export function FirmwareEditor({
         );
       if (controller.signal.aborted) throw new Error('install cancelled');
       const headers = [...built.headers.keys()];
-      setInstalledIndex((previous) => new Map(previous).set(name, { version, headers }));
+      setInstalled(name, { version, headers });
       // Same-name rows replace, so reinstalls re-pin rather than duplicate.
       // Lands on projectRef.current (fresh), not the stale closed-over project.
       onProjectChange(applyIndexInstall(projectRef.current, name, version));
@@ -798,12 +779,7 @@ export function FirmwareEditor({
   const handleUninstallIndex = (name: string) => {
     // Uninstall drops the declaration while the cached objects stay shared
     // in IDB — they are simply never referenced again.
-    setInstalledIndex((previous) => {
-      if (!previous.has(name)) return previous;
-      const next = new Map(previous);
-      next.delete(name);
-      return next;
-    });
+    removeInstalled(name);
     handleUndeclare(name);
   };
 
@@ -855,21 +831,18 @@ export function FirmwareEditor({
         ? declarations
         : [...declarations, { name: declaration, source: 'custom' }],
     });
-    setSlotId(id);
-    setSlotPath(null);
+    pickSlotFile(id, null);
     setNotice(null);
   };
 
-  const handleRemoveSlot = (id: string) => {
-    const declaration = `custom:${id}`;
+  const handleRemoveSlot = (id: string) => {    const declaration = `custom:${id}`;
     onProjectChange({
       ...project,
       slots: slots.filter((slot) => slot.id !== id),
       libraries: declarations.filter((entry) => entry.name !== declaration),
     });
     if (slotId === id) {
-      setSlotId(null);
-      setSlotPath(null);
+      pickSlotFile(null, null);
     }
     setNotice(null);
   };
@@ -953,7 +926,7 @@ export function FirmwareEditor({
     if (slotId === id && (slotPath === path || slotPath === null)) {
       const slot = slots.find((candidate) => candidate.id === id);
       const rest = slot?.files.filter((file) => file.path !== path) ?? [];
-      setSlotPath(rest[0]?.path ?? null);
+      pickSlotFile(slotId, rest[0]?.path ?? null);
     }
     setNotice(null);
   };
@@ -994,8 +967,7 @@ export function FirmwareEditor({
   useEffect(() => {
     const target = matchSlotFile(displayError, slots);
     if (target !== null) {
-      setSlotId(target.slotId);
-      setSlotPath(target.path);
+      pickSlotFile(target.slotId, target.path);
       setLibsPopupOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1023,7 +995,7 @@ export function FirmwareEditor({
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKey);
     };
-  }, [libsPopupOpen]);
+  }, [libsPopupOpen, setLibsPopupOpen]);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
@@ -1105,7 +1077,7 @@ export function FirmwareEditor({
         <div data-libs-button>
           <Button
             type="button"
-            onClick={() => setLibsPopupOpen((open) => !open)}
+            onClick={() => toggleLibsPopup()}
             aria-expanded={libsPopupOpen}
             size="sm"
             variant="secondary"
@@ -1274,7 +1246,7 @@ export function FirmwareEditor({
                   <span className="flex-1" />
                   <Button
                     type="button"
-                    onClick={() => setBrowseOpen((open) => !open)}
+                    onClick={() => toggleBrowse()}
                     variant="secondary"
                     size="sm"
                     aria-expanded={browseOpen}

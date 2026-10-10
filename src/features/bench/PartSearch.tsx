@@ -18,6 +18,7 @@ import { PART_CATALOGUE, type CatalogueEntry } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import { Button, Input } from '@/components';
 import { PartPreview } from './PartPreview';
+import { matchCatalogue } from './catalogue-filter';
 
 /**
  * The parts you reach for every time.
@@ -54,17 +55,7 @@ export function PartSearch({
         ),
       };
     }
-    return {
-      searching: true,
-      // Name, the note explaining what the part is for, and the id all count,
-      // so "pull-up" and "100k" both find something.
-      results: PART_CATALOGUE.filter(
-        (entry) =>
-          entry.name.toLowerCase().includes(needle) ||
-          entry.note.toLowerCase().includes(needle) ||
-          entry.id.toLowerCase().includes(needle),
-      ),
-    };
+    return { searching: true, results: matchCatalogue(query) };
   }, [query]);
   return (
     <section className="flex min-h-0 flex-1 flex-col">

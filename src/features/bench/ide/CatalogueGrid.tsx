@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { CATALOGUE_GROUPS, PART_CATALOGUE, type CatalogueEntry } from '@/features/parts';
+import { CATALOGUE_GROUPS, type CatalogueEntry } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
+import { matchCatalogue } from '../catalogue-filter';
 import {
   Input,
   Select,
@@ -21,18 +22,7 @@ export function CatalogueGrid({
 }) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState('all');
-  const matches = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return PART_CATALOGUE.filter((entry) => {
-      if (group !== 'all' && entry.group !== group) return false;
-      if (!needle) return true;
-      return (
-        entry.name.toLowerCase().includes(needle) ||
-        entry.note.toLowerCase().includes(needle) ||
-        entry.id.toLowerCase().includes(needle)
-      );
-    });
-  }, [query, group]);
+  const matches = useMemo(() => matchCatalogue(query, group), [query, group]);
   const sections = useMemo(
     () =>
       CATALOGUE_GROUPS.map((heading) => ({

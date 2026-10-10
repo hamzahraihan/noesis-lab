@@ -10,14 +10,15 @@
  * land, which is the opposite of what this tool is for.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Bench, Terminal, Wire, WireEnd } from '@/features/simulation';
 import { PartFootprint, type FootprintState } from './footprints';
 import { HardwareDefs, SILKSCREEN_FONT } from './hardware';
-import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from './wire-route';
+import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from './wiring/wire-route';
 import { artworkBox } from './wokwi';
-import { partTransform } from './part-transform';
-import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from './hit-test';
+import { partTransform } from './wiring/part-transform';
+import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from './wiring/hit-test';
+import { useWorkbenchStore, type ViewBox } from './workbench-store';
 
 /**
  * Name for the jumper that is only half drawn. It lives in a map of its own
@@ -91,8 +92,6 @@ const MAX_WHEEL_ZOOM_STEP = 0.6;
  * pixels, lines (Firefox on some platforms) and whole pages.
  */
 const WHEEL_UNITS_PER_MODE = [1, 16, 400];
-/** Aspect assumed until the canvas has been measured. */
-const DEFAULT_ASPECT = 16 / 10;
 
 /**
  * Where a remove button sits from the thing it removes, in screen pixels.
@@ -246,11 +245,6 @@ function PinTag({
  * derived from the canvas shape, which is what keeps the view box and the
  * element rectangle in the same proportions.
  */
-interface ViewBox {
-  x: number;
-  y: number;
-  width: number;
-}
 type DragState =
   | { kind: 'pan'; startX: number; startY: number; originX: number; originY: number }
   | { kind: 'move'; partId: string; grabDx: number; grabDy: number }
@@ -312,39 +306,32 @@ export function Workbench({
   onTogglePressed,
 }: WorkbenchProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  /*
-   * The pin a jumper is being drawn from, or null when none is.
-   *
-   * Wiring needs no tool to be armed: a click on a pin starts a wire and a
-   * second click on a pin ends it. This is the only record that a wire is half
-   * drawn, so it is the only thing Escape has to clear to put the bench back.
-   */
-  const [wireAnchor, setWireAnchor] = useState<Terminal | null>(null);
-  /** Waypoints placed so far on the jumper being routed. */
-  const [wireBends, setWireBends] = useState<readonly Point[]>([]);
+  const wireAnchor = useWorkbenchStore((s) => s.wireAnchor);
+  const wireBends = useWorkbenchStore((s) => s.wireBends);
+  const cancelDraft = useWorkbenchStore((s) => s.cancelDraft);
+  const startDraft = useWorkbenchStore((s) => s.startDraft);
+  const pushBend = useWorkbenchStore((s) => s.pushBend);
 
   /*
-   * Escape drops a half-drawn jumper.
-   *
-   * Necessary rather than decorative now that wiring is always armed: with no
-   * tool to switch off, a click on a pin would otherwise leave the bench
-   * waiting for the far end with no way out short of completing the wire or
-   * reloading the page.
+   * Escape drops a half-drawn jumper. Wiring is always armed, so without this
+   * a stray pin click leaves the bench waiting for the far end with no way out.
    */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      setWireAnchor((anchor) => (anchor === null ? anchor : null));
-      setWireBends((bends) => (bends.length === 0 ? bends : []));
+      cancelDraft();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [cancelDraft]);
 
-  const [pointerMm, setPointerMm] = useState<{ x: number; y: number } | null>(null);
+  const setPointer = useWorkbenchStore((s) => s.setPointer);
+  const pointerMm = useWorkbenchStore((s) => s.pointerMm);
   const movedRef = useRef(false);
-  const [view, setView] = useState<ViewBox>({ x: -12, y: -10, width: 428 });
-  const [aspect, setAspect] = useState(DEFAULT_ASPECT);
+  const view = useWorkbenchStore((s) => s.view);
+  const setView = useWorkbenchStore((s) => s.setView);
+  const aspect = useWorkbenchStore((s) => s.aspect);
+  const setAspect = useWorkbenchStore((s) => s.setAspect);
   const dragRef = useRef<DragState | null>(null);
   /** Part id under the pointer at press time; see `onPointerDown`. */
   const pressedPartRef = useRef<string | null>(null);
@@ -397,7 +384,7 @@ export function Workbench({
     });
     observer.observe(svg);
     return () => observer.disconnect();
-  }, []);
+  }, [setAspect]);
 
   /** Converts a pointer event into world millimetres. */
   const toWorld = useCallback(
@@ -595,7 +582,7 @@ export function Workbench({
 
   const onPointerMove = (event: React.PointerEvent) => {
     const world = toWorld(event.clientX, event.clientY);
-    setPointerMm(world);
+    setPointer(world);
 
     const drag = dragRef.current;
     if (!drag) return;
@@ -622,7 +609,7 @@ export function Workbench({
       const rect = svg.getBoundingClientRect();
       const dx = ((event.clientX - drag.startX) / rect.width) * view.width;
       const dy = ((event.clientY - drag.startY) / rect.height) * viewHeight;
-      setView((current) => ({ ...current, x: drag.originX - dx, y: drag.originY - dy }));
+      setView({ ...view, x: drag.originX - dx, y: drag.originY - dy });
       return;
     }
     if (drag.kind === 'bend') {
@@ -780,24 +767,14 @@ export function Workbench({
 
     if (wireAnchor !== null) {
       if (!terminal) {
-        // Bare bench: a corner on the way.
-        setWireBends((bends) => [
-          ...bends,
-          {
-            // Snapped to the 2.54 mm grid so a hand-placed bend lands on a
-            // real hole pitch rather than a fraction off it.
-            x: Math.round(world.x / 2.54) * 2.54,
-            y: Math.round(world.y / 2.54) * 2.54,
-          },
-        ]);
+        pushBend({ x: Math.round(world.x / 2.54) * 2.54, y: Math.round(world.y / 2.54) * 2.54 });
         return;
       }
 
       // Clicking the pin the wire started from abandons it rather than
       // routing a zero-length jumper back to itself.
       if (terminal.id !== wireAnchor.id) onRouteWire(wireAnchor, terminal, wireBends);
-      setWireAnchor(null);
-      setWireBends([]);
+      cancelDraft();
       return;
     }
 
@@ -857,8 +834,7 @@ export function Workbench({
         onSelect(pressedPart.id);
         return;
       }
-      setWireAnchor(terminal);
-      setWireBends([]);
+      startDraft(terminal);
       return;
     }
 

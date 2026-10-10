@@ -15,8 +15,8 @@ export {
   routeWireViaCorners,
   roundedPath,
   wireLanes,
-} from './wire-route';
-export type { Point, RouteSpan } from './wire-route';
+} from './wiring/wire-route';
+export type { Point, RouteSpan } from './wiring/wire-route';
 export {
   artworkBox,
   pinFitError,
@@ -26,10 +26,10 @@ export {
   wokwiPartFor,
 } from './wokwi';
 export type { WokwiPart } from './wokwi';
-export { partTransform } from './part-transform';
+export { partTransform } from './wiring/part-transform';
 export { PartFootprint } from './footprints';
 export type { FootprintState } from './footprints';
 export { HardwareDefs } from './hardware';
 export { PartPreview } from './PartPreview';
-export { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wire-colours';
-export type { WireColour } from './wire-colours';
+export { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wiring/wire-colours';
+export type { WireColour } from './wiring/wire-colours';

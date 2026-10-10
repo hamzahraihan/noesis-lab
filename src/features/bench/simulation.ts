@@ -40,7 +40,7 @@ import { FirmwareSyntaxError } from '@/features/simulation';
 import { validateLibraries, libraryDeclarations, projectSlots } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
-import { nextAutomaticWireColour, WIRE_COLOURS } from './wire-colours';
+import { nextAutomaticWireColour, WIRE_COLOURS } from './wiring/wire-colours';
 
 import { GROUND } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds } from '@/features/parts';
@@ -72,7 +72,7 @@ import {
 } from '@/features/simulation';
 
 import { DynamicState } from '@/features/parts';
-import { routeWireViaCorners } from './wire-route';
+import { routeWireViaCorners } from './wiring/wire-route';
 /** Longest slice of simulated time one rendered frame may cover. */
 const MAX_FRAME_MS = 40;
 /** Upper bound on generator steps per frame, so a runaway loop cannot hang. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from '@/features/simulation';
-import { Simulation } from './simulation';
+import { Simulation } from '../simulation';
 import { esp32DevKitV1 } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';
 import {

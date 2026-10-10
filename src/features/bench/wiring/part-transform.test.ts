@@ -4,7 +4,7 @@ import type { PartDefinition, Rotation } from '@/features/parts';
 import { resistorDefinition, buttonDefinition, ledDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import { partTransform } from './part-transform';
-import { artworkBox } from './wokwi';
+import { artworkBox } from '../wokwi';
 
 /**
  * The canvas and the pin resolver agree about rotated parts.

@@ -25,14 +25,14 @@ import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
 import { TopBar } from './ide/TopBar';
 import { ActivityBar } from './ide/ActivityBar';
-import type { Activity } from './ide/shell-state';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
 import { CenterTabs } from './ide/CenterTabs';
 import { BottomPanel } from './ide/BottomPanel';
 import { ResizeHandle } from './ide/ResizeHandle';
 import { WokwiLibrary } from './WokwiLibrary';
-import { bottomTabForError, centerKeyForFile, clampLayoutSizes, DEFAULT_LAYOUT, loadLayoutSizes, nextActivity, repairCenterKey, resolveErrorCenter, saveLayoutSizes, type BottomKey, type CenterKey, type LayoutSizes } from './ide/shell-state';
+import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from './ide/shell-state';
+import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from './ide/bench-store';
 import type {
   BoardId,
   BoardOption,
@@ -50,7 +50,7 @@ import {
   SerialMonitor,
   StatusBar,
 } from '@/features/instruments';
-import { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wire-colours';
+import { WIRE_COLOURS } from './wiring/wire-colours';
 import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
 import { MultimeterPanel } from '@/features/instruments';
@@ -82,24 +82,6 @@ const PALETTE_FLIP_X = 200;
 const PALETTE_FLIP_Y = 60;
 /** Where the breadboard sits, clear of the board plugged in beside it. */
 const BREADBOARD_ORIGIN_X = 230;
-
-/** Reads one key without throwing (private-mode localStorage throws). */
-function readLayout(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-/** Writes one key without throwing; failures keep sizes session-only. */
-function writeLayout(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Session-only: the debounced save retries next change.
-  }
-}
 
 /** Column the starter LED circuit is wired onto. */
 const SIGNAL_COLUMN = 20;
@@ -393,59 +375,28 @@ export default function Bench(props: BenchProps) {
 
   /*
    * Autosave: every project change lands in this board's localStorage slot
-   * ~500 ms later, so a reload reopens the same tabs. Loading an example,
-   * exercise, or gallery build replaces the project, which flows through here
-   * and overwrites that board's save.
+   * ~500 ms later, so a reload reopens the same tabs.
    */
   useEffect(() => {
     const timer = setTimeout(() => saveBenchProject(boardId, project), 500);
     return () => clearTimeout(timer);
   }, [boardId, project]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activity, setActivity] = useState<Activity>('components');
-  const [activeCenter, setActiveCenter] = useState<CenterKey>('circuit');
-  /*
-   * The center key must name the canvas or a file that exists. File ops
-   * (sidebar remove/rename, example loads, language and board switches)
-   * replace `project.files` without touching the center, so a stale key would
-   * highlight no tab while the editor showed another file. Repairing against
-   * the list covers every mutation site at once; explicit selections above
-   * already set what they mean, and an unchanged key bails out of the update.
-   */
+  const {
+    sidebarOpen, activity, activeCenter, instrumentsOpen, bottomTab, bottomOpen,
+    selectedId, selectedWireId, paletteFor, wireColour, guideOpen, projectBannerOpen,
+    baud, meterRedPin, meterBlackPin, pickActivity, showActivity, setActiveCenter,
+    repairCenter, setBottomTab, setBottomOpen, toggleBottom, setInstrumentsOpen,
+    toggleInstruments, toggleSidebar, selectPart, selectWire, openPalette, closePalette,
+    clearSelection, clearWire, setWireColour, setGuideOpen, setProjectBannerOpen,
+    setBaud, setMeterRedPin, setMeterBlackPin,
+  } = useBenchShellStore();
+  const { layout, nudge: nudgeLayout, resetKey: resetLayoutKey } = useLayoutStore();
+  /* The center key must name the canvas or a live file; repaired centrally. */
   useEffect(() => {
-    setActiveCenter((current) => repairCenterKey(current, project.files, project.activeName));
-  }, [project]);
-  /*
-   * The right-hand rail holds the Inspector alone now that Serial, Scope,
-   * Logic, Bus and the Multimeter live in the bottom panel. One toggle, one
-   * question.
-   */
-  const [instrumentsOpen, setInstrumentsOpen] = useState(true);
-  const [bottomTab, setBottomTab] = useState<BottomKey>('serial');
-  const [bottomOpen, setBottomOpen] = useState(true);
-  /*
-   * Adjustable panel sizes, persisted across visits. Dragging a divider nudges
-   * one dimension through the clamp; the save is debounced so a drag writes
-   * once, not per pixel.
-   */
-  const [layout, setLayout] = useState<LayoutSizes>(() =>
-    clampLayoutSizes(loadLayoutSizes(readLayout), window.innerHeight),
-  );
-  useEffect(() => {
-    const timer = setTimeout(() => saveLayoutSizes(writeLayout, layout), 300);
-    return () => clearTimeout(timer);
-  }, [layout]);
-  const nudgeLayout = (key: keyof LayoutSizes, delta: number) => {
-    setLayout((prev) =>
-      clampLayoutSizes({ ...prev, [key]: prev[key] + delta }, window.innerHeight),
-    );
-  };
-  const resetLayoutKey = (key: keyof LayoutSizes) => {
-    setLayout((prev) => ({ ...prev, [key]: DEFAULT_LAYOUT[key] }));
-  };
+    repairCenter(project.files, project.activeName);
+  }, [project, repairCenter]);
+  useEffect(() => persistLayoutSoon(layout), [layout]);
   const [frameTick, forceRender] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
   const [exampleId, setExampleId] = useState<string | null>(null);
   /*
    * Which backend the next Run executes on. Uno-only: the AVR option
@@ -481,39 +432,16 @@ export default function Bench(props: BenchProps) {
     setAvrMode(false);
   }, [boardId, starterFor]);
 
-  /*
-   * The colour the next jumper will be drawn in.
-   *
-   * Held here rather than inside the canvas because the picker lives in the
-   * header and the wire is placed on the canvas: one owner means the swatch
-   * shown and the colour applied cannot drift apart.
-   */
-  const [wireColour, setWireColour] = useState(DEFAULT_WIRE_COLOUR);
-
-  /*
-   * The exercise guide: popup instructions for the bench the learner just
-   * opened through `?ex=:id`.
-   *
-   * Auto-opens on arrival unless dismissed for this exercise, and reopens
-   * from the header's Guide button. Reset on exercise change so a second
-   * exercise never inherits the first one's dismissal in this session.
-   */
-  const [guideOpen, setGuideOpen] = useState(false);
+  /* The exercise guide auto-opens on arrival unless dismissed for this exercise. */
   useEffect(() => {
     if (exercise && !isGuideDismissed(exercise.id)) setGuideOpen(true);
     else setGuideOpen(false);
-  }, [exercise, isGuideDismissed]);
+  }, [exercise, isGuideDismissed, setGuideOpen]);
 
-  /*
-   * The project banner: a slim strip naming the build this bench was opened
-   * for through `?project=:id`. Dismissible, and reset on project change so
-   * a second project re-announces itself. Deliberately not the full guide —
-   * the instructions live on the board page this links back to.
-   */
-  const [projectBannerOpen, setProjectBannerOpen] = useState(true);
+  /* The project banner re-announces itself whenever the build changes. */
   useEffect(() => {
     setProjectBannerOpen(true);
-  }, [projectBuild]);
+  }, [projectBuild, setProjectBannerOpen]);
 
   // Rebuilt on board change only: a sketch's pin numbers mean something
   // different on each board, so carrying one across would silently misfire.
@@ -559,8 +487,6 @@ export default function Bench(props: BenchProps) {
     },
     [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild],
   );
-
-  const [baud, setBaud] = useState(9600);
 
   // Only pins firmware can actually name are worth probing; the power and
   // ground headers are rails, not signals.
@@ -623,57 +549,29 @@ export default function Bench(props: BenchProps) {
     };
   }, [simulation]);
 
-  /*
-   * The colour palette that opens where a wire was picked.
-   *
-   * Anchored to the click rather than to the wire, so it sits under the cursor
-   * the operator just used and does not slide around while they move it. It is
-   * transient: any further canvas click, Escape, or the wire going away closes
-   * it, because a palette left open over the bench would be in the way of the
-   * wiring it was opened to do.
-   */
-  const [paletteFor, setPaletteFor] = useState<{
-    wireId: string;
-    x: number;
-    y: number;
-  } | null>(null);
+  /* The colour palette opens where a picked wire was clicked (see store). */
 
   /**
-   * Takes a jumper off the bench.
-   *
-   * Re-solved, because pulling a wire is how an operator disconnects two
-   * things, and whatever net it was the only link in is now open.
+   * Takes a jumper off the bench. Re-solved, because pulling a wire is how an
+   * operator disconnects two things.
    */
   const removeWire = useCallback(
     (wireId: string) => {
       simulation.removeWire(wireId);
-      // The selection cannot outlive the wire: leaving it set would point the
-      // palette and the endpoint handles at a jumper that is no longer here.
-      setSelectedWireId(null);
-      setPaletteFor(null);
+      clearWire();
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, clearWire],
   );
 
-  /**
-   * Steps the bench back or forward through its history.
-   *
-   * Selections are dropped either way. A restored bench need not contain the
-   * part or the wire that was picked, and a selection left pointing at
-   * something that is no longer there is how the inspector ends up describing
-   * a part that does not exist and the delete key pulling a wire that was
-   * already gone.
-   */
+  /** Steps the bench back/forward, dropping selections that may be gone. */
   const stepHistory = useCallback(
     (forward: boolean) => {
       if (!(forward ? simulation.redo() : simulation.undo())) return;
-      setSelectedId(null);
-      setSelectedWireId(null);
-      setPaletteFor(null);
+      clearSelection();
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, clearSelection],
   );
 
   /*
@@ -730,41 +628,32 @@ export default function Bench(props: BenchProps) {
           forceRender((n) => n + 1);
           break;
         case 'r':
-          // Turning a part is only meaningful with one selected, and the key is
-          // left alone otherwise for the same reason Delete is: swallowing it
-          // would take the letter from anything else that wants it.
           if (selectedId === null) return;
           event.preventDefault();
           simulation.rotatePart(selectedId);
           forceRender((n) => n + 1);
           break;
         case 'b':
-          setSidebarOpen((open) => !open);
+          toggleSidebar();
           break;
         case 'c':
-          setActivity('components');
-          setSidebarOpen(true);
+          showActivity('components');
           break;
         case 'i':
-          setInstrumentsOpen((open) => !open);
+          toggleInstruments();
           break;
         case 'j':
-          setBottomOpen((open) => !open);
+          toggleBottom();
           break;
         case 'Delete':
         case 'Backspace':
-          // Only a picked wire answers to this. With nothing picked the key is
-          // left alone rather than swallowed, so it stays available to whatever
-          // else might want it.
           if (selectedWireId === null) return;
           event.preventDefault();
           removeWire(selectedWireId);
           break;
         case 'Escape':
-          // Escape backs out of whatever is open, deepest first, so it never
-          // leaves the bench in a state with no way back.
-          if (paletteFor) setPaletteFor(null);
-          else if (selectedId) setSelectedId(null);
+          if (paletteFor) closePalette();
+          else if (selectedId) selectPart(null);
           break;
         default:
           break;
@@ -772,7 +661,7 @@ export default function Bench(props: BenchProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [simulation, paletteFor, selectedId, selectedWireId, removeWire, stepHistory]);
+  }, [simulation, paletteFor, selectedId, selectedWireId, removeWire, stepHistory, toggleSidebar, showActivity, toggleInstruments, toggleBottom, closePalette, selectPart]);
 
 
   const bench = simulation.bench;
@@ -808,8 +697,6 @@ export default function Bench(props: BenchProps) {
 
   // Meter probes come from the same pin list as the scope's. The black probe
   // defaults to bench ground, which is where it sits when unclipped.
-  const [meterRedPin, setMeterRedPin] = useState<string | null>(null);
-  const [meterBlackPin, setMeterBlackPin] = useState<string | null>(null);
 
   useEffect(() => {
     simulation.setMeterProbes(
@@ -1086,12 +973,6 @@ export default function Bench(props: BenchProps) {
         : (() => {
             const column = nextDropColumn;
             nextDropColumn = (nextDropColumn + 8) % 60;
-            /*
-             * Land the part's topmost, leftmost pin on a real hole rather than
-             * its origin. Every part's leads sit at a different offset inside
-             * its own footprint, so dropping the origin on the hole row left
-             * everything but the resistor hanging in mid-air.
-             */
             const [pinX, pinY] = offsetOfFirstPin(definition);
             return simulation.addPart(
               definition,
@@ -1099,9 +980,9 @@ export default function Bench(props: BenchProps) {
               stripRowY(8) - pinY,
             );
           })();
-      setSelectedId(part.id);
+      selectPart(part.id);
     },
-    [simulation],
+    [simulation, selectPart],
   );
 
   /*
@@ -1360,10 +1241,7 @@ export default function Bench(props: BenchProps) {
             type="button"
             variant="default"
             size="sm"
-            onClick={() => {
-              setActivity('components');
-              setSidebarOpen(true);
-            }}
+            onClick={() => showActivity('components')}
             title="Browse every part the bench can hold (C)"
           >
             <PlusIcon className="icon" aria-hidden="true" />
@@ -1413,13 +1291,7 @@ export default function Bench(props: BenchProps) {
       <div className="flex min-h-0 flex-1">
         <ActivityBar
           activity={activity}
-          onActivity={(next) => {
-            // Re-clicking the active icon collapses the sidebar; picking
-            // another icon switches to it and opens. Keyboard B still toggles.
-            const result = nextActivity(activity, next, sidebarOpen);
-            setActivity(result.activity);
-            setSidebarOpen(result.sidebarOpen);
-          }}
+          onActivity={(next) => pickActivity(next)}
         />
         {sidebarOpen && (
           <Sidebar
@@ -1492,15 +1364,9 @@ export default function Bench(props: BenchProps) {
               netOfTerminal={netOfTerminal}
               selectedId={selectedId}
               selectedWireId={selectedWireId}
-              onSelect={(partId) => {
-                // A click anywhere that is not a wire also dismisses the
-                // palette, so picking a part puts the bench back to normal
-                // rather than leaving a swatch row floating over it.
-                setPaletteFor(null);
-                setSelectedId(partId);
-              }}
-              onSelectWire={setSelectedWireId}
-              onWirePicked={(wireId, x, y) => setPaletteFor({ wireId, x, y })}
+              onSelect={(partId) => selectPart(partId)}
+              onSelectWire={selectWire}
+              onWirePicked={(wireId, x, y) => openPalette({ wireId, x, y })}
               onMovePart={onMovePart}
               onRouteWire={onRouteWire}
               onMoveWireEnd={moveWireEnd}
@@ -1548,7 +1414,7 @@ export default function Bench(props: BenchProps) {
                     type="button"
                     onClick={() => {
                       recolourSelectedWire(colour.hex);
-                      setPaletteFor(null);
+                      closePalette();
                     }}
                     aria-label={`Wire colour ${colour.label}`}
                     title={colour.label}
@@ -1561,7 +1427,7 @@ export default function Bench(props: BenchProps) {
                 ))}
                 <button
                   type="button"
-                  onClick={() => setPaletteFor(null)}
+                  onClick={() => closePalette()}
                   aria-label="Close the colour palette"
                   title="Close (Esc)"
                   className="ml-1 flex h-5 w-5 items-center justify-center rounded-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
@@ -1613,7 +1479,7 @@ export default function Bench(props: BenchProps) {
             height={layout.bottomHeight}
             hasError={(simulation.firmwareError ?? shareError) !== null}
             onTab={setBottomTab}
-            onToggle={() => setBottomOpen((open) => !open)}
+            onToggle={() => toggleBottom()}
             serial={<SerialMonitor lines={simulation.serialLines()} />}
             scope={
               <ScopePanel
@@ -1691,7 +1557,7 @@ export default function Bench(props: BenchProps) {
               controls={simulation.controls}
               onDelete={() => {
                 if (selected) simulation.removePart(selected.id);
-                setSelectedId(null);
+                selectPart(null);
               }}
               onSetPressed={(pressed) => {
                 if (selected) simulation.setPressed(selected.id, pressed);

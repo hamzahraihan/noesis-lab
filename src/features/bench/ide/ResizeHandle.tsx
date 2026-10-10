@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 
 /**
  * A draggable divider between two panels.
@@ -20,7 +20,6 @@ export function ResizeHandle({
   label: string;
 }) {
   const last = useRef<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
   const vertical = axis === 'x';
 
   return (
@@ -33,7 +32,6 @@ export function ResizeHandle({
       onPointerDown={(event) => {
         (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
         last.current = { x: event.clientX, y: event.clientY };
-        setDragging(true);
       }}
       onPointerMove={(event) => {
         const from = last.current;
@@ -44,12 +42,10 @@ export function ResizeHandle({
       }}
       onPointerUp={(event) => {
         last.current = null;
-        setDragging(false);
         (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
       }}
       onPointerCancel={() => {
         last.current = null;
-        setDragging(false);
       }}
       onDoubleClick={(event) => {
         event.preventDefault();
@@ -67,12 +63,8 @@ export function ResizeHandle({
       }}
       className={
         vertical
-          ? `w-1 shrink-0 cursor-col-resize self-stretch touch-none transition-colors focus:outline-none ${
-              dragging ? 'bg-sky-500/80' : 'bg-transparent hover:bg-sky-500/60 focus-visible:bg-sky-500/60'
-            }`
-          : `h-1 w-full shrink-0 cursor-row-resize touch-none transition-colors focus:outline-none ${
-              dragging ? 'bg-sky-500/80' : 'bg-transparent hover:bg-sky-500/60 focus-visible:bg-sky-500/60'
-            }`
+          ? 'w-1 shrink-0 cursor-col-resize self-stretch touch-none transition-colors focus:outline-none bg-transparent hover:bg-sky-500/60 focus-visible:bg-sky-500/60 active:bg-sky-500/80'
+          : 'h-1 w-full shrink-0 cursor-row-resize touch-none transition-colors focus:outline-none bg-transparent hover:bg-sky-500/60 focus-visible:bg-sky-500/60 active:bg-sky-500/80'
       }
     />
   );
