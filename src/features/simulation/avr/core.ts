@@ -10,6 +10,14 @@ export interface AvrHooks {
   readonly nowMs: () => number;
   readonly readPin: (gpio: number) => boolean;
   readonly onSettle: () => void;
+  /**
+   * Whether a probe is watching: watched nets must be sampled every
+   * millisecond or the scope aliases. Unwatched, settling every 4 ms still
+   * samples the fastest firmware strobe on the bench (a 20 ms multiplexed
+   * digit) five times over, at a quarter of the solves. Absent (tests)
+   * keeps the legacy every-ms cadence.
+   */
+  readonly isProbed?: () => boolean;
   readonly serial: { serialWrite(text: string): void };
   readonly i2c: {
     writeByte(address: number, byte: number, isFirst: boolean): boolean;
@@ -55,7 +63,7 @@ export class AvrBackend implements ExecutionBackend {
     if (budgetMs > MAX_STEP_MS) this.clampedMs += budgetMs - MAX_STEP_MS;
     const perMs = cyclesPerMs(UNO_CLOCK_HZ);
     const ms = this.msCarry + clamped;
-    const settleEvery = perMs;
+    const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
     for (let i = 0; i < totalCycles; i++) {
       try {
