@@ -52,6 +52,7 @@ import type { Example } from '@/features/learn';
 import {
   CaretRightIcon,
   CodeIcon,
+  Cross2Icon,
   CrossCircledIcon,
   CubeIcon,
   PlayIcon,
@@ -437,8 +438,9 @@ export function FirmwareEditor({
    */
   const [notice, setNotice] = useState<string | null>(null);
 
-  /* Whether the Libraries section is open under the sketch tabs. */
-  const [libsOpen, setLibsOpen] = useState(false);
+  /* Whether the Libraries popup is open over the editor. */
+  const [libsPopupOpen, setLibsPopupOpen] = useState(false);
+  const libsPopupRef = useRef<HTMLDivElement>(null);
   /* Which custom slot (and file) the slot editor shows; null keeps the fallbacks below. */
   const [slotId, setSlotId] = useState<string | null>(null);
   const [slotPath, setSlotPath] = useState<string | null>(null);
@@ -986,7 +988,7 @@ export function FirmwareEditor({
 
   /*
    * Library errors name their origin (`path:line`, as the worker reports
-   * them): open the Libraries section on that slot file, the same way Run
+   * them): open the Libraries popup on that slot file, the same way Run
    * opens the sketch tab an interpreter error names.
    */
   useEffect(() => {
@@ -994,10 +996,34 @@ export function FirmwareEditor({
     if (target !== null) {
       setSlotId(target.slotId);
       setSlotPath(target.path);
-      setLibsOpen(true);
+      setLibsPopupOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayError]);
+
+  /*
+   * Popup dismissal: an outside pointer or Escape closes, the way a menu
+   * should. The header button lives outside the popup node, so its clicks are
+   * ignored here and toggle instead.
+   */
+  useEffect(() => {
+    if (!libsPopupOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest?.('[data-libs-popup]') ?? false) return;
+      if (target?.closest?.('[data-libs-button]') ?? false) return;
+      setLibsPopupOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLibsPopupOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [libsPopupOpen]);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
@@ -1070,6 +1096,27 @@ export function FirmwareEditor({
         </label>
 
         <span className="flex-1" />
+        {/*
+         * Libraries live in a popup, not a section: the old section stacked
+         * the catalogue, the index browser and a second Monaco in one
+         * `max-h-96` box and overflowed. The badge counts active declarations;
+         * custom slot *files* still edit below the sketch when one is picked.
+         */}
+        <div data-libs-button>
+          <Button
+            type="button"
+            onClick={() => setLibsPopupOpen((open) => !open)}
+            aria-expanded={libsPopupOpen}
+            size="sm"
+            variant="secondary"
+            title="Libraries: which are active, which are available"
+          >
+            Libraries
+            {declarations.length > 0 && (
+              <span className="num text-slate-400">{declarations.length}</span>
+            )}
+          </Button>
+        </div>
         {/*
          * One button that changes what it does, so the pair never sits side by
          * side claiming equal weight. Reset is deliberately the quiet
@@ -1180,31 +1227,41 @@ export function FirmwareEditor({
           />
           {/*
            * Libraries: the curated provided set plus the project's own custom
-           * slots. Provided rows come from the Tier-1 bundle list and the
-           * Tier-2 manifest with add/remove buttons; declared-but-unknown
-           * names sit greyed with the validation reason, as do custom
-           * declarations whose slot is empty. Slot files edit in a second
-           * Monaco below, reusing the tab helpers and the notice pattern —
-           * paths keep their original casing throughout.
+           * slots, in a popup over the editor rather than a section under it.
+           * Provided rows come from the Tier-1 bundle list and the Tier-2
+           * manifest with add/remove buttons; declared-but-unknown names sit
+           * greyed with the validation reason, as do custom declarations
+           * whose slot is empty. Slot files edit in a second Monaco below the
+           * sketch when one is picked, reusing the tab helpers and the notice
+           * pattern — paths keep their original casing throughout.
            */}
-          <div className="shrink-0 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => setLibsOpen((open) => !open)}
-              aria-expanded={libsOpen}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase transition-colors hover:text-slate-200"
+          {libsPopupOpen && (
+            <div
+              data-libs-popup
+              ref={libsPopupRef}
+              role="dialog"
+              aria-label="Libraries"
+              className="absolute top-11 right-2 bottom-12 z-50 flex w-[min(94vw,38rem)] flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl"
             >
-              <CaretRightIcon
-                className={`icon-sm transition-transform ${libsOpen ? 'rotate-90' : ''}`}
-                aria-hidden="true"
-              />
-              Libraries
-              {declarations.length > 0 && (
-                <span className="num text-slate-500">{declarations.length}</span>
-              )}
-            </button>
-            {libsOpen && (
-              <div className="max-h-96 overflow-y-auto px-3 pb-3">
+              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+                <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase">
+                  Libraries
+                </span>
+                {declarations.length > 0 && (
+                  <span className="num text-[11px] text-slate-500">{declarations.length}</span>
+                )}
+                <span className="flex-1" />
+                <button
+                  type="button"
+                  onClick={() => setLibsPopupOpen(false)}
+                  aria-label="Close libraries"
+                  title="Close (Esc)"
+                  className="flex size-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                >
+                  <Cross2Icon className="icon-sm" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
                 {/*
                  * Library Manager browse: lazy index search (debounced input,
                  * category filter, 50-row pages from the search cap), detail,
@@ -1647,13 +1704,16 @@ export function FirmwareEditor({
                     })}
                   </div>
                 )}
-
-                {selectedSlot && (
-                  <>
-                    <div
-                      role="tablist"
-                      aria-label="Library files"
-                      className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-y border-slate-800 px-2 py-1"
+              </div>
+            </div>
+          )}
+          {selectedSlot && (
+            <div className="shrink-0 border-t border-slate-800">
+              <>
+                <div
+                  role="tablist"
+                  aria-label="Library files"
+                      className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
                     >
                       {selectedSlot.files.map((file) => {
                         const selected = file.path === activeSlotPath;
@@ -1727,14 +1787,12 @@ export function FirmwareEditor({
                       />
                     ) : (
                       <p className="px-1 py-2 text-xs text-slate-600">
-                        Empty library: add a header and its sources above.
+                        Empty library: add a header and its sources from the Libraries popup.
                       </p>
                     )}
                   </>
-                )}
               </div>
             )}
-          </div>
         </>
       )}
 
