@@ -6,7 +6,7 @@ import { solveCircuit, type Solution } from '@/features/simulation';
 import { DynamicState, type KnobSpec, type PartDefinition } from '@/features/parts';
 import { buildNetlist, type Netlist } from '@/features/simulation';
 import { DETENT_KNOB, encoderDefinition, quadratureAt } from './encoder';
-import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 const SUPPLY_VOLTS = 3.3;
 

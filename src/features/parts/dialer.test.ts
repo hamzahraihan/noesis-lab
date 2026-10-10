@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DIGIT_KNOB, dialerDefinition } from './dialer';
-import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('dialer definition', () => {
   it('exposes GND/DIAL/PULSE with a digit knob', () => {

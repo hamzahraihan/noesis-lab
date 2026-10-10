@@ -8,7 +8,7 @@ import { buildNetlist, type Netlist } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
 import { clampChannel, ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition, pixelCount } from './pixels';
-import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('pixel definitions', () => {
   it('exposes the single, matrix, and ring pins', () => {

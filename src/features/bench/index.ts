@@ -24,12 +24,12 @@ export {
   renderedSizeMm,
   WOKWI_PARTS,
   wokwiPartFor,
-} from './wokwi';
-export type { WokwiPart } from './wokwi';
+} from './wokwi/wokwi';
+export type { WokwiPart } from './wokwi/wokwi';
 export { partTransform } from './wiring/part-transform';
-export { PartFootprint } from './footprints';
-export type { FootprintState } from './footprints';
-export { HardwareDefs } from './hardware';
+export { PartFootprint } from './wokwi/footprints';
+export type { FootprintState } from './wokwi/footprints';
+export { HardwareDefs } from './wokwi/hardware';
 export { PartPreview } from './PartPreview';
 export { DEFAULT_WIRE_COLOUR, WIRE_COLOURS } from './wiring/wire-colours';
 export type { WireColour } from './wiring/wire-colours';

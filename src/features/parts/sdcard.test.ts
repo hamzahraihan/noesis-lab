@@ -4,7 +4,7 @@ import { esp32DevKitV1 } from '@/features/parts';
 import { McuRuntime } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
 import { SD_CARD_BYTES, microsdDefinition } from './sdcard';
-import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('microsd definition', () => {
   it('exposes the seven breakout pins', () => {

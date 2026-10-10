@@ -10,9 +10,9 @@ import { useMemo } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition } from '@/features/parts';
 import { DynamicState } from '@/features/parts';
-import { PartFootprint, type FootprintState } from './footprints';
-import { HardwareDefs } from './hardware';
-import { renderedSizeMm } from './wokwi';
+import { PartFootprint, type FootprintState } from './wokwi/footprints';
+import { HardwareDefs } from './wokwi/hardware';
+import { renderedSizeMm } from './wokwi/wokwi';
 
 /**
  * The state a part is shown in when it is only being looked at.

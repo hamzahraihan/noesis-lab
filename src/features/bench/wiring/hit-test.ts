@@ -1,5 +1,5 @@
 import type { PartInstance, Terminal } from '@/features/simulation';
-import { artworkBox } from '../wokwi';
+import { artworkBox } from '../wokwi/wokwi';
 
 /**
  * Which part a press landed on.

@@ -8,8 +8,8 @@ import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById } from './g
 import { TIER2_MANIFEST } from '@/features/simulation';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulation';
-import { pushWokwiState } from '@/features/bench/wokwi';
-import type { FootprintState } from '@/features/bench/footprints';
+import { pushWokwiState } from '@/features/bench/wokwi/wokwi';
+import type { FootprintState } from '@/features/bench/wokwi/footprints';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 

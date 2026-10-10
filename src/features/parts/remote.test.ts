@@ -7,7 +7,7 @@ import { DynamicState } from '@/features/parts';
 import { irReceiverDefinition } from '@/features/parts';
 import { sonarDefinition } from './sonar';
 import { NEC_CODES, REMOTE_KEY_KNOB, remoteDefinition } from './remote';
-import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('remote definition', () => {
   it('is pinless with a 20-key table', () => {

@@ -7,7 +7,7 @@ import { DynamicState } from '@/features/parts';
 import { buildNetlist } from '@/features/simulation';
 import { HUMIDITY_KNOB, dhtDefinition } from './dht';
 import { TEMPERATURE_KNOB } from '@/features/parts';
-import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi';
+import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('dht definition', () => {
   it('exposes VCC/SDA/NC/GND with climate knobs', () => {

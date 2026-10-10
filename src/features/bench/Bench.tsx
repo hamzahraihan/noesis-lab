@@ -25,12 +25,12 @@ import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
 import { TopBar } from './ide/TopBar';
 import { ActivityBar } from './ide/ActivityBar';
-import type { FootprintState } from './footprints';
+import type { FootprintState } from './wokwi/footprints';
 import { Simulation } from './simulation';
 import { CenterTabs } from './ide/CenterTabs';
 import { BottomPanel } from './ide/BottomPanel';
 import { ResizeHandle } from './ide/ResizeHandle';
-import { WokwiLibrary } from './WokwiLibrary';
+import { WokwiLibrary } from './wokwi/WokwiLibrary';
 import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from './ide/shell-state';
 import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from './ide/bench-store';
 import type {
