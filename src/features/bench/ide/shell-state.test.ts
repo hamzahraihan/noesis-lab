@@ -1,6 +1,6 @@
 // src/features/bench/ide/shell-state.test.ts
 import { describe, expect, it } from 'vitest';
-import { bottomTabForError, centerKeyForFile, isCircuitKey, nextActivity, repairCenterKey, resolveErrorCenter } from './shell-state';
+import { bottomTabForError, centerKeyForFile, clampLayoutSizes, DEFAULT_LAYOUT, isCircuitKey, loadLayoutSizes, nextActivity, repairCenterKey, resolveErrorCenter, saveLayoutSizes } from './shell-state';
 
 describe('shell-state', () => {
   it('passes file names through as center keys', () => {
@@ -30,5 +30,32 @@ describe('shell-state', () => {
     expect(repairCenterKey('circuit', [{ name: 'a.ino' }], 'a.ino')).toBe('circuit');
     expect(repairCenterKey('a.ino', [{ name: 'a.ino' }], 'a.ino')).toBe('a.ino');
     expect(repairCenterKey('gone.h', [{ name: 'a.ino' }], 'a.ino')).toBe('a.ino');
+  });
+  it('clamps each panel dimension into its limits', () => {
+    expect(
+      clampLayoutSizes({ sidebarWidth: 40, bottomHeight: 4000, railWidth: 240 }),
+    ).toEqual({ sidebarWidth: 176, bottomHeight: 560, railWidth: 240 });
+  });
+  it('caps the bottom panel at half the viewport when given', () => {
+    expect(clampLayoutSizes({ ...DEFAULT_LAYOUT, bottomHeight: 500 }, 600).bottomHeight).toBe(
+      300,
+    );
+  });
+  it('loads defaults on missing, corrupt, or partial saves', () => {
+    expect(loadLayoutSizes(() => null)).toEqual(DEFAULT_LAYOUT);
+    expect(loadLayoutSizes(() => '{broken')).toEqual(DEFAULT_LAYOUT);
+    expect(loadLayoutSizes(() => JSON.stringify({ sidebarWidth: 300 }))).toEqual({
+      ...DEFAULT_LAYOUT,
+      sidebarWidth: 300,
+    });
+    expect(loadLayoutSizes(() => JSON.stringify({ sidebarWidth: 'wide' }))).toEqual(
+      DEFAULT_LAYOUT,
+    );
+  });
+  it('round-trips sizes through save and load', () => {
+    const backing = new Map<string, string>();
+    const sizes = { sidebarWidth: 300, bottomHeight: 220, railWidth: 280 };
+    saveLayoutSizes((k, v) => void backing.set(k, v), sizes);
+    expect(loadLayoutSizes((k) => backing.get(k) ?? null)).toEqual(sizes);
   });
 });

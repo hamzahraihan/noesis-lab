@@ -8,6 +8,7 @@ export function Sidebar({
   project,
   entryName,
   activeName,
+  width,
   onSelectFile,
   onProjectChange,
   componentsPane,
@@ -17,13 +18,18 @@ export function Sidebar({
   project: FirmwareProject;
   entryName: string;
   activeName: string;
+  /** Panel width in pixels, owned by the bench shell (draggable divider). */
+  width: number;
   onSelectFile(name: string): void;
   onProjectChange(next: FirmwareProject): void;
   componentsPane: ReactNode;
   libraryPane: ReactNode;
 }) {
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900">
+    <aside
+      style={{ width }}
+      className="flex shrink-0 flex-col border-r border-slate-800 bg-slate-900"
+    >
       <div className="flex h-9 shrink-0 items-center border-b border-slate-800 px-3 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase">
         {activity === 'files' ? 'Explorer' : activity === 'components' ? 'Components' : 'Library'}
       </div>

@@ -56,3 +56,84 @@ export function repairCenterKey(
   if (files.some((file) => file.name === active)) return active;
   return centerKeyForFile(fallback);
 }
+
+// ---------------------------------------------------------------------------
+// Adjustable panel sizes. Pure and node-testable: storage is injected so
+// tests pass a Map instead of localStorage.
+// ---------------------------------------------------------------------------
+
+export interface LayoutSizes {
+  sidebarWidth: number;
+  bottomHeight: number;
+  railWidth: number;
+}
+
+export const DEFAULT_LAYOUT: LayoutSizes = {
+  sidebarWidth: 256,
+  bottomHeight: 192,
+  railWidth: 240,
+};
+
+/** Storage key for the persisted bench layout. */
+export const LAYOUT_KEY = 'noesis:bench:layout';
+
+const LAYOUT_LIMITS = {
+  sidebarWidth: [176, 480],
+  bottomHeight: [120, 560],
+  railWidth: [200, 480],
+} as const;
+
+/**
+ * Clamps every dimension into its limits. `viewportHeight` caps the bottom
+ * panel at half the window, so a tall drag cannot squeeze the canvas away;
+ * without it the fixed ceiling applies.
+ */
+export function clampLayoutSizes(sizes: LayoutSizes, viewportHeight?: number): LayoutSizes {
+  const maxBottom =
+    viewportHeight === undefined ? LAYOUT_LIMITS.bottomHeight[1] : Math.floor(viewportHeight / 2);
+  const clamp = (value: number, [min, max]: readonly [number, number]) =>
+    Math.min(Math.max(Math.round(value), min), max);
+  return {
+    sidebarWidth: clamp(sizes.sidebarWidth, LAYOUT_LIMITS.sidebarWidth),
+    bottomHeight: clamp(sizes.bottomHeight, [LAYOUT_LIMITS.bottomHeight[0], maxBottom]),
+    railWidth: clamp(sizes.railWidth, LAYOUT_LIMITS.railWidth),
+  };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Reads the persisted layout. Missing, corrupt, or partial saves fall back
+ * to defaults per field, and anything out of range is clamped — a hostile or
+ * stale payload can never wedge the shell.
+ */
+export function loadLayoutSizes(read: (key: string) => string | null): LayoutSizes {
+  let raw: unknown = null;
+  try {
+    const text = read(LAYOUT_KEY);
+    raw = text === null ? null : (JSON.parse(text) as unknown);
+  } catch {
+    raw = null;
+  }
+  const saved =
+    typeof raw === 'object' && raw !== null ? (raw as Partial<Record<keyof LayoutSizes, unknown>>) : {};
+  return clampLayoutSizes({
+    sidebarWidth: isFiniteNumber(saved.sidebarWidth) ? saved.sidebarWidth : DEFAULT_LAYOUT.sidebarWidth,
+    bottomHeight: isFiniteNumber(saved.bottomHeight) ? saved.bottomHeight : DEFAULT_LAYOUT.bottomHeight,
+    railWidth: isFiniteNumber(saved.railWidth) ? saved.railWidth : DEFAULT_LAYOUT.railWidth,
+  });
+}
+
+/** Persists the layout; callers debounce. Failures stay silent by contract. */
+export function saveLayoutSizes(
+  write: (key: string, value: string) => void,
+  sizes: LayoutSizes,
+): void {
+  try {
+    write(LAYOUT_KEY, JSON.stringify(sizes));
+  } catch {
+    // Private-mode quotas and the like: sizes stay session-only.
+  }
+}

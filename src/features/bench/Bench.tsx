@@ -30,8 +30,9 @@ import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
 import { CenterTabs } from './ide/CenterTabs';
 import { BottomPanel } from './ide/BottomPanel';
+import { ResizeHandle } from './ide/ResizeHandle';
 import { WokwiLibrary } from './WokwiLibrary';
-import { bottomTabForError, centerKeyForFile, nextActivity, repairCenterKey, resolveErrorCenter, type BottomKey, type CenterKey } from './ide/shell-state';
+import { bottomTabForError, centerKeyForFile, clampLayoutSizes, DEFAULT_LAYOUT, loadLayoutSizes, nextActivity, repairCenterKey, resolveErrorCenter, saveLayoutSizes, type BottomKey, type CenterKey, type LayoutSizes } from './ide/shell-state';
 import type {
   BoardId,
   BoardOption,
@@ -81,6 +82,24 @@ const PALETTE_FLIP_X = 200;
 const PALETTE_FLIP_Y = 60;
 /** Where the breadboard sits, clear of the board plugged in beside it. */
 const BREADBOARD_ORIGIN_X = 230;
+
+/** Reads one key without throwing (private-mode localStorage throws). */
+function readLayout(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Writes one key without throwing; failures keep sizes session-only. */
+function writeLayout(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Session-only: the debounced save retries next change.
+  }
+}
 
 /** Column the starter LED circuit is wired onto. */
 const SIGNAL_COLUMN = 20;
@@ -404,6 +423,24 @@ export default function Bench(props: BenchProps) {
   const [instrumentsOpen, setInstrumentsOpen] = useState(true);
   const [bottomTab, setBottomTab] = useState<BottomKey>('serial');
   const [bottomOpen, setBottomOpen] = useState(true);
+  /*
+   * Adjustable panel sizes, persisted across visits. Dragging a divider nudges
+   * one dimension through the clamp; the save is debounced so a drag writes
+   * once, not per pixel.
+   */
+  const [layout, setLayout] = useState<LayoutSizes>(() => loadLayoutSizes(readLayout));
+  useEffect(() => {
+    const timer = setTimeout(() => saveLayoutSizes(writeLayout, layout), 300);
+    return () => clearTimeout(timer);
+  }, [layout]);
+  const nudgeLayout = (key: keyof LayoutSizes, delta: number) => {
+    setLayout((prev) =>
+      clampLayoutSizes({ ...prev, [key]: prev[key] + delta }, window.innerHeight),
+    );
+  };
+  const resetLayoutKey = (key: keyof LayoutSizes) => {
+    setLayout((prev) => ({ ...prev, [key]: DEFAULT_LAYOUT[key] }));
+  };
   const [frameTick, forceRender] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
@@ -1388,6 +1425,7 @@ export default function Bench(props: BenchProps) {
             project={project}
             entryName={ENTRY_BY_LANGUAGE[project.language]}
             activeName={project.activeName}
+            width={layout.sidebarWidth}
             onSelectFile={(name) => {
               setActiveCenter(centerKeyForFile(name));
               setProject((previous) => ({ ...previous, activeName: name }));
@@ -1402,6 +1440,14 @@ export default function Bench(props: BenchProps) {
               />
             }
             libraryPane={<WokwiLibrary />}
+          />
+        )}
+        {sidebarOpen && (
+          <ResizeHandle
+            axis="x"
+            onResize={(delta) => nudgeLayout('sidebarWidth', delta)}
+            onReset={() => resetLayoutKey('sidebarWidth')}
+            label="Resize sidebar"
           />
         )}
 
@@ -1569,9 +1615,18 @@ export default function Bench(props: BenchProps) {
           </p>
         </main>
 
+        {instrumentsOpen && (
+          <ResizeHandle
+            axis="x"
+            onResize={(delta) => nudgeLayout('railWidth', -delta)}
+            onReset={() => resetLayoutKey('railWidth')}
+            label="Resize inspector panel"
+          />
+        )}
         <aside
+          style={instrumentsOpen ? { width: layout.railWidth } : undefined}
           className={`shrink-0 flex-col border-l border-slate-800 bg-slate-900 ${
-            instrumentsOpen ? 'hidden w-60 lg:flex' : 'hidden'
+            instrumentsOpen ? 'hidden lg:flex' : 'hidden'
           }`}
         >
           <button
@@ -1638,9 +1693,18 @@ export default function Bench(props: BenchProps) {
 
       </div>
 
+      {bottomOpen && (
+        <ResizeHandle
+          axis="y"
+          onResize={(delta) => nudgeLayout('bottomHeight', -delta)}
+          onReset={() => resetLayoutKey('bottomHeight')}
+          label="Resize bottom panel"
+        />
+      )}
       <BottomPanel
         tab={bottomTab}
         open={bottomOpen}
+        height={layout.bottomHeight}
         hasError={(simulation.firmwareError ?? shareError) !== null}
         onTab={setBottomTab}
         onToggle={() => setBottomOpen((open) => !open)}

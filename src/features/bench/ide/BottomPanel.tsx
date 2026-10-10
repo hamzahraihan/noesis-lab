@@ -15,6 +15,7 @@ export function BottomPanel({
   tab,
   open,
   hasError,
+  height,
   onTab,
   onToggle,
   serial,
@@ -27,6 +28,8 @@ export function BottomPanel({
   tab: BottomKey;
   open: boolean;
   hasError: boolean;
+  /** Panel height in pixels when open, owned by the bench shell (draggable). */
+  height: number;
   onTab(next: BottomKey): void;
   onToggle(): void;
   serial: ReactNode;
@@ -50,7 +53,8 @@ export function BottomPanel({
               : problems;
   return (
     <section
-      className={`flex shrink-0 flex-col border-t border-slate-800 bg-slate-900 ${open ? 'h-48' : 'h-9'}`}
+      style={open ? { height } : undefined}
+      className={`flex shrink-0 flex-col border-t border-slate-800 bg-slate-900 ${open ? '' : 'h-9'}`}
     >
       <div
         role="tablist"
