@@ -428,7 +428,9 @@ export default function Bench(props: BenchProps) {
    * one dimension through the clamp; the save is debounced so a drag writes
    * once, not per pixel.
    */
-  const [layout, setLayout] = useState<LayoutSizes>(() => loadLayoutSizes(readLayout));
+  const [layout, setLayout] = useState<LayoutSizes>(() =>
+    clampLayoutSizes(loadLayoutSizes(readLayout), window.innerHeight),
+  );
   useEffect(() => {
     const timer = setTimeout(() => saveLayoutSizes(writeLayout, layout), 300);
     return () => clearTimeout(timer);
@@ -1451,7 +1453,7 @@ export default function Bench(props: BenchProps) {
           />
         )}
 
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <CenterTabs
             active={activeCenter}
             files={project.files}

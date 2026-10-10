@@ -58,4 +58,9 @@ describe('shell-state', () => {
     saveLayoutSizes((k, v) => void backing.set(k, v), sizes);
     expect(loadLayoutSizes((k) => backing.get(k) ?? null)).toEqual(sizes);
   });
+  it('clamps a tall persisted panel to half the viewport on load', () => {
+    const read = () =>
+      JSON.stringify({ sidebarWidth: 256, bottomHeight: 478, railWidth: 240 });
+    expect(clampLayoutSizes(loadLayoutSizes(read), 800).bottomHeight).toBe(400);
+  });
 });
