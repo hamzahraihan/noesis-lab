@@ -28,6 +28,7 @@ import { ActivityBar } from './ide/ActivityBar';
 import type { Activity } from './ide/shell-state';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
+import { CenterTabs } from './ide/CenterTabs';
 import { WokwiLibrary } from './WokwiLibrary';
 import { centerKeyForFile, type CenterKey } from './ide/shell-state';
 import type {
@@ -40,7 +41,7 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import { ENTRY_BY_LANGUAGE, TIER2_MANIFEST, toSingleFileProject } from '@/features/simulation';
+import { ENTRY_BY_LANGUAGE, TIER2_MANIFEST, removeFile, renameFile, toSingleFileProject } from '@/features/simulation';
 import {
   FirmwareEditor,
   Inspector,
@@ -383,8 +384,6 @@ export default function Bench(props: BenchProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activity, setActivity] = useState<Activity>('components');
   const [activeCenter, setActiveCenter] = useState<CenterKey>('circuit');
-  // Read by CenterTabs in Task 5; referenced here so noUnusedLocals stays green meanwhile.
-  void activeCenter;
   /*
    * The right-hand rails — Inspector + Serial, and Scope + Logic + Bus +
    * Multimeter — collapse together under one toggle, mirroring the parts rail
@@ -438,7 +437,6 @@ export default function Bench(props: BenchProps) {
    * shown and the colour applied cannot drift apart.
    */
   const [wireColour, setWireColour] = useState(DEFAULT_WIRE_COLOUR);
-  const [firmwareOpen, setFirmwareOpen] = useState(true);
 
   /*
    * The exercise guide: popup instructions for the bench the learner just
@@ -712,7 +710,6 @@ export default function Bench(props: BenchProps) {
           // leaves the bench in a state with no way back.
           if (paletteFor) setPaletteFor(null);
           else if (selectedId) setSelectedId(null);
-          else if (firmwareOpen) setFirmwareOpen(false);
           break;
         default:
           break;
@@ -720,7 +717,7 @@ export default function Bench(props: BenchProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [simulation, paletteFor, selectedId, selectedWireId, firmwareOpen, removeWire, stepHistory]);
+  }, [simulation, paletteFor, selectedId, selectedWireId, removeWire, stepHistory]);
 
 
   const bench = simulation.bench;
@@ -1001,6 +998,9 @@ export default function Bench(props: BenchProps) {
       if (head !== '' && head !== project.activeName && project.files.some((file) => file.name === head)) {
         const failed = head;
         setProject((previous) => ({ ...previous, activeName: failed }));
+        // The center follows the failure: the bar names the file, the editor
+        // shows it, so the operator never guesses which tab broke.
+        setActiveCenter(centerKeyForFile(failed));
       }
     }
     simulation.start();
@@ -1371,8 +1371,39 @@ export default function Bench(props: BenchProps) {
         )}
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="relative min-h-0 flex-1">
-            <Workbench
+          <CenterTabs
+            active={activeCenter}
+            files={project.files}
+            entryName={ENTRY_BY_LANGUAGE[project.language]}
+            onSelect={(key) => {
+              if (key === 'circuit') {
+                setActiveCenter('circuit');
+                return;
+              }
+              setActiveCenter(centerKeyForFile(key));
+              setProject((previous) => ({ ...previous, activeName: key }));
+            }}
+            onCloseFile={(name) => {
+              try {
+                setProject((previous) => removeFile(previous, name));
+              } catch {
+                // Editor notice surface owns errors.
+              }
+              setActiveCenter('circuit');
+            }}
+            onRenameFile={(name) => {
+              const next = window.prompt('Rename file', name);
+              if (!next || next.trim() === name) return;
+              try {
+                setProject((previous) => renameFile(previous, name, next.trim()));
+                setActiveCenter(centerKeyForFile(next.trim()));
+              } catch {
+                // Editor notice surface owns errors.
+              }
+            }}
+            circuit={
+              <div className="relative min-h-0 flex-1">
+                <Workbench
               bench={bench}
               renderState={renderState}
               netOfTerminal={netOfTerminal}
@@ -1456,36 +1487,30 @@ export default function Bench(props: BenchProps) {
                 </button>
               </div>
             )}
-          </div>
-          {/*
-           * The editor lives under the bench rather than beside it. A wide
-           * text area does not need a tall column, and a landscape bench on a
-           * landscape canvas frames the whole board without zooming out.
-           */}
-          <section
-            className={`flex shrink-0 flex-col border-t border-slate-800 bg-slate-900 ${
-              firmwareOpen ? 'h-[42%]' : ''
-            }`}
-          >
-            <FirmwareEditor
-              project={project}
-              onProjectChange={setProject}
-              error={simulation.firmwareError ?? shareError}
-              expanded={firmwareOpen}
-              onToggle={() => setFirmwareOpen((open) => !open)}
-              language={project.language}
-              onChangeLanguage={handleLanguageChange}
-              onRun={handleRun}
-              onReset={() => {
-                simulation.reset();
-                forceRender((n) => n + 1);
-              }}
-              running={simulation.running}
-              examples={EXAMPLES}
-              activeExampleId={exampleId}
-              onLoadExample={loadExample}
-            />
-          </section>
+              </div>
+            }
+            editor={
+              <FirmwareEditor
+                project={project}
+                onProjectChange={setProject}
+                error={simulation.firmwareError ?? shareError}
+                expanded
+                onToggle={() => {}}
+                headerHidden
+                language={project.language}
+                onChangeLanguage={handleLanguageChange}
+                onRun={handleRun}
+                onReset={() => {
+                  simulation.reset();
+                  forceRender((n) => n + 1);
+                }}
+                running={simulation.running}
+                examples={EXAMPLES}
+                activeExampleId={exampleId}
+                onLoadExample={loadExample}
+              />
+            }
+          />
           {/*
            * Toolchain provenance, one line for GPLv3 compliance: in-browser
            * AVR builds run on the pinned WASM toolchain, whose own notices

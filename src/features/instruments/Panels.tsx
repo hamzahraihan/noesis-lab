@@ -379,6 +379,7 @@ export function FirmwareEditor({
   language,
   expanded,
   onToggle,
+  headerHidden = false,
   onChangeLanguage,
   onRun,
   onReset,
@@ -395,6 +396,13 @@ export function FirmwareEditor({
   /** Whether the editor body is showing under its header. */
   expanded: boolean;
   onToggle(): void;
+  /**
+   * Hides the collapse toggle and the internal file tabstrip, for the IDE
+   * shell: the center tabstrip owns file switching there, so a second
+   * tabstrip would be two controls for one thing. Language, examples and Run
+   * stay in the header.
+   */
+  headerHidden?: boolean;
   onChangeLanguage(language: FirmwareLanguage): void;
   onRun(): void;
   onReset(): void;
@@ -993,6 +1001,7 @@ export function FirmwareEditor({
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+        {!headerHidden && (
         <button
           type="button"
           onClick={onToggle}
@@ -1008,6 +1017,7 @@ export function FirmwareEditor({
           </span>
           Firmware
         </button>
+        )}
 
         {/*
          * Which grammar, stated rather than inferred. The two are not
@@ -1083,6 +1093,8 @@ export function FirmwareEditor({
 
       {expanded && (
         <>
+          {!headerHidden && (
+          <>
           {/*
            * One tab per file over a single Monaco instance. The entry tab has
            * no close button; double-click renames in v1. Tab order is file
@@ -1140,6 +1152,8 @@ export function FirmwareEditor({
               +
             </Button>
           </div>
+          </>
+          )}
           <Editor
             height="100%"
             language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
