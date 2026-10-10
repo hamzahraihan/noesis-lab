@@ -22,6 +22,9 @@ import type { PartDefinition } from '@/features/parts';
 import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
 import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
+import { TopBar } from './ide/TopBar';
+import { ActivityBar } from './ide/ActivityBar';
+import type { Activity } from './ide/shell-state';
 import type { FootprintState } from './footprints';
 import { Simulation } from './simulation';
 import type {
@@ -377,6 +380,7 @@ export default function Bench(props: BenchProps) {
   }, [boardId, project]);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activity, setActivity] = useState<Activity>('components');
   /*
    * The right-hand rails — Inspector + Serial, and Scope + Logic + Bus +
    * Multimeter — collapse together under one toggle, mirroring the parts rail
@@ -1063,7 +1067,7 @@ export default function Bench(props: BenchProps) {
        * five equal buttons, so stopping the firmware and opening the parts
        * browser looked like the same kind of act.
        */}
-      <header className="flex h-11 shrink-0 items-center gap-3 border-b border-slate-800 pr-3 pl-4">
+      <TopBar>
         <h1 className="text-sm font-semibold tracking-tight">Noesis Lab</h1>
 
         {/*
@@ -1307,7 +1311,7 @@ export default function Bench(props: BenchProps) {
             </Button>
           )}
         </div>
-      </header>
+      </TopBar>
 
       {projectBuild !== null && foundProject !== null && projectBannerOpen && (
         <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 bg-slate-950/80 px-4 py-1.5 text-sm">
@@ -1335,6 +1339,7 @@ export default function Bench(props: BenchProps) {
       )}
 
       <div className="flex min-h-0 flex-1">
+        <ActivityBar activity={activity} onActivity={setActivity} />
         {/*
          * The parts rail. It used to step aside under the `lg` breakpoint, which
          * meant a laptop could reach the bench but could not reach the parts list
