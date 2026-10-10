@@ -4,7 +4,7 @@ import { tier2ByName } from './provided';
 export interface ProjectLibrary {
   readonly name: string;
   readonly version?: string;
-  readonly source: 'provided' | 'custom';
+  readonly source: 'provided' | 'custom' | 'index';
 }
 
 export interface LibrarySlotFile {
@@ -44,7 +44,7 @@ export function projectSlots(project: FirmwareProject): readonly LibrarySlot[] {
 /** Declaration errors only; include resolution lives in resolve.ts. */
 export function validateLibraries(
   project: FirmwareProject,
-  ctx: { slots: readonly LibrarySlot[] },
+  ctx: { slots: readonly LibrarySlot[]; indexInstalled?: ReadonlyMap<string, { headers: readonly string[] }> },
 ): string[] {
   const errors: string[] = [];
   const seen = new Set<string>();
@@ -60,6 +60,12 @@ export function validateLibraries(
       // are ignored here, as for Tier-1; the build enforces exact pins.
       if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name) && tier2ByName(entry.name) === null) {
         errors.push(`<${entry.name}>: unknown provided library`);
+      }
+    } else if (entry.source === 'index') {
+      // Version pinned at install time and stored on the entry; validation
+      // matches by name only against the installed map.
+      if (ctx.indexInstalled?.has(entry.name) !== true) {
+        errors.push(`<${entry.name}>: unknown index library`);
       }
     } else {
       const id = entry.name.startsWith('custom:') ? entry.name.slice('custom:'.length) : null;

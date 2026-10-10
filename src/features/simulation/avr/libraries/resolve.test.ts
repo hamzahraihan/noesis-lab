@@ -40,4 +40,19 @@ describe('angle include resolution', () => {
     const ctx = { project: { ...declared, libraries: [] as const }, slots: [], toolchainHeaders: toolchain };
     expect(resolveAngleInclude('Wire.h', ctx)).toEqual({ kind: 'toolchain' });
   });
+
+  it('resolves installed index headers ahead of the toolchain bundle', () => {
+    const indexed = {
+      ...declared,
+      libraries: [{ name: 'Servo', source: 'index', version: '5.0.0' }] as const,
+    };
+    const ctx = {
+      project: indexed,
+      slots: [],
+      toolchainHeaders: toolchain,
+      indexInstalled: new Map([['Servo', { headers: ['Servo.h'] as const }]]),
+    };
+    expect(resolveAngleInclude('Servo.h', ctx)).toEqual({ kind: 'index', library: 'Servo' });
+    expect(resolveAngleInclude('Wire.h', ctx)).toEqual({ kind: 'toolchain' });
+  });
 });

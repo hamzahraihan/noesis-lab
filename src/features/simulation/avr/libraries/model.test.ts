@@ -51,4 +51,18 @@ describe('library model', () => {
     expect(validateLibraries(bare, { slots: [] })).toEqual([]);
     expect(libraryDeclarations(bare)).toEqual([]);
   });
+
+  it('validates index declarations against installed entries', () => {
+    const bare = { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: '' }] } as const;
+    const withIndex = { ...bare, libraries: [{ name: 'SevSeg', source: 'index', version: '3.2.0' } as const] };
+    expect(validateLibraries(withIndex, { slots: [], indexInstalled: new Map() })).toEqual([
+      '<SevSeg>: unknown index library',
+    ]);
+    expect(
+      validateLibraries(withIndex, {
+        slots: [],
+        indexInstalled: new Map([['SevSeg', { headers: ['SevSeg.h'] }]]),
+      }),
+    ).toEqual([]);
+  });
 });
