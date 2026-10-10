@@ -43,7 +43,7 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import { ENTRY_BY_LANGUAGE, TIER2_MANIFEST, removeFile, renameFile, toSingleFileProject } from '@/features/simulation';
+import { ENTRY_BY_LANGUAGE, removeFile, renameFile, toSingleFileProject } from '@/features/simulation';
 import {
   FirmwareEditor,
   Inspector,
@@ -1594,27 +1594,6 @@ export default function Bench(props: BenchProps) {
               />
             }
           />
-          {/*
-           * Toolchain provenance, one line for GPLv3 compliance: in-browser
-           * AVR builds run on the pinned WASM toolchain, whose own notices
-           * file carries the GPL terms for its compiler components.
-           */}
-          <p className="shrink-0 border-t border-slate-800 px-3 py-1 text-[11px] text-slate-500">
-            AVR compiles run in-browser via{' '}
-            <a
-              className="underline underline-offset-2 hover:text-slate-300"
-              href="https://www.npmjs.com/package/@horang-corp/avr-gcc-wasm"
-              target="_blank"
-              rel="noreferrer"
-            >
-              @horang-corp/avr-gcc-wasm 0.2.0
-            </a>{' '}
-            (GPLv3 toolchain — see its THIRD_PARTY_NOTICES.md).
-            <br />
-            Library builds {TIER2_MANIFEST.map((entry) => `${entry.name} ${entry.version}`).join(', ')}{' '}
-            ({[...new Set(TIER2_MANIFEST.map((entry) => entry.license))].join(', ')}; fetched once,
-            SHA-256-verified).
-          </p>
           {/*
            * The bottom panel lives in the center column, under the canvas and
            * code, the way VS Code centers its panel under the editor group:
