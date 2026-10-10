@@ -183,13 +183,13 @@ function makeCrcTable(): Uint32Array {
 
 const CRC_TABLE = makeCrcTable();
 
-function crc32(data: Uint8Array): number {
+export function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
   for (const byte of data) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+export async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const stream = new DecompressionStream('deflate-raw');
   const input = new Uint8Array(data.length);
   input.set(data);
@@ -227,7 +227,7 @@ const ZIP_CENTRAL_SIG = 0x02014b50;
 const ZIP_EOCD_SIG = 0x06050b50;
 
 /** Minimal zip reader: local file headers, stored/deflated entries, CRC32-checked. */
-async function unzipArchive(archive: Uint8Array, label: string): Promise<Map<string, Uint8Array>> {
+export async function unzipArchive(archive: Uint8Array, label: string): Promise<Map<string, Uint8Array>> {
   const fail = (detail: string): Error => new Error(`${label}: ${detail}`);
   const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
   const decoder = new TextDecoder();
@@ -271,7 +271,7 @@ async function unzipArchive(archive: Uint8Array, label: string): Promise<Map<str
  * tree stays `src/`-rooted (src/RTClib.h, src/RTClib.cpp) rather than being
  * flattened — callers key headers by basename.
  */
-function stripTopFolder(files: ReadonlyMap<string, Uint8Array>, label: string): Map<string, Uint8Array> {
+export function stripTopFolder(files: ReadonlyMap<string, Uint8Array>, label: string): Map<string, Uint8Array> {
   const fail = (detail: string): Error => new Error(`${label}: ${detail}`);
   const tops = new Set<string>();
   for (const name of files.keys()) {
@@ -285,19 +285,19 @@ function stripTopFolder(files: ReadonlyMap<string, Uint8Array>, label: string): 
   return rooted;
 }
 
-function baseName(path: string): string {
+export function baseName(path: string): string {
   const slash = path.lastIndexOf('/');
   return slash < 0 ? path : path.slice(slash + 1);
 }
 
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const copy = new Uint8Array(bytes.length);
   copy.set(bytes);
   const digest = await crypto.subtle.digest('SHA-256', copy.buffer);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function cacheDetail(error: unknown): string {
+export function cacheDetail(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
