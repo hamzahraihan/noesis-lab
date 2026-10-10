@@ -88,6 +88,36 @@ export class Engine {
   private pinSourceIndex = new Map<string, number>();
   /** Net index of the board's regulated supply rail. */
   private supplyNet: number = GROUND;
+  /**
+   * Solve cache key: a re-solve with the same simulated instant, timestep,
+   * pin intents, topology and stamped extras answers identically (the solver
+   * is deterministic), so repeated reads between writes reuse it.
+   *
+   * This is what makes three button reads in one loop cost one solve instead
+   * of three: only the first observes new pin levels, the rest re-read the
+   * same answer. Time must be part of the key — floating inputs drift with
+   * it — as must the timestep, whose capacitor companion differs per dt.
+   */
+  private solvedAtMs = NaN;
+  private solvedDt = NaN;
+  private solvedMcuRev = -1;
+  private solvedTopoRev = -1;
+  private solvedElemRev = -1;
+  /**
+   * Held-remote control state at the last solve.
+   *
+   * The IR pump reads the operator's knobs straight from control state, which
+   * no revision counter sees: turning the key knob mid-hold must re-solve
+   * (part of the key), while presses rebuild and null the cache anyway.
+   */
+  private solvedIrKey = '';
+  /** Topology generations: bumped on every netlist (re)assignment. */
+  private topoRevision = 0;
+  /**
+   * Stamped-extra generations: the meter and servo loads are stamped around
+   * the netlist rather than into it, so their changes bump this instead.
+   */
+  private elemRevision = 0;
 
   constructor(options: EngineOptions) {
     this.bench = options.bench;
@@ -116,6 +146,20 @@ export class Engine {
   /** Clips the meter onto two nets, or lifts it with null. */
   setMeter(meter: Multimeter | null): void {
     this.meter = meter;
+    // The meter stamps into the netlist in amps and ohms mode: same nets,
+    // different circuit.
+    this.elemRevision++;
+  }
+
+  /**
+   * Marks stamped extras dirty without changing any net.
+   *
+   * Called after mutations the netlist cannot see but `buildElements` stamps
+   * around it — a servo changing load on write — so the next solve rebuilds
+   * rather than reusing a cache from before the change.
+   */
+  touch(): void {
+    this.elemRevision++;
   }
 
   /**
@@ -172,6 +216,7 @@ export class Engine {
       this.sonarMeasuring,
       this.irTransmitting !== null,
     );
+    this.topoRevision++;
     this.solution = null;
     this.previousVoltages = null;
     this.pinSourceIndex.clear();
@@ -809,42 +854,66 @@ export class Engine {
   }
 
   private solveAt(timeMs: number, dtSeconds: number): Solution {
-    let netlist = this.currentNetlist;
-    let { elements, nodeCount } = this.buildElements(netlist, timeMs);
+    let solution: Solution;
+    if (
+      this.solution !== null &&
+      timeMs === this.solvedAtMs &&
+      dtSeconds === this.solvedDt &&
+      this.mcu.revision === this.solvedMcuRev &&
+      this.topoRevision === this.solvedTopoRev &&
+      this.elemRevision === this.solvedElemRev &&
+      this.irControlKey() === this.solvedIrKey
+    ) {
+      // Same instant, timestep, pin intents, topology and stamped extras as
+      // the last solve: the solver would answer identically, so its voltages
+      // are reused and the pumps below observe them exactly as a fresh pass
+      // would — including re-capturing the same probe samples.
+      solution = this.solution;
+    } else {
+      let netlist = this.currentNetlist;
+      let { elements, nodeCount } = this.buildElements(netlist, timeMs);
 
-    let solution = solveCircuit(elements, {
-      nodeCount,
-      dtSeconds,
-      previousVoltages: this.previousVoltages,
-    });
-
-    this.solution = solution;
-    // Both pumps run every solve: short-circuiting would starve one of them,
-    // and one shared re-solve covers armature and transmission changes alike.
-    const armaturesMoved = this.pumpRelays();
-    const transmissionMoved = this.pumpIr();
-    if (armaturesMoved || transmissionMoved) {
-      // An armature moved: the contact elements above are stale, so rebuild
-      // the netlist once and re-solve. The coil is an independent resistor,
-      // so its volts barely move with the contacts and one pass converges.
-      netlist = buildNetlist(
-        this.bench,
-        this.dynamicState,
-        this.relayEnergized,
-        this.sonarMeasuring,
-        this.irTransmitting !== null,
-      );
-      this.netlist = netlist;
-      const rebuilt = this.buildElements(netlist, timeMs);
-      elements = rebuilt.elements;
-      nodeCount = rebuilt.nodeCount;
       solution = solveCircuit(elements, {
         nodeCount,
         dtSeconds,
         previousVoltages: this.previousVoltages,
       });
+
       this.solution = solution;
-      this.pumpRelays();
+      // Both pumps run every solve: short-circuiting would starve one of them,
+      // and one shared re-solve covers armature and transmission changes alike.
+      const armaturesMoved = this.pumpRelays();
+      const transmissionMoved = this.pumpIr();
+      if (armaturesMoved || transmissionMoved) {
+        // An armature moved: the contact elements above are stale, so rebuild
+        // the netlist once and re-solve. The coil is an independent resistor,
+        // so its volts barely move with the contacts and one pass converges.
+        netlist = buildNetlist(
+          this.bench,
+          this.dynamicState,
+          this.relayEnergized,
+          this.sonarMeasuring,
+          this.irTransmitting !== null,
+        );
+        this.netlist = netlist;
+        this.topoRevision++;
+        const rebuilt = this.buildElements(netlist, timeMs);
+        elements = rebuilt.elements;
+        nodeCount = rebuilt.nodeCount;
+        solution = solveCircuit(elements, {
+          nodeCount,
+          dtSeconds,
+          previousVoltages: this.previousVoltages,
+        });
+        this.solution = solution;
+        this.pumpRelays();
+      }
+      this.solvedAtMs = timeMs;
+      this.solvedDt = dtSeconds;
+      this.solvedMcuRev = this.mcu.revision;
+      this.solvedTopoRev = this.topoRevision;
+      this.solvedElemRev = this.elemRevision;
+      this.solvedIrKey = this.irControlKey();
     }
     // Shafts only move, never change topology, so one pump after the final
     // solve covers both paths above with no re-solve.
@@ -878,6 +947,7 @@ export class Engine {
       this.sonarMeasuring,
       this.irTransmitting !== null,
     );
+    this.topoRevision++;
     this.solution = null;
   }
   /** Shaft angle of a stepper part in degrees; axis 2 on a biaxial part. */
@@ -1006,6 +1076,24 @@ export class Engine {
   /** Live transmitted NEC code, or 0 with nothing in the air. */
   irCode(): number {
     return this.irTransmitting?.code ?? 0;
+  }
+
+  /**
+   * Held-remote control state the IR pump reads.
+   *
+   * Keyed into the solve cache because no revision sees it: a press rebuilds
+   * (nulling the cache), but turning the key knob mid-hold does not, and the
+   * hold-time value must win on the very next solve.
+   */
+  private irControlKey(): string {
+    let key = '';
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'ir-remote') continue;
+      key += this.dynamicState.isPressed(part.id)
+        ? `1:${this.dynamicState.knob(part.id, REMOTE_KEY_KNOB)};`
+        : '0;';
+    }
+    return key;
   }
 
   /** Last dialed digit on a dialer part, or -1 before the first dial. */
