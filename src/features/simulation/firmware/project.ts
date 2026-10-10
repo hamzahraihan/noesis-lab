@@ -99,7 +99,7 @@ function validateLibraryFields(project: FirmwareProject): string[] {
           errors.push('libraries: every entry needs a non-empty name');
           continue;
         }
-        if (declaration.source !== 'provided' && declaration.source !== 'custom') {
+        if (declaration.source !== 'provided' && declaration.source !== 'custom' && declaration.source !== 'index') {
           errors.push(`<${declaration.name}>: unknown library source`);
           continue;
         }

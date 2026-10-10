@@ -12,7 +12,9 @@ import type { FirmwareProject } from '@/features/simulation/firmware/project';
 import { collectCustomUnits } from '../libraries/custom';
 import { CURATED_LIBRARIES, libraryDeclarations, validateLibraries, type LibrarySlot } from '../libraries/model';
 import { tier2ByName } from '../libraries/provided';
-import { buildTier2Objects, type Tier2BuildResult } from '../libraries/tier2';
+import { buildTier2Objects, decodeTier2Map, tier2CacheKey, type Tier2BuildResult } from '../libraries/tier2';
+import { fetchIndex } from '../libraries/index';
+import { buildIndexObjects, selectIndexRelease } from '../libraries/index-build';
 import { BuildFailedError, buildProjectHex, compileToolchainUnit, type ToolchainUnit } from './tools';
 import type { ProjectCompileRequest } from './worker';
 
@@ -160,6 +162,10 @@ export async function compileInWorker(
 export interface ProjectLibraryContext {
   readonly slots: readonly LibrarySlot[];
   readonly tier2: (name: string, version: string | undefined) => Promise<Tier2BuildResult>;
+  /** Installed index entries for validation; absent means no index library is known. */
+  readonly indexInstalled?: ReadonlyMap<string, { headers: readonly string[] }>;
+  /** Installed-index object builds; absent means index declarations cannot link. */
+  readonly index?: (name: string, version: string | undefined) => Promise<Tier2BuildResult>;
 }
 
 export interface AssembledUnit {
@@ -217,7 +223,7 @@ export async function assembleProjectUnits(
   ctx: ProjectLibraryContext,
   supported: ReadonlySet<string>,
 ): Promise<AssembledProject> {
-  const invalid = validateLibraries(project, { slots: ctx.slots });
+  const invalid = validateLibraries(project, { slots: ctx.slots, indexInstalled: ctx.indexInstalled });
   if (invalid.length > 0) throw new Error(invalid.join('; '));
   const packed = packageSketch(project);
   const firmwareHeaders = new Map<string, string>();
@@ -243,7 +249,19 @@ export async function assembleProjectUnits(
         units.push({ name, source: unit.source, headers: unit.headers });
         unitMaps.push({ unit: name, lineMap: identityUnitMap(unit.source, unit.path) });
       }
-    } else if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name) && tier2ByName(entry.name) !== null) {
+      continue;
+    }
+    if (entry.source === 'index') {
+      if (ctx.index === undefined) throw new Error(`<${entry.name}>: index build unavailable`);
+      const built = await ctx.index(entry.name, entry.version);
+      for (const bytes of built.objects.values()) prebuiltObjects.push(bytes);
+      const decoder = new TextDecoder();
+      for (const [headerName, headerBytes] of built.headers) {
+        if (!firmwareHeaders.has(headerName)) firmwareHeaders.set(headerName, decoder.decode(headerBytes));
+      }
+      continue;
+    }
+    if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name) && tier2ByName(entry.name) !== null) {
       const built = await ctx.tier2(entry.name, entry.version);
       for (const bytes of built.objects.values()) prebuiltObjects.push(bytes);
       const decoder = new TextDecoder();
@@ -268,9 +286,13 @@ export async function assembleProjectUnits(
  * cc1plus+as). Tier-2 compiles run on the calling thread and are cached
  * across sessions, so steady-state builds never compile them.
  */
-export function createProjectLibraryContext(slots: readonly LibrarySlot[]): ProjectLibraryContext {
+export function createProjectLibraryContext(
+  slots: readonly LibrarySlot[],
+  opts?: { indexInstalled?: ReadonlyMap<string, { headers: readonly string[] }> },
+): ProjectLibraryContext {
   return {
     slots,
+    indexInstalled: opts?.indexInstalled,
     tier2: (name, version) => {
       const backend = createProductionBackend();
       // Captured before the toolchain shim installs: the Arduino-index zip
@@ -290,7 +312,50 @@ export function createProjectLibraryContext(slots: readonly LibrarySlot[]): Proj
         compileUnit: (source, headers) => compileToolchainUnit({ name: 'Tier2Unit.cpp', source, headers }),
       }));
     },
+    index: (name, version) => buildProductionIndex(name, version),
   };
+}
+
+/**
+ * Production installed-index build: an exact pinned version with cached
+ * objects serves with zero fetches and no index parse; otherwise the pinned
+ * (or latest) release resolves through the live index and builds verified
+ * through the same Tier-2 seam, SRI-shimmed. Requested versions absent from
+ * the index fail naming them, never silently latest.
+ */
+async function buildProductionIndex(name: string, version: string | undefined): Promise<Tier2BuildResult> {
+  const backend = createProductionBackend();
+  if (version !== undefined) {
+    const [hitObjects, hitHeaders] = await Promise.all([
+      backend.get(tier2CacheKey(name, version, 'objects')),
+      backend.get(tier2CacheKey(name, version, 'headers')),
+    ]);
+    if (hitObjects !== null && hitHeaders !== null) {
+      const objects = decodeTier2Map(hitObjects);
+      const headers = decodeTier2Map(hitHeaders);
+      if (objects !== null && headers !== null) return { objects, headers };
+    }
+  }
+  // Captured before the toolchain shim installs: the Arduino index and the
+  // library zip live off-CDN (SHA-256-verified by buildIndexObjects itself),
+  // while every toolchain byte the compile below fetches stays SRI-shimmed.
+  const directFetch = globalThis.fetch.bind(globalThis);
+  const libs = await fetchIndex({ store: backend, fetchFn: directFetch });
+  const lib = libs.find((candidate) => candidate.name === name) ?? null;
+  const release = lib === null ? null : selectIndexRelease(lib, version);
+  if (release === null) throw new Error(`<${name}>: version ${version ?? 'latest'} is not in the index`);
+  return withToolchainFetch(() => buildIndexObjects({ name, release }, {
+    fetch: async (url: string) => {
+      const res = await directFetch(url);
+      if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    cache: {
+      get: (key) => backend.get(key),
+      put: (key, value) => backend.put(key, value),
+    },
+    compileUnit: (source, headers) => compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers }),
+  }));
 }
 
 /**

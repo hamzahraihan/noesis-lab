@@ -21,10 +21,13 @@ import { AvrBackend, hexForSourcesHash, parseIntelHex, sourcesHashForProject } f
 import {
   compileInWorker as builtinCompileInWorker,
   compileProjectWithLibraries as builtinCompileProjectWithLibraries,
+  createProductionBackend,
   createProjectLibraryContext,
   lintPrototypes,
   packageSketch,
+  restoreInstalledIndex,
   type CompileResult,
+  type ProjectLibraryContext,
 } from '@/features/simulation';
 import {
   FirmwareRunner,
@@ -210,6 +213,10 @@ function hasLibraryBuild(project: FirmwareProject): boolean {
 export interface SimulationDeps {
   readonly avrCompile?: typeof builtinCompileInWorker;
   readonly avrProjectCompile?: typeof builtinCompileProjectWithLibraries;
+  /** Installed index entries for validation; absent falls back to the IDB object cache. */
+  readonly indexInstalled?: ProjectLibraryContext['indexInstalled'];
+  /** Installed-index object builds; absent uses the production index build. */
+  readonly indexBuild?: ProjectLibraryContext['index'];
 }
 
 export class Simulation {
@@ -250,6 +257,8 @@ export class Simulation {
   private avrBackend: AvrBackend | null = null;
   private readonly avrCompile: typeof builtinCompileInWorker;
   private readonly avrProjectCompile: typeof builtinCompileProjectWithLibraries;
+  private readonly indexInstalled: ProjectLibraryContext['indexInstalled'];
+  private readonly indexBuild: ProjectLibraryContext['index'];
   /** In-flight worker build, so a new `compileAndRun` aborts the previous. */
   private compileAbort: AbortController | null = null;
   private serialSnapshot: string[] = [];
@@ -280,6 +289,8 @@ export class Simulation {
     this.engine = new Engine({ bench: this.builder.build(), mcu: this.mcu, dynamicState: this.controls });
     this.avrCompile = deps?.avrCompile ?? builtinCompileInWorker;
     this.avrProjectCompile = deps?.avrProjectCompile ?? builtinCompileProjectWithLibraries;
+    this.indexInstalled = deps?.indexInstalled;
+    this.indexBuild = deps?.indexBuild;
   }
   get bench(): Bench {
     return this.builder.build();
@@ -484,7 +495,13 @@ export class Simulation {
       return;
     }
 
-    const declarationErrors = validateLibraries(project, { slots: projectSlots(project) });
+    const slots = projectSlots(project);
+    // Restoring suspends, so projects without index declarations skip it
+    // entirely: the compile below must be reached synchronously, the way an
+    // abort between Run and the worker call expects.
+    const wantsIndex = libraryDeclarations(project).some((entry) => entry.source === 'index');
+    const indexInstalled = this.indexInstalled ?? (wantsIndex ? await this.restoreIndexInstalled(project) : undefined);
+    const declarationErrors = validateLibraries(project, { slots, indexInstalled });
     if (declarationErrors.length > 0) {
       // Offline-friendly: no worker traffic, straight to the interpreter fallback.
       this.loadFirmware(project);
@@ -509,7 +526,10 @@ export class Simulation {
         // shape and same landing as the single-TU path below.
         compiled = await this.avrProjectCompile(
           project,
-          createProjectLibraryContext(projectSlots(project)),
+          {
+            ...createProjectLibraryContext(slots, { indexInstalled }),
+            ...(this.indexBuild !== undefined ? { index: this.indexBuild } : {}),
+          },
           () => {
             this.compileState = 'compiling';
           },
@@ -556,6 +576,27 @@ export class Simulation {
     }
     this.firmwareError = null;
     this.compileState = 'ready';
+  }
+
+  /**
+   * Rebuilds the installed-index map from the versioned IDB object cache,
+   * which outlives the session: declarations persist with the project while
+   * the session map does not, so a reload would otherwise fail validation as
+   * `unknown index library` until reinstall. Projects without index
+   * declarations skip the backend entirely; any cache failure restores empty
+   * (the validation reason names the library, never a cache detail), and an
+   * injected map always wins over the restore.
+   */
+  private async restoreIndexInstalled(
+    project: FirmwareProject,
+  ): Promise<ReadonlyMap<string, { headers: readonly string[] }> | undefined> {
+    const wanted = libraryDeclarations(project).filter((entry) => entry.source === 'index');
+    if (wanted.length === 0) return undefined;
+    try {
+      return await restoreInstalledIndex(wanted, createProductionBackend());
+    } catch {
+      return new Map();
+    }
   }
 
   /**

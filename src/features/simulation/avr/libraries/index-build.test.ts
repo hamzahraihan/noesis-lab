@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { buildIndexObjects, selectIndexRelease } from './index-build';
+import { buildIndexObjects, reinstallIndexObjects, restoreInstalledIndex, selectIndexRelease } from './index-build';
 import { encodeTier2Map, tier2CacheKey } from './tier2';
+import { validateLibraries } from './model';
 import type { IndexLibrary } from './index';
 
 const lib: IndexLibrary = {
@@ -192,5 +193,95 @@ describe('index entry builds', () => {
     expect(compiles).toBe(1);
     expect(await cache.get(objectsKey)).toBeNull();
     expect(await cache.get(headersKey)).toBeNull();
+  });
+
+  it('reinstall evicts the exact-key hit and refetches instead of no-op', async () => {
+    const encoder = new TextEncoder();
+    const archive = buildStoredZip([
+      { name: 'SevSeg-1.0.0/SevSeg.cpp', data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n') },
+      { name: 'SevSeg-1.0.0/SevSeg.h', data: encoder.encode('#pragma once\nint x;\n') },
+    ]);
+    const sha = createHash('sha256').update(archive).digest('hex');
+    const release = { version: '1.0.0', url: 'u', checksum: `SHA-256:${sha}`, size: archive.length };
+    // A previous build's bytes behind the exact key: a plain install no-ops on this hit.
+    const seedObjects = new Map([['SevSeg.o', new Uint8Array([1, 2, 3])]]);
+    const seedHeaders = new Map([['SevSeg.h', encoder.encode('#pragma once')]]);
+    const store = new Map([
+      [tier2CacheKey('SevSeg', release.version, 'objects'), encodeTier2Map(seedObjects)],
+      [tier2CacheKey('SevSeg', release.version, 'headers'), encodeTier2Map(seedHeaders)],
+    ]);
+    let fetches = 0;
+    let compiles = 0;
+    const deps = {
+      fetch: async (): Promise<Uint8Array> => {
+        fetches += 1;
+        return archive;
+      },
+      cache: {
+        get: async (key: string): Promise<Uint8Array | null> => store.get(key) ?? null,
+        put: async (key: string, value: Uint8Array): Promise<void> => {
+          store.set(key, value);
+        },
+        delete: async (key: string): Promise<void> => {
+          store.delete(key);
+        },
+      },
+      compileUnit: async (): Promise<Uint8Array> => {
+        compiles += 1;
+        return new Uint8Array([7]);
+      },
+    };
+    const hit = await buildIndexObjects({ name: 'SevSeg', release }, deps);
+    expect(fetches).toBe(0);
+    expect(compiles).toBe(0);
+    expect([...hit.objects.values()][0]).toEqual(new Uint8Array([1, 2, 3]));
+    // A reinstall evicts first, so it always refetches + rebuilds (spec §2).
+    const rebuilt = await reinstallIndexObjects({ name: 'SevSeg', release }, deps);
+    expect(fetches).toBe(1);
+    expect(compiles).toBe(1);
+    expect([...rebuilt.objects.values()][0]).toEqual(new Uint8Array([7]));
+    expect([...rebuilt.headers.keys()]).toEqual(['SevSeg.h']);
+  });
+
+  it('restores the installed map from the versioned cache for saved declarations', async () => {
+    const encoder = new TextEncoder();
+    const archive = buildStoredZip([
+      { name: 'SevSeg-1.0.0/SevSeg.cpp', data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n') },
+      { name: 'SevSeg-1.0.0/SevSeg.h', data: encoder.encode('#pragma once\nint x;\n') },
+    ]);
+    const sha = createHash('sha256').update(archive).digest('hex');
+    const release = { version: '1.0.0', url: 'u', checksum: `SHA-256:${sha}`, size: archive.length };
+    const store = new Map<string, Uint8Array>();
+    const cache = {
+      get: async (key: string): Promise<Uint8Array | null> => store.get(key) ?? null,
+      put: async (key: string, value: Uint8Array): Promise<void> => {
+        store.set(key, value);
+      },
+    };
+    await buildIndexObjects(
+      { name: 'SevSeg', release },
+      { fetch: async () => archive, cache, compileUnit: async () => new Uint8Array([7]) },
+    );
+    // A fresh session holds no installed entries: the declaration alone greys unknown.
+    const saved = {
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
+      libraries: [{ name: 'SevSeg', source: 'index', version: '1.0.0' } as const],
+    } as const;
+    expect(validateLibraries(saved, { slots: [], indexInstalled: new Map() })).toEqual([
+      '<SevSeg>: unknown index library',
+    ]);
+    // Rebuilt deterministically from the outliving object cache: validates clean, no reinstall.
+    const restored = await restoreInstalledIndex(
+      [{ name: 'SevSeg', version: '1.0.0' }],
+      cache,
+    );
+    expect(restored.get('SevSeg')).toEqual({ version: '1.0.0', headers: ['SevSeg.h'] });
+    expect(validateLibraries(saved, { slots: [], indexInstalled: restored })).toEqual([]);
+    // Unpinned declarations and evicted entries stay unknown until install.
+    expect(await restoreInstalledIndex([{ name: 'SevSeg' }], cache)).toEqual(new Map());
+    store.clear();
+    expect(await restoreInstalledIndex([{ name: 'SevSeg', version: '1.0.0' }], cache)).toEqual(new Map());
   });
 });

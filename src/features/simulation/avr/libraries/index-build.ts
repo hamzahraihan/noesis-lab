@@ -98,3 +98,55 @@ export async function buildIndexObjects(
   }
   return { objects, headers };
 }
+
+export interface IndexReinstallDeps extends Tier2Deps {
+  readonly cache: Tier2Deps['cache'] & { delete(key: string): Promise<void> };
+}
+
+/**
+ * Reinstall path (spec §2): evicts the exact-key entry first, so a reinstall
+ * always refetches + rebuilds. A silent cache-hit no-op here would leave a
+ * stale or corrupt build in place. Plain installs keep using
+ * buildIndexObjects, whose verified no-op on a hit is the deduplication rule.
+ */
+export async function reinstallIndexObjects(
+  entry: IndexBuildEntry,
+  deps: IndexReinstallDeps,
+): Promise<Tier2BuildResult> {
+  const resolved = `${entry.name}@${entry.release.version}`;
+  try {
+    await deps.cache.delete(tier2CacheKey(entry.name, entry.release.version, 'objects'));
+    await deps.cache.delete(tier2CacheKey(entry.name, entry.release.version, 'headers'));
+  } catch (error) {
+    throw new Error(`${resolved}: cache unavailable (${cacheDetail(error)}), reinstall aborted`);
+  }
+  return buildIndexObjects(entry, deps);
+}
+
+/**
+ * Rebuilds the session's installed-index map from the versioned object cache,
+ * which outlives the session while the map itself does not. Declarations
+ * persist with the project; after a reload this repopulates validation and
+ * resolution without a reinstall. Entries with no pinned version, no cached
+ * entry, or undecodable bytes are skipped — they stay grey with the
+ * validation reason until installed.
+ */
+export async function restoreInstalledIndex(
+  declarations: readonly { readonly name: string; readonly version?: string }[],
+  cache: { get(key: string): Promise<Uint8Array | null> },
+): Promise<Map<string, { version: string; headers: readonly string[] }>> {
+  const restored = new Map<string, { version: string; headers: readonly string[] }>();
+  for (const declaration of declarations) {
+    if (declaration.version === undefined) continue;
+    const [hitObjects, hitHeaders] = await Promise.all([
+      cache.get(tier2CacheKey(declaration.name, declaration.version, 'objects')),
+      cache.get(tier2CacheKey(declaration.name, declaration.version, 'headers')),
+    ]);
+    if (hitObjects === null || hitHeaders === null) continue;
+    const objects = decodeTier2Map(hitObjects);
+    const headers = decodeTier2Map(hitHeaders);
+    if (objects === null || headers === null) continue;
+    restored.set(declaration.name, { version: declaration.version, headers: [...headers.keys()] });
+  }
+  return restored;
+}

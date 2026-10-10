@@ -21,8 +21,10 @@ import {
   MAX_FILE_BYTES,
   projectSlots,
   refreshIndex,
+  reinstallIndexObjects,
   removeFile,
   renameFile,
+  restoreInstalledIndex,
   searchIndex,
   selectIndexRelease,
   TIER2_MANIFEST,
@@ -598,6 +600,39 @@ export function FirmwareEditor({
   }, [installedIndex]);
   const libraryProblems = validateLibraries(project, { slots, indexInstalled });
 
+  /*
+   * Reload rebuild: declarations persist with the project and built objects
+   * persist in IDB, but installedIndex is session state — repopulate
+   * declared-but-unbuilt entries from the versioned cache so a reload
+   * validates clean instead of greying `unknown index library` until
+   * reinstall. A failed restore stays grey with the validation reason;
+   * reinstall rebuilds.
+   */
+  useEffect(() => {
+    const wanted = declarations.filter(
+      (entry) => entry.source === 'index' && entry.version !== undefined && !installedIndex.has(entry.name),
+    );
+    if (wanted.length === 0) return;
+    let cancelled = false;
+    void restoreInstalledIndex(wanted, createProductionBackend())
+      .then((restored) => {
+        if (cancelled || restored.size === 0) return;
+        setInstalledIndex((previous) => {
+          const next = new Map(previous);
+          for (const [name, entry] of restored) {
+            if (!next.has(name)) next.set(name, entry);
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Stays grey with the validation reason; reinstall rebuilds.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [declarations, installedIndex]);
+
   /* Debounced browse input: the index holds tens of thousands of rows, so typing filters on a delay. */
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 200);
@@ -672,9 +707,11 @@ export function FirmwareEditor({
    * progress in the bench header, and a cancelled install lands 'install
    * cancelled' and stays undeclared, the way a cancelled compile stays
    * stopped. The version is pinned on the declaration; the verified build's
-   * headers join the session's installed map for validation.
+   * headers join the session's installed map for validation. Reinstalls
+   * (`force`) evict the cached entry first, so they always refetch + rebuild
+   * per spec §2 instead of no-op on a cache hit.
    */
-  const handleInstallIndex = async (name: string, version: string) => {
+  const handleInstallIndex = async (name: string, version: string, force = false) => {
     const lib = indexLibs?.find((candidate) => candidate.name === name) ?? null;
     const release = lib === null ? null : selectIndexRelease(lib, version);
     if (release === null) {
@@ -692,28 +729,30 @@ export function FirmwareEditor({
     setNotice(null);
     try {
       const backend = createProductionBackend();
-      const built = await buildIndexObjects(
-        { name, release },
-        {
-          fetch: async (url: string) => {
-            if (controller.signal.aborted) throw new Error('install cancelled');
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
-            return new Uint8Array(await res.arrayBuffer());
-          },
-          cache: {
-            get: (key: string) => backend.get(key),
-            put: (key: string, value: Uint8Array) => backend.put(key, value),
-          },
-          compileUnit: (source: string, headers: ReadonlyMap<string, string>) => {
-            if (controller.signal.aborted) return Promise.reject(new Error('install cancelled'));
-            // Same two-stage cc1plus→as unit build Tier-2 installs use; the
-            // toolchain assets load over plain fetch here because the browser
-            // UI thread carries no FetchCache shim (cf. client.ts, in-worker only).
-            return compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers });
-          },
-        },
-      );
+      const fetchArchive = async (url: string): Promise<Uint8Array> => {
+        if (controller.signal.aborted) throw new Error('install cancelled');
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
+        return new Uint8Array(await res.arrayBuffer());
+      };
+      const cache = {
+        get: (key: string) => backend.get(key),
+        put: (key: string, value: Uint8Array) => backend.put(key, value),
+        delete: (key: string) => backend.delete(key),
+      };
+      const compileUnit = (source: string, headers: ReadonlyMap<string, string>) => {
+        if (controller.signal.aborted) return Promise.reject(new Error('install cancelled'));
+        // Same two-stage cc1plus→as unit build Tier-2 installs use; the
+        // toolchain assets load over plain fetch here because the browser
+        // UI thread carries no FetchCache shim (cf. client.ts, in-worker only).
+        return compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers });
+      };
+      const built = force
+        ? await reinstallIndexObjects({ name, release }, { fetch: fetchArchive, cache, compileUnit })
+        : await buildIndexObjects(
+          { name, release },
+          { fetch: fetchArchive, cache, compileUnit },
+        );
       if (controller.signal.aborted) throw new Error('install cancelled');
       const headers = [...built.headers.keys()];
       setInstalledIndex((previous) => new Map(previous).set(name, { version, headers }));
@@ -1316,7 +1355,7 @@ export function FirmwareEditor({
                               size="sm"
                               disabled={effectivePin === null}
                               onClick={() => {
-                                if (effectivePin !== null) void handleInstallIndex(selectedLib.name, effectivePin);
+                                if (effectivePin !== null) void handleInstallIndex(selectedLib.name, effectivePin, installedVersionOf(selectedLib.name) !== null);
                               }}
                               title={
                                 effectivePin === null
@@ -1480,7 +1519,7 @@ export function FirmwareEditor({
                             {built !== undefined && version !== null && (
                               <button
                                 type="button"
-                                onClick={() => void handleInstallIndex(entry.name, version)}
+                                onClick={() => void handleInstallIndex(entry.name, version, true)}
                                 aria-label={`Rebuild ${entry.name}`}
                                 title={`Rebuild ${entry.name}@${version}`}
                                 className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"

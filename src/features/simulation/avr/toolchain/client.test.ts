@@ -158,6 +158,88 @@ describe('project assembly', () => {
     expect(assembled.prebuiltObjects).toHaveLength(1);
     expect(assembled.units[0]?.headers.get('SevSeg.h')).toBe('#pragma once\n');
   });
+
+  it('merges index objects and headers through the index hook', async () => {
+    const encoder = new TextEncoder();
+    const project = {
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: '#include <Arduino.h>\n#include <Bounce2.h>\nvoid setup(){}\nvoid loop(){}\n' }],
+      libraries: [{ name: 'Bounce2', source: 'index', version: '2.71.0' }],
+    } as unknown as FirmwareProject;
+    const indexCalls: Array<[string, string | undefined]> = [];
+    const assembled = await assembleProjectUnits(
+      project,
+      stubContext({
+        slots: [],
+        indexInstalled: new Map([['Bounce2', { headers: ['Bounce2.h'] }]]),
+        index: async (name: string, version: string | undefined) => {
+          indexCalls.push([name, version]);
+          return {
+            objects: new Map([['Bounce2.o', new Uint8Array([7])]]),
+            headers: new Map([['Bounce2.h', encoder.encode('#pragma once\n')]]),
+          };
+        },
+      }),
+      SUPPORTED,
+    );
+    expect(indexCalls).toEqual([['Bounce2', '2.71.0']]);
+    expect(assembled.units.map((unit) => unit.name)).toEqual(['HorangFirmware.cpp']);
+    expect(assembled.prebuiltObjects).toHaveLength(1);
+    expect(assembled.units[0]?.headers.get('Bounce2.h')).toBe('#pragma once\n');
+  });
+
+  it('refuses uninstalled index declarations before fetching anything', async () => {
+    let indexCalls = 0;
+    const project = {
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: 'void setup(){}\nvoid loop(){}\n' }],
+      libraries: [{ name: 'Nope', source: 'index', version: '1.0.0' }],
+    } as unknown as FirmwareProject;
+    await expect(
+      assembleProjectUnits(
+        project,
+        stubContext({
+          slots: [],
+          index: async () => {
+            indexCalls += 1;
+            throw new Error('unexpected index fetch');
+          },
+        }),
+        SUPPORTED,
+      ),
+    ).rejects.toThrow(/unknown index library/);
+    expect(indexCalls).toBe(0);
+  });
+
+  it('surfaces index hook failures naming the library', async () => {
+    let tier2Calls = 0;
+    const project = {
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: '#include <Arduino.h>\n#include <Bounce2.h>\nvoid setup(){}\nvoid loop(){}\n' }],
+      libraries: [{ name: 'Bounce2', source: 'index', version: '2.71.0' }],
+    } as unknown as FirmwareProject;
+    await expect(
+      assembleProjectUnits(
+        project,
+        stubContext({
+          slots: [],
+          indexInstalled: new Map([['Bounce2', { headers: ['Bounce2.h'] }]]),
+          tier2: async () => {
+            tier2Calls += 1;
+            throw new Error('unexpected Tier-2 fetch');
+          },
+          index: async () => {
+            throw new Error('<Bounce2>: offline, library fetch failed: network down');
+          },
+        }),
+        SUPPORTED,
+      ),
+    ).rejects.toThrow(/<Bounce2>.*offline/);
+    expect(tier2Calls).toBe(0);
+  });
 });
 
 describe('avr compile client', () => {

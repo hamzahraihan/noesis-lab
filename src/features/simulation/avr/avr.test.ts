@@ -533,6 +533,23 @@ describe('avr compile fallback matrix', () => {
     ).not.toBeNull();
   });
 
+  it('offline index declarations fail named with interpreter fallback', async () => {
+    const simulation = new Simulation(arduinoUnoR3(), {
+      indexInstalled: new Map([['SevSeg', { headers: ['SevSeg.h'] }]]),
+      avrProjectCompile: async (): Promise<CompileResult> => {
+        throw new Error('<SevSeg>: offline, library fetch failed for u: network down');
+      },
+    });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun({
+      ...blink(),
+      libraries: [{ name: 'SevSeg', source: 'index', version: '3.2.0' }],
+    } as FirmwareProject);
+    expect(simulation.firmwareError ?? '').toContain('<SevSeg>');
+    expect(simulation.firmwareError ?? '').toMatch(/offline|network down/);
+    expect(simulation.runner, 'offline index builds fall back to the interpreter').not.toBeNull();
+  });
+
   it('keeps the flashed core across start() when the interpreter cannot parse library types', async () => {
     const multi = async (): Promise<CompileResult> => ({ hex: new Uint16Array(64), warnings: [] });
     const simulation = new Simulation(arduinoUnoR3(), { avrProjectCompile: multi });

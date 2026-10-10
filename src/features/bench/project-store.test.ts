@@ -7,7 +7,7 @@ import {
   resolveBenchSeed,
   saveBenchProject,
 } from './project-store';
-import { toSingleFileProject, type FirmwareProject } from '@/features/simulation';
+import { toSingleFileProject, validateLibraries, validateProject, type FirmwareProject } from '@/features/simulation';
 
 describe('project store', () => {
   it('round-trips through injected storage', () => {
@@ -81,6 +81,23 @@ describe('library persistence', () => {
     saveBenchProject('uno-test', project, memStorage());
     expect(loadBenchProject('uno-test', memStorage())?.libraries).toEqual(project.libraries);
     expect(loadBenchProject('uno-test', memStorage())?.slots).toEqual(project.slots);
+  });
+
+  it('round-trips index declarations through save/load', () => {
+    const project: FirmwareProject = {
+      ...toSingleFileProject('void setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
+      libraries: [{ name: 'SevSeg', source: 'index', version: '3.2.0' }],
+    };
+    saveBenchProject('uno-index', project, memStorage());
+    const loaded = loadBenchProject('uno-index', memStorage());
+    expect(loaded?.libraries).toEqual(project.libraries);
+    expect(validateProject(loaded!)).toEqual([]);
+    expect(
+      validateLibraries(loaded!, {
+        slots: [],
+        indexInstalled: new Map([['SevSeg', { headers: ['SevSeg.h'] }]]),
+      }),
+    ).toEqual([]);
   });
 
   it('rejects saves with unknown library shapes like corrupt saves', () => {

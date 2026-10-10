@@ -69,6 +69,16 @@ describe('share codec', () => {
     expect(decodeShareToProject(encoded)).toEqual({ ...project, activeName: 'main.ino' });
   });
 
+  it('round-trips index declarations through the share codec', () => {
+    const project: FirmwareProject = {
+      ...toSingleFileProject('void setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
+      libraries: [{ name: 'SevSeg', source: 'index', version: '3.2.0' }],
+    };
+    const encoded = encodeProjectToShare(project);
+    expect(encoded.length).toBeLessThan(SHARE_URL_LIMIT);
+    expect(decodeShareToProject(encoded)?.libraries).toEqual(project.libraries);
+  });
+
   it('rejects well-formed payloads with unknown library shapes', () => {
     const badLibraries = compressToEncodedURIComponent(
       JSON.stringify({
