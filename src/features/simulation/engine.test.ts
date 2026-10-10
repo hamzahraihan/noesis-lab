@@ -167,6 +167,24 @@ describe('pin drive', () => {
     expect(amps).toBeGreaterThan(0.05);
     expect(amps).toBeLessThan(0.09);
   });
+
+  it('reuses the last solve for repeated reads at the same instant', () => {
+    const { engine, mcu } = ledBench();
+    mcu.setDirection(2, 'output');
+    mcu.writeDigital(2, true, engine.timeMs);
+    const first = engine.settle();
+    // Same instant, same intents: three button-style reads cost one solve.
+    expect(engine.settle()).toBe(first);
+    expect(engine.settle()).toBe(first);
+    // A no-op write changes nothing and keeps the cache.
+    mcu.writeDigital(2, true, engine.timeMs);
+    expect(engine.settle()).toBe(first);
+    // A real change re-solves.
+    mcu.writeDigital(2, false, engine.timeMs);
+    const after = engine.settle();
+    expect(after).not.toBe(first);
+    expect(engine.voltageOfNet(engine.netOfMcuPin('R_D2'))).toBeLessThan(1);
+  });
 });
 
 describe('board supply', () => {
