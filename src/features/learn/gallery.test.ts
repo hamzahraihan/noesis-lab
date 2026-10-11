@@ -178,11 +178,11 @@ describe('the project gallery', () => {
     expect(lib.execution).toBe('avr');
     const libSim = freshBench('uno');
     libSim.loadFirmware(firmwareForBuild(lib, 'arduino-cpp'));
-    // Verbatim upstream tabs keep their capitalized quoted includes
-    // ("Button.h") while bench-legal filenames are lowercase, so the
-    // case-sensitive interpreter stops at the unresolved include before it
-    // ever reaches the classes. Either rejection proves the build is AVR-only.
-    expect(libSim.firmwareError ?? '').toMatch(/expected a type|not found/);
+    // Still AVR-only, but the frontier moved: Button/AlarmTone now parse, so
+    // the interpreter rejects the next unsupported shape instead (the
+    // file-scope `enum` in clock.h — Task 4's red). Either rejection proves
+    // the build cannot run on the interpreter yet.
+    expect(libSim.firmwareError ?? '').toMatch(/expected a type|not found|expected ';'/);
   });
 
   it('wires every build onto its board bench without throwing', () => {
@@ -649,7 +649,7 @@ void loop() {
     // the committed HEX runs underneath. A fault would overwrite this with
     // its own message, so the rejection standing also proves no fault.
     expect(simulation.firmwareError ?? '', 'library build is AVR-only').toMatch(
-      /expected a type|not found/,
+      /expected a type|not found|expected ';'/,
     );
     simulation.start();
     for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
@@ -730,7 +730,7 @@ void loop() {
     build.setup(simulation);
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     expect(simulation.firmwareError ?? '', 'library build is AVR-only').toMatch(
-      /expected a type|not found/,
+      /expected a type|not found|expected ';'/,
     );
     simulation.start();
     const alarmButton = simulation.bench.parts.filter(
@@ -754,7 +754,7 @@ void loop() {
     expect(status.glyphs[1], 'library build status shows O').toEqual(ZERO_GLYPH);
     expect(status.glyphs[2], 'library build status shows n').toEqual(N_GLYPH);
     expect(simulation.firmwareError ?? '', 'library build still runs after the tap').toMatch(
-      /expected a type|not found/,
+      /expected a type|not found|expected ';'/,
     );
     // NVRAM round-trip: reset the MCU core — setup() reruns and Clock::begin()
     // rereads the DS1307's RAM, which the reset preserves (only a rebuild
@@ -771,7 +771,7 @@ void loop() {
     expect(rearmed.glyphs[2], 'library build NVRAM persists the arm (F)').toEqual(F_GLYPH);
     expect(rearmed.glyphs[3], 'library build NVRAM persists the arm (F)').toEqual(F_GLYPH);
     expect(simulation.firmwareError ?? '', 'library build still runs after reset').toMatch(
-      /expected a type|not found/,
+      /expected a type|not found|expected ';'/,
     );
     // Release only now that the read-back is proven. Releasing rebuilds the
     // bench and recreates the RTC model, so the save is gone — but the
@@ -802,7 +802,7 @@ void loop() {
     }
     expect(buzzerSeenHigh, 'library build buzzer rings while the alarm is due').toBe(true);
     expect(simulation.firmwareError ?? '', 'library build still runs while ringing').toMatch(
-      /expected a type|not found/,
+      /expected a type|not found|expected ';'/,
     );
   }, 180_000);
 

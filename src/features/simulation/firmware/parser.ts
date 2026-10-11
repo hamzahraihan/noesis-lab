@@ -263,14 +263,16 @@ export type Stmt =
 export interface FunctionDecl {
   readonly name: string;
   readonly returnType: string;
-  readonly parameters: ReadonlyArray<{ name: string; type: string }>;
+  readonly parameters: ReadonlyArray<{ name: string; type: string; defaultValue?: Expr }>;
+  /** Constructor initializer list (`: _pin(pin)`); absent on plain functions. */
+  readonly initList?: ReadonlyArray<{ field: string; value: Expr }>;
   readonly body: Stmt;
   readonly location: SourceLocation;
 }
 
 export interface ClassDecl {
   readonly name: string;
-  readonly fields: { readonly name: string; readonly type: string }[];
+  readonly fields: { readonly name: string; readonly type: string; readonly init?: Expr }[];
   readonly methods: Map<string, FunctionDecl>;
   readonly location: SourceLocation;
 }
@@ -333,7 +335,7 @@ class Parser {
         this.next();
         const className = this.expectIdentifier().text;
         this.expectPunctuation('{');
-        const fields: { name: string; type: string }[] = [];
+        const fields: { name: string; type: string; init?: Expr }[] = [];
         const methods = new Map<string, FunctionDecl>();
         let section = 'private';
         while (!this.atPunctuation('}')) {
@@ -357,36 +359,38 @@ class Parser {
           }
           if (this.atPunctuation('(')) {
             this.expectPunctuation('(');
-            const parameters: { name: string; type: string }[] = [];
+            const parameters: { name: string; type: string; defaultValue?: Expr }[] = [];
             if (!this.atPunctuation(')')) {
               do {
                 const ptype = this.readType();
-                // Default args (`uint8_t pin, uint16_t ms = 100`): skip `= expr`.
+                // Default args (`uint16_t ms = 100`): kept so the runtime can
+                // bind them when the call site omits the argument.
                 const pname = this.expectIdentifier().text;
-                if (this.acceptPunctuation('=')) this.readExpression();
-                parameters.push({ name: pname, type: ptype });
+                const defaultValue = this.acceptPunctuation('=') ? this.readExpression() : undefined;
+                parameters.push({ name: pname, type: ptype, defaultValue });
               } while (this.acceptPunctuation(','));
             }
             this.expectPunctuation(')');
-            // Constructor initializer list (`: _pin(pin)`): parsed and skipped
-            // here; Task 2 executes the body assignments only.
-            this.skipInitializerList();
+            // Constructor initializer list (`: _pin(pin)`): kept for the
+            // runtime; anything else meets `{` or `;` next and reads empty.
+            const initList = this.readInitializerList();
             if (this.atPunctuation(';')) {
               this.next();
-              methods.set(memberName, { name: memberName, returnType, parameters, body: { kind: 'block', statements: [], location: loc }, location: loc });
+              methods.set(memberName, { name: memberName, returnType, parameters, initList, body: { kind: 'block', statements: [], location: loc }, location: loc });
               continue;
             }
             this.expectPunctuation('{');
             const body = this.readBlock();
-            methods.set(memberName, { name: memberName, returnType, parameters, body, location: loc });
+            methods.set(memberName, { name: memberName, returnType, parameters, initList, body, location: loc });
           } else {
-            // Field, possibly `static const bool PRESSED = LOW;` — consume init + `;`.
-            if (this.acceptPunctuation('=')) this.readExpression();
+            // Field, possibly `static const bool PRESSED = LOW;` — the init
+            // is kept so the runtime can seed static consts from it.
+            const init = this.acceptPunctuation('=') ? this.readExpression() : undefined;
             // Array field `uint16_t TONES[2];` shape:
             if (this.acceptPunctuation('[')) { this.expect('number'); this.expectPunctuation(']'); }
             this.expectPunctuation(';');
             void section;
-            fields.push({ name: memberName, type: returnType });
+            fields.push({ name: memberName, type: returnType, init });
           }
         }
         this.expectPunctuation('}');
@@ -406,25 +410,25 @@ class Parser {
         const memberName = this.expectIdentifier().text;
         const qualified = `${qualifier}::${memberName}`;
         this.expectPunctuation('(');
-        const parameters: { name: string; type: string }[] = [];
+        const parameters: { name: string; type: string; defaultValue?: Expr }[] = [];
         if (!this.atPunctuation(')')) {
           do {
             const ptype = this.readType();
             const pname = this.expectIdentifier().text;
-            if (this.acceptPunctuation('=')) this.readExpression();
-            parameters.push({ name: pname, type: ptype });
+            const defaultValue = this.acceptPunctuation('=') ? this.readExpression() : undefined;
+            parameters.push({ name: pname, type: ptype, defaultValue });
           } while (this.acceptPunctuation(','));
         }
         this.expectPunctuation(')');
-        this.skipInitializerList();
+        const initList = this.readInitializerList();
         if (this.atPunctuation(';')) {
           this.next();
-          functions.set(qualified, { name: qualified, returnType: '', parameters, body: { kind: 'block', statements: [], location: qualifiedLocation }, location: qualifiedLocation });
+          functions.set(qualified, { name: qualified, returnType: '', parameters, initList, body: { kind: 'block', statements: [], location: qualifiedLocation }, location: qualifiedLocation });
           continue;
         }
         this.expectPunctuation('{');
         const body = this.readBlock();
-        functions.set(qualified, { name: qualified, returnType: '', parameters, body, location: qualifiedLocation });
+        functions.set(qualified, { name: qualified, returnType: '', parameters, initList, body, location: qualifiedLocation });
         continue;
       }
 
@@ -489,19 +493,24 @@ class Parser {
   }
 
   /**
-   * Skips a constructor initializer list (`: _pin(pin), _delay(ms)`).
+   * Reads a constructor initializer list (`: _pin(pin), _delay(ms)`).
    *
    * Shared by in-class constructors and out-of-line `Class::Class`
-   * definitions: the runtime executes the body assignments only.
+   * definitions: the runtime binds each entry after the parameters, which is
+   * what carries the constructor arguments into the fields when the body
+   * itself is empty. Anything else meets `{` or `;` next and reads empty.
    */
-  private skipInitializerList(): void {
-    if (!this.acceptPunctuation(':')) return;
-    let depth = 0;
-    while (!this.at('eof') && !((this.atPunctuation('{') || this.atPunctuation(';')) && depth === 0)) {
-      if (this.atPunctuation('(')) depth++;
-      else if (this.atPunctuation(')')) depth--;
-      this.next();
-    }
+  private readInitializerList(): Array<{ field: string; value: Expr }> {
+    const entries: Array<{ field: string; value: Expr }> = [];
+    if (!this.acceptPunctuation(':')) return entries;
+    do {
+      const field = this.expectIdentifier().text;
+      this.expectPunctuation('(');
+      const value = this.readExpression();
+      this.expectPunctuation(')');
+      entries.push({ field, value });
+    } while (this.acceptPunctuation(','));
+    return entries;
   }
 
   /** Reads `int a = 1, b[4] = {1, 2, 3, 4};` into one declaration per name. */
@@ -845,6 +854,13 @@ class Parser {
         continue;
       }
       if (this.acceptPunctuation('.')) {
+        const member = this.expectIdentifier().text;
+        expression = { kind: 'member', target: expression, member, location: expression.location };
+        continue;
+      }
+      if (this.acceptPunctuation('::')) {
+        // `Button::RELEASED`: scope resolution reads like member access; the
+        // interpreter resolves class names through the class table.
         const member = this.expectIdentifier().text;
         expression = { kind: 'member', target: expression, member, location: expression.location };
         continue;

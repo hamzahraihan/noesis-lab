@@ -550,6 +550,16 @@ export class FirmwareRuntime {
   private instances!: Map<string, Instance>;
   private classMethods!: Map<string, Map<string, FunctionDecl>>;
   private classes!: Map<string, ClassDecl>;
+  /** Folded `static const` field values per class (`Button::RELEASED` → 1). */
+  private classStatics!: Map<string, Map<string, number>>;
+  /**
+   * The instance whose method body is running, for sibling dispatch.
+   *
+   * A bare call inside a method (`read()` in `Button::pressed`) names a
+   * sibling, not a global; `callFunction` checks this before the global
+   * table. Null outside any method, so plain sketches never consult it.
+   */
+  private currentInstance!: Instance | null;
   private language!: FirmwareLanguage;
 
   constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
@@ -578,7 +588,9 @@ export class FirmwareRuntime {
      * Out-of-line definitions (`Counter::bump`) parse as qualified function
      * names; file them back under their class so method dispatch finds them.
      * A definition carries the body, so it wins over the in-class declaration
-     * stub (empty body) it completes.
+     * stub (empty body) it completes. Defaults live on the declaration
+     * (`= 100` is not repeated out of line), so each parameter inherits the
+     * stub's default when the definition omits it.
      */
     for (const declaration of this.functions.values()) {
       const separator = declaration.name.indexOf('::');
@@ -591,7 +603,16 @@ export class FirmwareRuntime {
         methods = new Map();
         this.classMethods.set(className, methods);
       }
-      methods.set(method, { ...declaration, name: method });
+      const stub = methods.get(method);
+      let parameters = declaration.parameters;
+      if (stub && stub.parameters.length === declaration.parameters.length) {
+        parameters = declaration.parameters.map((parameter, index) => {
+          const fallback = stub.parameters[index]?.defaultValue;
+          if (parameter.defaultValue !== undefined || fallback === undefined) return parameter;
+          return { ...parameter, defaultValue: fallback };
+        });
+      }
+      methods.set(method, { ...declaration, name: method, parameters });
     }
 
     for (const name of ['HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP']) {
@@ -599,6 +620,30 @@ export class FirmwareRuntime {
     }
     this.globals.values.set('true', 1);
     this.globals.values.set('false', 0);
+    /*
+     * Uno analog aliases: A0 is GPIO 14 through A5 at 19. Sketches name pins
+     * `A0`, and an unknown identifier would otherwise read zero and bind the
+     * button to the wrong pin without a word anywhere.
+     */
+    for (let pin = 0; pin <= 5; pin++) {
+      this.globals.values.set(`A${pin}`, 14 + pin);
+    }
+    this.currentInstance = null;
+    /*
+     * Static consts (`const static bool RELEASED = HIGH`): folded here so
+     * `Button::MEMBER` reads resolve with no instance, and construction seeds
+     * the same values into each instance's field frame.
+     */
+    this.classStatics = new Map();
+    for (const [className, declaration] of program.classes) {
+      const table = new Map<string, number>();
+      for (const field of declaration.fields) {
+        if (!field.init) continue;
+        const value = this.staticValue(field.init);
+        if (value !== undefined) table.set(field.name, value);
+      }
+      if (table.size > 0) this.classStatics.set(className, table);
+    }
   }
 
   /** Merged-construction path for fromProject; shares init with the constructor. */
@@ -769,6 +814,19 @@ export class FirmwareRuntime {
       return typeof value === 'string' ? value.length : 0;
     }
 
+    /*
+     * A bare call inside a method body (`read()` in `Button::pressed`):
+     * members hide globals in C++, so a sibling method wins over any
+     * same-named builtin or global here. Outside a method there is no
+     * instance and the lookup below never runs.
+     */
+    if (this.currentInstance) {
+      const sibling = this.classMethods.get(this.currentInstance.className)?.get(name);
+      if (sibling) {
+        return yield* this.runMethodBody(this.currentInstance, sibling, args, services);
+      }
+    }
+
     const builtin = BUILTINS[name];
     if (builtin) return builtin(args.map(asNumber));
 
@@ -789,9 +847,56 @@ export class FirmwareRuntime {
   }
 
   /**
-   * Builds a global instance: every field defaults to zero, then the
-   * constructor body (`ClassName::ClassName` or the in-class `ClassName`)
-   * runs with the call-site arguments bound.
+   * Folds a field initializer that needs no runtime (`= LOW`, `= 100`).
+   *
+   * Anything that calls out (`= read()`) answers undefined and evaluates at
+   * construction instead, against the live field frame.
+   */
+  private staticValue(expression: Expr): number | undefined {
+    switch (expression.kind) {
+      case 'number':
+        return expression.value;
+      case 'boolean':
+        return expression.value ? 1 : 0;
+      case 'unary': {
+        const operand = this.staticValue(expression.operand);
+        if (operand === undefined) return undefined;
+        switch (expression.operator) {
+          case '-':
+            return -operand;
+          case '+':
+            return operand;
+          case '!':
+            return operand !== 0 ? 0 : 1;
+          case '~':
+            return ~operand;
+          default:
+            return undefined;
+        }
+      }
+      case 'binary': {
+        const left = this.staticValue(expression.left);
+        const right = this.staticValue(expression.right);
+        if (left === undefined || right === undefined) return undefined;
+        return applyBinary(expression.operator, left, right);
+      }
+      case 'identifier': {
+        const global = this.globals.lookup(expression.name);
+        if (typeof global === 'number') return global;
+        if (typeof global === 'string') return asNumber(global);
+        return this.defines.get(expression.name);
+      }
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Builds a global instance: every field defaults to zero, in-class field
+   * initializers seed their values, then the constructor binds its arguments
+   * (falling back to declared defaults), runs its initializer list, and runs
+   * its body. The list matters because Button constructs entirely in it --
+   * the body alone is empty, so skipping it would leave every field zero.
    */
   private *constructInstance(
     className: string,
@@ -800,11 +905,81 @@ export class FirmwareRuntime {
     services: FirmwareServices,
   ): Generator<DelayRequest, void, void> {
     const instance = new Instance(className, this.globals);
-    for (const field of this.classes.get(className)?.fields ?? []) {
+    const declaration = this.classes.get(className);
+    for (const field of declaration?.fields ?? []) {
       if (!instance.scope.values.has(field.name)) instance.scope.values.set(field.name, 0);
     }
+    for (const field of declaration?.fields ?? []) {
+      if (!field.init) continue;
+      const known = this.classStatics.get(className)?.get(field.name);
+      instance.scope.values.set(
+        field.name,
+        known ?? ((yield* this.evaluate(field.init, instance.scope, services)) as Value),
+      );
+    }
     this.instances.set(name, instance);
-    yield* this.callMethod(instance, className, args, services);
+    const ctor = this.classMethods.get(className)?.get(className);
+    if (!ctor) return;
+    const previous = this.currentInstance;
+    this.currentInstance = instance;
+    try {
+      const frame = new Scope(instance.scope);
+      yield* this.bindMethodParameters(frame, instance, ctor, args, services);
+      for (const entry of ctor.initList ?? []) {
+        instance.scope.values.set(
+          entry.field,
+          (yield* this.evaluate(entry.value, frame, services)) as Value,
+        );
+      }
+      yield* this.execute(ctor.body, frame, services);
+    } finally {
+      this.currentInstance = previous;
+    }
+  }
+
+  /**
+   * Binds call-site arguments over declared defaults. A missing argument
+   * evaluates its default in the field frame; with no default it binds zero,
+   * the way an uninitialised field reads.
+   */
+  private *bindMethodParameters(
+    frame: Scope,
+    instance: Instance,
+    declaration: FunctionDecl,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, void, void> {
+    let index = 0;
+    for (const parameter of declaration.parameters) {
+      const arg = args[index++];
+      if (arg !== undefined) {
+        frame.values.set(parameter.name, arg);
+      } else if (parameter.defaultValue) {
+        frame.values.set(
+          parameter.name,
+          (yield* this.evaluate(parameter.defaultValue, instance.scope, services)) as Value,
+        );
+      } else {
+        frame.values.set(parameter.name, 0);
+      }
+    }
+  }
+
+  /**
+   * Runs a method body with the instance fields in scope, without touching
+   * the sibling-dispatch pointer: callers either set it (callMethod) or
+   * already hold it (a bare call inside a body).
+   */
+  private *runMethodBody(
+    instance: Instance,
+    declaration: FunctionDecl,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    const frame = new Scope(instance.scope);
+    yield* this.bindMethodParameters(frame, instance, declaration, args, services);
+    const flow = yield* this.execute(declaration.body, frame, services);
+    return flow.kind === 'return' ? flow.value : 0;
   }
 
   /**
@@ -814,7 +989,9 @@ export class FirmwareRuntime {
    * field names read and write the live store -- including through nested
    * blocks, which the plain `Scope` walk reaches because the fields are a
    * real link in the chain rather than a copy. Unknown classes and missing
-   * methods answer zero, the way unknown functions do.
+   * methods answer zero, the way unknown functions do. While the body runs,
+   * bare calls resolve to siblings on this instance (saved and restored
+   * around nesting, the way a call stack behaves).
    */
   *callMethod(
     instance: Instance,
@@ -824,12 +1001,13 @@ export class FirmwareRuntime {
   ): Generator<DelayRequest, Value, void> {
     const declaration = this.classMethods.get(instance.className)?.get(method);
     if (!declaration) return 0;
-    const frame = new Scope(instance.scope);
-    declaration.parameters.forEach((parameter, index) => {
-      frame.values.set(parameter.name, args[index] ?? 0);
-    });
-    const flow = yield* this.execute(declaration.body, frame, services);
-    return flow.kind === 'return' ? flow.value : 0;
+    const previous = this.currentInstance;
+    this.currentInstance = instance;
+    try {
+      return yield* this.runMethodBody(instance, declaration, args, services);
+    } finally {
+      this.currentInstance = previous;
+    }
   }
 
   /**
@@ -1264,6 +1442,11 @@ export class FirmwareRuntime {
           // bare identifier does -- the field frame is chained to them.
           const instance = this.instances.get(expression.target.name);
           if (instance) return instance.scope.lookup(expression.member) ?? 0;
+          // `Button::RELEASED`: static consts live in the class table, since
+          // no instance is involved. Instance-qualified statics (`b.PRESSED`)
+          // already resolved above through the seeded field frame.
+          const statics = this.classStatics.get(expression.target.name);
+          if (statics?.has(expression.member)) return statics.get(expression.member) ?? 0;
         }
         // A bare `Serial`, `Wire` or `SPI` on the right of a dot has no value
         // of its own; their methods are reached through the `call` branch.
