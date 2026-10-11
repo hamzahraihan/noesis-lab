@@ -503,6 +503,8 @@ function formatValue(value: Value): string {
 }
 
 const LOCAL_INCLUDE = /^#\s*include\s*"([^"]+)"/;
+/** Quoted core headers that ride through (toolchain -I), never project tabs. */
+const SYSTEM_QUOTED_HEADERS = new Set(['arduino.h', 'wire.h', 'spi.h']);
 function localIncludes(content: string): string[] {
   return content.split('\n')
     .map((line) => LOCAL_INCLUDE.exec(line.trim())?.[1])
@@ -568,6 +570,11 @@ export class FirmwareRuntime {
     const problems = validateProject(project);
     if (problems.length > 0) throw new FirmwareProjectError(problems[0]);
     const byName = new Map(project.files.map((file) => [file.name, file.content]));
+    // Bench-legal tab names are lowercase, but verbatim upstream tabs keep
+    // capitalized quoted includes ("Button.h"). Resolve case-insensitively
+    // to match packager.ts, so the AVR-only build fails on classes (the
+    // pinned contract) instead of a misleading not-found.
+    const byLower = new Map([...byName.keys()].map((k) => [k.toLowerCase(), k]));
     // Resolve + cycle check over local edges only.
     const order: string[] = [];
     const visiting = new Set<string>();
@@ -577,11 +584,20 @@ export class FirmwareRuntime {
       if (visiting.has(name)) throw new FirmwareProjectError(`${[...stack, name].join(' → ')}: include cycle detected`);
       visiting.add(name);
       const content = byName.get(name) ?? '';
-      const edges = project.language === 'python'
-        ? pythonImports(content).map((mod) => `${mod}.py`)
-        : localIncludes(content);
+      const rawEdges =
+        project.language === 'python'
+          ? pythonImports(content).map((mod) => `${mod}.py`)
+          : localIncludes(content);
+      // Quoted system headers ride through like packager.ts (they resolve
+      // via the toolchain -I roots): only project tabs are edges here.
+      // Upstream tabs quote "Arduino.h"; the bench core provides it.
+      const edges =
+        project.language === 'python'
+          ? rawEdges
+          : rawEdges.filter((e) => !SYSTEM_QUOTED_HEADERS.has(e.toLowerCase()));
       for (const edge of edges) {
-        if (!byName.has(edge)) {
+        const target = byLower.get(edge.toLowerCase());
+        if (!target) {
           const owner = name;
           throw new FirmwareProjectError(
             project.language === 'python'
@@ -589,7 +605,7 @@ export class FirmwareRuntime {
               : `${owner}: #include "${edge}" not found`,
           );
         }
-        visit(edge, [...stack, name]);
+        visit(target, [...stack, name]);
       }
       visiting.delete(name);
       visited.add(name);
