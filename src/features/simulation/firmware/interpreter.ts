@@ -1191,11 +1191,10 @@ export class FirmwareRuntime {
         // `led.value = 0.5` and `pwm.value = 1` drive the pin directly.
         if (
           expression.target.kind === 'member' &&
-          expression.target.target.kind === 'identifier' &&
-          expression.operator === '='
+          expression.target.target.kind === 'identifier'
         ) {
           const device = scope.deviceFor(expression.target.target.name);
-          if (device) {
+          if (device && expression.operator === '=') {
             this.writeDevice(device, expression.target.member, value, services);
             return value;
           }
@@ -1205,8 +1204,21 @@ export class FirmwareRuntime {
           // instance.
           const instance = this.instances.get(expression.target.target.name);
           if (instance) {
-            instance.scope.values.set(expression.target.member, value);
-            return value;
+            if (expression.operator === '=') {
+              instance.scope.values.set(expression.target.member, value);
+              return value;
+            }
+            // `c.n += 1` and `c.n++` combine against the current field the
+            // same way bare identifiers do (`++`/`--` arrive as `+ 1`/`- 1`),
+            // then store back into the same frame the plain write uses.
+            const current = instance.scope.lookup(expression.target.member) ?? 0;
+            const combined = applyBinary(
+              expression.operator.slice(0, -1),
+              asNumber(current),
+              asNumber(value),
+            );
+            instance.scope.values.set(expression.target.member, combined);
+            return combined;
           }
         }
         if (expression.target.kind === 'identifier') {
