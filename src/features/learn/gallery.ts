@@ -1413,6 +1413,7 @@ const SAFE: GalleryProject = {
   builds: [
     {
       board: 'uno',
+      libraries: [],
       sketch: `#include <Arduino.h>
 
 byte BTN_A = 2;
@@ -1607,6 +1608,7 @@ const DASHBOARD: GalleryProject = {
   builds: [
     {
       board: 'uno',
+      libraries: [],
       sketch: `#include <Arduino.h>
 
 byte KNOB_PIN = 14;
@@ -1715,6 +1717,7 @@ const PARKING: GalleryProject = {
   builds: [
     {
       board: 'uno',
+      libraries: [],
       sketch: `#include <Arduino.h>
 
 byte PIN_TRIG = 6;
@@ -1842,6 +1845,7 @@ const WEATHER: GalleryProject = {
   builds: [
     {
       board: 'uno',
+      libraries: [],
       sketch: `#include <Arduino.h>
 
 byte SENSOR_PIN = 10;
@@ -1926,6 +1930,7 @@ const REACTION: GalleryProject = {
   builds: [
     {
       board: 'uno',
+      libraries: [],
       sketch: `#include <Arduino.h>
 
 byte BTN = 2;

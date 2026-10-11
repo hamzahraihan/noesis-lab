@@ -269,6 +269,12 @@ describe('the project gallery', () => {
     expect(firmwareForBuild(build, 'arduino-cpp').libraries).toEqual(build.libraries);
   });
 
+  it('declares no libraries on the raw builds', () => {
+    for (const id of ['safe', 'dashboard', 'parking', 'weather', 'reaction'] as const) {
+      expect(galleryById(id)!.builds[0]!.libraries, `${id} declares no libraries`).toEqual([]);
+    }
+  });
+
   /*
    * Live parity for the library-declared alarm build: the same glass, colon,
    * and serial observables as the raw-GPIO build, running under `execution
