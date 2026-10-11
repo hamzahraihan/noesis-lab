@@ -487,6 +487,24 @@ function* chainFrom(start: Scope): Generator<Scope> {
   }
 }
 
+/**
+ * A live class instance: its class name plus its field frame.
+ *
+ * Fields live in a real `Scope` chained to the runtime globals, so a method
+ * body reads and writes them through the ordinary lookup walk -- parameters,
+ * then fields, then globals -- with no copying. Sharing the frame rather than
+ * copying it is what keeps re-entrant calls (`c.reset()` calling back into
+ * another method on `c`) from clobbering each other's writes.
+ */
+export class Instance {
+  readonly className: string;
+  readonly scope: Scope;
+  constructor(className: string, globals: Scope) {
+    this.className = className;
+    this.scope = new Scope(globals);
+  }
+}
+
 function isTruthy(value: Value): boolean {
   return typeof value === 'number' ? value !== 0 : value.length > 0;
 }
@@ -529,6 +547,9 @@ export class FirmwareRuntime {
 
   private globals!: Scope;
   private functions!: Map<string, FunctionDecl>;
+  private instances!: Map<string, Instance>;
+  private classMethods!: Map<string, Map<string, FunctionDecl>>;
+  private classes!: Map<string, ClassDecl>;
   private language!: FirmwareLanguage;
 
   constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
@@ -542,9 +563,35 @@ export class FirmwareRuntime {
     this.defines = new Map(program.defines);
     this.globals = new Scope();
     this.functions = new Map();
+    this.instances = new Map();
+    this.classes = new Map(program.classes);
+    this.classMethods = new Map();
 
     for (const declaration of this.program.functions.values()) {
       this.functions.set(declaration.name, declaration);
+    }
+
+    for (const [className, declaration] of program.classes) {
+      this.classMethods.set(className, new Map(declaration.methods));
+    }
+    /*
+     * Out-of-line definitions (`Counter::bump`) parse as qualified function
+     * names; file them back under their class so method dispatch finds them.
+     * A definition carries the body, so it wins over the in-class declaration
+     * stub (empty body) it completes.
+     */
+    for (const declaration of this.functions.values()) {
+      const separator = declaration.name.indexOf('::');
+      if (separator < 0) continue;
+      const className = declaration.name.slice(0, separator);
+      const method = declaration.name.slice(separator + 2);
+      if (!className || !method) continue;
+      let methods = this.classMethods.get(className);
+      if (!methods) {
+        methods = new Map();
+        this.classMethods.set(className, methods);
+      }
+      methods.set(method, { ...declaration, name: method });
     }
 
     for (const name of ['HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP']) {
@@ -624,11 +671,14 @@ export class FirmwareRuntime {
     const defines = new Map<string, number>();
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
-    // Class merging across files lands in Task 2; pass through empty so the
-    // merged program keeps the same shape as the single-file front ends.
+    // A class is declared once (usually in a header) while its `Class::`
+    // definitions live in other tabs, so per-file declarations merge instead
+    // of colliding: fields union, methods union, duplicate methods rejected
+    // like duplicate functions.
     const classes = new Map<string, ClassDecl>();
     const functionOwner = new Map<string, string>();
     const defineOwner = new Map<string, string>();
+    const classOwner = new Map<string, string>();
     programs.forEach((program, index) => {
       const owner = order[index];
       for (const [key, value] of program.defines) {
@@ -645,6 +695,26 @@ export class FirmwareRuntime {
         }
         functions.set(key, decl);
         functionOwner.set(key, owner);
+      }
+      for (const [key, decl] of program.classes) {
+        const existing = classes.get(key);
+        if (!existing) {
+          classes.set(key, decl);
+          classOwner.set(key, owner);
+          continue;
+        }
+        const fields = [...existing.fields];
+        for (const field of decl.fields) {
+          if (!fields.some((known) => known.name === field.name)) fields.push(field);
+        }
+        const methods = new Map(existing.methods);
+        for (const [methodName, methodDecl] of decl.methods) {
+          if (methods.has(methodName)) {
+            throw new FirmwareProjectError(`${owner}: duplicate method '${key}::${methodName}' (also in ${classOwner.get(key)})`);
+          }
+          methods.set(methodName, methodDecl);
+        }
+        classes.set(key, { name: key, fields, methods, location: existing.location });
       }
     });
     return FirmwareRuntime.__merged({ defines, globals, functions, classes }, project.language);
@@ -715,6 +785,50 @@ export class FirmwareRuntime {
     const flow = yield* this.execute(declaration.body, scope, services);
     // The body's `return` carries the value out; falling off the end, as C
     // does, yields whatever the last expression left behind.
+    return flow.kind === 'return' ? flow.value : 0;
+  }
+
+  /**
+   * Builds a global instance: every field defaults to zero, then the
+   * constructor body (`ClassName::ClassName` or the in-class `ClassName`)
+   * runs with the call-site arguments bound.
+   */
+  private *constructInstance(
+    className: string,
+    name: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, void, void> {
+    const instance = new Instance(className, this.globals);
+    for (const field of this.classes.get(className)?.fields ?? []) {
+      if (!instance.scope.values.has(field.name)) instance.scope.values.set(field.name, 0);
+    }
+    this.instances.set(name, instance);
+    yield* this.callMethod(instance, className, args, services);
+  }
+
+  /**
+   * Runs a method body with the instance fields in scope.
+   *
+   * The frame chains parameters over the instance's field frame, so bare
+   * field names read and write the live store -- including through nested
+   * blocks, which the plain `Scope` walk reaches because the fields are a
+   * real link in the chain rather than a copy. Unknown classes and missing
+   * methods answer zero, the way unknown functions do.
+   */
+  *callMethod(
+    instance: Instance,
+    method: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    const declaration = this.classMethods.get(instance.className)?.get(method);
+    if (!declaration) return 0;
+    const frame = new Scope(instance.scope);
+    declaration.parameters.forEach((parameter, index) => {
+      frame.values.set(parameter.name, args[index] ?? 0);
+    });
+    const flow = yield* this.execute(declaration.body, frame, services);
     return flow.kind === 'return' ? flow.value : 0;
   }
 
@@ -909,6 +1023,15 @@ export class FirmwareRuntime {
         return NORMAL;
       }
 
+      case 'instanceDecl': {
+        const args: Value[] = [];
+        for (const argument of statement.args) {
+          args.push((yield* this.evaluate(argument, scope, services)) as Value);
+        }
+        yield* this.constructInstance(statement.className, statement.name, args, services);
+        return NORMAL;
+      }
+
       case 'expression':
         yield* this.evaluate(statement.value, scope, services);
         return NORMAL;
@@ -1076,6 +1199,15 @@ export class FirmwareRuntime {
             this.writeDevice(device, expression.target.member, value, services);
             return value;
           }
+          // `c.n = 41` stores into the instance's field frame, never into a
+          // global of the same name: routing through `assign` would bind a
+          // global when the field is missing instead of keeping it on the
+          // instance.
+          const instance = this.instances.get(expression.target.target.name);
+          if (instance) {
+            instance.scope.values.set(expression.target.member, value);
+            return value;
+          }
         }
         if (expression.target.kind === 'identifier') {
           const name = expression.target.name;
@@ -1116,6 +1248,10 @@ export class FirmwareRuntime {
         if (expression.target.kind === 'identifier') {
           const device = scope.deviceFor(expression.target.name);
           if (device) return this.readDevice(device, expression.member, services);
+          // `c.n` reads the instance field, falling back to globals the way a
+          // bare identifier does -- the field frame is chained to them.
+          const instance = this.instances.get(expression.target.name);
+          if (instance) return instance.scope.lookup(expression.member) ?? 0;
         }
         // A bare `Serial`, `Wire` or `SPI` on the right of a dot has no value
         // of its own; their methods are reached through the `call` branch.
@@ -1146,6 +1282,16 @@ export class FirmwareRuntime {
           const device = scope.deviceFor(callee.target.name);
           if (device) {
             return (yield* this.callDevice(device, callee.member, services)) as Value;
+          }
+          /*
+           * A method on a class instance (`c.bump()`), built from a global
+           * (`Counter c;`) when the globals ran. Checked here, beside the
+           * device dispatch, because both resolve a method through the name
+           * before the target rather than through a value.
+           */
+          const instance = this.instances.get(callee.target.name);
+          if (instance) {
+            return (yield* this.callMethod(instance, callee.member, args, services)) as Value;
           }
           if (callee.target.name === 'lcd' || callee.target.name === 'LiquidCrystal') {
             return this.evaluateLcdCall(callee.member, args, services);

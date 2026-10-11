@@ -234,8 +234,15 @@ export type Stmt =
   | { kind: 'varDecl'; name: string; init: Expr | null; location: SourceLocation }
   | { kind: 'arrayDecl'; name: string; size: number; init: Expr[] | null; location: SourceLocation }
   | { kind: 'expression'; value: Expr; location: SourceLocation }
-  | { kind: 'if'; condition: Expr; then: Stmt; otherwise: Stmt | null; location: SourceLocation }
-  | { kind: 'while'; condition: Expr; body: Stmt; location: SourceLocation }
+  | {
+      kind: 'instanceDecl';
+      className: string;
+      name: string;
+      /** Constructor arguments (`Button btn(2)`), empty for default construction. */
+      args: Expr[];
+      location: SourceLocation;
+    }
+  | { kind: 'if'; condition: Expr; then: Stmt; otherwise: Stmt | null; location: SourceLocation }  | { kind: 'while'; condition: Expr; body: Stmt; location: SourceLocation }
   | { kind: 'doWhile'; body: Stmt; condition: Expr; location: SourceLocation }
   | { kind: 'for'; init: Stmt | null; condition: Expr | null; update: Expr | null; body: Stmt; location: SourceLocation }
   | { kind: 'return'; value: Expr | null; location: SourceLocation }
@@ -363,14 +370,7 @@ class Parser {
             this.expectPunctuation(')');
             // Constructor initializer list (`: _pin(pin)`): parsed and skipped
             // here; Task 2 executes the body assignments only.
-            if (this.acceptPunctuation(':')) {
-              let depth = 0;
-              while (!this.at('eof') && !((this.atPunctuation('{') || this.atPunctuation(';')) && depth === 0)) {
-                if (this.atPunctuation('(')) depth++;
-                else if (this.atPunctuation(')')) depth--;
-                this.next();
-              }
-            }
+            this.skipInitializerList();
             if (this.atPunctuation(';')) {
               this.next();
               methods.set(memberName, { name: memberName, returnType, parameters, body: { kind: 'block', statements: [], location: loc }, location: loc });
@@ -395,9 +395,72 @@ class Parser {
         continue;
       }
 
+      // An out-of-line constructor (`Counter::Counter() {...}`) has no return
+      // type, so it starts with an identifier where `readType` expects a
+      // keyword. Typed definitions (`int Counter::bump()`) go through the
+      // normal path below, which folds `::` into the function name.
+      if (this.peek().kind === 'identifier' && this.peek(1).text === '::') {
+        const qualifier = this.next().text;
+        const qualifiedLocation = this.peek().location;
+        this.expectPunctuation('::');
+        const memberName = this.expectIdentifier().text;
+        const qualified = `${qualifier}::${memberName}`;
+        this.expectPunctuation('(');
+        const parameters: { name: string; type: string }[] = [];
+        if (!this.atPunctuation(')')) {
+          do {
+            const ptype = this.readType();
+            const pname = this.expectIdentifier().text;
+            if (this.acceptPunctuation('=')) this.readExpression();
+            parameters.push({ name: pname, type: ptype });
+          } while (this.acceptPunctuation(','));
+        }
+        this.expectPunctuation(')');
+        this.skipInitializerList();
+        if (this.atPunctuation(';')) {
+          this.next();
+          functions.set(qualified, { name: qualified, returnType: '', parameters, body: { kind: 'block', statements: [], location: qualifiedLocation }, location: qualifiedLocation });
+          continue;
+        }
+        this.expectPunctuation('{');
+        const body = this.readBlock();
+        functions.set(qualified, { name: qualified, returnType: '', parameters, body, location: qualifiedLocation });
+        continue;
+      }
+
+      // A class-typed global (`Counter c;`, `Button btn(pin);`): the type is a
+      // class name rather than a keyword type, so `readType` cannot read it.
+      // The class may live in another tab, so any `Type name` shape is
+      // accepted here; an unknown class builds an empty instance at runtime.
+      if (this.peek().kind === 'identifier' && this.peek(1).kind === 'identifier') {
+        const instanceLocation = this.peek().location;
+        const className = this.next().text;
+        const instanceName = this.expectIdentifier().text;
+        const args: Expr[] = [];
+        if (this.acceptPunctuation('(')) {
+          if (!this.atPunctuation(')')) {
+            do {
+              args.push(this.readExpression());
+            } while (this.acceptPunctuation(','));
+          }
+          this.expectPunctuation(')');
+        }
+        this.expectPunctuation(';');
+        globals.push({ kind: 'instanceDecl', className, name: instanceName, args, location: instanceLocation });
+        continue;
+      }
+
       const location = this.peek().location;
       const returnType = this.readType();
       const name = this.expectIdentifier().text;
+
+      // An out-of-line definition (`int Counter::bump() {...}`): the `::`
+      // stays part of the function name here; `fromProject` and the runtime
+      // init file it back under its class.
+      let functionName = name;
+      if (this.acceptPunctuation('::')) {
+        functionName = `${name}::${this.expectIdentifier().text}`;
+      }
 
       // A type followed by a name but no parameter list is a global variable,
       // not a function. Sketches declare these constantly -- counters, buffers
@@ -419,10 +482,26 @@ class Parser {
       this.expectPunctuation('{');
 
       const body = this.readBlock();
-      functions.set(name, { name, returnType, parameters, body, location });
+      functions.set(functionName, { name: functionName, returnType, parameters, body, location });
     }
 
     return { defines, globals, functions, classes };
+  }
+
+  /**
+   * Skips a constructor initializer list (`: _pin(pin), _delay(ms)`).
+   *
+   * Shared by in-class constructors and out-of-line `Class::Class`
+   * definitions: the runtime executes the body assignments only.
+   */
+  private skipInitializerList(): void {
+    if (!this.acceptPunctuation(':')) return;
+    let depth = 0;
+    while (!this.at('eof') && !((this.atPunctuation('{') || this.atPunctuation(';')) && depth === 0)) {
+      if (this.atPunctuation('(')) depth++;
+      else if (this.atPunctuation(')')) depth--;
+      this.next();
+    }
   }
 
   /** Reads `int a = 1, b[4] = {1, 2, 3, 4};` into one declaration per name. */
