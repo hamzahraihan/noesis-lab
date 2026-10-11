@@ -696,6 +696,15 @@ function timeSpanMember(value: TimeSpanValue, member: string): Value {
 const LOCAL_INCLUDE = /^#\s*include\s*"([^"]+)"/;
 /** Quoted core headers that ride through (toolchain -I), never project tabs. */
 const SYSTEM_QUOTED_HEADERS = new Set(['arduino.h', 'wire.h', 'spi.h']);
+/**
+ * Library-owned instance types with no tab declaration: the class is never
+ * declared in the project (the library owns it), so a global of that type
+ * answers through services rather than through method bodies. `SevSeg` and
+ * `RTC_DS1307` are the only two the gallery library tabs and the Tier-2
+ * fixture instantiate -- every other `Type name` global must name a class
+ * the merged tabs declare, or `fromProject` rejects it as a probable typo.
+ */
+const LIBRARY_OWNED_INSTANCES = new Set(['SevSeg', 'RTC_DS1307']);
 function localIncludes(content: string): string[] {
   return content.split('\n')
     .map((line) => LOCAL_INCLUDE.exec(line.trim())?.[1])
@@ -977,6 +986,24 @@ export class FirmwareRuntime {
         classes.set(key, { name: key, fields, methods, location: existing.location });
       }
     });
+    /*
+     * A `Type name` global builds a class instance when the globals run, so
+     * an unknown class name here is almost certainly a typo (`Buton b(A0)`)
+     * that would otherwise run dark answering zeros. Library-owned types
+     * with no tab declaration ride through; everything else must name a
+     * class the merged tabs declare.
+     */
+    programs.forEach((program, index) => {
+      const owner = order[index];
+      for (const statement of program.globals) {
+        if (statement.kind !== 'instanceDecl') continue;
+        if (classes.has(statement.className)) continue;
+        if (LIBRARY_OWNED_INSTANCES.has(statement.className)) continue;
+        throw new FirmwareProjectError(
+          `${owner}: unknown class '${statement.className}' (global '${statement.name}')`,
+        );
+      }
+    });
     return FirmwareRuntime.__merged({ defines, macros, globals, functions, classes }, project.language);
   }
 
@@ -1223,8 +1250,8 @@ export class FirmwareRuntime {
    * The frame chains parameters over the instance's field frame, so bare
    * field names read and write the live store -- including through nested
    * blocks, which the plain `Scope` walk reaches because the fields are a
-   * real link in the chain rather than a copy. Unknown classes and missing
-   * methods answer zero, the way unknown functions do. While the body runs,
+   * real link in the chain rather than a copy. Missing methods answer zero,
+   * the way unknown functions do. While the body runs,
    * bare calls resolve to siblings on this instance (saved and restored
    * around nesting, the way a call stack behaves).
    */
@@ -1780,8 +1807,14 @@ export class FirmwareRuntime {
             }
             // `c.n += 1` and `c.n++` combine against the current field the
             // same way bare identifiers do (`++`/`--` arrive as `+ 1`/`- 1`),
-            // then store back into the same frame the plain write uses.
-            const current = instance.scope.lookup(expression.target.member) ?? 0;
+            // then store back into the same frame the plain write uses. The
+            // read stays inside the field frame, the way the plain member
+            // read does -- a same-named global must not leak into the
+            // combination and mask a typo'd field.
+            const current =
+              instance.scope.values.get(expression.target.member) ??
+              this.classStatics.get(instance.className)?.get(expression.target.member) ??
+              0;
             const combined = applyBinary(
               expression.operator.slice(0, -1),
               asNumber(current),
@@ -1830,10 +1863,18 @@ export class FirmwareRuntime {
         if (expression.target.kind === 'identifier') {
           const device = scope.deviceFor(expression.target.name);
           if (device) return this.readDevice(device, expression.member, services);
-          // `c.n` reads the instance field, falling back to globals the way a
-          // bare identifier does -- the field frame is chained to them.
+          // `c.n` reads the instance's own field frame, never globals: writes
+          // store into the frame, so chaining past it would answer a
+          // same-named global and mask a typo'd field. Folded statics back
+          // the read for names the frame never seeded.
           const instance = this.instances.get(expression.target.name);
-          if (instance) return instance.scope.lookup(expression.member) ?? 0;
+          if (instance) {
+            return (
+              instance.scope.values.get(expression.member) ??
+              this.classStatics.get(instance.className)?.get(expression.member) ??
+              0
+            );
+          }
           // `Button::RELEASED`: static consts live in the class table, since
           // no instance is involved. Instance-qualified statics (`b.PRESSED`)
           // already resolved above through the seeded field frame.

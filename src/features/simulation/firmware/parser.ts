@@ -513,7 +513,8 @@ class Parser {
       // A class-typed global (`Counter c;`, `Button btn(pin);`): the type is a
       // class name rather than a keyword type, so `readType` cannot read it.
       // The class may live in another tab, so any `Type name` shape is
-      // accepted here; an unknown class builds an empty instance at runtime.
+      // accepted here; `fromProject` rejects names no merged tab declares
+      // (outside the library-owned allow-list) instead of running dark.
       if (this.peek().kind === 'identifier' && this.peek(1).kind === 'identifier') {
         /*
          * An out-of-line definition with an identifier return type

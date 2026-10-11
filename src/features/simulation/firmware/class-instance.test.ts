@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFor, galleryById } from '@/features/learn/gallery';
 import { FirmwareRuntime, PIN_INPUT_PULLUP, type FirmwareServices } from './interpreter';
-import { toSingleFileProject, type FirmwareProject } from './project';
+import { FirmwareProjectError, toSingleFileProject, type FirmwareProject } from './project';
 
 function stubServices(serial: string[]): FirmwareServices {
   return {
@@ -61,6 +61,36 @@ describe('class instances', () => {
     // |1=9, ^3=10, bump=11: every compound store landed in the field frame
     // and the method body saw them through the shared frame.
     expect(serial.join('')).toBe('11\n');
+  });
+
+  it('rejects an unknown class global loudly instead of answering zero', () => {
+    const typo = toSingleFileProject(`Buton b(A0);\nvoid setup() {}\nvoid loop() {}`, 'arduino-cpp');
+    expect(() => FirmwareRuntime.fromProject(typo)).toThrowError(FirmwareProjectError);
+    expect(() => FirmwareRuntime.fromProject(typo)).toThrowError("unknown class 'Buton'");
+  });
+
+  it('lets library-owned instances through with no tab declaration', () => {
+    const project = toSingleFileProject(
+      `SevSeg sevseg;\nRTC_DS1307 rtc;\nvoid setup() {}\nvoid loop() {}`,
+      'arduino-cpp',
+    );
+    expect(() => FirmwareRuntime.fromProject(project)).not.toThrow();
+  });
+
+  it('reads a missing member as zero even beside a same-named global', () => {
+    const project = toSingleFileProject(
+      `class Counter { public: int n; };\nCounter c;\nint missing;\n` +
+        'void setup() { missing = 7; c.n = 1; Serial.println(c.missing + c.n); }\nvoid loop() {}',
+      'arduino-cpp',
+    );
+    const runtime = FirmwareRuntime.fromProject(project);
+    const serial: string[] = [];
+    const main = runtime.main(stubServices(serial));
+    for (let step = 0; step < 10; step++) {
+      if (main.next().done) break;
+    }
+    // `c.missing` answers the field frame (0), not the global `missing` (7).
+    expect(serial.join('')).toBe('1\n');
   });
 });
 
