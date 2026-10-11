@@ -66,10 +66,27 @@ import {
   type Stmt,
   parseFirmware,
 } from './parser';
+import {
+  DateTimeValue,
+  RtcHandle,
+  TimeSpanValue,
+  addSeconds,
+  bcdToDec,
+  compareDateTime,
+  decToBcd,
+  DS1307_ADDRESS,
+  NVRAM_BASE,
+} from './rtc-shim';
 import { FirmwareProjectError, validateProject, type FirmwareProject } from './project';
 
-/** A runtime value: numbers for everything numeric, plus strings for Serial. */
-export type Value = number | string;
+/**
+ * A runtime value: numbers for everything numeric, strings for Serial, and
+ * RTClib values for sketches that keep time. Date and span objects pass
+ * through assignments, arguments and returns untouched; only the operations
+ * RTClib defines (field reads, comparison, plus-a-span) see inside them,
+ * and everything else reads them as zero rather than crashing.
+ */
+export type Value = number | string | DateTimeValue | TimeSpanValue | RtcHandle;
 
 /** Yields the milliseconds a blocking call wants to wait. */
 export type DelayRequest = number;
@@ -506,11 +523,18 @@ export class Instance {
 }
 
 function isTruthy(value: Value): boolean {
-  return typeof value === 'number' ? value !== 0 : value.length > 0;
+  if (typeof value === 'number') return value !== 0;
+  // A date, a span or an RTC handle is always something rather than nothing;
+  // sketches test their fields, never the object itself.
+  if (typeof value === 'object') return true;
+  return value.length > 0;
 }
 
 function asNumber(value: Value): number {
   if (typeof value === 'number') return value;
+  // RTClib values have no numeric reading: only their fields and comparisons
+  // do, through the dispatch that understands them.
+  if (typeof value === 'object') return 0;
   const parsed = Number(value);
   return Number.isNaN(parsed) ? 0 : parsed;
 }
@@ -518,7 +542,82 @@ function asNumber(value: Value): number {
 
 /** Renders a value the way `print` and an f-string would write it. */
 function formatValue(value: Value): string {
-  return typeof value === 'string' ? value : formatPrintValue(asNumber(value));
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') return formatObjectValue(value);
+  return formatPrintValue(asNumber(value));
+}
+
+/** Renders an RTClib value for `print`: dates read as calendar text. */
+function formatObjectValue(value: DateTimeValue | TimeSpanValue | RtcHandle): string {
+  if (value instanceof DateTimeValue) {
+    const pad = (part: number): string => String(part).padStart(2, '0');
+    return `${value.year()}-${pad(value.month())}-${pad(value.day())} ${pad(value.hour())}:${pad(value.minute())}:${pad(value.second())}`;
+  }
+  if (value instanceof TimeSpanValue) return String(value.totalSeconds());
+  return 'rtc';
+}
+
+/**
+ * Builds a `DateTime` from call arguments: RTClib defaults every trailing
+ * component, so two to six arguments all construct (`year, month, day` then
+ * `hour = 0, minute = 0, second = 0`), and bare construction is the
+ * zero time, 2000-01-01 00:00:00.
+ */
+function constructDateTime(args: Value[]): DateTimeValue {
+  const component = (index: number, fallback: number): number =>
+    args[index] === undefined ? fallback : asNumber(args[index] as Value);
+  return new DateTimeValue(
+    component(0, 2000),
+    component(1, 1),
+    component(2, 1),
+    component(3, 0),
+    component(4, 0),
+    component(5, 0),
+  );
+}
+
+/** Builds a `TimeSpan` from call arguments: days, hours, minutes, seconds. */
+function constructTimeSpan(args: Value[]): TimeSpanValue {
+  const component = (index: number): number => (args[index] === undefined ? 0 : asNumber(args[index] as Value));
+  return new TimeSpanValue(component(0), component(1), component(2), component(3));
+}
+
+/** Reads a `DateTime` field the way `now.hour()` spells it. */
+function dateTimeMember(value: DateTimeValue, member: string): Value {
+  switch (member) {
+    case 'year':
+      return value.year();
+    case 'month':
+      return value.month();
+    case 'day':
+      return value.day();
+    case 'hour':
+      return value.hour();
+    case 'minute':
+      return value.minute();
+    case 'second':
+      return value.second();
+    default:
+      return 0;
+  }
+}
+
+/** Reads a `TimeSpan` field; the gallery only builds them, never reads them. */
+function timeSpanMember(value: TimeSpanValue, member: string): Value {
+  switch (member) {
+    case 'days':
+      return value.days();
+    case 'hours':
+      return value.hours();
+    case 'minutes':
+      return value.minutes();
+    case 'seconds':
+      return value.seconds();
+    case 'totalseconds':
+      return value.totalSeconds();
+    default:
+      return 0;
+  }
 }
 
 const LOCAL_INCLUDE = /^#\s*include\s*"([^"]+)"/;
@@ -544,6 +643,8 @@ function pythonImports(content: string): string[] {
 export class FirmwareRuntime {
   program!: Program;
   defines!: Map<string, number>;
+  /** Expression defines, evaluated where used (see the `Program` contract). */
+  macros!: Map<string, Expr>;
 
   private globals!: Scope;
   private functions!: Map<string, FunctionDecl>;
@@ -560,6 +661,13 @@ export class FirmwareRuntime {
    * table. Null outside any method, so plain sketches never consult it.
    */
   private currentInstance!: Instance | null;
+  /**
+   * Macro names currently being expanded, against self-reference: a define
+   * that names itself (`#define X X + 1`) answers zero rather than recursing
+   * forever. Saved per runtime, not per call, because expansion nests through
+   * ordinary evaluation.
+   */
+  private macroResolving!: string[];
   private language!: FirmwareLanguage;
 
   constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
@@ -571,6 +679,8 @@ export class FirmwareRuntime {
     this.program = program;
     this.language = language;
     this.defines = new Map(program.defines);
+    this.macros = new Map(program.macros);
+    this.macroResolving = [];
     this.globals = new Scope();
     this.functions = new Map();
     this.instances = new Map();
@@ -648,12 +758,12 @@ export class FirmwareRuntime {
 
   /** Merged-construction path for fromProject; shares init with the constructor. */
   private static __merged(
-    merged: { defines: Map<string, number>; globals: Stmt[]; functions: Map<string, FunctionDecl>; classes: Map<string, ClassDecl> },
+    merged: { defines: Map<string, number>; macros: Map<string, Expr>; globals: Stmt[]; functions: Map<string, FunctionDecl>; classes: Map<string, ClassDecl> },
     language: FirmwareLanguage,
   ): FirmwareRuntime {
     const runtime = Object.create(FirmwareRuntime.prototype) as FirmwareRuntime;
     runtime.init(
-      { defines: merged.defines, globals: merged.globals, functions: merged.functions, classes: merged.classes },
+      { defines: merged.defines, macros: merged.macros, globals: merged.globals, functions: merged.functions, classes: merged.classes },
       language,
     );
     return runtime;
@@ -714,6 +824,7 @@ export class FirmwareRuntime {
         : parseFirmware(byName.get(name)!, name),
     );
     const defines = new Map<string, number>();
+    const macros = new Map<string, Expr>();
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
     // A class is declared once (usually in a header) while its `Class::`
@@ -734,6 +845,12 @@ export class FirmwareRuntime {
         if (!defineOwner.has(key)) defineOwner.set(key, owner);
       }
       globals.push(...program.globals);
+      for (const [key, expression] of program.macros) {
+        // First tab wins: a name that also differs as a numeric define
+        // already threw in the defines merge above, so only identical
+        // expression defines can meet here.
+        if (!macros.has(key)) macros.set(key, expression);
+      }
       for (const [key, decl] of program.functions) {
         if (functions.has(key)) {
           throw new FirmwareProjectError(`${owner}: duplicate function '${key}' (also in ${functionOwner.get(key)})`);
@@ -762,7 +879,7 @@ export class FirmwareRuntime {
         classes.set(key, { name: key, fields, methods, location: existing.location });
       }
     });
-    return FirmwareRuntime.__merged({ defines, globals, functions, classes }, project.language);
+    return FirmwareRuntime.__merged({ defines, macros, globals, functions, classes }, project.language);
   }
 
   hasFunction(name: string): boolean {
@@ -813,6 +930,15 @@ export class FirmwareRuntime {
       if (array) return array.length;
       return typeof value === 'string' ? value.length : 0;
     }
+
+    /*
+     * RTClib value construction (`DateTime(2026, 10, 11, 9, 30)`,
+     * `TimeSpan(1, 0, 0, 0)`): checked before sibling dispatch, because a
+     * type name can never be a method and a constructor call inside a Clock
+     * body must build a value rather than recurse into a same-named member.
+     */
+    if (name === 'DateTime') return constructDateTime(args);
+    if (name === 'TimeSpan') return constructTimeSpan(args);
 
     /*
      * A bare call inside a method body (`read()` in `Button::pressed`):
@@ -917,6 +1043,17 @@ export class FirmwareRuntime {
         known ?? ((yield* this.evaluate(field.init, instance.scope, services)) as Value),
       );
     }
+    /*
+     * A member wired to the bench rather than to a number: any field declared
+     * as an `RTC_DS1307` starts as a live handle on the I2C clock, so method
+     * bodies call `_rtc.now()` against the registers instead of a zero.
+     * General for any class that holds one, exercised here by Clock.
+     */
+    for (const field of declaration?.fields ?? []) {
+      if (field.type === 'RTC_DS1307' && !field.init) {
+        instance.scope.values.set(field.name, new RtcHandle());
+      }
+    }
     this.instances.set(name, instance);
     const ctor = this.classMethods.get(className)?.get(className);
     if (!ctor) return;
@@ -999,6 +1136,14 @@ export class FirmwareRuntime {
     args: Value[],
     services: FirmwareServices,
   ): Generator<DelayRequest, Value, void> {
+    /*
+     * A global RTC (`RTC_DS1307 rtc; rtc.now()`): the class is never declared
+     * in a tab -- the library owns it -- so the handle answers directly
+     * rather than through method bodies that do not exist.
+     */
+    if (instance.className === 'RTC_DS1307') {
+      return yield* this.evaluateRtcCall(method, args, services);
+    }
     const declaration = this.classMethods.get(instance.className)?.get(method);
     if (!declaration) return 0;
     const previous = this.currentInstance;
@@ -1136,6 +1281,14 @@ export class FirmwareRuntime {
           asNumber(args[2] ?? 0),
           Math.max(asNumber(args[1] ?? 0), asNumber(args[0] ?? 0)),
         );
+      /*
+       * `abort()` ends the sketch on hardware (Clock::begin calls it when no
+       * RTC answers). The VM has no halt state for a missing part, so it is
+       * a no-op and execution continues past it; the begin probe still
+       * reports the absence through its return value.
+       */
+      case 'abort':
+        return 0;
       default:
         return 0;
     }
@@ -1265,6 +1418,49 @@ export class FirmwareRuntime {
       case 'continue':
         return { kind: 'continue' };
 
+      /*
+       * A `switch`: the discriminant picks the first matching case (or the
+       * first `default`), and bodies run from there to the end -- falling
+       * through labels until a `break` leaves the switch. The `break` is
+       * consumed here rather than propagated, so a switch inside a loop
+       * breaks the switch the way C does.
+       */
+      case 'switch': {
+        const discriminant = asNumber(
+          (yield* this.evaluate(statement.value, scope, services)) as Value,
+        );
+        let selected = -1;
+        let fallback = -1;
+        for (let index = 0; index < statement.cases.length; index++) {
+          const entry = statement.cases[index];
+          if (!entry) continue;
+          if (entry.test === null) {
+            if (fallback < 0) fallback = index;
+            continue;
+          }
+          const probe = asNumber(
+            (yield* this.evaluate(entry.test, scope, services)) as Value,
+          );
+          if (probe === discriminant) {
+            selected = index;
+            break;
+          }
+        }
+        if (selected < 0) selected = fallback;
+        if (selected < 0) return NORMAL;
+        const inner = new Scope(scope);
+        for (let index = selected; index < statement.cases.length; index++) {
+          const entry = statement.cases[index];
+          if (!entry) continue;
+          for (const child of entry.body) {
+            const flow = yield* this.execute(child, inner, services);
+            if (flow.kind === 'break') return NORMAL;
+            if (flow.kind !== 'normal') return flow;
+          }
+        }
+        return NORMAL;
+      }
+
       case 'return': {
         const value = statement.value
           ? ((yield* this.evaluate(statement.value, scope, services)) as Value)
@@ -1293,7 +1489,23 @@ export class FirmwareRuntime {
 
       case 'identifier': {
         const found = scope.lookup(expression.name);
-        return found ?? this.defines.get(expression.name) ?? 0;
+        if (found !== undefined) return found;
+        /*
+         * An expression define (`MINUTE`, `TIMESPAN_DAY`): evaluated where it
+         * is used, against the scope that names it. A self-referencing macro
+         * answers zero rather than recursing.
+         */
+        const macro = this.macros.get(expression.name);
+        if (macro !== undefined) {
+          if (this.macroResolving.includes(expression.name)) return 0;
+          this.macroResolving.push(expression.name);
+          try {
+            return (yield* this.evaluate(macro, scope, services)) as Value;
+          } finally {
+            this.macroResolving.pop();
+          }
+        }
+        return this.defines.get(expression.name) ?? 0;
       }
 
       case 'unary': {
@@ -1341,6 +1553,39 @@ export class FirmwareRuntime {
           (typeof leftValue === 'string' || typeof rightValue === 'string')
         ) {
           return `${formatValue(leftValue)}${formatValue(rightValue)}`;
+        }
+
+        /*
+         * RTClib arithmetic: dates compare with every relational operator
+         * (`alarm >= now`), and a date plus a span moves the calendar
+         * (`alarm + TIMESPAN_DAY`). Anything else involving a date or a span
+         * answers zero, the way unmodelled operations always have.
+         */
+        if (leftValue instanceof DateTimeValue && rightValue instanceof DateTimeValue) {
+          switch (expression.operator) {
+            case '==':
+              return compareDateTime(leftValue, rightValue) === 0 ? 1 : 0;
+            case '!=':
+              return compareDateTime(leftValue, rightValue) !== 0 ? 1 : 0;
+            case '<':
+              return compareDateTime(leftValue, rightValue) < 0 ? 1 : 0;
+            case '>':
+              return compareDateTime(leftValue, rightValue) > 0 ? 1 : 0;
+            case '<=':
+              return compareDateTime(leftValue, rightValue) <= 0 ? 1 : 0;
+            case '>=':
+              return compareDateTime(leftValue, rightValue) >= 0 ? 1 : 0;
+            default:
+              return 0;
+          }
+        }
+        if (expression.operator === '+') {
+          if (leftValue instanceof DateTimeValue && rightValue instanceof TimeSpanValue) {
+            return addSeconds(leftValue, rightValue.totalSeconds());
+          }
+          if (leftValue instanceof TimeSpanValue && rightValue instanceof DateTimeValue) {
+            return addSeconds(rightValue, leftValue.totalSeconds());
+          }
         }
 
         return applyBinary(expression.operator, asNumber(leftValue), asNumber(rightValue));
@@ -1488,6 +1733,19 @@ export class FirmwareRuntime {
           if (instance) {
             return (yield* this.callMethod(instance, callee.member, args, services)) as Value;
           }
+          /*
+           * A method on a value the program is holding: a `DateTime` local
+           * answering `hour()`, or the RTC member a constructor wired to the
+           * bench answering `now()`. Values answer before the name-based
+           * library dispatch below, the way instances do above -- a name only
+           * reaches `lcd`/`servo`/serial when it holds no value at all.
+           */
+          const bound = scope.lookup(callee.target.name);
+          if (bound instanceof DateTimeValue) return dateTimeMember(bound, callee.member);
+          if (bound instanceof TimeSpanValue) return timeSpanMember(bound, callee.member);
+          if (bound instanceof RtcHandle) {
+            return (yield* this.evaluateRtcCall(callee.member, args, services)) as Value;
+          }
           if (callee.target.name === 'lcd' || callee.target.name === 'LiquidCrystal') {
             return this.evaluateLcdCall(callee.member, args, services);
           }
@@ -1589,6 +1847,100 @@ export class FirmwareRuntime {
       case 'close':
         this.writeLevel(device, LEVEL_LOW, services);
         return 0;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles an RTC call: `begin`, `now`, `adjust` and the two NVRAM verbs.
+   *
+   * Every verb goes out over the bench I2C with the same register sequences
+   * the raw build's helpers use: `now` points the chip at 0x00 and reads the
+   * seven BCD time registers; `adjust` writes them; the NVRAM verbs address
+   * `0x08 + offset`. Only `endTransmission` blocks, yielding the bus time the
+   * way `Wire` itself does.
+   */
+  private *evaluateRtcCall(
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    const wire = services.wire;
+
+    switch (member) {
+      case 'begin': {
+        // Probes for the part: with nothing answering at the address the bus
+        // stays silent, which is the bench's report of a missing clock.
+        wire.requestFrom(DS1307_ADDRESS, 1);
+        return wire.available() > 0 ? 1 : 0;
+      }
+      case 'now': {
+        wire.beginTransmission(DS1307_ADDRESS);
+        wire.write(0x00);
+        const selected = wire.endTransmission();
+        if (selected > 0) yield selected / 1000;
+        wire.requestFrom(DS1307_ADDRESS, 7);
+        const raw: number[] = [];
+        for (let index = 0; index < 7; index++) {
+          raw.push(wire.available() > 0 ? wire.read() : 0);
+        }
+        const second = raw[0] ?? 0;
+        const minute = raw[1] ?? 0;
+        const hour = raw[2] ?? 0;
+        const date = raw[4] ?? 0;
+        const month = raw[5] ?? 0;
+        const year = raw[6] ?? 0;
+        // The seconds carry the halt flag in bit 7; the hour is read as a
+        // 24-hour register, the only packing the bench produces.
+        return new DateTimeValue(
+          2000 + bcdToDec(year),
+          bcdToDec(month),
+          bcdToDec(date),
+          bcdToDec(hour & 0x3f),
+          bcdToDec(minute),
+          bcdToDec(second & 0x7f),
+        );
+      }
+      case 'adjust': {
+        const current = args[0] instanceof DateTimeValue ? args[0] : new DateTimeValue();
+        // Sunday is 0 to the calendar and 7 on the chip.
+        const weekday = new Date(
+          Date.UTC(current.year(), current.month() - 1, current.day()),
+        ).getUTCDay();
+        wire.beginTransmission(DS1307_ADDRESS);
+        wire.write(0x00);
+        for (const byte of [
+          decToBcd(current.second()),
+          decToBcd(current.minute()),
+          decToBcd(current.hour()),
+          decToBcd(weekday === 0 ? 7 : weekday),
+          decToBcd(current.day()),
+          decToBcd(current.month()),
+          decToBcd(current.year() - 2000),
+        ]) {
+          wire.write(byte);
+        }
+        const written = wire.endTransmission();
+        if (written > 0) yield written / 1000;
+        return 0;
+      }
+      case 'readnvram': {
+        wire.beginTransmission(DS1307_ADDRESS);
+        wire.write(NVRAM_BASE + (asNumber(args[0] ?? 0) & 0xff));
+        const selected = wire.endTransmission();
+        if (selected > 0) yield selected / 1000;
+        wire.requestFrom(DS1307_ADDRESS, 1);
+        return wire.available() > 0 ? wire.read() : -1;
+      }
+      case 'writenvram': {
+        wire.beginTransmission(DS1307_ADDRESS);
+        wire.write(NVRAM_BASE + (asNumber(args[0] ?? 0) & 0xff));
+        wire.write(asNumber(args[1] ?? 0));
+        const written = wire.endTransmission();
+        if (written > 0) yield written / 1000;
+        return 0;
+      }
       default:
         return 0;
     }

@@ -156,15 +156,27 @@ export function tokenize(source: string, file = 'main.ino'): Token[] {
           advance(1);
         }
       }
+      /*
+       * Integer suffixes (`1000L`, `60UL`): glued to the literal the way C
+       * spells them, so the suffix never lexes as a stray identifier. Only
+       * immediately adjacent letters count -- `1000 L` stays two tokens, as
+       * it is not one literal. `f`/`F` stay out of hex for the reason below.
+       */
+      while (index < source.length && /[uUlL]/.test(source[index] ?? '')) {
+        text += source[index];
+        advance(1);
+      }
 
       const isHex = /^0[xX]/.test(text);
       let value = Number(text);
       // `f` is a float suffix in C -- but only for decimal literals. Stripping it
       // from a hex one silently turns 0xAF into 0xA and 0xFF into 0xF, which
       // would corrupt every display constant that happens to end in a nibble of
-      // F rather than fail loudly.
-      if (!isHex && (text.endsWith('f') || text.endsWith('F'))) {
-        value = Number(text.slice(0, -1));
+      // F rather than fail loudly. Integer suffixes strip from either base.
+      if (!isHex && /[uUlLfF]+$/.test(text)) {
+        value = Number(text.replace(/[uUlLfF]+$/, ''));
+      } else if (isHex && /[uUlL]+$/.test(text)) {
+        value = Number(text.replace(/[uUlL]+$/, ''));
       }
       if (Number.isNaN(value)) value = 0;
       tokens.push({ kind: 'number', text, value, location });
@@ -245,6 +257,13 @@ export type Stmt =
   | { kind: 'if'; condition: Expr; then: Stmt; otherwise: Stmt | null; location: SourceLocation }  | { kind: 'while'; condition: Expr; body: Stmt; location: SourceLocation }
   | { kind: 'doWhile'; body: Stmt; condition: Expr; location: SourceLocation }
   | { kind: 'for'; init: Stmt | null; condition: Expr | null; update: Expr | null; body: Stmt; location: SourceLocation }
+  /**
+   * A `switch` with `case` labels and an optional `default`.
+   *
+   * A null test is `default`; bodies fall through to the next case the way C
+   * runs them, and `break` leaves the switch rather than any enclosing loop.
+   */
+  | { kind: 'switch'; value: Expr; cases: { test: Expr | null; body: Stmt[] }[]; location: SourceLocation }
   | { kind: 'return'; value: Expr | null; location: SourceLocation }
   | { kind: 'break'; location: SourceLocation }
   | { kind: 'continue'; location: SourceLocation }
@@ -279,6 +298,13 @@ export interface ClassDecl {
 
 export interface Program {
   readonly defines: ReadonlyMap<string, number>;
+  /**
+   * Expression defines (`#define MINUTE 60 * 1000L`): kept as syntax and
+   * evaluated where used, because their value is a computation rather than a
+   * literal. The `defines` map still records 0 for the name, so a lookup of
+   * the map alone keeps its long-standing answer.
+   */
+  readonly macros: ReadonlyMap<string, Expr>;
   readonly globals: readonly Stmt[];
   readonly functions: ReadonlyMap<string, FunctionDecl>;
   readonly classes: Map<string, ClassDecl>;
@@ -308,6 +334,11 @@ class Parser {
   private position = 0;
   private readonly tokens: Token[];
   private readonly file: string;
+  /**
+   * File-scope enum names seen so far (`AlarmState`): a global or local that
+   * names one binds a value rather than building a class instance.
+   */
+  private readonly enumNames = new Set<string>();
 
   constructor(tokens: Token[], file = 'main.ino') {
     this.tokens = tokens;
@@ -315,18 +346,49 @@ class Parser {
   }
   parseProgram(): Program {
     const defines = new Map<string, number>();
+    const macros = new Map<string, Expr>();
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
     const classes = new Map<string, ClassDecl>();
 
     while (!this.at('eof')) {
       if (this.peek().kind === 'directive') {
-        this.consumeDefine(defines);
+        this.consumeDefine(defines, macros);
         continue;
       }
 
       if (this.atPunctuation(';')) {
         this.next();
+        continue;
+      }
+
+      /*
+       * A file-scope enum (`enum AlarmState { ALARM_OFF, ... };`): each
+       * enumerator folds to its number in the defines table, so uses read as
+       * ordinary constants. Explicit values (`A = 3`) hold; the rest count up
+       * from zero or from the last explicit one, as C numbers them.
+       */
+      if (this.peek().kind === 'identifier' && this.peek().text === 'enum' && this.peek(1).kind === 'identifier') {
+        this.next();
+        this.enumNames.add(this.next().text);
+        this.expectPunctuation('{');
+        let nextValue = 0;
+        for (;;) {
+          if (this.acceptPunctuation('}')) break;
+          const member = this.expectIdentifier().text;
+          if (this.acceptPunctuation('=')) {
+            const negative = this.acceptPunctuation('-');
+            const literal = this.expect('number');
+            nextValue = (literal.value ?? 0) * (negative ? -1 : 1);
+          }
+          defines.set(member, nextValue);
+          nextValue++;
+          if (!this.acceptPunctuation(',')) {
+            this.expectPunctuation('}');
+            break;
+          }
+        }
+        this.acceptPunctuation(';');
         continue;
       }
 
@@ -345,6 +407,16 @@ class Parser {
           if (this.peek().kind === 'keyword' && (this.peek().text === 'public' || this.peek().text === 'private' || this.peek().text === 'protected')) {
             section = this.next().text;
             this.expectPunctuation(':');
+            continue;
+          }
+          /*
+           * Conditional compilation inside a class (`#if USE_RTC` around a
+           * member): both branches stay, the way inert directives behave at
+           * file scope. The guarded members parse as ordinary declarations;
+           * a duplicate name keeps its first field slot and one shared value.
+           */
+          if (this.peek().kind === 'directive' && CONDITIONAL_DIRECTIVE.test(this.peek().text)) {
+            this.next();
             continue;
           }
           const loc = this.peek().location;
@@ -437,6 +509,45 @@ class Parser {
       // The class may live in another tab, so any `Type name` shape is
       // accepted here; an unknown class builds an empty instance at runtime.
       if (this.peek().kind === 'identifier' && this.peek(1).kind === 'identifier') {
+        /*
+         * An out-of-line definition with an identifier return type
+         * (`DateTime Clock::now()`): the `::` after the second name says this
+         * is a function, not a global. Keyword return types (`void
+         * Clock::begin`) never reach here; they parse through `readType`.
+         */
+        if (this.peek(2).kind === 'punctuation' && this.peek(2).text === '::') {
+          const qualifiedLocation = this.peek().location;
+          const returnType = this.next().text;
+          const qualifier = this.next().text;
+          this.expectPunctuation('::');
+          const memberName = this.expectIdentifier().text;
+          const qualified = `${qualifier}::${memberName}`;
+          this.expectPunctuation('(');
+          const parameters: { name: string; type: string }[] = [];
+          if (!this.atPunctuation(')')) {
+            do {
+              const type = this.readType();
+              parameters.push({ name: this.expectIdentifier().text, type });
+            } while (this.acceptPunctuation(','));
+          }
+          this.expectPunctuation(')');
+          this.expectPunctuation('{');
+          const body = this.readBlock();
+          functions.set(qualified, { name: qualified, returnType, parameters, body, location: qualifiedLocation });
+          continue;
+        }
+        /*
+         * A value-typed global (`DisplayState displayState = DisplayClock;`,
+         * `DateTime when = clock.now();`): binds a value like a variable
+         * rather than building a class instance.
+         */
+        if (
+          this.peek().text === 'DateTime' || this.peek().text === 'TimeSpan' ||
+          this.peek().text === 'auto' || this.enumNames.has(this.peek().text)
+        ) {
+          globals.push(this.readValueBinding());
+          continue;
+        }
         const instanceLocation = this.peek().location;
         const className = this.next().text;
         const instanceName = this.expectIdentifier().text;
@@ -489,7 +600,7 @@ class Parser {
       functions.set(functionName, { name: functionName, returnType, parameters, body, location });
     }
 
-    return { defines, globals, functions, classes };
+    return { defines, macros, globals, functions, classes };
   }
 
   /**
@@ -511,6 +622,43 @@ class Parser {
       entries.push({ field, value });
     } while (this.acceptPunctuation(','));
     return entries;
+  }
+
+  /**
+   * Reads a value binding (`DisplayState s = DisplayClock;`,
+   * `DateTime now = clock.now();`, `auto alarm = alarmTime();`).
+   *
+   * Three shapes, matching what value types need: copy-initialisation with
+   * `=`, direct-initialisation with `(args)` (a construction call, except
+   * that `auto x(v)` unwraps its single argument), and a bare declaration,
+   * which constructs a default `DateTime`/`TimeSpan` and binds zero for
+   * anything else. Callers decide where the resulting `varDecl` lives.
+   */
+  private readValueBinding(): Stmt {
+    const location = this.peek().location;
+    const typeName = this.next().text;
+    const name = this.expectIdentifier().text;
+    let init: Expr | null = null;
+    if (this.acceptPunctuation('(')) {
+      const args: Expr[] = [];
+      if (!this.atPunctuation(')')) {
+        do {
+          args.push(this.readExpression());
+        } while (this.acceptPunctuation(','));
+      }
+      this.expectPunctuation(')');
+      const sole = args.length === 1 ? args[0] : undefined;
+      init =
+        sole !== undefined && typeName === 'auto'
+          ? sole
+          : { kind: 'call', callee: { kind: 'identifier', name: typeName, location }, args, location };
+    } else if (this.acceptPunctuation('=')) {
+      init = this.readExpression();
+    } else if (typeName === 'DateTime' || typeName === 'TimeSpan') {
+      init = { kind: 'call', callee: { kind: 'identifier', name: typeName, location }, args: [], location };
+    }
+    this.expectPunctuation(';');
+    return { kind: 'varDecl', name, init, location };
   }
 
   /** Reads `int a = 1, b[4] = {1, 2, 3, 4};` into one declaration per name. */
@@ -565,23 +713,41 @@ class Parser {
    * `#include` and everything else stay inert: the VM supplies its own runtime,
    * so there is no header for them to reach into.
    */
-  private consumeDefine(defines: Map<string, number>): void {
+  private consumeDefine(defines: Map<string, number>, macros: Map<string, Expr>): void {
     const token = this.next();
     const match = /^#\s*define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(\S.*?)\s*$/.exec(token.text.trim());
     if (!match) return;
     const parts = tokenize(match[2], this.file).filter((part) => part.kind !== 'eof');
-    const [sign, literal] =
-      parts.length === 2 && parts[0].kind === 'punctuation' ? parts : [null, parts[0]];
+    // A lone literal (optionally signed) stays a plain number; anything longer
+    // is syntax to evaluate where used rather than a prefix to guess from --
+    // `60 * 1000L` starts with a number but means sixty thousand, not sixty.
+    const [literal] =
+      parts.length === 1
+        ? parts
+        : parts.length === 2 && parts[0].kind === 'punctuation' && parts[0].text === '-'
+          ? [parts[1]]
+          : [];
+    const negative = parts.length === 2 && literal !== undefined;
     const magnitude = literal?.kind === 'number' ? literal.value : undefined;
 
     if (magnitude === undefined) {
-      // Anything else -- a function call, an expression, a string -- resolves
-      // to zero. The VM has no macro expander, and guessing at the first number
-      // in `#define X (1 << 3)` would silently invent an 8.
+      /*
+       * Anything else -- a call, an expression, a bare name -- is kept as
+       * syntax and evaluated where used, so `#define MINUTE 60 * 1000L`
+       * reads 60000 and `#define TIMESPAN_DAY TimeSpan(1, 0, 0, 0)` builds a
+       * day. Text that is not an expression at all stays inert. Either way
+       * the defines map keeps 0 for the name, its long-standing answer for
+       * a lookup of the map alone.
+       */
+      try {
+        macros.set(match[1], parseExpression(match[2], this.file));
+      } catch {
+        // Not an expression either: the name simply resolves to zero.
+      }
       defines.set(match[1], 0);
       return;
     }
-    if (sign?.kind === 'punctuation' && sign.text === '-') {
+    if (negative) {
       defines.set(match[1], -magnitude);
       return;
     }
@@ -590,16 +756,26 @@ class Parser {
 
   private readType(): string {
     const first = this.peek();
-    if (first.kind !== 'keyword' || !TYPE_KEYWORDS.includes(first.text)) {
-      throw new FirmwareSyntaxError(`expected a type, found '${first.text}'`, first.location, this.file);
+    if (first.kind === 'keyword' && TYPE_KEYWORDS.includes(first.text)) {
+      this.next();
+      // Consume any further type keywords, e.g. `unsigned long x`.
+      let type = first.text;
+      while (this.peek().kind === 'keyword' && TYPE_KEYWORDS.includes(this.peek().text)) {
+        type += ` ${this.next().text}`;
+      }
+      return type;
     }
-    this.next();
-    // Consume any further type keywords, e.g. `unsigned long x`.
-    let type = first.text;
-    while (this.peek().kind === 'keyword' && TYPE_KEYWORDS.includes(this.peek().text)) {
-      type += ` ${this.next().text}`;
+    /*
+     * An identifier naming a value type (`DisplayState`, `DateTime`,
+     * `RTC_DS1307`): accepted only in the `Type name` shape, so an enum
+     * parameter, a DateTime method result or an RTC member keeps its spelling
+     * instead of erroring on the type. Anything else still reports the
+     * expected type error below.
+     */
+    if (first.kind === 'identifier' && this.peek(1).kind === 'identifier') {
+      return this.next().text;
     }
-    return type;
+    throw new FirmwareSyntaxError(`expected a type, found '${first.text}'`, first.location, this.file);
   }
 
   private readBlock(): Stmt {
@@ -621,11 +797,22 @@ class Parser {
       return this.readBlock();
     }
     if (this.acceptPunctuation(';')) return { kind: 'empty', location: token.location };
+    /*
+     * A conditional line inside a body (`#if USE_RTC`, `#else`, `#endif`):
+     * consumed without a statement, so both branches parse and run the way
+     * inert directives behave everywhere else.
+     */
+    if (token.kind === 'directive' && CONDITIONAL_DIRECTIVE.test(token.text)) {
+      this.next();
+      return { kind: 'empty', location: token.location };
+    }
 
     if (token.kind === 'keyword') {
       switch (token.text) {
         case 'if':
           return this.readIf();
+        case 'switch':
+          return this.readSwitch();
         case 'while': {
           this.next();
           this.expectPunctuation('(');
@@ -668,6 +855,22 @@ class Parser {
     }
 
     if (this.startsDeclaration()) return this.readDeclaration();
+
+    /*
+     * A value-typed local (`DateTime now = _rtc.now();`,
+     * `auto alarm = alarmTime();`): the type is an identifier the class
+     * machinery would otherwise misread as a class name, so value types and
+     * same-file enums bind here instead.
+     */
+    if (this.peek().kind === 'identifier' && this.peek(1).kind === 'identifier') {
+      const typeName = this.peek().text;
+      if (
+        typeName === 'auto' || typeName === 'DateTime' || typeName === 'TimeSpan' ||
+        this.enumNames.has(typeName)
+      ) {
+        return this.readValueBinding();
+      }
+    }
 
     const value = this.readExpression();
     this.expectPunctuation(';');
@@ -728,6 +931,53 @@ class Parser {
     return { kind: 'if', condition, then, otherwise, location };
   }
 
+  /**
+   * Reads `switch (value) { case test: ...; default: ...; }`.
+   *
+   * Labels are full expressions, usually enumerators or numbers; each case
+   * holds a run of statements that falls through into the next case unless a
+   * `break` or `return` leaves first. A `default` without a match runs from
+   * its own position, the way C enters the switch at the label.
+   */
+  private readSwitch(): Stmt {
+    const location = this.peek().location;
+    this.next();
+    this.expectPunctuation('(');
+    const value = this.readExpression();
+    this.expectPunctuation(')');
+    this.expectPunctuation('{');
+    const cases: { test: Expr | null; body: Stmt[] }[] = [];
+    while (!this.atPunctuation('}')) {
+      if (this.at('eof')) throw new FirmwareSyntaxError('unclosed switch', location, this.file);
+      let test: Expr | null = null;
+      if (this.peek().kind === 'keyword' && this.peek().text === 'case') {
+        this.next();
+        test = this.readExpression();
+        this.expectPunctuation(':');
+      } else if (this.peek().kind === 'keyword' && this.peek().text === 'default') {
+        this.next();
+        this.expectPunctuation(':');
+      } else {
+        throw new FirmwareSyntaxError(
+          `expected 'case' or 'default', found '${this.peek().text}'`,
+          this.peek().location,
+          this.file,
+        );
+      }
+      const body: Stmt[] = [];
+      while (
+        !this.atPunctuation('}') &&
+        !(this.peek().kind === 'keyword' && (this.peek().text === 'case' || this.peek().text === 'default'))
+      ) {
+        if (this.at('eof')) throw new FirmwareSyntaxError('unclosed switch', location, this.file);
+        body.push(this.readStatement());
+      }
+      cases.push({ test, body });
+    }
+    this.expectPunctuation('}');
+    return { kind: 'switch', value, cases, location };
+  }
+
   private readDoWhile(): Stmt {
     const location = this.peek().location;
     this.next();
@@ -769,6 +1019,18 @@ class Parser {
 
   // -- expressions ---------------------------------------------------------
   // Precedence climbing, lowest binding first.
+
+  /**
+   * Reads one expression and requires the end of input: the entry point for
+   * parsing a `#define` body as syntax rather than lexing a literal from it.
+   */
+  expression(): Expr {
+    const value = this.readExpression();
+    if (!this.at('eof')) {
+      throw new FirmwareSyntaxError(`unexpected '${this.peek().text}'`, this.peek().location, this.file);
+    }
+    return value;
+  }
 
   private readExpression(): Expr {
     return this.readAssignment();
@@ -974,3 +1236,20 @@ const BINARY_PRECEDENCE: Readonly<Record<string, number>> = {
 export function parseFirmware(source: string, file = 'main.ino'): Program {
   return new Parser(tokenize(source, file), file).parseProgram();
 }
+
+/**
+ * Parses one expression (`60 * 1000L`, `TimeSpan(1, 0, 0, 0)`): how a
+ * `#define` body that is not a single literal is kept for evaluation where
+ * it is used. Throws a syntax error when the text is not an expression.
+ */
+export function parseExpression(source: string, file = 'main.ino'): Expr {
+  return new Parser(tokenize(source, file), file).expression();
+}
+
+/**
+ * Preprocessor conditionals the parser treats as inert rather than as code:
+ * both branches stay and run, the way every other directive already behaves.
+ * Include guards never reach here (file scope consumes all directives), so
+ * this only meets `#if` shapes nested inside classes and function bodies.
+ */
+const CONDITIONAL_DIRECTIVE = /^#\s*(ifdef|ifndef|elif|else|endif|if)\b/;
