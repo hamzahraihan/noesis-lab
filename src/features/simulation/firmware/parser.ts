@@ -55,6 +55,8 @@ const KEYWORDS = new Set([
   'if', 'else', 'while', 'do', 'for', 'return', 'break', 'continue',
   'switch', 'case', 'default', 'HIGH', 'LOW', 'INPUT', 'OUTPUT',
   'INPUT_PULLUP', 'true', 'false',
+  'class', 'public', 'private', 'protected',
+  'uint8_t', 'int8_t', 'uint16_t', 'int16_t', 'uint32_t', 'int32_t',
 ]);
 
 /** Longest-first so that `<=` never lexes as `<` then `=`. */
@@ -259,10 +261,18 @@ export interface FunctionDecl {
   readonly location: SourceLocation;
 }
 
+export interface ClassDecl {
+  readonly name: string;
+  readonly fields: { readonly name: string; readonly type: string }[];
+  readonly methods: Map<string, FunctionDecl>;
+  readonly location: SourceLocation;
+}
+
 export interface Program {
   readonly defines: ReadonlyMap<string, number>;
   readonly globals: readonly Stmt[];
   readonly functions: ReadonlyMap<string, FunctionDecl>;
+  readonly classes: Map<string, ClassDecl>;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +291,8 @@ export interface Program {
 const TYPE_KEYWORDS = [
   'unsigned long', 'unsigned', 'signed', 'long long', 'long', 'short',
   'void', 'int', 'float', 'double', 'bool', 'char', 'byte',
+  'const', 'static', 'volatile',
+  'uint8_t', 'int8_t', 'uint16_t', 'int16_t', 'uint32_t', 'int32_t',
 ];
 
 class Parser {
@@ -296,6 +308,7 @@ class Parser {
     const defines = new Map<string, number>();
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
+    const classes = new Map<string, ClassDecl>();
 
     while (!this.at('eof')) {
       if (this.peek().kind === 'directive') {
@@ -305,6 +318,80 @@ class Parser {
 
       if (this.atPunctuation(';')) {
         this.next();
+        continue;
+      }
+
+      if (this.peek().kind === 'keyword' && this.peek().text === 'class') {
+        const classLocation = this.peek().location;
+        this.next();
+        const className = this.expectIdentifier().text;
+        this.expectPunctuation('{');
+        const fields: { name: string; type: string }[] = [];
+        const methods = new Map<string, FunctionDecl>();
+        let section = 'private';
+        while (!this.atPunctuation('}')) {
+          if (this.at('eof')) {
+            throw new FirmwareSyntaxError('unclosed class', classLocation, this.file);
+          }
+          if (this.peek().kind === 'keyword' && (this.peek().text === 'public' || this.peek().text === 'private' || this.peek().text === 'protected')) {
+            section = this.next().text;
+            this.expectPunctuation(':');
+            continue;
+          }
+          const loc = this.peek().location;
+          // A constructor names the class and has no return type.
+          let returnType = '';
+          let memberName: string;
+          if (this.peek().kind === 'identifier' && this.peek().text === className && this.tokens[this.position + 1]?.text === '(') {
+            memberName = this.next().text;
+          } else {
+            returnType = this.readType();
+            memberName = this.expectIdentifier().text;
+          }
+          if (this.atPunctuation('(')) {
+            this.expectPunctuation('(');
+            const parameters: { name: string; type: string }[] = [];
+            if (!this.atPunctuation(')')) {
+              do {
+                const ptype = this.readType();
+                // Default args (`uint8_t pin, uint16_t ms = 100`): skip `= expr`.
+                const pname = this.expectIdentifier().text;
+                if (this.acceptPunctuation('=')) this.readExpression();
+                parameters.push({ name: pname, type: ptype });
+              } while (this.acceptPunctuation(','));
+            }
+            this.expectPunctuation(')');
+            // Constructor initializer list (`: _pin(pin)`): parsed and skipped
+            // here; Task 2 executes the body assignments only.
+            if (this.acceptPunctuation(':')) {
+              let depth = 0;
+              while (!this.at('eof') && !((this.atPunctuation('{') || this.atPunctuation(';')) && depth === 0)) {
+                if (this.atPunctuation('(')) depth++;
+                else if (this.atPunctuation(')')) depth--;
+                this.next();
+              }
+            }
+            if (this.atPunctuation(';')) {
+              this.next();
+              methods.set(memberName, { name: memberName, returnType, parameters, body: { kind: 'block', statements: [], location: loc }, location: loc });
+              continue;
+            }
+            this.expectPunctuation('{');
+            const body = this.readBlock();
+            methods.set(memberName, { name: memberName, returnType, parameters, body, location: loc });
+          } else {
+            // Field, possibly `static const bool PRESSED = LOW;` — consume init + `;`.
+            if (this.acceptPunctuation('=')) this.readExpression();
+            // Array field `uint16_t TONES[2];` shape:
+            if (this.acceptPunctuation('[')) { this.expect('number'); this.expectPunctuation(']'); }
+            this.expectPunctuation(';');
+            void section;
+            fields.push({ name: memberName, type: returnType });
+          }
+        }
+        this.expectPunctuation('}');
+        this.acceptPunctuation(';');
+        classes.set(className, { name: className, fields, methods, location: classLocation });
         continue;
       }
 
@@ -335,7 +422,7 @@ class Parser {
       functions.set(name, { name, returnType, parameters, body, location });
     }
 
-    return { defines, globals, functions };
+    return { defines, globals, functions, classes };
   }
 
   /** Reads `int a = 1, b[4] = {1, 2, 3, 4};` into one declaration per name. */

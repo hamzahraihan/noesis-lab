@@ -59,6 +59,7 @@ const DEVICE_CONSTRUCTORS: Readonly<Record<string, DeviceKind>> = {
 const SWITCH_ACTIVE_LOW = true;
 
 import {
+  type ClassDecl,
   type Expr,
   type FunctionDecl,
   type Program,
@@ -555,12 +556,12 @@ export class FirmwareRuntime {
 
   /** Merged-construction path for fromProject; shares init with the constructor. */
   private static __merged(
-    merged: { defines: Map<string, number>; globals: Stmt[]; functions: Map<string, FunctionDecl> },
+    merged: { defines: Map<string, number>; globals: Stmt[]; functions: Map<string, FunctionDecl>; classes: Map<string, ClassDecl> },
     language: FirmwareLanguage,
   ): FirmwareRuntime {
     const runtime = Object.create(FirmwareRuntime.prototype) as FirmwareRuntime;
     runtime.init(
-      { defines: merged.defines, globals: merged.globals, functions: merged.functions },
+      { defines: merged.defines, globals: merged.globals, functions: merged.functions, classes: merged.classes },
       language,
     );
     return runtime;
@@ -623,6 +624,9 @@ export class FirmwareRuntime {
     const defines = new Map<string, number>();
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
+    // Class merging across files lands in Task 2; pass through empty so the
+    // merged program keeps the same shape as the single-file front ends.
+    const classes = new Map<string, ClassDecl>();
     const functionOwner = new Map<string, string>();
     const defineOwner = new Map<string, string>();
     programs.forEach((program, index) => {
@@ -643,7 +647,7 @@ export class FirmwareRuntime {
         functionOwner.set(key, owner);
       }
     });
-    return FirmwareRuntime.__merged({ defines, globals, functions }, project.language);
+    return FirmwareRuntime.__merged({ defines, globals, functions, classes }, project.language);
   }
 
   hasFunction(name: string): boolean {

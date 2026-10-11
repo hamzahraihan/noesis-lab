@@ -357,7 +357,7 @@ class PythonParser {
       globals.push(...this.flatten(statement));
     }
 
-    return { defines, globals, functions };
+    return { defines, globals, functions, classes: new Map() };
   }
 
   // -- statements ----------------------------------------------------------
