@@ -670,9 +670,9 @@ export class Simulation {
   }
 
   start(): void {
-    // A flashed AVR core counts as a loaded runner: library sketches use
-    // real library types the interpreter cannot parse, so reloading here
-    // would discard the fresh HEX for a syntax error and leave the bench
+    // A flashed AVR core counts as a loaded runner: a sketch with shapes the
+    // interpreter cannot parse still runs from the HEX, so reloading here
+    // would discard the fresh core for a syntax error and leave the bench
     // dark. Only reload when neither runner exists.
     if (!this.runner && !this.avrBackend && this.firmwareProject) this.loadFirmware(this.firmwareProject);
     this.running = true;

@@ -458,8 +458,14 @@ class Parser {
             // Field, possibly `static const bool PRESSED = LOW;` — the init
             // is kept so the runtime can seed static consts from it.
             const init = this.acceptPunctuation('=') ? this.readExpression() : undefined;
-            // Array field `uint16_t TONES[2];` shape:
-            if (this.acceptPunctuation('[')) { this.expect('number'); this.expectPunctuation(']'); }
+            // Array field `uint16_t TONES[2];` shape (deduced `[]` tolerated
+            // the same way locals are; only the name and type are kept).
+            if (this.acceptPunctuation('[')) {
+              if (!this.acceptPunctuation(']')) {
+                this.expect('number');
+                this.expectPunctuation(']');
+              }
+            }
             this.expectPunctuation(';');
             void section;
             fields.push({ name: memberName, type: returnType, init });
@@ -668,22 +674,35 @@ class Parser {
 
     for (;;) {
       if (this.acceptPunctuation('[')) {
-        const sizeToken = this.expect('number');
-        this.expectPunctuation(']');
+        // A deduced size (`byte digitPins[] = {...}`) takes its length from
+        // the braces, the way the SevSeg wiring tables spell it.
+        let size = 0;
+        let deduced = false;
+        if (this.acceptPunctuation(']')) {
+          deduced = true;
+        } else {
+          size = this.expect('number').value ?? 0;
+          this.expectPunctuation(']');
+        }
         const initialisers: Expr[] | null = [];
         if (this.acceptPunctuation('=')) {
           this.expectPunctuation('{');
           if (!this.atPunctuation('}')) {
-            do {
+            for (;;) {
               initialisers.push(this.readExpression());
-            } while (this.acceptPunctuation(','));
+              if (!this.acceptPunctuation(',')) break;
+              // A trailing comma before the closing brace, the way the
+              // library tabs spell their tables.
+              if (this.atPunctuation('}')) break;
+            }
           }
           this.expectPunctuation('}');
         }
+        if (deduced) size = initialisers.length;
         declarations.push({
           kind: 'arrayDecl',
           name: current,
-          size: sizeToken.value ?? 0,
+          size,
           init: initialisers,
           location,
         });
@@ -892,21 +911,33 @@ class Parser {
     if (this.peek().kind === 'identifier' && this.tokens[this.position + 1]?.text === '[') {
       const name = this.next().text;
       this.expectPunctuation('[');
-      const sizeToken = this.expect('number');
-      this.expectPunctuation(']');
+      // A deduced size (`byte digitPins[] = {...}`) takes its length from
+      // the braces; without braces it sizes zero rather than erroring.
+      let size = 0;
+      let deduced = false;
+      if (this.acceptPunctuation(']')) {
+        deduced = true;
+      } else {
+        size = this.expect('number').value ?? 0;
+        this.expectPunctuation(']');
+      }
 
       const initialisers: Expr[] | null = [];
       if (this.acceptPunctuation('=')) {
         this.expectPunctuation('{');
         if (!this.atPunctuation('}')) {
-          do {
+          for (;;) {
             initialisers.push(this.readExpression());
-          } while (this.acceptPunctuation(','));
+            if (!this.acceptPunctuation(',')) break;
+            // A trailing comma before the closing brace.
+            if (this.atPunctuation('}')) break;
+          }
         }
         this.expectPunctuation('}');
       }
+      if (deduced) size = initialisers.length;
       this.expectPunctuation(';');
-      return { kind: 'arrayDecl', name, size: sizeToken.value ?? 0, init: initialisers, location };
+      return { kind: 'arrayDecl', name, size, init: initialisers, location };
     }
 
     const name = this.expectIdentifier().text;

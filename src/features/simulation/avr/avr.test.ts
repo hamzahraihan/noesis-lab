@@ -610,7 +610,7 @@ describe('avr compile fallback matrix', () => {
     expect(simulation.runner, 'offline index builds fall back to the interpreter').not.toBeNull();
   });
 
-  it('keeps the flashed core across start() when the interpreter cannot parse library types', async () => {
+  it('keeps the flashed core across start() while the interpreter models library types', async () => {
     const multi = async (): Promise<CompileResult> => ({ hex: new Uint16Array(64), warnings: [] });
     const simulation = new Simulation(arduinoUnoR3(), { avrProjectCompile: multi });
     simulation.execution = 'avr';
@@ -619,13 +619,34 @@ describe('avr compile fallback matrix', () => {
       libraries: [{ name: 'SevSeg', source: 'provided' }],
     } as FirmwareProject);
     expect(simulation.compileState).toBe('ready');
-    // The interpreter rejects the real library type, so no interpreter
-    // runner exists — but the multi-TU HEX flashed onto a live core.
-    expect(simulation.runner, 'interpreter cannot model SevSeg').toBeNull();
+    // The interpreter models the SevSeg global, so a runner exists — and the
+    // multi-TU HEX still flashes onto a live core on top of it.
+    expect(simulation.runner, 'interpreter models SevSeg').not.toBeNull();
     simulation.start();
     expect(
       (simulation as unknown as { avrBackend: unknown }).avrBackend,
       'start() preserves the flashed library core',
+    ).not.toBeNull();
+    expect(simulation.firmwareError, 'no interpreter fault surfaces').toBeNull();
+    expect(simulation.running).toBe(true);
+  });
+
+  it('keeps the flashed core across start() when the interpreter rejects the sketch', async () => {
+    const multi = async (): Promise<CompileResult> => ({ hex: new Uint16Array(64), warnings: [] });
+    const simulation = new Simulation(arduinoUnoR3(), { avrProjectCompile: multi });
+    simulation.execution = 'avr';
+    await simulation.compileAndRun({
+      // Pointers are outside the parser's documented scope, so no runner
+      // exists — but the multi-TU HEX still flashes onto a live core.
+      ...toSingleFileProject('SevSeg *display;\nvoid setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
+      libraries: [{ name: 'SevSeg', source: 'provided' }],
+    } as FirmwareProject);
+    expect(simulation.compileState).toBe('ready');
+    expect(simulation.runner, 'pointers have no interpreter runner').toBeNull();
+    simulation.start();
+    expect(
+      (simulation as unknown as { avrBackend: unknown }).avrBackend,
+      'start() preserves the flashed core without a runner',
     ).not.toBeNull();
     expect(simulation.firmwareError, 'no interpreter fault surfaces').toBeNull();
     expect(simulation.running).toBe(true);

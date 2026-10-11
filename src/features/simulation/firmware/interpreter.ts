@@ -80,13 +80,83 @@ import {
 import { FirmwareProjectError, validateProject, type FirmwareProject } from './project';
 
 /**
- * A runtime value: numbers for everything numeric, strings for Serial, and
- * RTClib values for sketches that keep time. Date and span objects pass
- * through assignments, arguments and returns untouched; only the operations
- * RTClib defines (field reads, comparison, plus-a-span) see inside them,
- * and everything else reads them as zero rather than crashing.
+ * A runtime value: numbers for everything numeric, strings for Serial,
+ * whole-array copies where a sketch names an array, and RTClib values for
+ * sketches that keep time. Date and span objects pass through assignments,
+ * arguments and returns untouched; only the operations RTClib defines (field
+ * reads, comparison, plus-a-span) see inside them, and everything else reads
+ * them as zero rather than crashing. Arrays likewise read as zero wherever a
+ * number is wanted (`sizeof` and the SevSeg wiring tables are the readers
+ * that see inside them).
  */
-export type Value = number | string | DateTimeValue | TimeSpanValue | RtcHandle;
+export type Value = number | string | number[] | DateTimeValue | TimeSpanValue | RtcHandle;
+
+/**
+ * One SevSeg display's wiring and frame, as `begin` records it.
+ *
+ * The sketch owns the text: `setNumber`/`setChars` stage segment patterns
+ * into `buffer`, and `refreshDisplay` multiplexes one digit per call through
+ * the recorded pins, the way the real library drives GPIO rather than a
+ * controller. The bench latches each digit electrically from those writes,
+ * so the glass the tests read is the solved circuit rather than a second
+ * framebuffer.
+ */
+interface SevSegState {
+  digitPins: number[];
+  segmentPins: number[];
+  digits: number;
+  commonAnode: boolean;
+  leadingZeros: boolean;
+  /** Per-digit A-G patterns, in SEGMENT_ORDER bit order. */
+  buffer: number[];
+  brightness: number;
+  /** Next digit `refreshDisplay` will light. */
+  mux: number;
+}
+
+/**
+ * Segment patterns by character, in A-G bit order.
+ *
+ * Digits and the display letters match the bench's own glass table;
+ * `'o'` renders as `'0'` and `'n'` lights C/E/G per the SevSeg alpha table
+ * the gallery status views rely on. No decimal point is ever wired (the
+ * gallery passes seven segment pins with the point disabled), so the alarm
+ * snooze mark lights every bar instead.
+ */
+const SEVSEG_GLYPHS: Readonly<Record<string, number>> = {
+  ' ': 0x00,
+  '0': 0x3f,
+  '1': 0x06,
+  '2': 0x5b,
+  '3': 0x4f,
+  '4': 0x66,
+  '5': 0x6d,
+  '6': 0x7d,
+  '7': 0x07,
+  '8': 0x7f,
+  '9': 0x6f,
+  A: 0x77,
+  b: 0x7c,
+  C: 0x39,
+  c: 0x58,
+  d: 0x5e,
+  E: 0x79,
+  F: 0x71,
+  H: 0x76,
+  h: 0x74,
+  L: 0x38,
+  n: 0x54,
+  N: 0x54,
+  o: 0x3f,
+  O: 0x3f,
+  P: 0x73,
+  U: 0x3e,
+  u: 0x1c,
+  y: 0x6e,
+  '-': 0x40,
+  _: 0x08,
+  '*': 0x7f,
+};
 
 /** Yields the milliseconds a blocking call wants to wait. */
 export type DelayRequest = number;
@@ -543,6 +613,9 @@ function asNumber(value: Value): number {
 /** Renders a value the way `print` and an f-string would write it. */
 function formatValue(value: Value): string {
   if (typeof value === 'string') return value;
+  // C has no array printing; brackets name the contents rather than the
+  // misleading library fallback below.
+  if (Array.isArray(value)) return `[${value.join(', ')}]`;
   if (typeof value === 'object') return formatObjectValue(value);
   return formatPrintValue(asNumber(value));
 }
@@ -668,6 +741,22 @@ export class FirmwareRuntime {
    * ordinary evaluation.
    */
   private macroResolving!: string[];
+  /**
+   * Sounding `tone()` pins to their silence time, or null while indefinite.
+   *
+   * `tone` never blocks: it drives HIGH and records when the note ends, and
+   * the next `tone`/`noTone` on the pin retires it. A sketch that polls
+   * (`AlarmTone::play` every loop) hears the 500/800 Hz alternation through
+   * its own table; the bench reads levels, never frequencies.
+   */
+  private tones!: Map<number, { endsAt: number | null }>;
+  /**
+   * SevSeg wiring and frames by instance, as each `begin` records them.
+   *
+   * Keyed by instance rather than kept in the field frame so method bodies
+   * never see reserved names and two displays never share a frame.
+   */
+  private sevseg!: Map<Instance, SevSegState>;
   private language!: FirmwareLanguage;
 
   constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
@@ -681,6 +770,8 @@ export class FirmwareRuntime {
     this.defines = new Map(program.defines);
     this.macros = new Map(program.macros);
     this.macroResolving = [];
+    this.tones = new Map();
+    this.sevseg = new Map();
     this.globals = new Scope();
     this.functions = new Map();
     this.instances = new Map();
@@ -728,6 +819,13 @@ export class FirmwareRuntime {
     for (const name of ['HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP']) {
       this.globals.values.set(name, BUILTIN_CONSTANTS[name]);
     }
+    /*
+     * SevSeg display types, as SevSeg.h numbers them: the gallery's
+     * `#define DISPLAY_TYPE COMMON_ANODE` resolves through here, so `begin`
+     * learns the polarity from the name rather than a magic literal.
+     */
+    this.globals.values.set('COMMON_CATHODE', 0);
+    this.globals.values.set('COMMON_ANODE', 1);
     this.globals.values.set('true', 1);
     this.globals.values.set('false', 0);
     /*
@@ -775,8 +873,8 @@ export class FirmwareRuntime {
     const byName = new Map(project.files.map((file) => [file.name, file.content]));
     // Bench-legal tab names are lowercase, but verbatim upstream tabs keep
     // capitalized quoted includes ("Button.h"). Resolve case-insensitively
-    // to match packager.ts, so the AVR-only build fails on classes (the
-    // pinned contract) instead of a misleading not-found.
+    // to match packager.ts, so a broken include still fails as not-found
+    // instead of resolving the wrong tab.
     const byLower = new Map([...byName.keys()].map((k) => [k.toLowerCase(), k]));
     // Resolve + cycle check over local edges only.
     const order: string[] = [];
@@ -1144,6 +1242,15 @@ export class FirmwareRuntime {
     if (instance.className === 'RTC_DS1307') {
       return yield* this.evaluateRtcCall(method, args, services);
     }
+    /*
+     * A SevSeg display (`SevSeg sevseg; sevseg.setNumber(...)`): the class is
+     * never declared in a tab -- the library owns it -- so the instance
+     * answers through recorded wiring and GPIO rather than through method
+     * bodies that do not exist, the way the RTC handle does.
+     */
+    if (instance.className === 'SevSeg') {
+      return this.evaluateSevSegCall(instance, method, args, services);
+    }
     const declaration = this.classMethods.get(instance.className)?.get(method);
     if (!declaration) return 0;
     const previous = this.currentInstance;
@@ -1288,6 +1395,29 @@ export class FirmwareRuntime {
        * reports the absence through its return value.
        */
       case 'abort':
+        return 0;
+      /*
+       * `sizeof` over an array answers its length, so the idiom
+       * `sizeof(TONES) / sizeof(TONES[0])` counts entries; over anything
+       * else it answers one unit, which keeps the same ratio exact.
+       */
+      case 'sizeof': {
+        const target = args[0];
+        return Array.isArray(target) ? target.length : 1;
+      }
+      /*
+       * `tone(pin, freq, dur?)` starts a non-blocking note (see `startTone`):
+       * it drives HIGH and records the silence time rather than yielding it,
+       * because a sketch that polls (`AlarmTone::play` every loop) must keep
+       * sampling its buttons while the note sounds.
+       */
+      case 'tone': {
+        const duration = args[2] === undefined ? 0 : asNumber(args[2]);
+        this.startTone(asNumber(args[0] ?? 0), duration, services);
+        return 0;
+      }
+      case 'noTone':
+        this.stopTone(asNumber(args[0] ?? 0), services);
         return 0;
       default:
         return 0;
@@ -1488,8 +1618,25 @@ export class FirmwareRuntime {
         return expression.value ? 1 : 0;
 
       case 'identifier': {
-        const found = scope.lookup(expression.name);
-        if (found !== undefined) return found;
+        /*
+         * A name that holds an array evaluates to a copy of its store, so a
+         * wiring table (`digitPins`) can be handed to a call (`begin`) the
+         * way C decays it. The walk is innermost-out with the values entry
+         * winning per scope, so a parameter shadowing a global array reads
+         * the parameter rather than the table behind it. Copies, not the
+         * live store: a callee cannot scribble the caller's table through
+         * the argument.
+         */
+        for (const frame of chainFrom(scope)) {
+          if (frame.values.has(expression.name)) {
+            const store = frame.arrays.get(expression.name);
+            if (store !== undefined) return [...store];
+            return frame.values.get(expression.name) ?? 0;
+          }
+          if (frame.arrays.has(expression.name)) {
+            return [...(frame.arrays.get(expression.name) ?? [])];
+          }
+        }
         /*
          * An expression define (`MINUTE`, `TIMESPAN_DAY`): evaluated where it
          * is used, against the scope that names it. A self-referencing macro
@@ -1850,6 +1997,129 @@ export class FirmwareRuntime {
       default:
         return 0;
     }
+  }
+
+  /**
+   * Handles a `SevSeg` call against the instance's recorded wiring.
+   *
+   * `begin` records the digit/segment pins (handed over as whole arrays by
+   * the identifier evaluation) and takes them as outputs; `setNumber` and
+   * `setChars` stage patterns; `refreshDisplay` multiplexes one digit per
+   * call so the phase matches the raw build's one-digit `dspRefresh`; a
+   * refresh before any `begin` is a silent no-op. Unknown methods answer
+   * zero, the way unknown functions do.
+   */
+  private evaluateSevSegCall(
+    instance: Instance,
+    method: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Value {
+    let state = this.sevseg.get(instance);
+    if (!state) {
+      state = {
+        digitPins: [],
+        segmentPins: [],
+        digits: 4,
+        commonAnode: true,
+        leadingZeros: false,
+        buffer: [0, 0, 0, 0],
+        brightness: 100,
+        mux: 0,
+      };
+      this.sevseg.set(instance, state);
+    }
+    const pins = (value: Value | undefined): number[] =>
+      Array.isArray(value) ? value.map((pin) => Math.trunc(asNumber(pin))) : [];
+
+    switch (method) {
+      case 'begin': {
+        const digits = Math.max(1, Math.min(8, Math.trunc(asNumber(args[1] ?? 4))));
+        state.commonAnode = asNumber(args[0] ?? 1) !== 0;
+        state.digitPins = pins(args[2]).slice(0, digits);
+        state.segmentPins = pins(args[3]).slice(0, 8);
+        state.digits = digits;
+        state.leadingZeros = isTruthy(args[6] ?? 0);
+        state.buffer = new Array<number>(digits).fill(0);
+        state.mux = 0;
+        for (const pin of [...state.digitPins, ...state.segmentPins]) {
+          services.pinMode(pin, PIN_OUTPUT);
+        }
+        return 0;
+      }
+      case 'setNumber': {
+        /*
+         * The second argument is the caller's decimal/leading-zero request:
+         * the gallery passes -1 (no point) or omits it, both of which keep
+         * the zero-padded HHMM the glass shows. Only an explicit zero blanks
+         * the leading zeros; the instance flag from `begin` decides the rest.
+         */
+        const padded = args[1] === undefined ? state.leadingZeros : isTruthy(args[1]);
+        const text = Math.abs(Math.trunc(asNumber(args[0] ?? 0)))
+          .toString()
+          .padStart(state.digits, '0')
+          .slice(-state.digits);
+        state.buffer = [...text].map((char, index) => {
+          if (!padded && index < text.length - 1 && char === '0') return SEVSEG_GLYPHS[' '] ?? 0;
+          // A leading-zero blank never eats the units: the last digit keeps
+          // its zero so an empty value still reads as zero, not as blank.
+          return SEVSEG_GLYPHS[char] ?? 0;
+        });
+        return 0;
+      }
+      case 'setChars': {
+        const text = typeof args[0] === 'string' ? args[0] : formatValue(args[0] ?? 0);
+        const chars = [...text].slice(0, state.digits);
+        while (chars.length < state.digits) chars.push(' ');
+        state.buffer = chars.map((char) => SEVSEG_GLYPHS[char] ?? SEVSEG_GLYPHS[' '] ?? 0);
+        return 0;
+      }
+      case 'setBrightness': {
+        state.brightness = Math.max(0, Math.min(100, Math.trunc(asNumber(args[0] ?? 100))));
+        return 0;
+      }
+      case 'refreshDisplay': {
+        if (state.digitPins.length === 0 || state.segmentPins.length === 0) return 0;
+        const select = state.commonAnode ? LEVEL_HIGH : LEVEL_LOW;
+        const release = state.commonAnode ? LEVEL_LOW : LEVEL_HIGH;
+        const digit = state.mux % state.digits;
+        for (const pin of state.digitPins) services.digitalWrite(pin, release);
+        const pattern = state.buffer[digit] ?? 0;
+        state.segmentPins.forEach((pin, bit) => {
+          services.digitalWrite(pin, (pattern >> bit) & 1 ? release : select);
+        });
+        const common = state.digitPins[digit];
+        if (common !== undefined) services.digitalWrite(common, select);
+        state.mux = (digit + 1) % state.digits;
+        return 0;
+      }
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Starts a non-blocking tone: drives HIGH and records when the note ends.
+   *
+   * An expired note retires (LOW) on the next `tone`/`noTone` for its pin;
+   * nothing retires it in between, which is what keeps the siren live across
+   * loop passes without ever yielding. The frequency is recorded nowhere the
+   * bench reads: levels, not waveforms, are what the buzzer net carries.
+   */
+  private startTone(pin: number, durationMs: number, services: FirmwareServices): void {
+    const sounding = this.tones.get(pin);
+    if (sounding && sounding.endsAt !== null && sounding.endsAt <= services.nowMs()) {
+      this.tones.delete(pin);
+      services.digitalWrite(pin, LEVEL_LOW);
+    }
+    services.digitalWrite(pin, LEVEL_HIGH);
+    this.tones.set(pin, { endsAt: durationMs > 0 ? services.nowMs() + durationMs : null });
+  }
+
+  /** Silences a pin unconditionally, retiring any recorded note. */
+  private stopTone(pin: number, services: FirmwareServices): void {
+    this.tones.delete(pin);
+    services.digitalWrite(pin, LEVEL_LOW);
   }
 
   /**
