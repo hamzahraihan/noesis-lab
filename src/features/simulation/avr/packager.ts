@@ -26,6 +26,7 @@ export function packageSketch(project: FirmwareProject): PackedSketch {
     if (parts.length > 0 && parts[parts.length - 1] === '') parts.pop();
     parts.forEach((text, index) => {
       const local = text.match(LOCAL_INCLUDE_OF);
+      // Quoted non-tab includes ride through: they resolve via the toolchain -I roots; stripping them breaks system headers like "Arduino.h".
       if (local !== null && tabNames.has(local[1]!.toLowerCase())) return;
       lines.push(text);
       lineMap.push({ file, line: index + 1 });

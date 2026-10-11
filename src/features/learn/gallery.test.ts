@@ -148,10 +148,10 @@ describe('the project gallery', () => {
     const alarm = galleryById('alarm-clock')!;
     expect(buildFor(alarm, 'uno')?.sketch).toBe(alarm.builds[0]!.sketch);
     expect(buildFor(alarm, 'uno', 'nope')).toBe(alarm.builds[0]!);
-    // Unknown variant falls back to the default build, never a blank bench —
-    // 'library' has no build yet, so it resolves to the default too. (Task 2
-    // strengthens this once the library build exists.)
-    expect(buildFor(alarm, 'uno', 'library')).not.toBeNull();
+    // Unknown variant falls back to the default build (see plan Task 1 ruling).
+    expect(buildFor(alarm, 'uno', 'library')).toBe(alarm.builds[1]!);
+    // Both builds share one setup: guards against wiring drift between them.
+    expect(alarm.builds[1]!.setup).toBe(alarm.builds[0]!.setup);
   });
 
   it('names only parts the catalogue stocks and says what running shows', () => {
