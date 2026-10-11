@@ -146,6 +146,94 @@ try {
   };
   const toolchain = await import('@horang-corp/avr-gcc-wasm');
   toolchain.setAssetsBase(assetsBase);
+  if (variant === 'library') {
+    // Tier-2 assembly path: the single-TU buildFirmware({ source }) entry
+    // cannot resolve <SevSeg.h>/<RTClib.h> (structural), so the library
+    // variant compiles the multi-TU gallery project through the public
+    // compileProjectWithLibraries seam, with Tier-2 objects built through
+    // the injected per-TU toolchain adapter. Same materialize-and-run
+    // vite-node pattern as Step 2 above. The in-memory cache backend is
+    // constructed literally: createProjectLibraryContext wires IndexedDB,
+    // which is unavailable in Node. The snippet additionally normalizes the
+    // tabs' quoted "Arduino.h" include to the angle form (see inline note):
+    // packageSketch drops quoted includes as local tabs, which would strip
+    // the system header's declarations from the packed TU.
+    const librarySnippet = `import { writeFileSync } from 'node:fs';
+import { buildFor, firmwareForBuild, galleryById } from '../src/features/learn/gallery';
+import { compileProjectWithLibraries } from '../src/features/simulation/avr/toolchain/client';
+import { buildTier2Objects } from '../src/features/simulation/avr/libraries/tier2';
+import { compileToolchainUnit } from '../src/features/simulation/avr/toolchain/tools';
+
+const build = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
+const rawProject = firmwareForBuild(build, 'arduino-cpp');
+// packageSketch drops every quoted #include as a project-local tab, but the
+// library tabs quote "Arduino.h" — a system header, not a tab. The TU-level
+// <Arduino.h> backstop never fires (later tabs already use the angle form)
+// and button.h packs first, so uint8_t/LOW/HIGH go missing and the TU fails
+// (silently under runTool: the empty object surfaces only as undefined
+// setup/loop at link). Normalize to the angle form the default build's tabs
+// use: identical header, identical declarations, verbatim tab contents
+// otherwise untouched.
+const project = {
+  ...rawProject,
+  files: rawProject.files.map((f) => ({
+    ...f,
+    content: f.content.replace(/^\\s*#include\\s+"Arduino\\.h"\\s*$/gm, '#include <Arduino.h>'),
+  })),
+};
+const mem = new Map();
+const ctx = {
+  slots: [],
+  tier2: (name, version) => buildTier2Objects(name, version, {
+    fetch: async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(\`library fetch failed for \${url}: \${res.status}\`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    cache: {
+      get: async (k) => mem.get(k) ?? null,
+      put: async (k, v) => { mem.set(k, v); },
+    },
+    compileUnit: (source, headers) => compileToolchainUnit({ name: 'Tier2Unit.cpp', source, headers }),
+  }),
+};
+const result = await compileProjectWithLibraries(project, ctx, () => {}, AbortSignal.timeout(1_200_000));
+// result.hex is Uint16Array flash words: serialize to Intel HEX text,
+// trimming trailing zero words, LF endings.
+const words = [...result.hex];
+while (words.length > 0 && words[words.length - 1] === 0) words.pop();
+const bytes = Buffer.alloc(words.length * 2);
+words.forEach((w, i) => { bytes[i * 2] = w & 0xff; bytes[i * 2 + 1] = (w >> 8) & 0xff; });
+let hex = '';
+for (let addr = 0; addr < bytes.length; addr += 16) {
+  const chunk = bytes.subarray(addr, addr + 16);
+  let sum = chunk.length + ((addr >> 8) & 0xff) + (addr & 0xff);
+  let line = \`:\${chunk.length.toString(16).padStart(2, '0').toUpperCase()}\${addr.toString(16).padStart(4, '0').toUpperCase()}00\`;
+  for (const b of chunk) { sum += b; line += b.toString(16).padStart(2, '0').toUpperCase(); }
+  hex += line + (((~sum + 1) & 0xff).toString(16).padStart(2, '0').toUpperCase()) + '\\n';
+}
+hex += ':00000001FF\\n';
+writeFileSync('.avr-stage/lib-hex.txt', hex);
+`;
+    const LIBRARY_SNIPPET = join(STAGE, 'build-library.mts');
+    await writeFile(LIBRARY_SNIPPET, librarySnippet);
+    runViteNode(join('.avr-stage', 'build-library.mts'));
+    hex = await readFile(join(STAGE, 'lib-hex.txt'), 'utf8');
+    // Mirror the toolchain's own budget check (firmware-builder.js:
+    // flashBytes = countIntelHexDataBytes(hex), UNO_APP_FLASH_BYTES = 32256).
+    let flashBytes = 0;
+    for (const line of hex.split('\n')) {
+      if (line[0] !== ':' || line.length < 11) continue;
+      if (Number.parseInt(line.slice(7, 9), 16) === 0x00) {
+        flashBytes += Number.parseInt(line.slice(1, 3), 16);
+      }
+    }
+    fitsTarget = flashBytes <= 32256;
+    console.log(`built (library): flash ${flashBytes} bytes (budget 32256), fitsTarget=${fitsTarget}`);
+    if (!fitsTarget) {
+      throw new Error('HEX overflows the Uno flash budget; refusing to commit it.');
+    }
+  } else {
   const result = await toolchain.buildFirmware({ source });
   hex = result.hex;
   fitsTarget = result.flashBytes <= result.target.appFlashBytes;
@@ -155,6 +243,7 @@ try {
   );
   if (!result.fitsTarget) {
     throw new Error('HEX overflows the Uno flash budget; refusing to commit it.');
+  }
   }
 } catch (error) {
   console.error('buildFirmware failed:', error instanceof Error ? (error.stack ?? error.message) : error);
