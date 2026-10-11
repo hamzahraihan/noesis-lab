@@ -154,10 +154,8 @@ try {
     // the injected per-TU toolchain adapter. Same materialize-and-run
     // vite-node pattern as Step 2 above. The in-memory cache backend is
     // constructed literally: createProjectLibraryContext wires IndexedDB,
-    // which is unavailable in Node. The snippet additionally normalizes the
-    // tabs' quoted "Arduino.h" include to the angle form (see inline note):
-    // packageSketch drops quoted includes as local tabs, which would strip
-    // the system header's declarations from the packed TU.
+    // which is unavailable in Node. Staged sources are byte-identical
+    // gallery sources; the packager resolves quoted system headers.
     const librarySnippet = `import { writeFileSync } from 'node:fs';
 import { buildFor, firmwareForBuild, galleryById } from '../src/features/learn/gallery';
 import { compileProjectWithLibraries } from '../src/features/simulation/avr/toolchain/client';
@@ -165,22 +163,7 @@ import { buildTier2Objects } from '../src/features/simulation/avr/libraries/tier
 import { compileToolchainUnit } from '../src/features/simulation/avr/toolchain/tools';
 
 const build = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
-const rawProject = firmwareForBuild(build, 'arduino-cpp');
-// packageSketch drops every quoted #include as a project-local tab, but the
-// library tabs quote "Arduino.h" — a system header, not a tab. The TU-level
-// <Arduino.h> backstop never fires (later tabs already use the angle form)
-// and button.h packs first, so uint8_t/LOW/HIGH go missing and the TU fails
-// (silently under runTool: the empty object surfaces only as undefined
-// setup/loop at link). Normalize to the angle form the default build's tabs
-// use: identical header, identical declarations, verbatim tab contents
-// otherwise untouched.
-const project = {
-  ...rawProject,
-  files: rawProject.files.map((f) => ({
-    ...f,
-    content: f.content.replace(/^\\s*#include\\s+"Arduino\\.h"\\s*$/gm, '#include <Arduino.h>'),
-  })),
-};
+const project = firmwareForBuild(build, 'arduino-cpp');
 const mem = new Map();
 const ctx = {
   slots: [],

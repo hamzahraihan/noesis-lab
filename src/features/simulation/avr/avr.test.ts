@@ -451,6 +451,32 @@ describe('sketch packager', () => {
     expect(lintPrototypes('void loop() {\n  return foo();\n}\n')).toEqual([{ line: 2, name: 'foo' }]);
     expect(lintPrototypes('void loop() {\n  if (x) {\n  } else foo();\n}\n')).toEqual([{ line: 3, name: 'foo' }]);
   });
+
+  it('keeps quoted includes that name no project tab', () => {
+    const packed = packageSketch({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [
+        { name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' },
+        { name: 'button.h', content: '#include "Arduino.h"\nclass Button {};\n' },
+      ],
+    });
+    expect(packed.source).toContain('#include "Arduino.h"');
+    expect(packed.source).toContain('class Button {};');
+  });
+
+  it('still strips quoted includes that name a project tab, any case', () => {
+    const packed = packageSketch({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [
+        { name: 'main.ino', content: '#include "Button.h"\nvoid setup() {}\nvoid loop() {}\n' },
+        { name: 'button.h', content: 'class Button {};\n' },
+      ],
+    });
+    expect(packed.source).not.toContain('#include "Button.h"');
+    expect(packed.source).toContain('class Button {};');
+  });
 });
 
 describe('avr compile fallback matrix', () => {

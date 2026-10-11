@@ -11,20 +11,22 @@ export interface PackedSketch {
   readonly lineMap: readonly PackedLine[];
 }
 
-const LOCAL_INCLUDE = /^\s*#include\s+"[^"]+"\s*$/;
+const LOCAL_INCLUDE_OF = /^\s*#include\s+"([^"]+)"\s*$/;
 const ARDUINO_INCLUDE = /^\s*#\s*include\s*<Arduino\.h>/;
 
 /** Flattens a multi-file project into the single TU the WASM toolchain takes. */
 export function packageSketch(project: FirmwareProject): PackedSketch {
   const lines: string[] = [];
   const lineMap: PackedLine[] = [];
+  const tabNames = new Set(project.files.map((file) => file.name.toLowerCase()));
   const push = (file: string, content: string): void => {
     const parts = content.split('\n');
     // Drop the trailing artifact of a final newline so concatenated tabs do
     // not gain blank separator lines; kept lines retain 1-based numbers.
     if (parts.length > 0 && parts[parts.length - 1] === '') parts.pop();
     parts.forEach((text, index) => {
-      if (LOCAL_INCLUDE.test(text)) return;
+      const local = text.match(LOCAL_INCLUDE_OF);
+      if (local !== null && tabNames.has(local[1]!.toLowerCase())) return;
       lines.push(text);
       lineMap.push({ file, line: index + 1 });
     });
