@@ -57,6 +57,72 @@ async function tier2Reachable(): Promise<boolean> {
   }
 }
 
+/**
+ * Expected 8-segment glyphs in SEGMENT_ORDER bit order, for the
+ * accumulation probe below. '0'/'1' are the SevSeg numeral codes; 'n' is
+ * SevSeg's 0x54 (C/E/G); 'F' is 0x71 (A/E/F/G). Lowercase 'o' renders as
+ * 'O' — the same segments as '0' — per SevSeg's alpha table.
+ */
+const ZERO_GLYPH = [1, 1, 1, 1, 1, 1, 0, 0];
+const ONE_GLYPH = [0, 1, 1, 0, 0, 0, 0, 0];
+const N_GLYPH = [0, 0, 1, 0, 1, 0, 1, 0];
+const F_GLYPH = [1, 0, 0, 0, 1, 1, 1, 0];
+
+/**
+ * Settles the lit segments per digit over up to `maxTicks` small frames.
+ *
+ * The library build multiplexes segments, not digits (SevSeg with resistors
+ * on digits and no update delays: one segment pin at a time across every
+ * digit that uses it), so the edge-latched glass never holds a whole
+ * character at once. Unioning the instantaneous Wokwi values over full
+ * multiplex cycles recovers the decoded content all the same — midnight
+ * lights A-F on every digit, whatever any single instant says.
+ *
+ * The walk is live but its phase against the tick boundary jitters with
+ * machine load, so the probe runs until the union stops changing (14 quiet
+ * frames past a 30-frame floor) instead of asserting after a fixed count.
+ * Digits whose code is blank never relatch and keep stale bits from the
+ * previous view — callers assert only on digits the current view drives.
+ */
+function convergeGlass(
+  simulation: Simulation,
+  maxTicks: number,
+): { glyphs: number[][]; converged: boolean } {
+  const lit: number[][] = [0, 1, 2, 3].map(() => [0, 0, 0, 0, 0, 0, 0, 0]);
+  let stable = 0;
+  let converged = false;
+  for (let frame = 0; frame < maxTicks; frame++) {
+    simulation.tick(0.01);
+    const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+    const probe = {
+      values: [] as number[],
+      digits: 0,
+      colon: false,
+      colonValue: false,
+    } as unknown as HTMLElement;
+    pushWokwiState(probe, seg.definition, seg, {
+      pinVolts: simulation.pinVoltages(),
+      displays: simulation.displayControllers(),
+    } as unknown as FootprintState);
+    const values = (probe as unknown as { values: number[] }).values;
+    let changed = false;
+    for (let d = 0; d < 4; d++) {
+      for (let s = 0; s < 8; s++) {
+        if (values[d * 8 + s] === 1 && lit[d]![s] === 0) {
+          lit[d]![s] = 1;
+          changed = true;
+        }
+      }
+    }
+    stable = changed ? 0 : stable + 1;
+    if (stable >= 14 && frame >= 30) {
+      converged = true;
+      break;
+    }
+  }
+  return { glyphs: lit, converged };
+}
+
 describe('the project gallery', () => {
   it('numbers every project uniquely and builds each at least once', () => {
     const ids = GALLERY.map((entry) => entry.id);
@@ -543,4 +609,234 @@ void loop() {
     expect(glass(), 'hour tap moves the hour digits').toMatch(/^0[12]01$/);
     }
   }, 60_000);
+
+  /*
+   * Live AVR legs for the alarm library build (Task 2's AVR-only entry:
+   * verbatim urish sources with SevSeg/RTClib, flashed from the committed
+   * library HEX). Same simulation shape and helpers as the raw legs above —
+   * AVR-only, since the interpreter cannot parse classes — gated on the HEX
+   * with the file's skip pattern.
+   *
+   * Two adaptations the bench forces, both verified by execution (see the
+   * Task 8 report): the interpreter rejection is the pinned AVR-only
+   * contract, so firmwareError carries it while the HEX runs underneath;
+   * and the SevSeg multiplex cycles segments rather than digits, so decoded
+   * digits are accumulated over full multiplex frames instead of read off
+   * the edge-latched glass. The colon, DP, buzzer, and worker legs are
+   * verbatim: those pins are driven directly, not multiplexed.
+   */
+  it('runs the alarm library build live (AVR)', () => {
+    const libHex = join(__dirname, '..', 'simulation', 'avr', 'hex', 'alarm-clock-lib-uno.hex');
+    if (!hexAvailable() || !existsSync(libHex)) {
+      console.warn('SKIP library build live: no HEX');
+      return;
+    }
+    const build = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    build.setup(simulation);
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    // AVR-only by contract: the interpreter stops at the class sources while
+    // the committed HEX runs underneath. A fault would overwrite this with
+    // its own message, so the rejection standing also proves no fault.
+    expect(simulation.firmwareError ?? '', 'library build is AVR-only').toMatch(
+      /expected a type|not found/,
+    );
+    simulation.start();
+    for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
+    const midnight = convergeGlass(simulation, 70);
+    expect(midnight.converged, 'library build multiplex settles at midnight').toBe(true);
+    expect(midnight.glyphs, 'library build idles at midnight').toEqual([
+      ZERO_GLYPH,
+      ZERO_GLYPH,
+      ZERO_GLYPH,
+      ZERO_GLYPH,
+    ]);
+    simulation.engine.timeMs += 61000;
+    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+    const minute = convergeGlass(simulation, 70);
+    expect(minute.converged, 'library build multiplex settles a minute later').toBe(true);
+    expect(minute.glyphs, 'library build shows 00:01 a minute later').toEqual([
+      ZERO_GLYPH,
+      ZERO_GLYPH,
+      ZERO_GLYPH,
+      ONE_GLYPH,
+    ]);
+    // Colon blinks: sample colonValue like the raw legs. Ticks advance 40 ms
+    // (the frame budget cap), so three samples a second apart always span
+    // both parities of the once-a-second blink — 60 frames prove the blink
+    // at half the cost of the raw legs' 120.
+    const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+    const colonSamples: boolean[] = [];
+    for (let frame = 0; frame < 60; frame++) {
+      simulation.tick(0.05);
+      if (frame % 20 === 19) {
+        const probe = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
+        pushWokwiState(probe, segPart.definition, segPart, {
+          pinVolts: simulation.pinVoltages(),
+          displays: simulation.displayControllers(),
+        } as unknown as FootprintState);
+        colonSamples.push((probe as unknown as { colonValue: boolean }).colonValue);
+      }
+    }
+    expect(new Set(colonSamples), 'library colon blinks').toEqual(new Set([false, true]));
+    // DP slice stays dark: SevSeg begun with 7 segment pins.
+    const element = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
+    pushWokwiState(element, segPart.definition, segPart, {
+      pinVolts: simulation.pinVoltages(),
+      displays: simulation.displayControllers(),
+    } as unknown as FootprintState);
+    const values = (element as unknown as { values: number[] }).values;
+    expect(values).toHaveLength(32);
+    for (let d = 0; d < 4; d++) expect(values.slice(d * 8 + 7, d * 8 + 8)).toEqual([0]);
+  }, 180_000);
+
+  /*
+   * Status view + NVRAM + buzzer for the library build: a short Alarm press
+   * arms the clock (toggleAlarm saves over real I2C writes), the glass
+   * switches to the setChars status view, an MCU reset proves the NVRAM
+   * round-trip (the clock comes back armed), and with the alarm due the
+   * siren drives A3 — liveness across samples, never exact timing.
+   *
+   * Two bench facts shape the choreography. First, setPressed rebuilds the
+   * bench and recreates the RTC model, wiping its RAM — so the button stays
+   * held from the arming press until the rebooted clock has been read back;
+   * only then is it released. Second, with the button held through the
+   * reset, the rebooted clock toggles straight back off (the held edge
+   * reads as a fresh press), landing in the status view: " off" proves the
+   * save survived, while a wiped NVRAM would boot disarmed and show " on".
+   */
+  it('runs the alarm library build live status, NVRAM, and buzzer (AVR)', () => {
+    const libHex = join(__dirname, '..', 'simulation', 'avr', 'hex', 'alarm-clock-lib-uno.hex');
+    if (!hexAvailable() || !existsSync(libHex)) {
+      console.warn('SKIP library build live: no HEX');
+      return;
+    }
+    const build = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    build.setup(simulation);
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError ?? '', 'library build is AVR-only').toMatch(
+      /expected a type|not found/,
+    );
+    simulation.start();
+    const alarmButton = simulation.bench.parts.filter(
+      (p) => p.definition.name === 'Tactile Button',
+    )[2]!;
+    // Fresh NVRAM starts disarmed (zeroed model NVRAM ⇒ DISABLED per
+    // Clock::begin): the buzzer rests LOW before anything is armed.
+    for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
+    expect(simulation.engine.readDigital(17), 'library build buzzer silent while disarmed').toBe(false);
+    // Arming press: the toggle saves NVRAM over real I2C writes and the
+    // glass switches to the setChars status view — the SevSeg API the
+    // fixture never covers. ALARM_STATUS_DISPLAY_TIME is 1000 ms, so the
+    // status is settled mid-hold (10 ms ticks, 60-frame cap) while the view
+    // is guaranteed up. ' ' stays blank, 'o' renders as 'O' (same segments
+    // as '0'), 'n' lights C/E/G. Blank digits keep stale bits, so only the
+    // driven digits are asserted. The button stays held past the reset.
+    simulation.setPressed(alarmButton.id, true);
+    for (let frame = 0; frame < 10; frame++) simulation.tick(0.01);
+    const status = convergeGlass(simulation, 60);
+    expect(status.converged, 'library build status view settles').toBe(true);
+    expect(status.glyphs[1], 'library build status shows O').toEqual(ZERO_GLYPH);
+    expect(status.glyphs[2], 'library build status shows n').toEqual(N_GLYPH);
+    expect(simulation.firmwareError ?? '', 'library build still runs after the tap').toMatch(
+      /expected a type|not found/,
+    );
+    // NVRAM round-trip: reset the MCU core — setup() reruns and Clock::begin()
+    // rereads the DS1307's RAM, which the reset preserves (only a rebuild
+    // recreates the model). The held edge toggles the rebooted clock straight
+    // back off, so " off" (blank, 'O', 'F', 'F') proves the save survived —
+    // a wiped NVRAM would boot disarmed and show " on".
+    const core = (simulation as unknown as { avrBackend: { reset(): void } | null }).avrBackend;
+    expect(core, 'library build AVR core flashed').not.toBeNull();
+    core!.reset();
+    for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
+    const rearmed = convergeGlass(simulation, 60);
+    expect(rearmed.converged, 'library build second status view settles').toBe(true);
+    expect(rearmed.glyphs[1], 'library build NVRAM persists the arm (O)').toEqual(ZERO_GLYPH);
+    expect(rearmed.glyphs[2], 'library build NVRAM persists the arm (F)').toEqual(F_GLYPH);
+    expect(rearmed.glyphs[3], 'library build NVRAM persists the arm (F)').toEqual(F_GLYPH);
+    expect(simulation.firmwareError ?? '', 'library build still runs after reset').toMatch(
+      /expected a type|not found/,
+    );
+    // Release only now that the read-back is proven. Releasing rebuilds the
+    // bench and recreates the RTC model, so the save is gone — but the
+    // firmware's own save already went out over real I2C (asserted on the
+    // bus log below), and the reboot read-back above proved the model side.
+    // For the siren leg, stage an armed save directly (the same two bytes
+    // toggleAlarm emits) and reset: the rebooted clock boots armed with no
+    // button choreography in the way, sees the due alarm, and rings.
+    simulation.setPressed(alarmButton.id, false);
+    for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
+    const saves = simulation
+      .busLines()
+      .filter((entry) => entry.bus === 'i2c' && entry.address === 0x68)
+      .map((entry) => [...entry.bytes]);
+    expect(saves, 'library build saves the arm over I2C').toContainEqual([8, 1]);
+    expect(simulation.engine.writeI2C(0x68, 0x08, true), 'library build NVRAM staged').toBe(true);
+    expect(simulation.engine.writeI2C(0x68, 0x01, false), 'library build NVRAM staged').toBe(true);
+    core!.reset();
+    for (let frame = 0; frame < 10; frame++) simulation.tick(0.05);
+    // Live buzzer: the alarm is due — the staged save arms 00:00 while the
+    // RTC sits just past midnight — so the rebooted clock walks straight
+    // into the alarm state and the siren drives A3: liveness across
+    // samples, never exact timing.
+    let buzzerSeenHigh = false;
+    for (let frame = 0; frame < 25; frame++) {
+      simulation.tick(0.05);
+      if (simulation.engine.readDigital(17)) buzzerSeenHigh = true;
+    }
+    expect(buzzerSeenHigh, 'library build buzzer rings while the alarm is due').toBe(true);
+    expect(simulation.firmwareError ?? '', 'library build still runs while ringing').toMatch(
+      /expected a type|not found/,
+    );
+  }, 180_000);
+
+  /*
+   * Worker-compile leg for the library build: the committed HEX proves the
+   * recorded sources built once, but only a live worker compile proves the
+   * gallery sources plus their declared libraries still compile now. Mirrors
+   * the Tier-2 fixture shape (toolchain + Tier-2 gates, 1_500_000 budget):
+   * compileAndRun → compileState 'ready', firmwareError null, then ticks
+   * without fault.
+   */
+  it('runs the alarm library build live worker compile (AVR Tier-2)', async () => {
+    let pkg: string | null = null;
+    try {
+      pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
+    } catch { /* fall through to skip */ }
+    if (!pkg) {
+      console.warn('SKIP library build worker compile: toolchain absent');
+      return;
+    }
+    if (!(await tier2Reachable())) {
+      console.warn('SKIP library build worker compile: Tier-2 fetch unreachable');
+      return;
+    }
+    const libBuild = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    libBuild.setup(simulation);
+    await simulation.compileAndRun(firmwareForBuild(libBuild, 'arduino-cpp'));
+    expect(simulation.compileState, 'library build compiles').toBe('ready');
+    expect(simulation.firmwareError, 'library build firmware').toBeNull();
+    simulation.start();
+    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+    expect(simulation.firmwareError, 'library build runs without fault').toBeNull();
+    // Budget: a cold Tier-2 build compiles the firmware TU plus the SevSeg
+    // and RTClib TUs through the wasm toolchain (measured in minutes, not
+    // seconds); the browser reuses its versioned cache across sessions, Node
+    // rebuilds every run.
+  }, 1_500_000);
 });
