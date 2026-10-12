@@ -397,3 +397,73 @@ describe('Clock class end to end', () => {
     expect(output).toBe("Couldn't find RTC\n99\n");
   });
 });
+
+describe('RTC read caching', () => {
+  function countingBench(nowMs: () => number = () => 0): {
+    bench: RtcBench;
+    services: FirmwareServices;
+    requests: () => number;
+  } {
+    const bench = makeRtcBench(true, nowMs);
+    bench.setTime(2026, 10, 11, 9, 30, 0);
+    let requests = 0;
+    const services: FirmwareServices = {
+      ...bench.services,
+      wire: {
+        ...bench.services.wire,
+        requestFrom: (address: number, count: number) => {
+          requests++;
+          return bench.services.wire.requestFrom(address, count);
+        },
+      },
+    };
+    return { bench, services, requests: () => requests };
+  }
+
+  function drain(runtime: FirmwareRuntime, services: FirmwareServices, steps = 20): void {
+    const main = runtime.main(services);
+    for (let step = 0; step < steps && !main.next().done; step++) {
+      // Drain setup; the empty loop then idles.
+    }
+  }
+
+  it('reads the RTC once per 100ms window', () => {
+    const { services, requests } = countingBench(() => 0);
+    const runtime = FirmwareRuntime.fromProject(
+      toSingleFileProject(
+        `RTC_DS1307 rtc;
+         void setup() {
+           rtc.begin();
+           rtc.now(); rtc.now(); rtc.now(); rtc.now(); rtc.now();
+         }
+         void loop() {}`,
+        'arduino-cpp',
+      ),
+    );
+    drain(runtime, services);
+    // begin() probes once + five now() calls in window 0 share one read.
+    expect(requests()).toBe(2);
+  });
+
+  it('re-reads after adjust and shows the adjusted time', () => {
+    const { bench, services } = countingBench(() => 0);
+    const runtime = FirmwareRuntime.fromProject(
+      toSingleFileProject(
+        `RTC_DS1307 rtc;
+         void setup() {
+           rtc.begin();
+           DateTime a = rtc.now();
+           Serial.println(a.hour());
+           rtc.adjust(DateTime(2026, 10, 11, 10, 45, 0));
+           DateTime b = rtc.now();
+           Serial.println(b.hour() * 100 + b.minute());
+         }
+         void loop() {}`,
+        'arduino-cpp',
+      ),
+    );
+    drain(runtime, services, 30);
+    // Without cache invalidation the second read would print the stale 930.
+    expect(bench.serial.join('')).toBe('9\n1045\n');
+  });
+});

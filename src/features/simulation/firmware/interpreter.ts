@@ -766,6 +766,18 @@ export class FirmwareRuntime {
    * never see reserved names and two displays never share a frame.
    */
   private sevseg!: Map<Instance, SevSegState>;
+  /**
+   * Last RTC read plus how many times it has been served. One bench carries
+   * one DS1307 at 0x68, so a single slot is exact — and `adjust` clears it,
+   * since time moved under the cache.
+   *
+   * Served by count, never by the clock: reads must not call nowMs(), which
+   * would perturb call-count-scripted time sources. Each served pass still
+   * costs its 1ms scheduler quantum, so 50 serves bound staleness to roughly
+   * 50ms — far below the per-second glass and the raw build's own 10 Hz
+   * re-read rate.
+   */
+  private rtcNowCache: { value: DateTimeValue; served: number } | null = null;
   private language!: FirmwareLanguage;
 
   constructor(source: string, language: FirmwareLanguage = 'arduino-cpp') {
@@ -781,6 +793,7 @@ export class FirmwareRuntime {
     this.macroResolving = [];
     this.tones = new Map();
     this.sevseg = new Map();
+    this.rtcNowCache = null;
     this.globals = new Scope();
     this.functions = new Map();
     this.instances = new Map();
@@ -2187,6 +2200,18 @@ export class FirmwareRuntime {
         return wire.available() > 0 ? 1 : 0;
       }
       case 'now': {
+        /*
+         * One bus read per burst of passes: the glass blinks per second and
+         * the raw build itself re-reads at 10 Hz, so serving recent reads
+         * from cache changes nothing observable. The cached path still yields
+         * (1ms quantum) so delay-free loops keep suspending — without a yield
+         * the runner would never return from step() and the bench would hang.
+         */
+        if (this.rtcNowCache && this.rtcNowCache.served < RTC_NOW_CACHE_READS) {
+          this.rtcNowCache.served++;
+          yield 0;
+          return this.rtcNowCache.value;
+        }
         wire.beginTransmission(DS1307_ADDRESS);
         wire.write(0x00);
         const selected = wire.endTransmission();
@@ -2204,7 +2229,7 @@ export class FirmwareRuntime {
         const year = raw[6] ?? 0;
         // The seconds carry the halt flag in bit 7; the hour is read as a
         // 24-hour register, the only packing the bench produces.
-        return new DateTimeValue(
+        const value = new DateTimeValue(
           2000 + bcdToDec(year),
           bcdToDec(month),
           bcdToDec(date),
@@ -2212,8 +2237,12 @@ export class FirmwareRuntime {
           bcdToDec(minute),
           bcdToDec(second & 0x7f),
         );
+        this.rtcNowCache = { value, served: 1 };
+        return value;
       }
       case 'adjust': {
+        // Time moved under the cache: drop it before writing.
+        this.rtcNowCache = null;
         const current = args[0] instanceof DateTimeValue ? args[0] : new DateTimeValue();
         // Sunday is 0 to the calendar and 7 on the chip.
         const weekday = new Date(
@@ -2795,6 +2824,13 @@ function formatPrintValue(value: number, decimals?: number): string {
  * large enough that it does not monopolise the frame.
  */
 const NON_BLOCKING_QUANTUM_MS = 1;
+
+/**
+ * Cached RTC reads served before the next bus read. Each served pass still
+ * costs its 1ms scheduler quantum, so this bounds staleness to roughly
+ * 50ms — far below the per-second glass.
+ */
+const RTC_NOW_CACHE_READS = 50;
 
 export class FirmwareRunner {
   readonly runtime: FirmwareRuntime;
