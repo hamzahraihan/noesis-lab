@@ -409,6 +409,12 @@ export default function Bench(props: BenchProps) {
   const [compiling, setCompiling] = useState(false);
   /* Guards the progress flag when a second Run supersedes the first. */
   const compileSeq = useRef(0);
+  /*
+   * Latest Run handler for the keyboard shortcut below: the effect subscribes
+   * once, and the ref carries the current render's handler into it, so Space
+   * always loads/compiles exactly what the editor's Run button would.
+   */
+  const handleRunRef = useRef<() => void>(() => {});
 
   /*
    * Switching boards reloads that board's tabs from its own autosave (or its
@@ -625,7 +631,7 @@ export default function Bench(props: BenchProps) {
         case ' ':
           event.preventDefault();
           if (simulation.running) simulation.stop();
-          else simulation.start();
+          else void handleRunRef.current();
           forceRender((n) => n + 1);
           break;
         case 'r':
@@ -909,7 +915,7 @@ export default function Bench(props: BenchProps) {
    * loads straight into the interpreter as before. A cancelled compile stays
    * stopped: there is nothing fresh to run.
    */
-  const handleRun = async () => {
+  async function handleRun() {
     // A real firmware verdict replaces the corrupt-share notice: the bar
     // shows one thing at a time, and the run just produced something newer.
     setShareError(null);
@@ -958,7 +964,9 @@ export default function Bench(props: BenchProps) {
     }
     simulation.start();
     forceRender((n) => n + 1);
-  };
+  }
+  // Published to the keyboard shortcut above (declared below, hoisted).
+  handleRunRef.current = handleRun;
 
   const onPlacePart = useCallback(
     (definition: PartDefinition, entry: CatalogueEntry) => {
@@ -1069,7 +1077,7 @@ export default function Bench(props: BenchProps) {
             size="sm"
             onClick={() => {
               if (simulation.running) simulation.stop();
-              else simulation.start();
+              else void handleRun();
               forceRender((n) => n + 1);
             }}
             title={simulation.running ? 'Pause the simulation (Space)' : 'Run the simulation (Space)'}
