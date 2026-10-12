@@ -20,7 +20,7 @@ import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/p
 import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
-import { Servo } from '@/features/parts';
+import { Servo, type DisplayController, type Lcd1602 } from '@/features/parts';
 import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
 import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
@@ -28,7 +28,7 @@ import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
 import type { FootprintState } from '../wokwi/footprints';
 import { Simulation } from '../simulations/simulation';
-import { createWorkerClient, type WorkerClient } from '../simulations/worker-client';
+import { createWorkerClient, lcdFromSnapshot, sevenSegmentFromSnapshot, type WorkerClient } from '../simulations/worker-client';
 import { CenterTabs } from '../ide/CenterTabs';
 import { BottomPanel } from '../ide/BottomPanel';
 import { ResizeHandle } from '../ide/ResizeHandle';
@@ -523,11 +523,12 @@ export default function Bench(props: BenchProps) {
     };
   }, [simulation]);
 
-  /* Which backend owns stepping + its running flag. */
+  /* Which backend owns stepping + its running flag. One owner only: the
+   * worker when constructed, else the in-page simulation. */
   const isRunning = workerClient !== null ? workerClient.running : simulation.running;
   const activeStop = useCallback(() => {
-    simulation.stop();
-    workerClient?.stop();
+    if (workerClient) workerClient.stop();
+    else simulation.stop();
   }, [simulation, workerClient]);
   /* Firmware verdict from the owning backend (worker fault travels by
    * message in Task 5; the parse/fallback verdicts stay in-page). */
@@ -734,23 +735,29 @@ export default function Bench(props: BenchProps) {
   const renderState = useMemo<FootprintState>(() => {
     if (workerClient) {
       /*
-       * Mirror-fed frame: pin volts remapped with the bench, servo horns and
-       * pixel dies adapted from the plain display snapshots (real Servo
-       * models driven to the mirrored angle; RGB triplets split per part).
-       * 7-segment/TFT/stepper/LCD controller objects are not faked from
-       * plain bytes — TFT transport lands with Task 7 — so those stay empty
-       * on the worker path rather than showing a stale in-page picture.
+       * Mirror-fed frame: pin volts remapped with the bench, servo horns as
+       * real models driven to the mirrored angle, pixel dies as RGB triplets,
+       * 7-segment controllers rebuilt from latched patterns + colon, and LCD
+       * panels replayed from text bytes + flags. TFT stays empty — Task 7
+       * owns TFT transport, never faked here. Steppers show the last in-page
+       * angles by explicit decision: the core's display region carries no
+       * stepper bytes (shaft angles derive from coil-volt edge counting
+       * inside the solver, which has no frame encoding), so there is nothing
+       * to transport without a core change.
        */
       const snapshots = workerClient.displaySnapshots();
+      const colon = workerClient.colonFlags();
       const servos = new Map<string, Servo>();
       const pixels = new Map<string, readonly { r: number; g: number; b: number }[]>();
+      const displays = new Map<string, DisplayController>();
+      const lcds = new Map<string, Lcd1602>();
+      const logicVolts = simulation.mcu.board.logicVolts;
       for (const part of bench.parts) {
         const kind = part.definition.component.kind;
         const bytes = snapshots.get(part.id);
-        if (bytes === undefined) continue;
         if (kind === 'servo') {
           const servo = new Servo();
-          servo.write(bytes[0] ?? 90);
+          servo.write(bytes?.[0] ?? 90);
           servos.set(part.id, servo);
         } else if (
           kind === 'neopixel' ||
@@ -758,19 +765,34 @@ export default function Bench(props: BenchProps) {
           kind === 'led-ring'
         ) {
           const colors: { r: number; g: number; b: number }[] = [];
-          for (let i = 0; i + 2 < bytes.length; i += 3) {
-            colors.push({ r: bytes[i] ?? 0, g: bytes[i + 1] ?? 0, b: bytes[i + 2] ?? 0 });
+          if (bytes !== undefined) {
+            for (let i = 0; i + 2 < bytes.length; i += 3) {
+              colors.push({ r: bytes[i] ?? 0, g: bytes[i + 1] ?? 0, b: bytes[i + 2] ?? 0 });
+            }
           }
           pixels.set(part.id, colors);
+        } else if (kind === '7segment' && bytes !== undefined) {
+          const digits = part.definition.component.digits ?? 1;
+          displays.set(
+            part.id,
+            sevenSegmentFromSnapshot(digits, bytes.slice(0, digits), colon.get(part.id) ?? false, logicVolts),
+          );
+        } else if (kind === 'lcd' && bytes !== undefined) {
+          const panel = lcdFromSnapshot(
+            part.definition,
+            bytes.slice(0, bytes.length - 1),
+            bytes[bytes.length - 1] ?? 0,
+          );
+          if (panel !== null) lcds.set(part.id, panel);
         }
       }
       return {
         pinVolts: workerClient.pinVoltages(),
-        displays: new Map(),
+        displays,
         servos,
-        steppers: new Map(),
+        steppers: simulation.stepperAngles(),
         pixels,
-        lcds: new Map(),
+        lcds,
         controls: workerClient.controls,
         parts: bench.parts.length,
       };
@@ -936,12 +958,12 @@ export default function Bench(props: BenchProps) {
     [simulation],
   );
 
+  /* Inputs route to the owning backend only (worker messages on the worker
+   * path, the in-page model otherwise) — never both. */
   const onTogglePressed = useCallback(
     (partId: string, pressed: boolean) => {
-      simulation.setPressed(partId, pressed);
-      // Knob/press inputs travel as CoreInput messages on the worker path;
-      // the local controls stay live for render either way.
-      workerClient?.setPressed(partId, pressed);
+      if (workerClient) workerClient.setPressed(partId, pressed);
+      else simulation.setPressed(partId, pressed);
     },
     [simulation, workerClient],
   );
@@ -974,10 +996,11 @@ export default function Bench(props: BenchProps) {
       const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
       setProject(next);
       setExampleId(example.id);
-      simulation.loadFirmware(next);
+      if (workerClient) workerClient.loadFirmware(next);
+      else simulation.loadFirmware(next);
       forceRender((n) => n + 1);
     },
-    [simulation, EXAMPLES, boardOption, boardId],
+    [simulation, workerClient, EXAMPLES, boardOption, boardId],
   );
 
   /*
@@ -1072,8 +1095,8 @@ export default function Bench(props: BenchProps) {
         }
       }
     }
-    workerClient?.start();
-    simulation.start();
+    if (workerClient) workerClient.start();
+    else simulation.start();
     forceRender((n) => n + 1);
   }
   // Published to the keyboard shortcut above (declared below, hoisted).
@@ -1268,8 +1291,8 @@ export default function Bench(props: BenchProps) {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  workerClient?.cancelCompile();
-                  simulation.cancelCompile();
+                  if (workerClient) workerClient.cancelCompile();
+                  else simulation.cancelCompile();
                 }}
                 title="Abort the in-flight compile"
               >
@@ -1588,10 +1611,8 @@ export default function Bench(props: BenchProps) {
                 onChangeLanguage={handleLanguageChange}
                 onRun={handleRun}
                 onReset={() => {
-                  simulation.reset();
-                  // Mirror reset on the worker path (fresh firmware, serial
-                  // cleared); the running flag is left alone, as in-page.
                   if (workerClient) workerClient.loadFirmware(project);
+                  else simulation.reset();
                   forceRender((n) => n + 1);
                 }}
                 running={isRunning}
@@ -1614,6 +1635,12 @@ export default function Bench(props: BenchProps) {
               label="Resize bottom panel"
             />
           )}
+          {/*
+           * Instruments limitation (accepted): scope traces, analyser
+           * captures, bus log, and meter stay in-page — the core transports
+           * no probe waveforms, bus entries, or meter state, so they freeze
+           * while the worker owns stepping. Future transport work; not Task 7.
+           */}
           <BottomPanel
             tab={bottomTab}
             open={bottomOpen}
@@ -1701,13 +1728,14 @@ export default function Bench(props: BenchProps) {
                 selectPart(null);
               }}
               onSetPressed={(pressed) => {
-                if (selected) simulation.setPressed(selected.id, pressed);
+                if (!selected) return;
+                if (workerClient) workerClient.setPressed(selected.id, pressed);
+                else simulation.setPressed(selected.id, pressed);
               }}
               onSetKnob={(spec, value) => {
-                if (selected) {
-                  simulation.setKnob(selected.id, spec, value);
-                  workerClient?.setKnob(selected.id, spec, value);
-                }
+                if (!selected) return;
+                if (workerClient) workerClient.setKnob(selected.id, spec, value);
+                else simulation.setKnob(selected.id, spec, value);
               }}
               onRotate={() => {
                 // Physical, not electronic: this turns the part on the bench.
@@ -1751,7 +1779,7 @@ export default function Bench(props: BenchProps) {
       <StatusBar
         timeMs={workerClient ? workerClient.timeMs : simulation.engine.timeMs}
         running={isRunning}
-        netCount={workerClient ? workerClient.netCount : simulation.engine.currentNetlist.nodeCount}
+        netCount={simulation.engine.currentNetlist.nodeCount}
       />
     </div>
   );
