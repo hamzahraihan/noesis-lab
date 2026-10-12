@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReport, runHarness, type CheckDef, type HarnessReport, type HarnessSim } from './harness';
+import { formatReport, runHarness, type CheckDef, type HarnessSim } from './harness';
 
 function fakeSim(): HarnessSim & { calls: string[] } {
   const calls: string[] = [];
