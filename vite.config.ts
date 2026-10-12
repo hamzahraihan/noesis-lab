@@ -12,4 +12,16 @@ export default defineConfig({
   // running status bar. Correctness wins over the memoisation here.
   plugins: [tailwindcss(), react()],
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
 });
