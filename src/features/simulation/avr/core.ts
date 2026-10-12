@@ -2,6 +2,7 @@ import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8j
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import { attachGpioBridge } from './gpio';
+import { attachTimer1, bindTimer1Outputs } from './timer1';
 import { attachTwiBridge } from './twi';
 import { attachUsartBridge } from './usart';
 
@@ -101,6 +102,13 @@ export class AvrBackend implements ExecutionBackend {
     // the GPIO bridge already syncs); Timer0 keeps millis()/delay().
     new AVRTimer(cpu, timer2Config);
     attachGpioBridge(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
+    // Timer1 (Task 2): counter plus OC-to-PWM bridge beside the two AVRTimer
+    // lines; this shared constructor serves the in-page and worker paths. The
+    // bridge chains onto the DDRB/PORTB/PINB hooks, so it must bind after the
+    // GPIO bridge; both lines are load-bearing (counter alone never stamps
+    // duty). Attach once: a second attachTimer1 would double-wrap cpu.tick.
+    attachTimer1(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
+    bindTimer1Outputs(cpu, this.hooks.mcu, this.hooks.nowMs);
     attachUsartBridge(cpu, this.hooks.serial);
     attachTwiBridge(cpu, {
       writeByte: (address, byte, isFirst) => this.hooks.i2c.writeByte(address, byte, isFirst),

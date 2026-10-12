@@ -74,6 +74,10 @@ function pwmOf(mcu: McuRuntime, gpio: number): boolean {
   return mcu.configurationOf(mcu.pinIdForGpio(gpio)!).pwm;
 }
 
+function directionOf(mcu: McuRuntime, gpio: number): string {
+  return mcu.configurationOf(mcu.pinIdForGpio(gpio)!).direction;
+}
+
 describe('timer1 OC outputs', () => {
   it('stamps OC1A duty on D9 in Fast PWM', () => {
     const { cpu, mcu } = cpuWithOc();
@@ -99,6 +103,7 @@ describe('timer1 OC outputs', () => {
     // COM1A is disconnected, so D9 falls back to plain GPIO LOW.
     expect(dutyOf(mcu, 9)).toBe(0);
     expect(pwmOf(mcu, 9)).toBe(false);
+    expect(directionOf(mcu, 9)).toBe('input');
   });
 
   it('scales duty by TOP outside 8-bit modes', () => {
@@ -122,6 +127,7 @@ describe('timer1 OC outputs', () => {
     cpu.writeData(37, 0x02); // PORTB bit 1: HIGH
     expect(dutyOf(mcu, 9)).toBe(1);
     expect(pwmOf(mcu, 9)).toBe(false);
+    expect(directionOf(mcu, 9)).toBe('output');
     cpu.writeData(37, 0x00); // PORTB bit 1: LOW
     expect(dutyOf(mcu, 9)).toBe(0);
   });
@@ -133,7 +139,13 @@ describe('timer1 OC outputs', () => {
     cpu.writeData(0x81, 0x09); // WGM12 + prescaler 1
     cpu.writeData(36, 0x00); // DDRB: D9 stays an input
     cpu.writeData(37, 0x02); // PORTB bit 1: pull-up
-    expect(dutyOf(mcu, 9)).toBe(1);
+    // The fallback mirrors the GPIO bridge: pull-up direction, no digital
+    // write, and the pin is never converted to an output.
+    expect(directionOf(mcu, 9)).toBe('inputPullUp');
+    expect(pwmOf(mcu, 9)).toBe(false);
+    expect(dutyOf(mcu, 9)).toBe(0);
+    cpu.writeData(37, 0x00); // PORTB bit 1: pull-up off
+    expect(directionOf(mcu, 9)).toBe('input');
     expect(pwmOf(mcu, 9)).toBe(false);
   });
 

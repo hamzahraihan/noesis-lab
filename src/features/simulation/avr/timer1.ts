@@ -1,5 +1,5 @@
 import type { CPU } from 'avr8js';
-import type { McuRuntime } from '@/features/simulation/mcu';
+import type { McuRuntime, PinDirection } from '@/features/simulation/mcu';
 import { UNO_GPIO_MAP } from './backend';
 
 // ATmega328P Timer1 (16-bit) datasheet addresses.
@@ -346,6 +346,9 @@ const PORTB = 37;
  * `mcu.writeAnalog` with `Math.round(255 * ocr / top)` (inverting: `255 -`
  * that value); when COM is disconnected or the pin is an input it calls
  * `mcu.writeDigital` with the PORT bit so the pin falls back to plain GPIO.
+ * Fallback mirrors `attachGpioBridge` exactly: direction follows DDR/PORT and
+ * the digital write runs only for outputs, so an input pin (even with
+ * pull-up) is never converted to an output.
  * A later digitalWrite overrides duty outright through the existing
  * McuRuntime behavior. 8-bit quantization of 16-bit duties is accepted: the
  * solver consumes McuRuntime duty at 0..255 resolution, so wider timer ranges
@@ -386,7 +389,10 @@ export function bindTimer1Outputs(cpu: CPU, mcu: McuRuntime, nowMs: () => number
       const base = range > 0 ? Math.round((255 * ocr) / range) : 0;
       mcu.writeAnalog(gpio, com === 3 ? 255 - base : base, nowMs());
     } else {
-      mcu.writeDigital(gpio, ((cpu.data[PORTB] >> bit) & 1) === 1, nowMs());
+      const portHigh = ((cpu.data[PORTB] >> bit) & 1) === 1;
+      const direction: PinDirection = output ? 'output' : portHigh ? 'inputPullUp' : 'input';
+      mcu.setDirection(gpio, direction);
+      if (direction === 'output') mcu.writeDigital(gpio, portHigh, nowMs());
     }
   };
 
