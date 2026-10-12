@@ -27,3 +27,18 @@ export {
 } from './boardRegistry';
 export type { BoardId, BoardOption, StarterWiring } from './boardRegistry';
 export { isGuideDismissed, setGuideDismissed } from './guide-dismissal';
+export { DiagnosticsPanel } from './diagnostics/DiagnosticsPanel';
+export { buildRegistry } from './diagnostics/registry';
+export type { RegistryEntry } from './diagnostics/registry';
+export { formatReport, runHarness } from './diagnostics/harness';
+export type { CheckDef, CheckResult, CountingSim, HarnessReport } from './diagnostics/harness';
+export {
+  convergeGlass,
+  F_GLYPH,
+  liveProbe,
+  N_GLYPH,
+  ONE_GLYPH,
+  snapshotGlass,
+  ZERO_GLYPH,
+} from './diagnostics/probes';
+export type { GlassFrame, ProbeSim } from './diagnostics/probes';

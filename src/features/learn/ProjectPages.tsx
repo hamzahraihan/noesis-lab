@@ -113,6 +113,12 @@ export function ProjectPage() {
       </ProjectSection>
 
       <ProjectSection title="Finished projects">
+        <p className="mb-3 text-sm leading-relaxed text-slate-400">
+          <Link to="/diagnostics" className="text-sky-400 underline underline-offset-2">
+            Smoke-test the gallery
+          </Link>{' '}
+          — run every finished build through the automated smoke harness.
+        </p>
         {builds.length > 0 ? (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {builds.map(({ entry, build }) => (

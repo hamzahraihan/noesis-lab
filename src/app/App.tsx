@@ -23,6 +23,7 @@ import {
   ReferencesPage,
 } from '@/routes/LearnRoutes';
 import { ProjectsRoute } from '@/routes/ProjectsRoute';
+import { DiagnosticsRoute } from '@/routes/DiagnosticsRoute';
 import { DEFAULT_BOARD_ID } from '@/features/learn';
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
           element={<Navigate to={`/bench/${DEFAULT_BOARD_ID}`} replace />}
         />
         <Route path="/bench/:boardId" element={<BenchRoute />} />
+        <Route path="/diagnostics" element={<DiagnosticsRoute />} />
         {/* Anything unrecognised goes back to the picker, which is the page that
             can explain what a board is. */}
         <Route path="*" element={<Navigate to="/" replace />} />
