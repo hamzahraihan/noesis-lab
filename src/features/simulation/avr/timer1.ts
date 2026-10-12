@@ -328,3 +328,89 @@ export function attachTimer1(
     baseTick();
   };
 }
+
+// OC1A is PB1 (Uno D9); OC1B is PB2 (Uno D10), via the board map.
+const OC1A_GPIO = UNO_GPIO_MAP.find((entry) => entry.port === 'B' && entry.bit === 1)?.gpio ?? 9;
+const OC1B_GPIO = UNO_GPIO_MAP.find((entry) => entry.port === 'B' && entry.bit === 2)?.gpio ?? 10;
+
+// AVR data addresses (decimal) for port B, mirroring gpio.ts.
+const PINB = 35;
+const DDRB = 36;
+const PORTB = 37;
+
+/**
+ * OC-to-PWM bridge: stamps Timer1 compare outputs as McuRuntime PWM intent.
+ *
+ * When the mode is a PWM mode and the COM1x1:0 bits select non-inverting (2)
+ * or inverting (3) output and the DDR bit makes the pin an output, this calls
+ * `mcu.writeAnalog` with `Math.round(255 * ocr / top)` (inverting: `255 -`
+ * that value); when COM is disconnected or the pin is an input it calls
+ * `mcu.writeDigital` with the PORT bit so the pin falls back to plain GPIO.
+ * A later digitalWrite overrides duty outright through the existing
+ * McuRuntime behavior. 8-bit quantization of 16-bit duties is accepted: the
+ * solver consumes McuRuntime duty at 0..255 resolution, so wider timer ranges
+ * necessarily collapse at this stamp.
+ */
+export function bindTimer1Outputs(cpu: CPU, mcu: McuRuntime, nowMs: () => number): void {
+  // Wiring choice: chain onto the same cpu.writeHooks the GPIO bridge's
+  // AVRIOPort instances own for DDRB/PORTB/PINB (so call this after
+  // attachGpioBridge) and onto attachTimer1's TCCR/OCR/ICR hooks. When a
+  // chained hook declines the CPU default write (returns falsy), the wrapper
+  // replicates `cpu.data[addr] = value` itself before refreshing, so the OC
+  // rule always reads post-write register state.
+  const wgm = (): number =>
+    (((cpu.data[TCCRB] & 0x18) >> 1) | (cpu.data[TCCRA] & 0x03)) & 0x0f;
+
+  const isPwmMode = (): boolean => {
+    const mode = WGM_TABLE[wgm()] ?? WGM_TABLE[13]!;
+    return mode[0] === KIND_PHASE_CORRECT || mode[0] === KIND_FAST_PWM || mode[0] === KIND_PHASE_FREQ_CORRECT;
+  };
+
+  const readWord = (lo: number): number => (cpu.data[lo] | (cpu.data[lo + 1] << 8)) & MAX;
+
+  const top = (): number => {
+    const mode = WGM_TABLE[wgm()] ?? WGM_TABLE[13]!;
+    if (mode[1] === TOP_OCRA) return readWord(OCRAL);
+    if (mode[1] === TOP_ICR) return readWord(ICRL);
+    return mode[1];
+  };
+
+  const route = (channelA: boolean): void => {
+    const com = channelA ? (cpu.data[TCCRA] >> 6) & 0x03 : (cpu.data[TCCRA] >> 4) & 0x03;
+    const gpio = channelA ? OC1A_GPIO : OC1B_GPIO;
+    const bit = channelA ? 1 : 2;
+    const output = ((cpu.data[DDRB] >> bit) & 1) === 1;
+    if ((com === 2 || com === 3) && output && isPwmMode()) {
+      const ocr = channelA ? readWord(OCRAL) : readWord(OCRBL);
+      const range = top();
+      const base = range > 0 ? Math.round((255 * ocr) / range) : 0;
+      mcu.writeAnalog(gpio, com === 3 ? 255 - base : base, nowMs());
+    } else {
+      mcu.writeDigital(gpio, ((cpu.data[PORTB] >> bit) & 1) === 1, nowMs());
+    }
+  };
+
+  const refresh = (): void => {
+    route(true);
+    route(false);
+  };
+
+  const wrap = (addr: number): void => {
+    const prev = cpu.writeHooks[addr];
+    cpu.writeHooks[addr] = (value, oldValue, hookAddr, mask) => {
+      if (prev !== undefined && prev(value, oldValue, hookAddr, mask)) {
+        refresh();
+        return true;
+      }
+      // No previous hook, or one that declined the default write: perform it
+      // here (the CPU default ignores the mask) so refresh sees fresh state.
+      cpu.data[addr] = value;
+      refresh();
+      return true;
+    };
+  };
+
+  for (const addr of [TCCRA, TCCRB, OCRAL, OCRAL + 1, OCRBL, OCRBL + 1, ICRL, ICRL + 1, DDRB, PORTB, PINB]) {
+    wrap(addr);
+  }
+}
