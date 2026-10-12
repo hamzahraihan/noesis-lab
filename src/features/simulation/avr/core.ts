@@ -12,6 +12,11 @@ export interface AvrHooks {
   readonly readPin: (gpio: number) => boolean;
   readonly onSettle: () => void;
   /**
+   * Cycle-stamped driven-pin transitions, for the engine's servo pulse pump.
+   * Absent (unit tests driving the bridge directly) records nothing.
+   */
+  readonly onEdge?: (gpio: number, cycles: number) => void;
+  /**
    * Whether a probe is watching: watched nets must be sampled every
    * millisecond or the scope aliases. Unwatched, settling every 4 ms still
    * samples the fastest firmware strobe on the bench (a 20 ms multiplexed
@@ -101,7 +106,7 @@ export class AvrBackend implements ExecutionBackend {
     // Timer2 drives Arduino tone()/noTone() (compare ISR toggles PORT, which
     // the GPIO bridge already syncs); Timer0 keeps millis()/delay().
     new AVRTimer(cpu, timer2Config);
-    attachGpioBridge(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
+    attachGpioBridge(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin, this.hooks.onEdge);
     // Timer1 (Task 2): counter plus OC-to-PWM bridge beside the two AVRTimer
     // lines; this shared constructor serves the in-page and worker paths. The
     // bridge chains onto the DDRB/PORTB/PINB hooks, so it must bind after the

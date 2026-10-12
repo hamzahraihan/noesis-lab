@@ -5,19 +5,32 @@ import { UNO_GPIO_MAP } from './backend';
 const PORTS = { B: portBConfig, C: portCConfig, D: portDConfig } as const;
 
 /** Pushes AVR DDR/PORT state into McuRuntime intent on every change. */
-export function attachGpioBridge(cpu: CPU, mcu: McuRuntime, nowMs: () => number, readPin: (gpio: number) => boolean): void {
+export function attachGpioBridge(cpu: CPU, mcu: McuRuntime, nowMs: () => number, readPin: (gpio: number) => boolean, onEdge?: (gpio: number, cycles: number) => void): void {
   const ports = {
     B: new AVRIOPort(cpu, PORTS.B),
     C: new AVRIOPort(cpu, PORTS.C),
     D: new AVRIOPort(cpu, PORTS.D),
   };
+  /** Last driven level per gpio; baselined on first sight, never an edge. */
+  const drivenHigh = new Map<number, boolean>();
   const sync = (): void => {
     for (const entry of UNO_GPIO_MAP) {
       const ddr = (cpu.data[portDataAddr(entry.port, 'ddr')] >> entry.bit) & 1;
       const port = (cpu.data[portDataAddr(entry.port, 'port')] >> entry.bit) & 1;
       const direction: PinDirection = ddr === 1 ? 'output' : port === 1 ? 'inputPullUp' : 'input';
       mcu.setDirection(entry.gpio, direction);
-      if (direction === 'output') mcu.writeDigital(entry.gpio, port === 1, nowMs());
+      if (direction === 'output') {
+        const high = port === 1;
+        mcu.writeDigital(entry.gpio, high, nowMs());
+        // Cycle-stamped transitions on driven pins only: the servo pump turns
+        // these into pulse widths, so inputs and direction changes baseline
+        // without reporting.
+        const prev = drivenHigh.get(entry.gpio);
+        if (prev !== undefined && prev !== high) onEdge?.(entry.gpio, cpu.cycles);
+        drivenHigh.set(entry.gpio, high);
+      } else {
+        drivenHigh.delete(entry.gpio);
+      }
     }
   };
   for (const port of Object.values(ports)) port.addListener(() => sync());

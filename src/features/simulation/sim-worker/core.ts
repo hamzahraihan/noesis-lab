@@ -474,6 +474,7 @@ class SimCore implements CoreHandle {
     const flashed = new AvrBackend(program, {
       mcu: this.mcu,
       nowMs: () => this.engine.timeMs,
+      onEdge: (gpio, cycles) => this.engine.recordGpioEdge(gpio, cycles),
       readPin: (gpio) => {
         // PIN reads observe the last scheduled solve except after a pin-intent
         // change (pinMode, reset): the cached solve predates the new intents,

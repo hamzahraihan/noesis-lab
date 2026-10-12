@@ -184,3 +184,98 @@ describe('timer1 input-capture loopback', () => {
     // Budget: same cold single-TU worker compile as the fade leg above.
   }, 1_500_000);
 });
+
+describe('dashboard servo HEX acceptance', () => {
+  it('drives the horn to 45 under a worker-compiled Servo sketch', async () => {
+    let pkg: string | null = null;
+    try {
+      pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
+    } catch { /* fall through to skip */ }
+    if (!pkg) {
+      console.warn('SKIP servo: toolchain absent');
+      return;
+    }
+    if (!(await tier2Reachable())) {
+      console.warn('SKIP servo: Tier-2 fetch unreachable');
+      return;
+    }
+    // Servo is a Tier-1 provided library (bundled in the toolchain, declared
+    // here through the provided-source pattern): no fetch, no vendored driver.
+    // attach(pin, 1000, 2000) pins the pulse window to the decoder's own
+    // 1000–2000 us scale, so write(45) emits a 1250 us pulse and must read 45.
+    const sketch = [
+      '#include <Arduino.h>',
+      '#include <Servo.h>',
+      'Servo horn;',
+      'void setup() {',
+      '  horn.attach(19, 1000, 2000);',
+      '  horn.write(90);',
+      '  pinMode(6, OUTPUT);',
+      '  pinMode(7, OUTPUT);',
+      '  pinMode(8, OUTPUT);',
+      '}',
+      'void loop() {',
+      '  delay(1000);',
+      '  horn.write(45);',
+      '  digitalWrite(6, HIGH);',
+      '  digitalWrite(7, LOW);',
+      '  digitalWrite(8, HIGH);',
+      '  delay(1000);',
+      '}',
+      '',
+    ].join('\n');
+    // Dashboard wiring family: Uno + breadboard + the dashboard project's
+    // setup (servo on gpio 19, slide pot, three sink-wired LEDs on D6/D7/D8).
+    const dashboardSetup = galleryById('dashboard')!.builds[0]!.setup;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    dashboardSetup(simulation);
+    // Compile via the worker project path with the Servo library declared.
+    await simulation.compileAndRun(
+      firmwareForBuild(
+        {
+          board: 'uno',
+          setup: dashboardSetup,
+          sketch,
+          libraries: [{ name: 'Servo', source: 'provided' }],
+        },
+        'arduino-cpp',
+      ),
+    );
+    expect(simulation.compileState, 'servo sketch compiles').toBe('ready');
+    expect(simulation.firmwareError, 'servo sketch firmware').toBeNull();
+    const backend = (simulation as unknown as { avrBackend: AvrBackend | null }).avrBackend;
+    expect(backend, 'fresh HEX flashes onto a live core').not.toBeNull();
+    // Step 2 sim-seconds in 40 ms frames (the backend clamp). The first loop
+    // writes 45 at t=1 s, so every completed pulse after that is 1250 us.
+    for (let frame = 0; frame < 50; frame++) backend!.step(40);
+    expect(backend!.fault, 'no core fault surfaces').toBeNull();
+    const hornPart = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'servo',
+    );
+    expect(hornPart, 'dashboard servo is on the bench').toBeDefined();
+    expect(simulation.engine.servo(hornPart!.id)!.angle, 'horn follows the 45-degree pulse').toBe(45);
+    // Sink wiring (anode to 5V): the lit MID LED's pin sits LOW, the dark
+    // LOW/HIGH pins sit HIGH.
+    for (const [gpio, duty] of [
+      [6, 1],
+      [7, 0],
+      [8, 1],
+    ] as const) {
+      const configuration = simulation.mcu.configurationOf(simulation.mcu.pinIdForGpio(gpio)!);
+      expect(configuration.duty, `gpio ${gpio} duty`).toBe(duty);
+    }
+    const pinVolts = (gpio: number): number => {
+      const pinId = simulation.mcu.pinIdForGpio(gpio)!;
+      return simulation.engine.voltageOfNet(simulation.engine.netOfMcuPin(pinId));
+    };
+    expect(pinVolts(7), 'MID LED net lit (pin sinks)').toBeLessThan(1);
+    expect(pinVolts(6), 'LOW LED net dark').toBeGreaterThan(4);
+    expect(pinVolts(8), 'HIGH LED net dark').toBeGreaterThan(4);
+    // Budget: same cold worker compile as the fade leg above, plus the Servo
+    // library TU.
+  }, 1_500_000);
+});

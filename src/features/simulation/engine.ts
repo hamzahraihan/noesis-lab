@@ -220,6 +220,10 @@ export class Engine {
     this.solution = null;
     this.previousVoltages = null;
     this.pinSourceIndex.clear();
+    // Fresh wiring is fresh signal history: stale edges would pair a rise from
+    // the old bench with a fall from the new one into a bogus width.
+    this.gpioEdges.clear();
+    this.servoPendingRise.clear();
     this.supplyNet = GROUND;
 
     if (this.mcuPart) {
@@ -243,6 +247,24 @@ export class Engine {
 
   /** Servo parts, keyed by part id, for the renderer and the firmware port. */
   private readonly servos = new Map<string, Servo>();
+
+  /**
+   * Cycle-stamped GPIO transitions per gpio, reported by the AVR bridge.
+   *
+   * Entries carry the driven level at report time (the bridge reports after
+   * writing it), so the pump can pair rises with falls. Bounded at the latest
+   * 64 per gpio, oldest dropped; drained by `pumpServoPulse` every solve.
+   */
+  private readonly gpioEdges = new Map<number, Array<{ cycles: number; high: boolean }>>();
+
+  /**
+   * Unmatched rise per gpio, carried across drains.
+   *
+   * A 1–2 ms servo pulse straddles the 1–4 ms settle cadence, so the rise and
+   * the fall routinely land in different solve windows; keeping the pending
+   * rise is what lets the later window still complete the width.
+   */
+  private readonly servoPendingRise = new Map<number, number>();
 
   /**
    * Relay armature state, keyed by part id.
@@ -578,6 +600,75 @@ export class Engine {
   /** The servo on a part, or undefined when it is not one. */
   servo(partId: string): Servo | undefined {
     return this.servos.get(partId);
+  }
+
+  /**
+   * Records a driven-pin transition at `cycles` (16 MHz cpu cycles).
+   *
+   * Called by the AVR GPIO bridge on every output transition; the pump drains
+   * these per solve into servo angles. The level rides along from the pin's
+   * own intent — the bridge reports after writing it — so rises pair with
+   * falls without the report carrying anything but `(gpio, cycles)`.
+   */
+  recordGpioEdge(gpio: number, cycles: number): void {
+    const pinId = this.mcu.pinIdForGpio(gpio);
+    const high = pinId !== undefined && this.mcu.levelOf(pinId, this.timeMs) > 0.5;
+    const edges = this.gpioEdges.get(gpio) ?? [];
+    edges.push({ cycles, high });
+    while (edges.length > 64) edges.shift();
+    this.gpioEdges.set(gpio, edges);
+  }
+
+  /**
+   * Decodes servo pulses from the drained edge ring into `servo.write`.
+   *
+   * Runs post-solve beside the stepper and dialer pumps. Per gpio with edges,
+   * the last completed HIGH width (16 cycles per microsecond) maps by
+   * `round(((widthUs - 1000) / 1000) * 180)` through the existing clamp;
+   * widths outside 500–2500 µs are noise and ignored, and silence (no
+   * completed pulse) leaves the horn — and its driven load — untouched.
+   * Detaching stays a firmware-port-only operation.
+   */
+  pumpServoPulse(): void {
+    if (this.gpioEdges.size === 0) return;
+    for (const [gpio, edges] of this.gpioEdges) {
+      let pending = this.servoPendingRise.get(gpio);
+      let widthUs: number | null = null;
+      for (const edge of edges) {
+        if (edge.high) {
+          pending = edge.cycles;
+        } else if (pending !== undefined) {
+          widthUs = (edge.cycles - pending) / 16;
+          pending = undefined;
+        }
+      }
+      if (pending !== undefined) this.servoPendingRise.set(gpio, pending);
+      else this.servoPendingRise.delete(gpio);
+      if (widthUs === null) continue;
+      if (widthUs < 500 || widthUs > 2500) continue;
+      const servo = this.servoOnGpio(gpio);
+      if (!servo) continue;
+      servo.write(Math.round(((widthUs - 1000) / 1000) * 180));
+      // The servo load is stamped around the netlist: same nets, new circuit,
+      // so the solve cache must not reuse the pre-write answer.
+      this.touch();
+    }
+    this.gpioEdges.clear();
+  }
+
+  /** The servo whose signal pin shares the board gpio's net, if there is one. */
+  private servoOnGpio(gpio: number): Servo | null {
+    if (!this.mcuPart) return null;
+    const netlist = this.currentNetlist;
+    const pinId = this.mcu.pinIdForGpio(gpio);
+    if (pinId === undefined) return null;
+    const net = netlist.pinNode.get(`${this.mcuPart.id}:${pinId}`);
+    if (net === undefined || net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      const servo = this.servos.get(part.id);
+      if (servo && netlist.pinNode.get(`${part.id}:PWM`) === net) return servo;
+    }
+    return null;
   }
 
   /** The character LCD on a part, or undefined when it is not one. */
@@ -925,6 +1016,10 @@ export class Engine {
     // solve covers both paths above with no re-solve.
     this.pumpSteppers();
     this.pumpDialer();
+    // Servo horns follow decoded pulse widths the same way: display state fed
+    // every solve, never a re-solve of its own (a write only dirties the load
+    // stamp for the next pass via touch()).
+    this.pumpServoPulse();
     // Capacitor history only cares about real nets, so trim the internal rows.
     this.previousVoltages = solution.voltages.slice(0, this.currentNetlist.nodeCount);
     // Capture last, so a probe sees the voltages this solve produced rather
