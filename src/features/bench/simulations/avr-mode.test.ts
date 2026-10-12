@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
 import { toSingleFileProject } from '@/features/simulation';
 import { arduinoUnoR3 } from '@/features/parts';
-import { avrAvailableFor } from './avr-mode';
+import { avrAvailableFor, resolveBackendSelection } from './avr-mode';
 
 describe('avr mode availability', () => {
   it('is available on the Uno', () => {
@@ -11,6 +11,42 @@ describe('avr mode availability', () => {
 
   it('is refused elsewhere with a reason', () => {
     expect(avrAvailableFor('mega')).toEqual({ ok: false, reason: expect.any(String) });
+  });
+});
+
+describe('backend selection', () => {
+  it('pins an AVR-only build to AVR with interpreter disabled', () => {
+    expect(resolveBackendSelection({ execution: 'avr', avr: { ok: true }, avrMode: false })).toEqual({
+      value: 'avr',
+      interpreterDisabled: true,
+      interpreterTitle: 'This build runs on AVR only',
+    });
+  });
+
+  it('pins the deep link before avrMode catches up', () => {
+    const selection = resolveBackendSelection({
+      execution: 'avr',
+      avr: { ok: true },
+      avrMode: false,
+    });
+    expect(selection.value).toBe('avr');
+    expect(selection.interpreterDisabled).toBe(true);
+  });
+
+  it('leaves free builds on the current choice', () => {
+    expect(
+      resolveBackendSelection({ execution: undefined, avr: { ok: true }, avrMode: true }).value,
+    ).toBe('avr');
+    expect(
+      resolveBackendSelection({ execution: undefined, avr: { ok: true }, avrMode: false }).value,
+    ).toBe('interpreter');
+    expect(
+      resolveBackendSelection({
+        execution: undefined,
+        avr: { ok: false, reason: 'AVR mode needs an Uno board' },
+        avrMode: false,
+      }).interpreterDisabled,
+    ).toBe(false);
   });
 });
 

@@ -73,7 +73,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
 import { decodeShareToProject, encodeProjectToShare, isShareable } from '../utils/share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
-import { avrAvailableFor } from '../simulations/avr-mode';
+import { avrAvailableFor, resolveBackendSelection } from '../simulations/avr-mode';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -438,6 +438,12 @@ export default function Bench(props: BenchProps) {
     // interpreter rather than carrying the mode onto a board that refuses it.
     setAvrMode(false);
   }, [boardId, starterFor]);
+
+  /* AVR-only builds pin the backend: the interpreter option is disabled
+   * while one is loaded, so the slow path cannot be selected by accident. */
+  useEffect(() => {
+    if (projectBuild?.execution === 'avr') setAvrMode(true);
+  }, [projectBuild]);
 
   /* The exercise guide auto-opens on arrival unless dismissed for this exercise. */
   useEffect(() => {
@@ -904,6 +910,7 @@ export default function Bench(props: BenchProps) {
    * selector and the Run path track board switches together.
    */
   const avr = avrAvailableFor(boardId);
+  const backend = resolveBackendSelection({ execution: projectBuild?.execution, avr, avrMode });
 
   /*
    * Run loads the whole project, then opens the tab the error names: the bar
@@ -1098,7 +1105,7 @@ export default function Bench(props: BenchProps) {
           <label className="flex items-center gap-1.5">
             <span className="sr-only">Execution backend</span>
             <Select
-              value={avrMode && avr.ok ? 'avr' : 'interpreter'}
+              value={backend.value}
               onValueChange={(next) => setAvrMode(next === 'avr')}
             >
               <SelectTrigger
@@ -1115,7 +1122,13 @@ export default function Bench(props: BenchProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="interpreter">Interpreter</SelectItem>
+                <SelectItem
+                  value="interpreter"
+                  disabled={backend.interpreterDisabled}
+                  title={backend.interpreterTitle}
+                >
+                  Interpreter
+                </SelectItem>
                 <SelectItem
                   value="avr"
                   disabled={!avr.ok}
