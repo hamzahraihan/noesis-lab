@@ -40,37 +40,31 @@ function servoBench() {
 }
 
 /** Scripted clock feeding one pulse: rise now, fall widthUs later, then solve. */
-function drivePulse(
-  engine: Engine,
-  mcu: McuRuntime,
-  state: { tMs: number },
-  widthUs: number,
-): void {
-  const riseMs = state.tMs;
-  mcu.writeDigital(SERVO_GPIO, true, engine.timeMs);
-  engine.recordGpioEdge(SERVO_GPIO, Math.round(riseMs * CYCLES_PER_MS));
-  const fallMs = riseMs + widthUs / 1000;
-  mcu.writeDigital(SERVO_GPIO, false, engine.timeMs);
-  engine.recordGpioEdge(SERVO_GPIO, Math.round(fallMs * CYCLES_PER_MS));
+function drivePulse(engine: Engine, state: { tMs: number }, widthUs: number): void {
+  const riseCycles = Math.round(state.tMs * CYCLES_PER_MS);
+  engine.recordGpioEdge(SERVO_GPIO, riseCycles, true);
+  engine.recordGpioEdge(SERVO_GPIO, riseCycles + Math.round(widthUs * 16), false);
   engine.settle();
-  state.tMs = fallMs + 20;
+  state.tMs += widthUs / 1000 + 20;
 }
 
 describe('servo pulse decoder', () => {
-  it('maps a 1.5 ms pulse to 90 degrees', () => {
-    const { engine, mcu, horn } = servoBench();
+  it('maps stock Servo pulses to their angles', () => {
+    const { engine, horn } = servoBench();
     const state = { tMs: 10 };
-    // Off-centre first, so the 90 below proves the mapping rather than the rest pose.
-    drivePulse(engine, mcu, state, 1000);
-    expect(engine.servo(horn.id)!.angle).toBe(10);
-    drivePulse(engine, mcu, state, 1500);
+    // Arduino Servo stock timing (544–2400 us over 0–180°): 1008 us is
+    // write(45), 1472 us is write(90). Neither is the rest pose, so both prove
+    // the mapping.
+    drivePulse(engine, state, 1008);
+    expect(engine.servo(horn.id)!.angle).toBe(45);
+    drivePulse(engine, state, 1472);
     expect(engine.servo(horn.id)!.angle).toBe(90);
   });
 
   it('holds the last angle through silence', () => {
-    const { engine, mcu, horn } = servoBench();
+    const { engine, horn } = servoBench();
     const state = { tMs: 10 };
-    drivePulse(engine, mcu, state, 1500);
+    drivePulse(engine, state, 1472);
     expect(engine.servo(horn.id)!.angle).toBe(90);
     const load = engine.servo(horn.id)!.loadOhms;
     // Half a second of solves with no edges: the horn stays put and the part
@@ -82,13 +76,13 @@ describe('servo pulse decoder', () => {
   });
 
   it('ignores noise widths outside 500–2500 us', () => {
-    const { engine, mcu, horn } = servoBench();
+    const { engine, horn } = servoBench();
     const state = { tMs: 10 };
-    drivePulse(engine, mcu, state, 1500);
+    drivePulse(engine, state, 1472);
     expect(engine.servo(horn.id)!.angle).toBe(90);
-    drivePulse(engine, mcu, state, 100);
+    drivePulse(engine, state, 100);
     expect(engine.servo(horn.id)!.angle).toBe(90);
-    drivePulse(engine, mcu, state, 5000);
+    drivePulse(engine, state, 5000);
     expect(engine.servo(horn.id)!.angle).toBe(90);
   });
 });

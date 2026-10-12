@@ -12,10 +12,11 @@ export interface AvrHooks {
   readonly readPin: (gpio: number) => boolean;
   readonly onSettle: () => void;
   /**
-   * Cycle-stamped driven-pin transitions, for the engine's servo pulse pump.
-   * Absent (unit tests driving the bridge directly) records nothing.
+   * Cycle-stamped driven-pin transitions with explicit level, for the engine's
+   * servo pulse pump. Absent (unit tests driving the bridge directly) records
+   * nothing.
    */
-  readonly onEdge?: (gpio: number, cycles: number) => void;
+  readonly onEdge?: (gpio: number, cycles: number, high: boolean) => void;
   /**
    * Whether a probe is watching: watched nets must be sampled every
    * millisecond or the scope aliases. Unwatched, settling every 4 ms still

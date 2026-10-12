@@ -201,14 +201,15 @@ describe('dashboard servo HEX acceptance', () => {
     }
     // Servo is a Tier-1 provided library (bundled in the toolchain, declared
     // here through the provided-source pattern): no fetch, no vendored driver.
-    // attach(pin, 1000, 2000) pins the pulse window to the decoder's own
-    // 1000–2000 us scale, so write(45) emits a 1250 us pulse and must read 45.
+    // Stock attach(19) keeps the library defaults (544–2400 us over 0–180°),
+    // which is exactly the window the decoder inverts: write(45) emits
+    // ≈1008 us and must read 45.
     const sketch = [
       '#include <Arduino.h>',
       '#include <Servo.h>',
       'Servo horn;',
       'void setup() {',
-      '  horn.attach(19, 1000, 2000);',
+      '  horn.attach(19);',
       '  horn.write(90);',
       '  pinMode(6, OUTPUT);',
       '  pinMode(7, OUTPUT);',
@@ -250,7 +251,7 @@ describe('dashboard servo HEX acceptance', () => {
     const backend = (simulation as unknown as { avrBackend: AvrBackend | null }).avrBackend;
     expect(backend, 'fresh HEX flashes onto a live core').not.toBeNull();
     // Step 2 sim-seconds in 40 ms frames (the backend clamp). The first loop
-    // writes 45 at t=1 s, so every completed pulse after that is 1250 us.
+    // writes 45 at t=1 s, so every completed pulse after that is ≈1008 us.
     for (let frame = 0; frame < 50; frame++) backend!.step(40);
     expect(backend!.fault, 'no core fault surfaces').toBeNull();
     const hornPart = simulation.bench.parts.find(

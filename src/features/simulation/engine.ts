@@ -72,6 +72,13 @@ const SUPPLY_RAIL_LABELS: Readonly<Record<string, string>> = {
  */
 const RTC_EPOCH_MS = new Date(2000, 0, 1).getTime();
 
+/**
+ * Stock Arduino Servo pulse window: `write(angle)` maps 0–180° onto these
+ * microsecond bounds. Trade-off: hand-rolled generic 1000–2000 µs pulses read compressed (≈44–141°); Arduino-library timing is exact because that is what this bench executes.
+ */
+const SERVO_MIN_US = 544;
+const SERVO_MAX_US = 2400;
+
 export class Engine {
   readonly mcu: McuRuntime;
 
@@ -603,16 +610,14 @@ export class Engine {
   }
 
   /**
-   * Records a driven-pin transition at `cycles` (16 MHz cpu cycles).
+   * Records a driven-pin transition at `cycles` (16 MHz cpu cycles), with its
+   * level carried explicitly so the pump pairs rises with falls without ever
+   * depending on report ordering.
    *
    * Called by the AVR GPIO bridge on every output transition; the pump drains
-   * these per solve into servo angles. The level rides along from the pin's
-   * own intent — the bridge reports after writing it — so rises pair with
-   * falls without the report carrying anything but `(gpio, cycles)`.
+   * these per solve into servo angles.
    */
-  recordGpioEdge(gpio: number, cycles: number): void {
-    const pinId = this.mcu.pinIdForGpio(gpio);
-    const high = pinId !== undefined && this.mcu.levelOf(pinId, this.timeMs) > 0.5;
+  recordGpioEdge(gpio: number, cycles: number, high: boolean): void {
     const edges = this.gpioEdges.get(gpio) ?? [];
     edges.push({ cycles, high });
     while (edges.length > 64) edges.shift();
@@ -623,9 +628,9 @@ export class Engine {
    * Decodes servo pulses from the drained edge ring into `servo.write`.
    *
    * Runs post-solve beside the stepper and dialer pumps. Per gpio with edges,
-   * the last completed HIGH width (16 cycles per microsecond) maps by
-   * `round(((widthUs - 1000) / 1000) * 180)` through the existing clamp;
-   * widths outside 500–2500 µs are noise and ignored, and silence (no
+   * the last completed HIGH width (16 cycles per microsecond) maps through the
+   * stock Arduino Servo window (544–2400 µs over 0–180°) into the existing
+   * clamp; widths outside 500–2500 µs are noise and ignored, and silence (no
    * completed pulse) leaves the horn — and its driven load — untouched.
    * Detaching stays a firmware-port-only operation.
    */
@@ -648,7 +653,7 @@ export class Engine {
       if (widthUs < 500 || widthUs > 2500) continue;
       const servo = this.servoOnGpio(gpio);
       if (!servo) continue;
-      servo.write(Math.round(((widthUs - 1000) / 1000) * 180));
+      servo.write(Math.round(((widthUs - SERVO_MIN_US) / (SERVO_MAX_US - SERVO_MIN_US)) * 180));
       // The servo load is stamped around the netlist: same nets, new circuit,
       // so the solve cache must not reuse the pre-write answer.
       this.touch();

@@ -455,7 +455,7 @@ export class Simulation {
     const flashed = new AvrBackend(program, {
       mcu: this.mcu,
       nowMs: () => this.engine.timeMs,
-      onEdge: (gpio, cycles) => this.engine.recordGpioEdge(gpio, cycles),
+      onEdge: (gpio, cycles, high) => this.engine.recordGpioEdge(gpio, cycles, high),
       readPin: (gpio) => {
         // PIN reads observe the last scheduled solve (1-4ms cadence via
         // onSettle), except after a pin-intent change (pinMode, reset): the
