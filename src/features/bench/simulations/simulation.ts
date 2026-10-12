@@ -255,6 +255,12 @@ export class Simulation {
   }
   /** Live AVR core while execution is `'avr'` with a flashed HEX; null otherwise. */
   private avrBackend: AvrBackend | null = null;
+  /**
+   * MCU revision at the last AVR PIN-read settle. Reads settle once after a
+   * pin-intent change (pinMode, reset) so the boot transient cannot read LOW
+   * before setup's pull-ups solve; steady polling never settles here.
+   */
+  private avrSettledRevision = -1;
   private readonly avrCompile: typeof builtinCompileInWorker;
   private readonly avrProjectCompile: typeof builtinCompileProjectWithLibraries;
   private readonly indexInstalled: ProjectLibraryContext['indexInstalled'];
@@ -450,13 +456,18 @@ export class Simulation {
       mcu: this.mcu,
       nowMs: () => this.engine.timeMs,
       readPin: (gpio) => {
-        // No settle here: PIN reads observe the last scheduled solve (1-4ms
-        // cadence via onSettle). Settling per read cost ~1200 full solves per
-        // frame on a polling sketch — 8 per PIN byte across hundreds of
-        // passes — for state that cannot have meaningfully moved (button
-        // debounce alone is 25ms+; the boot transient reads LOW for at most
-        // one cadence window, far under it). TWI/USART read from their
-        // models, never the circuit, so they never needed this either.
+        // PIN reads observe the last scheduled solve (1-4ms cadence via
+        // onSettle), except after a pin-intent change (pinMode, reset): the
+        // cached solve predates the new intents, so the first read after the
+        // change settles once. Without that, the boot transient reads LOW
+        // before setup's pull-ups solve, and the alarm library boots toggled.
+        // Steady polling never settles here: ~1200 solves per frame for state
+        // that cannot have meaningfully moved (button debounce alone is
+        // 25ms+). TWI/USART read from their models, never the circuit.
+        if (this.mcu.revision !== this.avrSettledRevision) {
+          this.engine.settle();
+          this.avrSettledRevision = this.mcu.revision;
+        }
         return this.engine.readDigital(gpio);
       },
       onSettle: () => this.engine.settle(),

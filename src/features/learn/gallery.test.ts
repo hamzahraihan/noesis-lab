@@ -73,16 +73,18 @@ const F_GLYPH = [1, 0, 0, 0, 1, 1, 1, 0];
  *
  * The library build multiplexes segments, not digits (SevSeg with resistors
  * on digits and no update delays: one segment pin at a time across every
- * digit that uses it), so the edge-latched glass never holds a whole
- * character at once. Unioning the instantaneous Wokwi values over full
- * multiplex cycles recovers the decoded content all the same — midnight
- * lights A-F on every digit, whatever any single instant says.
+ * digit that uses it). The engine latch accumulates those slices into a
+ * stable frame, so unioning the instantaneous Wokwi values over full
+ * multiplex cycles recovers the decoded content — midnight lights A-F on
+ * every digit, whatever any single slice says.
  *
  * The walk is live but its phase against the tick boundary jitters with
  * machine load, so the probe runs until the union stops changing (14 quiet
  * frames past a 30-frame floor) instead of asserting after a fixed count.
- * Digits whose code is blank never relatch and keep stale bits from the
- * previous view — callers assert only on digits the current view drives.
+ * Callers must start the probe only after the view has settled (firmware
+ * refresh plus the latch persistence window): starting across a transition
+ * unions both eras, and an old "0" is a superset of a new "1". Blank digits
+ * decay to blank, so callers assert only on digits the current view drives.
  */
 function convergeGlass(
   simulation: Simulation,
@@ -817,7 +819,11 @@ void loop() {
       ZERO_GLYPH,
     ]);
     simulation.engine.timeMs += 61000;
-    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+    // The AVR core needs ~2 s of simulated time to read the jumped RTC and
+    // refresh the SevSeg buffer plus the persistence window: 12 frames left
+    // the glass on the pre-jump view, whose union ("0000") is a superset of
+    // "0001" and can never converge to the new digit.
+    for (let frame = 0; frame < 45; frame++) simulation.tick(0.05);
     const minute = convergeGlass(simulation, 70);
     expect(minute.converged, 'library build multiplex settles a minute later').toBe(true);
     expect(minute.glyphs, 'library build shows 00:01 a minute later').toEqual([
@@ -895,14 +901,16 @@ void loop() {
     expect(simulation.engine.readDigital(17), 'library build buzzer silent while disarmed').toBe(false);
     // Arming press: the toggle saves NVRAM over real I2C writes and the
     // glass switches to the setChars status view — the SevSeg API the
-    // fixture never covers. ALARM_STATUS_DISPLAY_TIME is 1000 ms, so the
-    // status is settled mid-hold (10 ms ticks, 60-frame cap) while the view
-    // is guaranteed up. ' ' stays blank, 'o' renders as 'O' (same segments
-    // as '0'), 'n' lights C/E/G. Blank digits keep stale bits, so only the
-    // driven digits are asserted. The button stays held past the reset.
+    // fixture never covers. ALARM_STATUS_DISPLAY_TIME is 1000 ms firmware,
+    // which runs ahead of simulated time, so the stable window is ~200-600 ms
+    // after the press: 200 ms of pre-wait covers the 100 ms debounce plus the
+    // persistence window, and the 400 ms converge ends at ~600 ms, before the
+    // lapse. ' ' stays blank, 'o' renders as 'O' (same segments as '0'), 'n'
+    // lights C/E/G. Blank digits decay to blank, so only the driven digits
+    // are asserted. The button stays held past the reset.
     simulation.setPressed(alarmButton.id, true);
-    for (let frame = 0; frame < 10; frame++) simulation.tick(0.01);
-    const status = convergeGlass(simulation, 60);
+    for (let frame = 0; frame < 20; frame++) simulation.tick(0.01);
+    const status = convergeGlass(simulation, 40);
     expect(status.converged, 'library build status view settles').toBe(true);
     expect(status.glyphs[1], 'library build status shows O').toEqual(ZERO_GLYPH);
     expect(status.glyphs[2], 'library build status shows n').toEqual(N_GLYPH);

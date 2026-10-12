@@ -464,6 +464,11 @@ export class Engine {
    * correct for the scope but leaves the latch living on threshold margins.
    * A net no firmware output drives falls back to the solved volts, so an
    * unwired or miswired display still reads dark/wrong instead of working.
+   *
+   * Simulated time rides along so segment-multiplexed firmware (one segment
+   * per solve across every digit needing it) accumulates into a stable frame
+   * instead of flickering through single-segment slices: slices persist for
+   * SEGMENT_PERSIST_MS while full digit patterns overwrite immediately.
    */
   private pumpSevenSegments(): void {
     for (const [partId, controller] of this.displays) {
@@ -498,6 +503,7 @@ export class Engine {
         nets.segments.map((net) => segmentLevel(net)),
         com,
         cln,
+        this.timeMs,
       );
     }
   }
