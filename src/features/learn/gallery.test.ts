@@ -10,6 +10,7 @@ import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { pushWokwiState } from '@/features/bench/wokwi/wokwi';
 import type { FootprintState } from '@/features/bench/wokwi/footprints';
+import { F_GLYPH, N_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe } from './diagnostics/probes';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 
@@ -55,74 +56,6 @@ async function tier2Reachable(): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * Expected 8-segment glyphs in SEGMENT_ORDER bit order, for the
- * accumulation probe below. '0'/'1' are the SevSeg numeral codes; 'n' is
- * SevSeg's 0x54 (C/E/G); 'F' is 0x71 (A/E/F/G). Lowercase 'o' renders as
- * 'O' — the same segments as '0' — per SevSeg's alpha table.
- */
-const ZERO_GLYPH = [1, 1, 1, 1, 1, 1, 0, 0];
-const ONE_GLYPH = [0, 1, 1, 0, 0, 0, 0, 0];
-const N_GLYPH = [0, 0, 1, 0, 1, 0, 1, 0];
-const F_GLYPH = [1, 0, 0, 0, 1, 1, 1, 0];
-
-/**
- * Settles the lit segments per digit over up to `maxTicks` small frames.
- *
- * The library build multiplexes segments, not digits (SevSeg with resistors
- * on digits and no update delays: one segment pin at a time across every
- * digit that uses it). The engine latch accumulates those slices into a
- * stable frame, so unioning the instantaneous Wokwi values over full
- * multiplex cycles recovers the decoded content — midnight lights A-F on
- * every digit, whatever any single slice says.
- *
- * The walk is live but its phase against the tick boundary jitters with
- * machine load, so the probe runs until the union stops changing (14 quiet
- * frames past a 30-frame floor) instead of asserting after a fixed count.
- * Callers must start the probe only after the view has settled (firmware
- * refresh plus the latch persistence window): starting across a transition
- * unions both eras, and an old "0" is a superset of a new "1". Blank digits
- * decay to blank, so callers assert only on digits the current view drives.
- */
-function convergeGlass(
-  simulation: Simulation,
-  maxTicks: number,
-): { glyphs: number[][]; converged: boolean } {
-  const lit: number[][] = [0, 1, 2, 3].map(() => [0, 0, 0, 0, 0, 0, 0, 0]);
-  let stable = 0;
-  let converged = false;
-  for (let frame = 0; frame < maxTicks; frame++) {
-    simulation.tick(0.01);
-    const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-    const probe = {
-      values: [] as number[],
-      digits: 0,
-      colon: false,
-      colonValue: false,
-    } as unknown as HTMLElement;
-    pushWokwiState(probe, seg.definition, seg, {
-      pinVolts: simulation.pinVoltages(),
-      displays: simulation.displayControllers(),
-    } as unknown as FootprintState);
-    const values = (probe as unknown as { values: number[] }).values;
-    let changed = false;
-    for (let d = 0; d < 4; d++) {
-      for (let s = 0; s < 8; s++) {
-        if (values[d * 8 + s] === 1 && lit[d]![s] === 0) {
-          lit[d]![s] = 1;
-          changed = true;
-        }
-      }
-    }
-    stable = changed ? 0 : stable + 1;
-    if (stable >= 14 && frame >= 30) {
-      converged = true;
-      break;
-    }
-  }
-  return { glyphs: lit, converged };
 }
 
 describe('the project gallery', () => {
@@ -809,8 +742,9 @@ void loop() {
     // this with its own message, so null standing also proves no fault.
     expect(simulation.firmwareError, 'library build runs the HEX without fault').toBeNull();
     simulation.start();
+    const glassProbe = liveProbe(simulation);
     for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
-    const midnight = convergeGlass(simulation, 70);
+    const midnight = convergeGlass(glassProbe, 70);
     expect(midnight.converged, 'library build multiplex settles at midnight').toBe(true);
     expect(midnight.glyphs, 'library build idles at midnight').toEqual([
       ZERO_GLYPH,
@@ -824,7 +758,7 @@ void loop() {
     // the glass on the pre-jump view, whose union ("0000") is a superset of
     // "0001" and can never converge to the new digit.
     for (let frame = 0; frame < 45; frame++) simulation.tick(0.05);
-    const minute = convergeGlass(simulation, 70);
+    const minute = convergeGlass(glassProbe, 70);
     expect(minute.converged, 'library build multiplex settles a minute later').toBe(true);
     expect(minute.glyphs, 'library build shows 00:01 a minute later').toEqual([
       ZERO_GLYPH,
@@ -892,6 +826,7 @@ void loop() {
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     expect(simulation.firmwareError, 'library build runs the HEX without fault').toBeNull();
     simulation.start();
+    const glassProbe = liveProbe(simulation);
     const alarmButton = simulation.bench.parts.filter(
       (p) => p.definition.name === 'Tactile Button',
     )[2]!;
@@ -910,7 +845,7 @@ void loop() {
     // are asserted. The button stays held past the reset.
     simulation.setPressed(alarmButton.id, true);
     for (let frame = 0; frame < 20; frame++) simulation.tick(0.01);
-    const status = convergeGlass(simulation, 40);
+    const status = convergeGlass(glassProbe, 40);
     expect(status.converged, 'library build status view settles').toBe(true);
     expect(status.glyphs[1], 'library build status shows O').toEqual(ZERO_GLYPH);
     expect(status.glyphs[2], 'library build status shows n').toEqual(N_GLYPH);
@@ -924,7 +859,7 @@ void loop() {
     expect(core, 'library build AVR core flashed').not.toBeNull();
     core!.reset();
     for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
-    const rearmed = convergeGlass(simulation, 60);
+    const rearmed = convergeGlass(glassProbe, 60);
     expect(rearmed.converged, 'library build second status view settles').toBe(true);
     expect(rearmed.glyphs[1], 'library build NVRAM persists the arm (O)').toEqual(ZERO_GLYPH);
     expect(rearmed.glyphs[2], 'library build NVRAM persists the arm (F)').toEqual(F_GLYPH);
