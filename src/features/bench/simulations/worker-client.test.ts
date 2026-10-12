@@ -481,6 +481,78 @@ describe('worker port protocol', () => {
     client.dispose();
   });
 
+  it('stays live on a firmware verdict, with fault text set and no terminate', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = portClient(port, onFallback);
+    const buf = replyInitOk(port);
+    expect(client.poll()).toBe('ok');
+    client.sendBench(benchWith([]));
+    const edit = port.sent.find((msg) => (msg as { type?: string }).type === 'edit') as
+      | { id: number }
+      | undefined;
+    expect(edit).toBeDefined();
+    // The worker is alive but the sketch failed: a verdict, not a transport
+    // fault. The client surfaces it and awaits the next Run.
+    port.reply({ id: edit?.id ?? -1, ok: true, fault: 'main.ino:3: expected ;' });
+    expect(client.fault).toBe('main.ino:3: expected ;');
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(port.terminated).toBe(false);
+    // Still live: inputs still post and frames still ingest.
+    client.setPressed('b1', true);
+    expect(port.sent.at(-1)).toMatchObject({ type: 'press', partId: 'b1', down: true });
+    headerView(buf).bump();
+    expect(client.poll()).toBe('ok');
+    client.dispose();
+  });
+
+  it('second init collapses queued edits with the latest bench winning', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const benchA = benchWith([]);
+    const firmwareA = plainProject();
+    const client = createWorkerClient({
+      board: { id: 'uno' } as never,
+      bench: benchA,
+      firmware: firmwareA,
+      onFallback,
+      createPort: () => port,
+    });
+    if (client === null) throw new Error('expected a live port client');
+    const init1 = port.sent[0] as { id: number; type: string };
+    expect(init1.type).toBe('init');
+    // Two structural edits land while the handshake is in flight: queued,
+    // never posted yet.
+    const benchB = benchWith([]);
+    const benchC = benchWith([]);
+    client.sendBench(benchB);
+    client.sendBench(benchC);
+    expect(port.sent).toHaveLength(1);
+    // A new sketch rebuilds immediately with the latest bench, not the one
+    // the first init carried.
+    const firmwareB = plainProject();
+    client.loadFirmware(firmwareB);
+    const init2 = port.sent[1] as Record<string, unknown>;
+    expect(init2.type).toBe('init');
+    expect(init2.bench).toBe(benchC);
+    expect(init2.firmware).toBe(firmwareB);
+    // Handshake replies land in order; the second init's buffer is the live
+    // frame, so the latest bench wins regardless of the queued edits.
+    const buf1 = allocSnapshot(layoutFor(1, 0, 16));
+    headerView(buf1).generation = 1;
+    headerView(buf1).timeMs = 111;
+    port.reply({ id: init1.id, ok: true, buffer: buf1, fault: null });
+    const buf2 = allocSnapshot(layoutFor(1, 0, 16));
+    headerView(buf2).generation = 1;
+    headerView(buf2).timeMs = 777;
+    port.reply({ id: (init2.id as number) ?? -1, ok: true, buffer: buf2, fault: null });
+    expect(client.poll()).toBe('ok');
+    expect(client.timeMs).toBe(777);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(port.terminated).toBe(false);
+    client.dispose();
+  });
+
   it('computes ratio from timeMs advance over the wall window', () => {
     const onFallback = vi.fn();
     const port = fakePort();
