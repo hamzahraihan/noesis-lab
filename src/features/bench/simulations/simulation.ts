@@ -450,7 +450,13 @@ export class Simulation {
       mcu: this.mcu,
       nowMs: () => this.engine.timeMs,
       readPin: (gpio) => {
-        this.engine.settle();
+        // No settle here: PIN reads observe the last scheduled solve (1-4ms
+        // cadence via onSettle). Settling per read cost ~1200 full solves per
+        // frame on a polling sketch — 8 per PIN byte across hundreds of
+        // passes — for state that cannot have meaningfully moved (button
+        // debounce alone is 25ms+; the boot transient reads LOW for at most
+        // one cadence window, far under it). TWI/USART read from their
+        // models, never the circuit, so they never needed this either.
         return this.engine.readDigital(gpio);
       },
       onSettle: () => this.engine.settle(),
