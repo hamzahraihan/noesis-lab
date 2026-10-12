@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createSimCore } from './core';
+import { serialRing, tftView } from './protocol';
+import {
+  ingestSnapshot,
+  tftFromMirror,
+  tftFromSnapshot,
+  tftRgbaFromFrame,
+  type MirrorState,
+} from '@/features/bench/simulations/worker-client';
+import { Simulation } from '@/features/bench/simulations/simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
+import { exerciseById } from '@/features/learn';
+import { breadboardDefinition, ili9341Definition, type Ili9341 } from '@/features/parts';
 
 describe('sim core', () => {
   it('steps an interpreter blink without Worker globals', () => {
@@ -57,5 +68,208 @@ describe('sim core', () => {
     );
     expect(() => core.flash(new Uint16Array([0xcfff]))).not.toThrow();
     expect(core.fault).toBeNull();
+  });
+});
+
+describe('tft snapshot transport', () => {
+  const paintSketch = {
+    language: 'arduino-cpp',
+    activeName: 'main.ino',
+    files: [
+      {
+        name: 'main.ino',
+        content: 'void setup() {\n  tft.fillRect(10, 20, 30, 40, 63488);\n}\nvoid loop() {}\n',
+      },
+    ],
+  } as never;
+
+  function tftBench(): never {
+    return {
+      parts: [
+        { id: 'tft1', definition: ili9341Definition(), x: 0, y: 0, rotation: 0, terminals: {} },
+      ],
+      wires: [],
+      terminals: [],
+      revision: 0,
+    } as never;
+  }
+
+  function blankMirror(): MirrorState {
+    return { layout: null, pinVolts: new Map(), values: new Map(), colon: new Map(), serial: [] };
+  }
+
+  it('round-trips painted panel pixels through writeTft, readFrame, and mirror decode', () => {
+    const core = createSimCore(boardOption('uno').make());
+    core.rebuild(tftBench(), paintSketch, 'interpreter');
+    expect(core.fault).toBeNull();
+    core.step(16);
+    core.step(16);
+
+    const frame = tftView(core.snapshot()).readFrame();
+    expect(frame.width).toBe(320);
+    expect(frame.height).toBe(240);
+    expect(frame.rgb565).toHaveLength(320 * 240 * 2);
+
+    const at = (x: number, y: number): number =>
+      ((frame.rgb565[(y * 320 + x) * 2] ?? 0) << 8) | (frame.rgb565[(y * 320 + x) * 2 + 1] ?? 0);
+    // Inside the painted rect, away from any text; and untouched black.
+    expect(at(15, 25)).toBe(0xf800);
+    expect(at(200, 200)).toBe(0);
+
+    // Mirror decode: the rebuilt controller is pixel-identical.
+    const panel = tftFromSnapshot(frame.width, frame.height, frame.rgb565);
+    expect(panel?.pixelAt(15, 25)).toBe(0xf800);
+    expect(panel?.pixelAt(200, 200)).toBe(0);
+
+    // RGBA decode spot-checks the same two pixels.
+    const rgba = tftRgbaFromFrame(frame.width, frame.height, frame.rgb565);
+    expect(rgba).toHaveLength(320 * 240 * 4);
+    const px = (x: number, y: number): number[] =>
+      Array.from(rgba.slice((y * 320 + x) * 4, (y * 320 + x) * 4 + 4));
+    expect(px(15, 25)).toEqual([255, 0, 0, 255]);
+    expect(px(200, 200)).toEqual([0, 0, 0, 255]);
+  });
+
+  it('reports an empty frame, with no mirror copy, when no TFT is on the bench', () => {
+    const core = createSimCore(boardOption('uno').make());
+    core.rebuild(
+      { parts: [], wires: [], terminals: [] } as never,
+      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }] } as never,
+      'interpreter',
+    );
+    core.step(16);
+
+    const buf = core.snapshot();
+    const frame = tftView(buf).readFrame();
+    expect(frame.width).toBe(0);
+    expect(frame.height).toBe(0);
+    expect(frame.rgb565).toHaveLength(0);
+
+    const state = blankMirror();
+    expect(ingestSnapshot(state, buf)).toBe('ok');
+    expect(tftFromMirror(state)).toBeNull();
+    expect(tftFromSnapshot(frame.width, frame.height, frame.rgb565)).toBeNull();
+  });
+});
+
+describe('map sketch parity', () => {
+  const TILE = 256;
+
+  function syntheticRgba(width: number, height: number): Uint8ClampedArray {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        data[i] = (x * 5 + y * 3) % 256;
+        data[i + 1] = (x * 7 + y * 11) % 256;
+        data[i + 2] = (x * 13 + y * 17) % 256;
+        data[i + 3] = 0xff;
+      }
+    }
+    return data;
+  }
+
+  function installStubs(urls: string[]): void {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.fetch = async (url: unknown) => {
+      urls.push(String(url));
+      return { ok: true, blob: async () => new Blob([]) };
+    };
+    g.createImageBitmap = async () => ({ width: TILE, height: TILE, close() {} });
+    g.OffscreenCanvas = class {
+      readonly width: number;
+      readonly height: number;
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+      }
+      getContext(): unknown {
+        return {
+          drawImage(): void {},
+          getImageData(_x: number, _y: number, w: number, h: number): unknown {
+            return { data: syntheticRgba(w, h) };
+          },
+        };
+      }
+    };
+  }
+
+  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('worker core draws the same map as in-page Simulation', async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const saved = { fetch: g.fetch, cib: g.createImageBitmap, oc: g.OffscreenCanvas };
+    const decoder = new TextDecoder();
+    try {
+      const exercise = exerciseById('5.1')!;
+      const sketch = exercise.sketch as unknown as string;
+
+      // Side A: in-page.
+      const simUrls: string[] = [];
+      installStubs(simUrls);
+      const definition = boardOption('esp32').make();
+      const sim = new Simulation(definition);
+      sim.addPart(definition, 0, 0);
+      sim.addPart(breadboardDefinition(), 230, 0);
+      exercise.setup(sim);
+      sim.loadFirmware(sketch);
+      sim.start();
+      for (let i = 0; i < 400; i++) {
+        sim.tick(0.05);
+        await flush();
+        if (sim.serialLines().join('').includes('map drawn')) break;
+      }
+      const simSerial = sim.serialLines().join('');
+      const panel = [...sim.displayControllers().values()][0] as Ili9341;
+
+      // Side B: worker core over the same bench and sketch.
+      const coreUrls: string[] = [];
+      installStubs(coreUrls);
+      const core = createSimCore(boardOption('esp32').make());
+      core.rebuild(
+        sim.bench,
+        {
+          language: 'arduino-cpp',
+          activeName: 'main.ino',
+          files: [{ name: 'main.ino', content: sketch }],
+        } as never,
+        'interpreter',
+      );
+      expect(core.fault).toBeNull();
+      let coreSerial = '';
+      for (let i = 0; i < 400; i++) {
+        core.step(40);
+        const drained = serialRing(core.snapshot()).drain();
+        if (drained.length > 0) coreSerial += decoder.decode(new Uint8Array(drained));
+        await flush();
+        if (coreSerial.includes('map drawn')) break;
+      }
+
+      // Identical verdicts: same tiles asked for, same serial tail, same panel.
+      expect(simSerial).toContain('centred on tile');
+      expect(simSerial).toContain('map drawn');
+      expect(coreSerial).toBe(simSerial);
+      expect(coreSerial.slice(-200)).toBe(simSerial.slice(-200));
+      expect([...coreUrls].sort()).toEqual([...simUrls].sort());
+      expect(coreUrls.length).toBeGreaterThan(0);
+
+      const frame = tftView(core.snapshot()).readFrame();
+      expect(frame.width).toBe(panel.width);
+      expect(frame.height).toBe(panel.height);
+      const expected = new Uint8Array(frame.width * frame.height * 2);
+      let o = 0;
+      for (let y = 0; y < frame.height; y++) {
+        for (let x = 0; x < frame.width; x++) {
+          const colour = panel.pixelAt(x, y);
+          expected[o++] = colour >> 8;
+          expected[o++] = colour & 0xff;
+        }
+      }
+      expect(frame.rgb565).toEqual(expected);
+    } finally {
+      g.fetch = saved.fetch;
+      g.createImageBitmap = saved.cib;
+      g.OffscreenCanvas = saved.oc;
+    }
   });
 });

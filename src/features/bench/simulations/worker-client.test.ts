@@ -6,6 +6,7 @@ import {
   layoutFor,
   netView,
   pinNodeView,
+  tftView,
 } from '@/features/simulation/sim-worker/protocol';
 import {
   createWorkerClient,
@@ -13,6 +14,9 @@ import {
   lcdFromSnapshot,
   remapWithBench,
   sevenSegmentFromSnapshot,
+  tftFromSnapshot,
+  tftImageDataFromFrame,
+  tftRgbaFromFrame,
   WorkerClientImpl,
   type MirrorState,
 } from './worker-client';
@@ -151,6 +155,84 @@ describe('display adapters', () => {
     expect(panel?.shape).toEqual({ columns: 16, rows: 2 });
     expect(panel?.text().split('\n')[0]?.slice(0, 5)).toBe('hello');
     expect(panel?.backlightOn).toBe(true);
+  });
+});
+
+describe('tft mirror decode', () => {
+  // A 2x2 frame with one primary per pixel: red, green / blue, white.
+  const frameBytes = new Uint8Array([0xf8, 0x00, 0x07, 0xe0, 0x00, 0x1f, 0xff, 0xff]);
+
+  /** `ImageData` does not exist in the node test env; stub it if missing. */
+  function ensureImageData(): () => void {
+    const g = globalThis as unknown as Record<string, unknown>;
+    if (typeof g.ImageData !== 'undefined') return () => {};
+    g.ImageData = class {
+      readonly data: Uint8ClampedArray;
+      readonly width: number;
+      readonly height: number;
+      constructor(data: Uint8ClampedArray, width: number, height?: number) {
+        this.data = data;
+        this.width = width;
+        this.height = height ?? data.length / 4 / width;
+      }
+    };
+    return () => {
+      delete g.ImageData;
+    };
+  }
+
+  function clientWithFrame(width: number, height: number, rgb565: Uint8Array): WorkerClientImpl {
+    const buf = allocSnapshot(layoutFor(1, 0, 16));
+    tftView(buf).writeFrame(width, height, rgb565);
+    const client = new WorkerClientImpl({ id: 'uno' } as never);
+    client.sendBench(benchWith([]));
+    client.attachBuffer(buf);
+    expect(client.poll()).toBe('ok');
+    return client;
+  }
+
+  it('round-trips a frame through writeFrame, readFrame, and mirror decode, pixel-identical', () => {
+    const restore = ensureImageData();
+    try {
+      const client = clientWithFrame(2, 2, frameBytes);
+      const frame = client.tftSnapshot();
+      expect(frame?.width).toBe(2);
+      expect(frame?.height).toBe(2);
+      expect(frame?.rgb565).toEqual(frameBytes);
+
+      const panel = tftFromSnapshot(frame?.width ?? 0, frame?.height ?? 0, frame?.rgb565 ?? new Uint8Array(0));
+      expect(panel?.pixelAt(0, 0)).toBe(0xf800);
+      expect(panel?.pixelAt(1, 0)).toBe(0x07e0);
+      expect(panel?.pixelAt(0, 1)).toBe(0x001f);
+      expect(panel?.pixelAt(1, 1)).toBe(0xffff);
+
+      const rgba = tftRgbaFromFrame(2, 2, frameBytes);
+      expect(Array.from(rgba)).toEqual([
+        255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+      ]);
+
+      const image = tftImageDataFromFrame(2, 2, frameBytes);
+      expect(image.width).toBe(2);
+      expect(image.height).toBe(2);
+      expect(Array.from(image.data)).toEqual(Array.from(rgba));
+      client.dispose();
+    } finally {
+      restore();
+    }
+  });
+
+  it('reports no TFT frame, without copying bytes, on the empty fast path', () => {
+    const client = clientWithFrame(0, 0, new Uint8Array(0));
+    expect(client.tftSnapshot()).toBeNull();
+    client.dispose();
+
+    const buf = allocSnapshot(layoutFor(1, 0, 16));
+    tftView(buf).writeFrame(0, 0, new Uint8Array(0));
+    const frame = tftView(buf).readFrame();
+    expect(frame.width).toBe(0);
+    expect(frame.height).toBe(0);
+    expect(frame.rgb565).toHaveLength(0);
+    expect(tftFromSnapshot(frame.width, frame.height, frame.rgb565)).toBeNull();
   });
 });
 
