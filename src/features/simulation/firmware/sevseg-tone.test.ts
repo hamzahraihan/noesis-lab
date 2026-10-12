@@ -138,22 +138,19 @@ describe('SevSeg on the interpreter', () => {
     expect(selects.length).toBeGreaterThanOrEqual(4);
     expect(selects.slice(0, 4).map((entry) => entry.pin)).toEqual([2, 3, 4, 5]);
     // setNumber(1) zero-pads to "0001": segment A (pin 6) is driven lit-low
-    // for the three zeros and released high for the one. A digit's segment
-    // writes precede its own select, so each select closes the bucket for
-    // that digit in select order.
-    const perDigitA: number[] = [];
-    let pending: number[] = [];
-    let selectsSeen = 0;
+    // for the three zeros and released high for the one. Refreshes past the
+    // first emit only changed pins, so per-digit levels are read off the
+    // replayed net state at each select rather than from that pass's writes:
+    // each select closes the bucket for the digit it lights, in order.
+    const levels = new Map<number, number>();
+    const aAtSelect: number[] = [];
     for (const entry of drive.log.writes) {
-      if (entry.pin >= 2 && entry.pin <= 5 && entry.level === 1) {
-        if (selectsSeen < 4) perDigitA.push(pending[pending.length - 1] ?? -1);
-        selectsSeen++;
-        pending = [];
-      } else if (entry.pin === 6) {
-        pending.push(entry.level);
+      levels.set(entry.pin, entry.level);
+      if (entry.pin >= 2 && entry.pin <= 5 && entry.level === 1 && aAtSelect.length < 4) {
+        aAtSelect.push(levels.get(6) ?? 1);
       }
     }
-    expect(perDigitA).toEqual([0, 0, 0, 1]);
+    expect(aAtSelect).toEqual([0, 0, 0, 1]);
   });
 
   it('maps setChars through the gallery status glyphs', () => {
@@ -172,28 +169,26 @@ describe('SevSeg on the interpreter', () => {
     for (let step = 0; step < 30 && !main.next().done; step++) {
       // setup plus several loop passes; the first cycle carries the proof.
     }
-    // A digit's segment writes land between the previous select and its
-    // own: digit index 1 ('o') belongs to bucket 0, index 2 ('n') to bucket 1.
-    const bucketed = new Map<number, Array<{ pin: number; level: number }>>();
-    let refresh = -1;
+    // Net levels replayed from the drive log: refreshes past the first emit
+    // only changed pins, so a digit's pattern is the replayed state at the
+    // select that lights it, not that pass's writes. Selects light digits
+    // 0-3 in order, so snapshot 1 is digit 1 ('o') and 2 is digit 2 ('n').
+    const levels = new Map<number, number>();
+    const snapshots: Array<Map<number, number>> = [];
     for (const entry of drive.log.writes) {
-      if (entry.pin >= 2 && entry.pin <= 5 && entry.level === 1) refresh++;
-      else if (refresh >= 0 && refresh < 4) {
-        const bucket = bucketed.get(refresh) ?? [];
-        bucket.push(entry);
-        bucketed.set(refresh, bucket);
+      levels.set(entry.pin, entry.level);
+      if (entry.pin >= 2 && entry.pin <= 5 && entry.level === 1 && snapshots.length < 4) {
+        snapshots.push(new Map(levels));
       }
     }
-    const lastLevel = (bucket: number, pin: number): number | undefined => {
-      const writes = (bucketed.get(bucket) ?? []).filter((entry) => entry.pin === pin);
-      return writes[writes.length - 1]?.level;
-    };
+    const levelAt = (digit: number, pin: number): number | undefined =>
+      snapshots[digit]?.get(pin);
     // 'o' renders as '0': A-F low, G (pin 12) high.
-    expect(lastLevel(0, 12), "'o' leaves G dark").toBe(1);
-    expect(lastLevel(0, 6), "'o' lights A").toBe(0);
+    expect(levelAt(1, 12), "'o' leaves G dark").toBe(1);
+    expect(levelAt(1, 6), "'o' lights A").toBe(0);
     // 'n' is C/E/G: segment C (pin 8) low, A (pin 6) high.
-    expect(lastLevel(1, 8), "'n' lights C").toBe(0);
-    expect(lastLevel(1, 6), "'n' leaves A dark").toBe(1);
+    expect(levelAt(2, 8), "'n' lights C").toBe(0);
+    expect(levelAt(2, 6), "'n' leaves A dark").toBe(1);
   });
 });
 
@@ -237,5 +232,36 @@ describe('tone and noTone on the interpreter', () => {
     // A blocking tone would have yielded its duration; every wait observed
     // is the loop quantum instead.
     expect(seen.every((value) => value === 0), 'tone never blocks').toBe(true);
+  });
+});
+
+describe('refreshDisplay pin churn', () => {
+  it('drives a full refresh once, then only the swapping common pin', () => {
+    const runtime = FirmwareRuntime.fromProject(
+      toSingleFileProject(
+        `SevSeg sevseg;
+         void setup() {
+           byte digitPins[] = {2, 3, 4, 5};
+           byte segmentPins[] = {6, 7, 8, 9, 10, 11, 12};
+           sevseg.begin(1, 4, digitPins, segmentPins, false, false, true, true);
+           sevseg.setNumber(0);
+         }
+         void loop() { sevseg.refreshDisplay(); }`,
+        'arduino-cpp',
+      ),
+    );
+    const drive = makeDrive();
+    const main = runtime.main(drive.services);
+    const writesPerPass: number[] = [];
+    let before = 0;
+    for (let pass = 0; pass < 9 && !main.next().done; pass++) {
+      writesPerPass.push(drive.log.writes.length - before);
+      before = drive.log.writes.length;
+    }
+    // Pass 0 drives every pin (4 digit + 7 segment + 1 common = 12).
+    expect(writesPerPass[0]).toBe(12);
+    // Passes 1-8 are a full mux cycle on a steady buffer: only the common
+    // pin swaps each pass (previous digit released, next selected).
+    expect(writesPerPass.slice(1)).toEqual([2, 2, 2, 2, 2, 2, 2, 2]);
   });
 });

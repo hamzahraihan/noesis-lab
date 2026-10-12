@@ -112,6 +112,14 @@ interface SevSegState {
   brightness: number;
   /** Next digit `refreshDisplay` will light. */
   mux: number;
+  /**
+   * Last driven level by pin. Empty before the first refresh, so the first
+   * pass drives every pin; steady passes then emit only real changes.
+   * Keyed by pin, never by position: the selected common moves each pass,
+   * and a positional record would drop the previous common's release and
+   * leave two digits lit at once.
+   */
+  levels: Map<number, number>;
 }
 
 /**
@@ -2080,6 +2088,7 @@ export class FirmwareRuntime {
         buffer: [0, 0, 0, 0],
         brightness: 100,
         mux: 0,
+        levels: new Map(),
       };
       this.sevseg.set(instance, state);
     }
@@ -2137,13 +2146,23 @@ export class FirmwareRuntime {
         const select = state.commonAnode ? LEVEL_HIGH : LEVEL_LOW;
         const release = state.commonAnode ? LEVEL_LOW : LEVEL_HIGH;
         const digit = state.mux % state.digits;
-        for (const pin of state.digitPins) services.digitalWrite(pin, release);
         const pattern = state.buffer[digit] ?? 0;
+        const want: Array<{ pin: number; level: number }> = [];
+        for (const pin of state.digitPins) want.push({ pin, level: release });
         state.segmentPins.forEach((pin, bit) => {
-          services.digitalWrite(pin, (pattern >> bit) & 1 ? release : select);
+          want.push({ pin, level: (pattern >> bit) & 1 ? release : select });
         });
         const common = state.digitPins[digit];
-        if (common !== undefined) services.digitalWrite(common, select);
+        if (common !== undefined) want.push({ pin: common, level: select });
+        // The mux advances every call — the glass multiplexes even when the
+        // picture is steady — but pins already at their level stay silent, so
+        // a steady buffer costs the common-pin swap, not a full drive.
+        for (const { pin, level } of want) {
+          if (state.levels.get(pin) !== level) {
+            services.digitalWrite(pin, level);
+            state.levels.set(pin, level);
+          }
+        }
         state.mux = (digit + 1) % state.digits;
         return 0;
       }
