@@ -33,3 +33,7 @@ export * from './avr/libraries/index';
 export * from './avr/libraries/index-build';
 export { createProductionBackend } from './avr/toolchain/cache';
 export { compileToolchainUnit } from './avr/toolchain/tools';
+// Task 4 bench client consumes the SHM snapshot protocol via this barrel
+// (bare `@/features/simulation` — the boundary gate forbids bench-deep
+// imports outside the owning feature). Pure layout math only, no Engine.
+export * from './sim-worker/protocol';

@@ -20,6 +20,7 @@ import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/p
 import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
+import { Servo } from '@/features/parts';
 import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
 import { ili9341Definition, ssd1306Definition } from '@/features/parts';
 import { Workbench } from './Workbench';
@@ -27,6 +28,7 @@ import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
 import type { FootprintState } from '../wokwi/footprints';
 import { Simulation } from '../simulations/simulation';
+import { createWorkerClient, type WorkerClient } from '../simulations/worker-client';
 import { CenterTabs } from '../ide/CenterTabs';
 import { BottomPanel } from '../ide/BottomPanel';
 import { ResizeHandle } from '../ide/ResizeHandle';
@@ -501,6 +503,36 @@ export default function Bench(props: BenchProps) {
     [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild],
   );
 
+  /*
+   * Sim worker client (Task 4): attempted per simulation; null while the
+   * Task 5 entry is pending, in which case the in-page Simulation owns
+   * everything exactly as before. The fallback reason feeds the status
+   * lamp's tooltip.
+   */
+  const [workerClient, setWorkerClient] = useState<WorkerClient | null>(null);
+  const [workerFallback, setWorkerFallback] = useState<string | null>(null);
+  useEffect(() => {
+    const client = createWorkerClient({
+      board: simulation.mcu.definition,
+      onFallback: (reason) => setWorkerFallback(reason),
+    });
+    setWorkerClient(client);
+    return () => {
+      client?.dispose();
+      setWorkerClient(null);
+    };
+  }, [simulation]);
+
+  /* Which backend owns stepping + its running flag. */
+  const isRunning = workerClient !== null ? workerClient.running : simulation.running;
+  const activeStop = useCallback(() => {
+    simulation.stop();
+    workerClient?.stop();
+  }, [simulation, workerClient]);
+  /* Firmware verdict from the owning backend (worker fault travels by
+   * message in Task 5; the parse/fallback verdicts stay in-page). */
+  const activeFirmwareError = workerClient?.fault ?? simulation.firmwareError;
+
   // Only pins firmware can actually name are worth probing; the power and
   // ground headers are rails, not signals.
   const probePins = useMemo(
@@ -518,31 +550,41 @@ export default function Bench(props: BenchProps) {
       const now = performance.now();
       const deltaSeconds = Math.min((now - previous) / 1000, 0.25);
       previous = now;
-      simulation.tick(deltaSeconds);
-
-      /*
-       * Re-render only when the bench actually changed.
-       *
-       * This used to force a render every frame unconditionally, on the
-       * reasoning that the frame rate drove the simulation. It does not: the
-       * wall-clock delta does, and a stopped simulation returns immediately
-       * from `tick` without touching anything.
-       *
-       * So a parked bench was re-rendering its whole tree -- nearly a thousand
-       * breadboard terminals, two canvas-backed panels -- sixty times a second
-       * to draw an identical picture. That is not merely wasteful, it is what
-       * made leaving the bench unusably slow: React Router performs a
-       * navigation in a transition, which is a lower-priority lane than the
-       * one these renders are written to. Sixty urgent renders a second starve
-       * the transition, so the new page could not commit until the bench gave
-       * up the main thread -- tens of seconds -- while arriving at the bench
-       * had nothing queued behind it and was immediate.
-       *
-       * The bench still animates whenever it is running, which is the only
-       * time anything is moving.
-       */
-      if (running && simulation.isAnimating()) {
-        forceRender((n) => n + 1);
+      if (workerClient) {
+        /*
+         * The worker owns stepping; per rAF ingest the live buffer. `'ok'`
+         * carries a new frame to draw, `'stale'` renders the last copy
+         * (no re-render), and `'reallocated'` rebinds and drops one frame.
+         */
+        if (workerClient.poll() === 'ok') {
+          forceRender((n) => n + 1);
+        }
+      } else {
+        simulation.tick(deltaSeconds);
+        /*
+         * Re-render only when the bench actually changed.
+         *
+         * This used to force a render every frame unconditionally, on the
+         * reasoning that the frame rate drove the simulation. It does not: the
+         * wall-clock delta does, and a stopped simulation returns immediately
+         * from `tick` without touching anything.
+         *
+         * So a parked bench was re-rendering its whole tree -- nearly a thousand
+         * breadboard terminals, two canvas-backed panels -- sixty times a second
+         * to draw an identical picture. That is not merely wasteful, it is what
+         * made leaving the bench unusably slow: React Router performs a
+         * navigation in a transition, which is a lower-priority lane than the
+         * one these renders are written to. Sixty urgent renders a second starve
+         * the transition, so the new page could not commit until the bench gave
+         * up the main thread -- tens of seconds -- while arriving at the bench
+         * had nothing queued behind it and was immediate.
+         *
+         * The bench still animates whenever it is running, which is the only
+         * time anything is moving.
+         */
+        if (running && simulation.isAnimating()) {
+          forceRender((n) => n + 1);
+        }
       }
 
       /*
@@ -560,7 +602,7 @@ export default function Bench(props: BenchProps) {
       running = false;
       cancelAnimationFrame(frame);
     };
-  }, [simulation]);
+  }, [simulation, workerClient]);
 
   /* The colour palette opens where a picked wire was clicked (see store). */
 
@@ -636,7 +678,7 @@ export default function Bench(props: BenchProps) {
       switch (event.key) {
         case ' ':
           event.preventDefault();
-          if (simulation.running) simulation.stop();
+          if (isRunning) activeStop();
           else void handleRunRef.current();
           forceRender((n) => n + 1);
           break;
@@ -674,7 +716,7 @@ export default function Bench(props: BenchProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [simulation, paletteFor, selectedId, selectedWireId, removeWire, stepHistory, toggleSidebar, showActivity, toggleInstruments, toggleBottom, closePalette, selectPart]);
+  }, [simulation, isRunning, activeStop, paletteFor, selectedId, selectedWireId, removeWire, stepHistory, toggleSidebar, showActivity, toggleInstruments, toggleBottom, closePalette, selectPart]);
 
 
   const bench = simulation.bench;
@@ -689,8 +731,51 @@ export default function Bench(props: BenchProps) {
    * the Inspector and the LEDs live while running, and still refreshes when
    * parts are added while stopped.
    */
-  const renderState = useMemo<FootprintState>(
-    () => ({
+  const renderState = useMemo<FootprintState>(() => {
+    if (workerClient) {
+      /*
+       * Mirror-fed frame: pin volts remapped with the bench, servo horns and
+       * pixel dies adapted from the plain display snapshots (real Servo
+       * models driven to the mirrored angle; RGB triplets split per part).
+       * 7-segment/TFT/stepper/LCD controller objects are not faked from
+       * plain bytes — TFT transport lands with Task 7 — so those stay empty
+       * on the worker path rather than showing a stale in-page picture.
+       */
+      const snapshots = workerClient.displaySnapshots();
+      const servos = new Map<string, Servo>();
+      const pixels = new Map<string, readonly { r: number; g: number; b: number }[]>();
+      for (const part of bench.parts) {
+        const kind = part.definition.component.kind;
+        const bytes = snapshots.get(part.id);
+        if (bytes === undefined) continue;
+        if (kind === 'servo') {
+          const servo = new Servo();
+          servo.write(bytes[0] ?? 90);
+          servos.set(part.id, servo);
+        } else if (
+          kind === 'neopixel' ||
+          kind === 'neopixel-matrix' ||
+          kind === 'led-ring'
+        ) {
+          const colors: { r: number; g: number; b: number }[] = [];
+          for (let i = 0; i + 2 < bytes.length; i += 3) {
+            colors.push({ r: bytes[i] ?? 0, g: bytes[i + 1] ?? 0, b: bytes[i + 2] ?? 0 });
+          }
+          pixels.set(part.id, colors);
+        }
+      }
+      return {
+        pinVolts: workerClient.pinVoltages(),
+        displays: new Map(),
+        servos,
+        steppers: new Map(),
+        pixels,
+        lcds: new Map(),
+        controls: workerClient.controls,
+        parts: bench.parts.length,
+      };
+    }
+    return {
       pinVolts: simulation.pinVoltages(),
       displays: simulation.displayControllers(),
       servos: simulation.servoModels(),
@@ -702,10 +787,9 @@ export default function Bench(props: BenchProps) {
       // above are built from it, and an example changes it without touching
       // the simulation.
       parts: bench.parts.length,
-    }),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [simulation, bench, frameTick],
-  );
+  }, [simulation, bench, frameTick, workerClient]);
 
 
   // Meter probes come from the same pin list as the scope's. The black probe
@@ -732,6 +816,16 @@ export default function Bench(props: BenchProps) {
    * Anything derived from where things are has to key on this.
    */
   const benchRevision = bench.revision;
+
+  /*
+   * Structural edits send a bench snapshot; the realloc reply carries the
+   * new SharedArrayBuffer (Task 5). `benchRevision` is the trigger without
+   * being read in the body — same pattern as the net map below.
+   */
+  useEffect(() => {
+    workerClient?.sendBench(simulation.bench);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simulation, workerClient, benchRevision]);
 
   /*
    * Which net each contact belongs to, for the highlight and the probes.
@@ -843,8 +937,13 @@ export default function Bench(props: BenchProps) {
   );
 
   const onTogglePressed = useCallback(
-    (partId: string, pressed: boolean) => simulation.setPressed(partId, pressed),
-    [simulation],
+    (partId: string, pressed: boolean) => {
+      simulation.setPressed(partId, pressed);
+      // Knob/press inputs travel as CoreInput messages on the worker path;
+      // the local controls stay live for render either way.
+      workerClient?.setPressed(partId, pressed);
+    },
+    [simulation, workerClient],
   );
 
   const clearBusLog = useCallback(() => simulation.clearBusLog(), [simulation]);
@@ -933,22 +1032,26 @@ export default function Bench(props: BenchProps) {
       const seq = ++compileSeq.current;
       setCompiling(true);
       try {
-        await simulation.compileAndRun(project);
+        if (workerClient) await workerClient.compileAndRun(project);
+        else await simulation.compileAndRun(project);
       } finally {
         if (compileSeq.current === seq) setCompiling(false);
       }
       if (compileSeq.current !== seq) return;
-      if (
-        typeof simulation.compileState === 'object' &&
-        simulation.compileState.error === 'compile cancelled'
-      ) {
+      const cancelled = workerClient
+        ? workerClient.fault === 'compile cancelled'
+        : typeof simulation.compileState === 'object' &&
+          simulation.compileState.error === 'compile cancelled';
+      if (cancelled) {
         forceRender((n) => n + 1);
         return;
       }
+    } else if (workerClient) {
+      workerClient.loadFirmware(project);
     } else {
       simulation.loadFirmware(project);
     }
-    const message = simulation.firmwareError;
+    const message = activeFirmwareError;
     if (message) {
       // A real firmware verdict opens Problems, the way Run opens the tab an
       // error names: the failure is visible without hunting for it.
@@ -969,6 +1072,7 @@ export default function Bench(props: BenchProps) {
         }
       }
     }
+    workerClient?.start();
     simulation.start();
     forceRender((n) => n + 1);
   }
@@ -1083,18 +1187,18 @@ export default function Bench(props: BenchProps) {
             variant="secondary"
             size="sm"
             onClick={() => {
-              if (simulation.running) simulation.stop();
+              if (isRunning) activeStop();
               else void handleRun();
               forceRender((n) => n + 1);
             }}
-            title={simulation.running ? 'Pause the simulation (Space)' : 'Run the simulation (Space)'}
+            title={isRunning ? 'Pause the simulation (Space)' : 'Run the simulation (Space)'}
           >
-            {simulation.running ? (
+            {isRunning ? (
               <PauseIcon className="icon" aria-hidden="true" />
             ) : (
               <PlayIcon className="icon" aria-hidden="true" />
             )}
-            {simulation.running ? 'Pause' : 'Run'}
+            {isRunning ? 'Pause' : 'Run'}
           </Button>
 
           {/*
@@ -1141,6 +1245,17 @@ export default function Bench(props: BenchProps) {
           </label>
 
           {/*
+           * Which backend owns stepping, with its frame rate. Worker fps comes
+           * from `status()`; in-page shows the fallback reason on hover.
+           */}
+          <span
+            className="text-xs text-slate-500"
+            title={workerClient ? 'Stepping in the sim worker' : (workerFallback ?? 'In-page simulation')}
+          >
+            {workerClient ? `worker · ${workerClient.status().fps}fps` : 'in-page'}
+          </span>
+
+          {/*
            * Worker-compile progress, in the same quiet dressing as the
            * controls around it. Cancel aborts the in-flight build; the
            * awaiting Run lands 'compile cancelled' and stays stopped.
@@ -1153,6 +1268,7 @@ export default function Bench(props: BenchProps) {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
+                  workerClient?.cancelCompile();
                   simulation.cancelCompile();
                 }}
                 title="Abort the in-flight compile"
@@ -1464,7 +1580,7 @@ export default function Bench(props: BenchProps) {
               <FirmwareEditor
                 project={project}
                 onProjectChange={setProject}
-                error={simulation.firmwareError ?? shareError}
+                error={activeFirmwareError ?? shareError}
                 expanded
                 onToggle={() => {}}
                 headerHidden
@@ -1473,9 +1589,12 @@ export default function Bench(props: BenchProps) {
                 onRun={handleRun}
                 onReset={() => {
                   simulation.reset();
+                  // Mirror reset on the worker path (fresh firmware, serial
+                  // cleared); the running flag is left alone, as in-page.
+                  if (workerClient) workerClient.loadFirmware(project);
                   forceRender((n) => n + 1);
                 }}
-                running={simulation.running}
+                running={isRunning}
                 examples={EXAMPLES}
                 activeExampleId={exampleId}
                 onLoadExample={loadExample}
@@ -1499,10 +1618,10 @@ export default function Bench(props: BenchProps) {
             tab={bottomTab}
             open={bottomOpen}
             height={layout.bottomHeight}
-            hasError={(simulation.firmwareError ?? shareError) !== null}
+            hasError={(activeFirmwareError ?? shareError) !== null}
             onTab={setBottomTab}
             onToggle={() => toggleBottom()}
-            serial={<SerialMonitor lines={simulation.serialLines()} />}
+            serial={<SerialMonitor lines={workerClient ? workerClient.serialLines() : simulation.serialLines()} />}
             scope={
               <ScopePanel
                 pins={probePins}
@@ -1542,7 +1661,7 @@ export default function Bench(props: BenchProps) {
             }
             problems={
               <p className="px-3 py-2 font-mono text-xs text-red-300">
-                {simulation.firmwareError ?? shareError ?? 'No problems.'}
+                {activeFirmwareError ?? shareError ?? 'No problems.'}
               </p>
             }
           />
@@ -1585,7 +1704,10 @@ export default function Bench(props: BenchProps) {
                 if (selected) simulation.setPressed(selected.id, pressed);
               }}
               onSetKnob={(spec, value) => {
-                if (selected) simulation.setKnob(selected.id, spec, value);
+                if (selected) {
+                  simulation.setKnob(selected.id, spec, value);
+                  workerClient?.setKnob(selected.id, spec, value);
+                }
               }}
               onRotate={() => {
                 // Physical, not electronic: this turns the part on the bench.
@@ -1627,9 +1749,9 @@ export default function Bench(props: BenchProps) {
       </div>
 
       <StatusBar
-        timeMs={simulation.engine.timeMs}
-        running={simulation.running}
-        netCount={simulation.engine.currentNetlist.nodeCount}
+        timeMs={workerClient ? workerClient.timeMs : simulation.engine.timeMs}
+        running={isRunning}
+        netCount={workerClient ? workerClient.netCount : simulation.engine.currentNetlist.nodeCount}
       />
     </div>
   );
