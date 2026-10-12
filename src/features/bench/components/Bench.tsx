@@ -504,35 +504,46 @@ export default function Bench(props: BenchProps) {
   );
 
   /*
-   * Sim worker client (Task 4): attempted per simulation; null while the
-   * Task 5 entry is pending, in which case the in-page Simulation owns
+   * Sim worker client (Task 8): attempted per simulation; null while the
+   * worker is absent or fails, in which case the in-page Simulation owns
    * everything exactly as before. The fallback reason feeds the status
-   * lamp's tooltip.
+   * lamp's tooltip. `workerLive` is the takeover gate: the worker owns
+   * stepping only after its first live `ok` frame lands (handshake success);
+   * until then the in-page simulation keeps ticking underneath.
    */
   const [workerClient, setWorkerClient] = useState<WorkerClient | null>(null);
   const [workerFallback, setWorkerFallback] = useState<string | null>(null);
+  const [workerLive, setWorkerLive] = useState(false);
   useEffect(() => {
+    setWorkerLive(false);
     const client = createWorkerClient({
       board: simulation.mcu.definition,
-      onFallback: (reason) => setWorkerFallback(reason),
+      bench: simulation.bench,
+      onFallback: (reason) => {
+        setWorkerFallback(reason);
+        setWorkerClient(null);
+        setWorkerLive(false);
+      },
     });
     setWorkerClient(client);
     return () => {
       client?.dispose();
       setWorkerClient(null);
+      setWorkerLive(false);
     };
   }, [simulation]);
 
   /* Which backend owns stepping + its running flag. One owner only: the
-   * worker when constructed, else the in-page simulation. */
-  const isRunning = workerClient !== null ? workerClient.running : simulation.running;
+   * worker once its first live frame has landed, else the in-page simulation. */
+  const workerActive = workerLive && workerClient !== null;
+  const isRunning = workerActive ? workerClient.running : simulation.running;
   const activeStop = useCallback(() => {
-    if (workerClient) workerClient.stop();
+    if (workerActive) workerClient.stop();
     else simulation.stop();
-  }, [simulation, workerClient]);
+  }, [simulation, workerClient, workerActive]);
   /* Firmware verdict from the owning backend (worker fault travels by
-   * message in Task 5; the parse/fallback verdicts stay in-page). */
-  const activeFirmwareError = workerClient?.fault ?? simulation.firmwareError;
+   * message; the parse/fallback verdicts stay in-page). */
+  const activeFirmwareError = workerActive ? (workerClient.fault ?? simulation.firmwareError) : simulation.firmwareError;
 
   // Only pins firmware can actually name are worth probing; the power and
   // ground headers are rails, not signals.
@@ -551,39 +562,27 @@ export default function Bench(props: BenchProps) {
       const now = performance.now();
       const deltaSeconds = Math.min((now - previous) / 1000, 0.25);
       previous = now;
-      if (workerClient) {
+      if (workerClient && workerLive) {
         /*
          * The worker owns stepping; per rAF ingest the live buffer. `'ok'`
-         * carries a new frame to draw, `'stale'` renders the last copy
-         * (no re-render), and `'reallocated'` rebinds and drops one frame.
+         * carries a new frame to draw (and posts one `ack` with its
+         * generation, draining the entry's backpressure), `'stale'` renders
+         * the last copy (no re-render), and `'reallocated'` rebinds and drops
+         * one frame.
          */
         if (workerClient.poll() === 'ok') {
           forceRender((n) => n + 1);
         }
       } else {
+        // In-page owns stepping: solely while no worker is constructed, and
+        // during the handshake window before its first live frame. A
+        // constructed-but-not-yet-live worker is polled for the takeover.
         simulation.tick(deltaSeconds);
-        /*
-         * Re-render only when the bench actually changed.
-         *
-         * This used to force a render every frame unconditionally, on the
-         * reasoning that the frame rate drove the simulation. It does not: the
-         * wall-clock delta does, and a stopped simulation returns immediately
-         * from `tick` without touching anything.
-         *
-         * So a parked bench was re-rendering its whole tree -- nearly a thousand
-         * breadboard terminals, two canvas-backed panels -- sixty times a second
-         * to draw an identical picture. That is not merely wasteful, it is what
-         * made leaving the bench unusably slow: React Router performs a
-         * navigation in a transition, which is a lower-priority lane than the
-         * one these renders are written to. Sixty urgent renders a second starve
-         * the transition, so the new page could not commit until the bench gave
-         * up the main thread -- tens of seconds -- while arriving at the bench
-         * had nothing queued behind it and was immediate.
-         *
-         * The bench still animates whenever it is running, which is the only
-         * time anything is moving.
-         */
-        if (running && simulation.isAnimating()) {
+        if (workerClient && workerClient.poll() === 'ok') {
+          // Handshake success: transfer stepping ownership exactly once.
+          setWorkerLive(true);
+          forceRender((n) => n + 1);
+        } else if (running && simulation.isAnimating()) {
           forceRender((n) => n + 1);
         }
       }
@@ -603,7 +602,7 @@ export default function Bench(props: BenchProps) {
       running = false;
       cancelAnimationFrame(frame);
     };
-  }, [simulation, workerClient]);
+  }, [simulation, workerClient, workerLive]);
 
   /* The colour palette opens where a picked wire was clicked (see store). */
 
@@ -722,6 +721,9 @@ export default function Bench(props: BenchProps) {
 
   const bench = simulation.bench;
 
+  /* Live worker status for the header badge; null while in-page owns stepping. */
+  const workerStatus = workerActive && workerClient !== null ? workerClient.status() : null;
+
   /*
    * Rebuilt every frame while running, not only when the bench changes.
    *
@@ -733,7 +735,7 @@ export default function Bench(props: BenchProps) {
    * parts are added while stopped.
    */
   const renderState = useMemo<FootprintState>(() => {
-    if (workerClient) {
+    if (workerClient !== null && workerLive) {
       /*
        * Mirror-fed frame: pin volts remapped with the bench, servo horns as
        * real models driven to the mirrored angle, pixel dies as RGB triplets,
@@ -827,7 +829,7 @@ export default function Bench(props: BenchProps) {
       parts: bench.parts.length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulation, bench, frameTick, workerClient]);
+  }, [simulation, bench, frameTick, workerClient, workerLive]);
 
 
   // Meter probes come from the same pin list as the scope's. The black probe
@@ -978,10 +980,10 @@ export default function Bench(props: BenchProps) {
    * path, the in-page model otherwise) — never both. */
   const onTogglePressed = useCallback(
     (partId: string, pressed: boolean) => {
-      if (workerClient) workerClient.setPressed(partId, pressed);
+      if (workerClient !== null && workerLive) workerClient.setPressed(partId, pressed);
       else simulation.setPressed(partId, pressed);
     },
-    [simulation, workerClient],
+    [simulation, workerClient, workerLive],
   );
 
   const clearBusLog = useCallback(() => simulation.clearBusLog(), [simulation]);
@@ -1012,11 +1014,11 @@ export default function Bench(props: BenchProps) {
       const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
       setProject(next);
       setExampleId(example.id);
-      if (workerClient) workerClient.loadFirmware(next);
+      if (workerClient !== null && workerLive) workerClient.loadFirmware(next);
       else simulation.loadFirmware(next);
       forceRender((n) => n + 1);
     },
-    [simulation, workerClient, EXAMPLES, boardOption, boardId],
+    [simulation, workerClient, workerLive, EXAMPLES, boardOption, boardId],
   );
 
   /*
@@ -1284,15 +1286,26 @@ export default function Bench(props: BenchProps) {
           </label>
 
           {/*
-           * Which backend owns stepping, with its frame rate. Worker fps comes
-           * from `status()`; in-page shows the fallback reason on hover.
+           * Which backend owns stepping. The worker badge shows live fps plus
+           * the sim/wall ratio from `status()`; in-page shows the fallback
+           * reason on hover.
            */}
-          <span
-            className="text-xs text-slate-500"
-            title={workerClient ? 'Stepping in the sim worker' : (workerFallback ?? 'In-page simulation')}
-          >
-            {workerClient ? `worker · ${workerClient.status().fps}fps` : 'in-page'}
-          </span>
+          {workerStatus !== null ? (
+            <span
+              className="rounded-sm border border-emerald-800 bg-emerald-950 px-1.5 py-0.5 text-xs text-emerald-300"
+              title="Stepping in the sim worker"
+              role="status"
+            >
+              {`worker · ${workerStatus.fps}fps · ${workerStatus.ratio.toFixed(2)}×`}
+            </span>
+          ) : (
+            <span
+              className="text-xs text-slate-500"
+              title={workerFallback ?? 'In-page simulation'}
+            >
+              in-page
+            </span>
+          )}
 
           {/*
            * Worker-compile progress, in the same quiet dressing as the
@@ -1627,7 +1640,7 @@ export default function Bench(props: BenchProps) {
                 onChangeLanguage={handleLanguageChange}
                 onRun={handleRun}
                 onReset={() => {
-                  if (workerClient) workerClient.loadFirmware(project);
+                  if (workerClient !== null && workerLive) workerClient.loadFirmware(project);
                   else simulation.reset();
                   forceRender((n) => n + 1);
                 }}
@@ -1655,8 +1668,14 @@ export default function Bench(props: BenchProps) {
            * Instruments limitation (accepted): scope traces, analyser
            * captures, bus log, and meter stay in-page — the core transports
            * no probe waveforms, bus entries, or meter state, so they freeze
-           * while the worker owns stepping. Future transport work; not Task 7.
+           * while the worker owns stepping. Surfaced by the one-line note
+           * below rather than left silent.
            */}
+          {workerActive && (
+            <p className="shrink-0 border-t border-slate-800 px-3 py-1 text-[11px] text-slate-500">
+              Worker mode: scope, bus monitor, and meter stay in-page and are frozen while the worker steps.
+            </p>
+          )}
           <BottomPanel
             tab={bottomTab}
             open={bottomOpen}
@@ -1664,7 +1683,7 @@ export default function Bench(props: BenchProps) {
             hasError={(activeFirmwareError ?? shareError) !== null}
             onTab={setBottomTab}
             onToggle={() => toggleBottom()}
-            serial={<SerialMonitor lines={workerClient ? workerClient.serialLines() : simulation.serialLines()} />}
+            serial={<SerialMonitor lines={workerClient !== null && workerLive ? workerClient.serialLines() : simulation.serialLines()} />}
             scope={
               <ScopePanel
                 pins={probePins}
@@ -1745,12 +1764,12 @@ export default function Bench(props: BenchProps) {
               }}
               onSetPressed={(pressed) => {
                 if (!selected) return;
-                if (workerClient) workerClient.setPressed(selected.id, pressed);
+                if (workerClient !== null && workerLive) workerClient.setPressed(selected.id, pressed);
                 else simulation.setPressed(selected.id, pressed);
               }}
               onSetKnob={(spec, value) => {
                 if (!selected) return;
-                if (workerClient) workerClient.setKnob(selected.id, spec, value);
+                if (workerClient !== null && workerLive) workerClient.setKnob(selected.id, spec, value);
                 else simulation.setKnob(selected.id, spec, value);
               }}
               onRotate={() => {
@@ -1793,7 +1812,7 @@ export default function Bench(props: BenchProps) {
       </div>
 
       <StatusBar
-        timeMs={workerClient ? workerClient.timeMs : simulation.engine.timeMs}
+        timeMs={workerClient !== null && workerLive ? workerClient.timeMs : simulation.engine.timeMs}
         running={isRunning}
         netCount={simulation.engine.currentNetlist.nodeCount}
       />

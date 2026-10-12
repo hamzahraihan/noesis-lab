@@ -35,11 +35,12 @@
  * `{ width, height, rgb565 }` and decodes here to `ImageData` — or to a
  * rebuilt `Ili9341` for the existing canvas blit path.
  *
- * Worker entry sequencing: Task 5 owns the worker entry + message contract
- * (`attachBuffer` is its realloc-reply landing: the realloc reply carries
- * the new SharedArrayBuffer). The factory returns a live client whenever
- * Worker + SHM + handshake succeed; frames start flowing once Task 5 drives
- * the port.
+ * Worker entry sequencing: the entry owns the worker side of the message
+ * contract (`attachBuffer` is its realloc-reply landing: the realloc reply
+ * carries the new SharedArrayBuffer). The factory returns a live client
+ * whenever Worker + SHM + port construction succeed; the init handshake
+ * attaches the first frame, after which per-rAF `poll()` ingests frames and
+ * posts one `ack` per consumed frame.
  *
  * Main-thread imports stay narrow: protocol views + plain types + the AVR
  * toolchain path via the simulation barrel. Never Engine/McuRuntime/
@@ -52,6 +53,7 @@ import {
   compileProjectWithLibraries,
   createProductionBackend,
   createProjectLibraryContext,
+  createSimWorker,
   displayView,
   headerView,
   hexForSourcesHash,
@@ -469,6 +471,17 @@ export interface WorkerClient {
   dispose(): void;
 }
 
+/**
+ * Bench-side message port to the sim worker. The production port wraps a
+ * real `Worker` from the simulation barrel factory; tests inject a fake
+ * with the same three fields (no DOM Worker needed).
+ */
+export interface SimWorkerPort {
+  postMessage(msg: unknown): void;
+  onmessage: ((event: { data: unknown }) => void) | null;
+  terminate(): void;
+}
+
 class WorkerClientImpl implements WorkerClient {
   readonly controls = new DynamicState();
   private readonly boardDef: PartDefinition;
@@ -487,20 +500,48 @@ class WorkerClientImpl implements WorkerClient {
   private bench: Bench | null = null;
   private live: SharedArrayBuffer | null = null;
   private loadedFirmware: FirmwareProject | null = null;
+  private execution: 'interpreter' | 'avr' = 'interpreter';
   private faultText: string | null = null;
   private compileAbort: AbortController | null = null;
   private stagedHex: Uint16Array | null = null;
   private overflowSticky = false;
   private disposed = false;
-  private pollTimes: number[] = [];
+  private samples: Array<{ wall: number; timeMs: number }> = [];
   private lastTimeMs = 0;
+  private port: SimWorkerPort | null = null;
+  private onPortFallback: ((reason: string) => void) | null = null;
+  private nextId = 1;
+  private readonly pending = new Map<number, string>();
+  private readonly outbox: Array<{ id: number; type: string; msg: Record<string, unknown> }> = [];
+  private handshakeOk = false;
+  private demoted = false;
+  private initSentFirmware: FirmwareProject | null = null;
 
-  constructor(board: PartDefinition, deps?: WorkerClientDeps) {
+  constructor(
+    board: PartDefinition,
+    deps?: WorkerClientDeps,
+    portInit?: {
+      port: SimWorkerPort;
+      bench: Bench;
+      firmware: FirmwareProject;
+      execution: 'interpreter' | 'avr';
+      onFallback: (reason: string) => void;
+    },
+  ) {
     this.boardDef = board;
     this.avrCompile = deps?.avrCompile ?? compileInWorker;
     this.avrProjectCompile = deps?.avrProjectCompile ?? compileProjectWithLibraries;
     this.depsIndexInstalled = deps?.indexInstalled;
     this.depsIndexBuild = deps?.indexBuild;
+    if (portInit !== undefined) {
+      this.port = portInit.port;
+      this.bench = portInit.bench;
+      this.loadedFirmware = portInit.firmware;
+      this.execution = portInit.execution;
+      this.onPortFallback = portInit.onFallback;
+      this.port.onmessage = (event) => this.handleReply(event.data);
+      this.sendInit();
+    }
   }
 
   get running(): boolean {
@@ -521,10 +562,12 @@ class WorkerClientImpl implements WorkerClient {
 
   start(): void {
     this.isRunning = true;
+    this.post('start');
   }
 
   stop(): void {
     this.isRunning = false;
+    this.post('stop');
   }
 
   pinVoltages(): ReadonlyMap<string, number> {
@@ -549,20 +592,21 @@ class WorkerClientImpl implements WorkerClient {
 
   setPressed(partId: string, pressed: boolean): void {
     this.controls.setPressed(partId, pressed);
-    // Task 5 posts {press} on the port here; the local controls stay live
-    // for render either way.
+    this.post('press', { partId, down: pressed });
   }
 
   setKnob(partId: string, spec: KnobSpec, value: number): void {
     this.controls.setKnob(partId, spec, value);
-    // Task 5 posts {knob} with the inline {spec, value} here.
+    this.post('knob', { partId, spec, value });
   }
 
   loadFirmware(project: FirmwareProject): void {
     this.loadedFirmware = project;
     this.faultText = null;
     this.mirror.serial.length = 0;
-    // Task 5 sends a rebuild (bench + firmware + execution) here.
+    // A new sketch rebuilds the worker core: `edit` reuses the stored
+    // firmware, so only `init` carries a fresh one.
+    if (this.port !== null) this.sendInit();
   }
 
   /**
@@ -638,8 +682,7 @@ class WorkerClientImpl implements WorkerClient {
     this.loadFirmware(project);
     this.stagedHex = compiled.hex;
     this.faultText = null;
-    // Task 5 posts {flash, hex} here, reading the staged HEX.
-    void this.stagedHex;
+    this.postFlash();
   }
 
   cancelCompile(): void {
@@ -648,9 +691,10 @@ class WorkerClientImpl implements WorkerClient {
 
   sendBench(bench: Bench): void {
     this.bench = bench;
-    // Task 5 posts the bench snapshot paired with the loaded firmware here;
-    // the realloc reply carries the new SharedArrayBuffer into `live`.
-    void this.loadedFirmware;
+    // Structural edits rebuild the worker core; the `realloc` reply carries
+    // the new SharedArrayBuffer into `live`. Queued until the handshake when
+    // the worker cannot serve `edit` yet.
+    if (this.port !== null) this.post('edit', { bench });
   }
 
   attachBuffer(buf: SharedArrayBuffer): void {
@@ -670,19 +714,196 @@ class WorkerClientImpl implements WorkerClient {
         // Header unreadable: keep the last time, report stale next frame.
       }
       const now = performance.now();
-      this.pollTimes.push(now);
-      while (this.pollTimes.length > 0 && now - (this.pollTimes[0] ?? now) > 1000) this.pollTimes.shift();
+      this.samples.push({ wall: now, timeMs: this.lastTimeMs });
+      this.pruneSamples(now);
+      // Drain the entry's backpressure: one ack per consumed frame carries
+      // the generation just drawn, so the worker never stalls past
+      // MAX_UNREAD_FRAMES while frames are being consumed.
+      try {
+        this.post('ack', { generation: headerView(buf).generation });
+      } catch {
+        // Header unreadable: skip the ack, the next frame carries on.
+      }
     }
     return outcome;
   }
 
   status(): WorkerStatus {
-    return { backend: 'worker', fps: this.pollTimes.length, ratio: 0 };
+    const now = performance.now();
+    this.pruneSamples(now);
+    let ratio = 0;
+    if (this.samples.length >= 2) {
+      const first = this.samples[0];
+      const last = this.samples[this.samples.length - 1];
+      if (first !== undefined && last !== undefined) {
+        ratio = (last.timeMs - first.timeMs) / Math.max(last.wall - first.wall, 1);
+      }
+    }
+    return { backend: 'worker', fps: this.samples.length, ratio };
   }
 
   dispose(): void {
     this.disposed = true;
     this.compileAbort?.abort();
+    try {
+      this.port?.terminate();
+    } catch {
+      // Terminate is best-effort on the way out.
+    }
+    this.port = null;
+    this.pending.clear();
+    this.outbox.length = 0;
+  }
+
+  /**
+   * Posts a worker message, queuing until the init handshake lands. `init`
+   * always goes immediately (the worker serves it uninitialised); `ack`
+   * skips pending tracking (per-frame churn whose replies carry nothing).
+   */
+  private post(type: string, fields: Record<string, unknown> = {}): void {
+    const port = this.port;
+    if (port === null || this.demoted || this.disposed) return;
+    const id = this.nextId++;
+    const msg = { id, type, ...fields };
+    if (!this.handshakeOk && type !== 'init') {
+      this.outbox.push({ id, type, msg });
+      return;
+    }
+    if (type !== 'ack') this.pending.set(id, type);
+    try {
+      port.postMessage(msg);
+    } catch {
+      this.demote('sim worker post failed');
+    }
+  }
+
+  /** Rebuilds the worker core with the current bench, firmware, and execution. */
+  private sendInit(): void {
+    const bench = this.bench;
+    const firmware = this.loadedFirmware;
+    if (bench === null || firmware === null) return;
+    this.initSentFirmware = firmware;
+    const port = this.port;
+    if (port === null || this.demoted || this.disposed) return;
+    const id = this.nextId++;
+    this.pending.set(id, 'init');
+    try {
+      port.postMessage({ id, type: 'init', bench, firmware, execution: this.execution });
+    } catch {
+      this.demote('sim worker post failed');
+    }
+  }
+
+  /** Flashes the staged HEX onto the worker's AVR core. */
+  private postFlash(): void {
+    if (this.stagedHex !== null && this.port !== null) this.post('flash', { words: this.stagedHex });
+  }
+
+  /**
+   * Handles one worker reply. `ok:false` (protocol fault, version mismatch,
+   * or a synthesised crash notice) demotes to in-page through the fallback
+   * path; `ok:true` with a `fault` string is a firmware verdict that stays
+   * on the worker path and surfaces via `fault`.
+   */
+  private handleReply(data: unknown): void {
+    if (data === null || typeof data !== 'object') return;
+    const reply = data as {
+      id?: unknown;
+      ok?: unknown;
+      buffer?: unknown;
+      realloc?: unknown;
+      fault?: unknown;
+      error?: unknown;
+    };
+    if (typeof reply.id !== 'number') return;
+    const kind = this.pending.get(reply.id);
+    if (reply.ok === false) {
+      const detail = typeof reply.error === 'string' && reply.error !== '' ? reply.error : 'worker fault';
+      this.pending.delete(reply.id);
+      this.demote(`sim worker fault: ${detail}`);
+      return;
+    }
+    if (reply.ok !== true) return;
+    this.pending.delete(reply.id);
+    if (typeof reply.fault === 'string' && reply.fault !== '') {
+      this.faultText = reply.fault;
+    } else if (reply.fault === null && (kind === 'init' || kind === 'edit')) {
+      this.faultText = null;
+    }
+    if (kind === 'init') {
+      const buf = reply.buffer as SharedArrayBuffer | undefined;
+      if (!this.checkHandshakeBuffer(buf)) return;
+      this.attachBuffer(buf as SharedArrayBuffer);
+      this.handshakeOk = true;
+      if (this.loadedFirmware !== this.initSentFirmware) {
+        // The sketch moved while the handshake was in flight: rebuild with
+        // it, dropping queued bench edits (the fresh init carries the latest
+        // bench; other queued inputs still flush after it).
+        for (let i = this.outbox.length - 1; i >= 0; i--) {
+          if (this.outbox[i]?.type === 'edit') this.outbox.splice(i, 1);
+        }
+        this.sendInit();
+      }
+      this.flushOutbox();
+    } else if (kind === 'edit' && reply.realloc === true) {
+      const buf = reply.buffer as SharedArrayBuffer | undefined;
+      if (!this.checkHandshakeBuffer(buf)) return;
+      this.attachBuffer(buf as SharedArrayBuffer);
+    }
+  }
+
+  /** Validates a handshake/realloc buffer, demoting on version mismatch. */
+  private checkHandshakeBuffer(buf: unknown): buf is SharedArrayBuffer {
+    try {
+      if (buf instanceof SharedArrayBuffer) {
+        const head = headerView(buf);
+        if (head.magic === SNAP_MAGIC && head.version === SNAP_VERSION) return true;
+      }
+    } catch {
+      // Falls through to the demotion below.
+    }
+    this.demote('sim worker unavailable: snapshot version handshake mismatch');
+    return false;
+  }
+
+  /** Sends queued messages in order, now the worker can serve them. */
+  private flushOutbox(): void {
+    const port = this.port;
+    if (port === null || this.demoted || this.disposed) {
+      this.outbox.length = 0;
+      return;
+    }
+    for (const queued of this.outbox) {
+      this.pending.set(queued.id, queued.type);
+      try {
+        port.postMessage(queued.msg);
+      } catch {
+        this.demote('sim worker post failed');
+        break;
+      }
+    }
+    this.outbox.length = 0;
+  }
+
+  /** Demotes to in-page: stops the port and reports through the fallback path. */
+  private demote(reason: string): void {
+    if (this.demoted) return;
+    this.demoted = true;
+    this.handshakeOk = false;
+    try {
+      this.port?.terminate();
+    } catch {
+      // Terminate is best-effort on the way out.
+    }
+    this.port = null;
+    this.pending.clear();
+    this.outbox.length = 0;
+    this.onPortFallback?.(reason);
+  }
+
+  /** Drops samples older than the one-second poll window. */
+  private pruneSamples(now: number): void {
+    while (this.samples.length > 0 && now - (this.samples[0]?.wall ?? now) > 1000) this.samples.shift();
   }
 
   /**
@@ -699,8 +920,7 @@ class WorkerClientImpl implements WorkerClient {
         this.loadFirmware(project);
         this.stagedHex = program;
         this.faultText = `compile failed, running bundled HEX: ${detail}`;
-        // Task 5 posts {flash, hex} here, reading the staged HEX.
-        void this.stagedHex;
+        this.postFlash();
         return;
       } catch {
         // A corrupt committed HEX falls through to the fault below.
@@ -727,21 +947,64 @@ class WorkerClientImpl implements WorkerClient {
 }
 
 /**
+ * Wraps the barrel worker factory in the injectable port shape: worker
+ * messages in, replies out, and a crash notice synthesised through the same
+ * `onmessage` channel so the client demotes on it like any other fault.
+ */
+function defaultPort(): SimWorkerPort {
+  const worker = createSimWorker();
+  const port: SimWorkerPort = {
+    postMessage: (msg) => worker.postMessage(msg),
+    onmessage: null,
+    terminate: () => worker.terminate(),
+  };
+  worker.onmessage = (event: MessageEvent) => port.onmessage?.({ data: event.data });
+  worker.onerror = () => port.onmessage?.({ data: { id: -1, ok: false, error: 'sim worker crashed' } });
+  return port;
+}
+
+/** Minimal bench carrying only the board, until the first `sendBench`. */
+function minimalBench(board: PartDefinition): Bench {
+  return {
+    parts: [{ id: 'board', definition: board, x: 0, y: 0, rotation: 0, terminals: {} }],
+    wires: [],
+    terminals: [],
+    revision: 0,
+  } as Bench;
+}
+
+/** Empty blink until the first `loadFirmware`. */
+function minimalFirmware(): FirmwareProject {
+  return {
+    language: 'arduino-cpp',
+    activeName: 'main.ino',
+    files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
+  };
+}
+
+/**
  * Builds the worker client, or null after `onFallback` when the worker path
- * cannot run: `forceNoWorker`, no `Worker` global, SHM construction throwing
- * (e.g. no isolation), or a version-handshake mismatch.
+ * cannot run: `forceNoWorker`, no `Worker` global (unless a `createPort` is
+ * injected, which bypasses the global for tests), SHM construction throwing
+ * (e.g. no isolation), a version-handshake mismatch, or port construction
+ * throwing. Later transport faults demote through the same `onFallback`.
  */
 export function createWorkerClient(opts: {
   board: PartDefinition;
+  bench?: Bench;
+  firmware?: FirmwareProject;
+  execution?: 'interpreter' | 'avr';
   onFallback: (reason: string) => void;
   forceNoWorker?: boolean;
+  createPort?: () => SimWorkerPort;
+  deps?: WorkerClientDeps;
 }): WorkerClient | null {
   const { board, onFallback, forceNoWorker } = opts;
   if (forceNoWorker === true) {
     onFallback('sim worker disabled (forceNoWorker)');
     return null;
   }
-  if (typeof Worker === 'undefined') {
+  if (opts.createPort === undefined && typeof Worker === 'undefined') {
     onFallback('sim worker unavailable: this environment has no Worker');
     return null;
   }
@@ -756,7 +1019,20 @@ export function createWorkerClient(opts: {
     onFallback(`sim worker unavailable: shared memory failed (${error instanceof Error ? error.message : String(error)})`);
     return null;
   }
-  return new WorkerClientImpl(board);
+  let port: SimWorkerPort;
+  try {
+    port = opts.createPort?.() ?? defaultPort();
+  } catch (error) {
+    onFallback(`sim worker unavailable: worker construction failed (${error instanceof Error ? error.message : String(error)})`);
+    return null;
+  }
+  return new WorkerClientImpl(board, opts.deps, {
+    port,
+    bench: opts.bench ?? minimalBench(board),
+    firmware: opts.firmware ?? minimalFirmware(),
+    execution: opts.execution ?? 'interpreter',
+    onFallback,
+  });
 }
 
 export { WorkerClientImpl };

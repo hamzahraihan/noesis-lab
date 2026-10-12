@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   allocSnapshot,
   displayView,
@@ -73,19 +73,25 @@ describe('worker client fallback', () => {
     expect(ingestSnapshot(state, b)).toBe('stale');
   });
 
-  it('returns a live client when Worker, SHM, and handshake succeed', () => {
-    const previous = (globalThis as Record<string, unknown>).Worker;
-    (globalThis as Record<string, unknown>).Worker = class {};
-    try {
-      const onFallback = vi.fn();
-      const client = createWorkerClient({ board: { id: 'uno' } as never, onFallback });
-      expect(client).not.toBeNull();
-      expect(onFallback).not.toHaveBeenCalled();
-      expect(client?.status().backend).toBe('worker');
-      client?.dispose();
-    } finally {
-      (globalThis as Record<string, unknown>).Worker = previous;
-    }
+  it('returns a live client when the port handshake succeeds', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = createWorkerClient({
+      board: { id: 'uno' } as never,
+      bench: benchWith([]),
+      firmware: plainProject(),
+      onFallback,
+      createPort: () => port,
+    });
+    expect(client).not.toBeNull();
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(client?.status().backend).toBe('worker');
+    const init = port.sent[0] as { id: number };
+    const buf = allocSnapshot(layoutFor(1, 0, 16));
+    headerView(buf).generation = 1;
+    port.reply({ id: init.id, ok: true, buffer: buf, fault: null });
+    expect(client?.poll()).toBe('ok');
+    client?.dispose();
   });
 });
 
@@ -302,6 +308,200 @@ describe('compile routing', () => {
     await client.compileAndRun(plainProject());
     expect(calls).toEqual([]);
     expect(client.fault).toMatch(/Uno/);
+    client.dispose();
+  });
+});
+
+/** Injected fake port: records posts, replays worker replies synchronously. */
+interface FakePort {
+  readonly sent: unknown[];
+  onmessage: ((event: { data: unknown }) => void) | null;
+  terminated: boolean;
+  postMessage(msg: unknown): void;
+  terminate(): void;
+  reply(data: unknown): void;
+}
+
+function fakePort(): FakePort {
+  const port: FakePort = {
+    sent: [],
+    onmessage: null,
+    terminated: false,
+    postMessage(msg: unknown): void {
+      port.sent.push(msg);
+    },
+    terminate(): void {
+      port.terminated = true;
+    },
+    reply(data: unknown): void {
+      port.onmessage?.({ data });
+    },
+  };
+  return port;
+}
+
+function portClient(
+  port: FakePort,
+  onFallback: (reason: string) => void,
+  deps?: ConstructorParameters<typeof WorkerClientImpl>[1],
+): NonNullable<ReturnType<typeof createWorkerClient>> {
+  const client = createWorkerClient({
+    board: { id: 'uno' } as never,
+    bench: benchWith([]),
+    firmware: plainProject(),
+    onFallback,
+    createPort: () => port,
+    ...(deps === undefined ? {} : { deps }),
+  });
+  if (client === null) throw new Error('expected a live port client');
+  return client;
+}
+
+function replyInitOk(port: FakePort, timeMs = 0): SharedArrayBuffer {
+  const init = port.sent[0] as { id: number; type: string };
+  expect(init.type).toBe('init');
+  const buf = allocSnapshot(layoutFor(1, 0, 16));
+  headerView(buf).generation = 1;
+  headerView(buf).timeMs = timeMs;
+  port.reply({ id: init.id, ok: true, buffer: buf, fault: null });
+  return buf;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('worker port protocol', () => {
+  it('sends init with bench, firmware, and execution, then lands the first frame', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const bench = benchWith([]);
+    const firmware = plainProject();
+    const client = createWorkerClient({
+      board: { id: 'uno' } as never,
+      bench,
+      firmware,
+      onFallback,
+      createPort: () => port,
+    });
+    expect(client).not.toBeNull();
+    const init = port.sent[0] as Record<string, unknown>;
+    expect(init.type).toBe('init');
+    expect(init.bench).toBe(bench);
+    expect(init.firmware).toBe(firmware);
+    expect(init.execution).toBe('interpreter');
+    const buf = allocSnapshot(layoutFor(1, 0, 16));
+    headerView(buf).generation = 1;
+    headerView(buf).timeMs = 120;
+    port.reply({ id: init.id, ok: true, buffer: buf, fault: null });
+    expect(client?.poll()).toBe('ok');
+    expect(client?.timeMs).toBe(120);
+    expect(onFallback).not.toHaveBeenCalled();
+    const ack = port.sent.find((msg) => (msg as { type?: string }).type === 'ack') as
+      | { type: string; generation: number }
+      | undefined;
+    expect(ack?.generation).toBe(1);
+    client?.dispose();
+  });
+
+  it('falls back when the handshake reports a version mismatch', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = portClient(port, onFallback);
+    expect(client).not.toBeNull();
+    const init = port.sent[0] as { id: number };
+    port.reply({ id: init.id, ok: false, error: 'snapshot version mismatch' });
+    expect(onFallback).toHaveBeenCalledOnce();
+    expect(port.terminated).toBe(true);
+    client.dispose();
+  });
+
+  it('posts start, stop, press, knob, edit, and flash in order', async () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const calls: string[] = [];
+    const client = portClient(port, onFallback, {
+      avrCompile: (async () => {
+        calls.push('single');
+        return { hex: new Uint16Array([1]), warnings: [] };
+      }) as never,
+    });
+    replyInitOk(port);
+    expect(client.poll()).toBe('ok');
+    port.sent.length = 0;
+    client.start();
+    client.stop();
+    client.setPressed('b1', true);
+    client.setKnob('k1', { id: 'knob', min: 0, max: 100 } as never, 42);
+    client.sendBench(benchWith([]));
+    await client.compileAndRun(plainProject());
+    const types = port.sent.map((msg) => (msg as { type: string }).type);
+    expect(types).toEqual(['start', 'stop', 'press', 'knob', 'edit', 'init', 'flash']);
+    const press = port.sent[2] as { partId: string; down: boolean };
+    expect(press.partId).toBe('b1');
+    expect(press.down).toBe(true);
+    const knob = port.sent[3] as { partId: string; value: number };
+    expect(knob.partId).toBe('k1');
+    expect(knob.value).toBe(42);
+    const flash = port.sent[6] as { words: Uint16Array };
+    expect(Array.from(flash.words)).toEqual([1]);
+    expect(calls).toEqual(['single']);
+    expect(onFallback).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
+  it('lands the realloc reply as a new buffer', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = portClient(port, onFallback);
+    replyInitOk(port);
+    expect(client.poll()).toBe('ok');
+    client.sendBench(benchWith([]));
+    const edit = port.sent.find((msg) => (msg as { type?: string }).type === 'edit') as
+      | { id: number }
+      | undefined;
+    expect(edit).toBeDefined();
+    const next = allocSnapshot(layoutFor(9, 2, 8, 16));
+    headerView(next).generation = 0;
+    port.reply({ id: edit?.id ?? -1, ok: true, realloc: true, buffer: next, fault: null });
+    expect(client.poll()).toBe('reallocated');
+    expect(onFallback).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
+  it('demotes to in-page fallback on a fault reply', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = portClient(port, onFallback);
+    replyInitOk(port);
+    expect(client.poll()).toBe('ok');
+    port.reply({ id: 999999, ok: false, error: 'sim worker crashed' });
+    expect(onFallback).toHaveBeenCalledOnce();
+    expect(port.terminated).toBe(true);
+    client.dispose();
+  });
+
+  it('computes ratio from timeMs advance over the wall window', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = portClient(port, onFallback);
+    const buf = replyInitOk(port, 0);
+    const head = headerView(buf);
+    const now = vi.spyOn(performance, 'now');
+    now.mockReturnValue(0);
+    expect(client.poll()).toBe('ok');
+    head.bump();
+    head.timeMs = 600;
+    now.mockReturnValue(600);
+    expect(client.poll()).toBe('ok');
+    expect(client.status().ratio).toBeCloseTo(1, 10);
+    head.bump();
+    head.timeMs = 1800;
+    now.mockReturnValue(1200);
+    expect(client.poll()).toBe('ok');
+    // The 1000 ms window drops the wall-0 sample (1200 - 0 > 1000), keeping
+    // 1200 ms of simulated time over 600 ms of wall clock.
+    expect(client.status().ratio).toBeCloseTo(2, 10);
     client.dispose();
   });
 });
