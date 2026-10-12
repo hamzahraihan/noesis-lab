@@ -340,7 +340,7 @@ class SimCore implements CoreHandle {
     }
     this.layout = layoutFor(needNodes, needPins, needDisplay);
     this.shm = allocSnapshot(this.layout);
-    this.onNeedsRealloc?.(needNodes, this.bench.terminals.length);
+    this.onNeedsRealloc?.(needNodes, needPins);
   }
 
   private writeDisplay(view: DisplayView): void {
