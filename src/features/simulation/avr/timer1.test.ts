@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CPU, timer1Config } from 'avr8js';
 import { attachGpioBridge } from './gpio';
-import { attachTimer1, bindTimer1Outputs } from './timer1';
+import { attachTimer1, bindTimer1Outputs, captureSourceIsComparator, feedCaptureEdge } from './timer1';
 import { McuRuntime } from '../mcu';
 import { arduinoUnoR3 } from '@/features/parts/boards';
 
@@ -184,5 +184,67 @@ describe('timer1 OC outputs', () => {
     expect(pwmOf(mcu, 5)).toBe(false);
     expect(dutyOf(mcu, 6)).toBe(0);
     expect(pwmOf(mcu, 6)).toBe(false);
+  });
+});
+
+describe('timer1 input capture', () => {
+  it('captures a rising edge with flag and interrupt', () => {
+    const { cpu } = cpuWithTimer1();
+    cpu.writeData(0x81, 0x41); // ICES1 rising edge, prescaler 1
+    cpu.writeData(0x6f, 0x20); // ICIE1: capture interrupt enabled
+    expect(captureSourceIsComparator()).toBe(false); // default pin source
+    // Scripted pin levels through the bridge read path: low, low, high.
+    for (let i = 0; i < 10; i++) cpu.tick();
+    feedCaptureEdge(false, 0);
+    feedCaptureEdge(false, 1000);
+    for (let i = 0; i < 5; i++) cpu.tick();
+    feedCaptureEdge(true, 2000);
+    expect(cpu.readData(0x86) | (cpu.readData(0x87) << 8)).toBe(15); // ICR1
+    expect(cpu.readData(0x36) & 0x20).not.toBe(0); // ICF1 in TIFR1
+    expect(cpu.nextInterrupt).toBe(0x14); // capture vector queued via ICIE1
+  });
+
+  it('captures a falling edge when ICES1 is clear', () => {
+    const { cpu } = cpuWithTimer1();
+    cpu.writeData(0x81, 0x01); // ICES1 falling edge, prescaler 1
+    for (let i = 0; i < 10; i++) cpu.tick();
+    feedCaptureEdge(true, 0);
+    expect(cpu.readData(0x36) & 0x20).toBe(0); // rising ignored while falling selected
+    feedCaptureEdge(false, 1000);
+    expect(cpu.readData(0x86) | (cpu.readData(0x87) << 8)).toBe(10); // ICR1
+    expect(cpu.readData(0x36) & 0x20).not.toBe(0); // ICF1 in TIFR1
+  });
+
+  it('noise canceler agrees with direct sampling on clean slow edges', () => {
+    const runTrain = (tccrb: number): number => {
+      const { cpu } = cpuWithTimer1();
+      cpu.writeData(0x81, tccrb);
+      for (let i = 0; i < 10; i++) cpu.tick();
+      // Same slow edge train in both configs: the level rests low, then rests
+      // high for 4 consecutive samples so the 4-sample canceler can converge.
+      feedCaptureEdge(false, 0);
+      feedCaptureEdge(false, 1000);
+      feedCaptureEdge(true, 2000);
+      feedCaptureEdge(true, 3000);
+      feedCaptureEdge(true, 4000);
+      feedCaptureEdge(true, 5000);
+      return cpu.readData(0x86) | (cpu.readData(0x87) << 8);
+    };
+    const direct = runTrain(0x41); // ICES1 rising, prescaler 1, canceler off
+    const filtered = runTrain(0xc1); // + ICNC1 noise canceler
+    expect(direct).toBe(10);
+    expect(filtered).toBe(direct);
+  });
+
+  it('reroutes the capture source to the comparator when ACIC is set', () => {
+    const { cpu } = cpuWithTimer1();
+    cpu.writeData(0x81, 0x41); // ICES1 rising edge, prescaler 1
+    for (let i = 0; i < 10; i++) cpu.tick();
+    cpu.writeData(0x50, 0x04); // ACSR bit 2: ACIC selects comparator output
+    expect(captureSourceIsComparator()).toBe(true);
+    feedCaptureEdge(true, 0);
+    expect(cpu.readData(0x36) & 0x20).toBe(0); // pin edge ignored: no capture
+    cpu.writeData(0x50, 0x00); // back to the ICP1 pin source
+    expect(captureSourceIsComparator()).toBe(false);
   });
 });

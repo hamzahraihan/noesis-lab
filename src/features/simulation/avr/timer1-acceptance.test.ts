@@ -83,3 +83,104 @@ describe('timer1 PWM acceptance', () => {
     // Node rebuilds every run.
   }, 1_500_000);
 });
+
+describe('timer1 input-capture loopback', () => {
+  it('counts D7→D8 loopback edges through ICP1 capture', async () => {
+    let pkg: string | null = null;
+    try {
+      pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
+    } catch { /* fall through to skip */ }
+    if (!pkg) {
+      console.warn('SKIP loopback: toolchain absent');
+      return;
+    }
+    if (!(await tier2Reachable())) {
+      console.warn('SKIP loopback: Tier-2 fetch unreachable');
+      return;
+    }
+    // loop() toggles D7 with delay(100): every loopback edge sits 100 ms
+    // apart, far above the solve cadence where capture sampling aliases.
+    // The ISR counts captures, derives the period from consecutive ICR1
+    // values (prescaler 1024 → 64 us per tick), and flips ICES1 after every
+    // capture — the standard both-edges technique, so each 100 ms toggle
+    // latches regardless of direction. Rising-only would see a 200 ms
+    // period and ~5 edges here, which is why the asserts below pin 8–12
+    // edges with a 90–110 ms ICR1-derived period instead.
+    const sketch = [
+      '#include <Arduino.h>',
+      // NOTE: no explicit <avr/interrupt.h> — the worker only compiles
+      // bundled headers, and Arduino.h already pulls avr/interrupt.h in
+      // (ISR, sei, and the TIMER1_CAPT_vect / register symbols below).
+      'volatile uint8_t edgeCount = 0;',
+      'volatile uint16_t prevCapture = 0;',
+      'volatile uint8_t lastPeriodMs = 0;',
+      'ISR(TIMER1_CAPT_vect) {',
+      '  uint16_t now = ICR1;',
+      '  uint16_t delta = now - prevCapture;',
+      '  prevCapture = now;',
+      '  if (edgeCount > 0) lastPeriodMs = (uint8_t)((delta * 64UL) / 1000UL);',
+      '  edgeCount++;',
+      '  TCCR1B ^= (1 << ICES1);',
+      '}',
+      'void setup() {',
+      '  pinMode(7, OUTPUT);',
+      '  pinMode(8, INPUT);',
+      '  TCCR1A = 0;',
+      '  TCCR1B = (1 << ICES1) | (1 << CS12) | (1 << CS10);',
+      '  TCNT1 = 0;',
+      '  TIFR1 = (1 << ICF1);',
+      '  TIMSK1 = (1 << ICIE1);',
+      '  GPIOR0 = 0;',
+      '  GPIOR1 = 0;',
+      '  sei();',
+      '}',
+      'void loop() {',
+      '  digitalWrite(7, !digitalRead(7));',
+      '  delay(100);',
+      '  GPIOR0 = edgeCount;',
+      '  GPIOR1 = lastPeriodMs;',
+      '}',
+      '',
+    ].join('\n');
+    // Bare Uno + breadboard (no alarm wiring, so D7/D8 are free), with D7
+    // wired straight to D8. The project setup token mirrors the fade test;
+    // it plays no part in the worker compile.
+    const alarmSetup = galleryById('alarm-clock')!.builds[0]!.setup;
+    const board = boardOption('uno').make();
+    const simulation = new Simulation(board);
+    simulation.execution = 'avr';
+    simulation.addPart(board, 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    const d7 = simulation.boardTerminal('D7');
+    const d8 = simulation.boardTerminal('D8');
+    expect(d7, 'D7 terminal exists').not.toBeNull();
+    expect(d8, 'D8 terminal exists').not.toBeNull();
+    simulation.routeWire(d7!, d8!);
+    // Compile via the worker project path with no extra libraries.
+    await simulation.compileAndRun(
+      firmwareForBuild({ board: 'uno', setup: alarmSetup, sketch }, 'arduino-cpp'),
+    );
+    expect(simulation.compileState, 'loopback sketch compiles').toBe('ready');
+    expect(simulation.firmwareError, 'loopback sketch firmware').toBeNull();
+    const backend = (simulation as unknown as { avrBackend: AvrBackend | null }).avrBackend;
+    expect(backend, 'fresh HEX flashes onto a live core').not.toBeNull();
+    // Step 800 ms in 40 ms frames (the backend clamp). The backend ticks
+    // once per executed instruction while each instruction retires 1+
+    // cycles, so firmware time runs ahead of the step budget (measured ~13
+    // toggles per 1000 ms of stepping); 800 ms centers ~10 loopback edges
+    // in the 8–12 window at 100 ms spacing.
+    for (let frame = 0; frame < 20; frame++) backend!.step(40);
+    expect(backend!.fault, 'no core fault surfaces').toBeNull();
+    // The ISR count and period are mirrored to GPIOR0/GPIOR1 (data 0x3E /
+    // 0x4A — I/O 0x1E / 0x2A), the only firmware state at fixed addresses
+    // the test can read.
+    const cpu = (backend! as unknown as { cpu: { data: Uint8Array } }).cpu;
+    const edges = cpu.data[0x3e];
+    expect(edges, 'loopback edges counted').toBeGreaterThanOrEqual(8);
+    expect(edges, 'loopback edges counted').toBeLessThanOrEqual(12);
+    const periodMs = cpu.data[0x4a];
+    expect(periodMs, 'ICR1-derived period ms').toBeGreaterThanOrEqual(90);
+    expect(periodMs, 'ICR1-derived period ms').toBeLessThanOrEqual(110);
+    // Budget: same cold single-TU worker compile as the fade leg above.
+  }, 1_500_000);
+});

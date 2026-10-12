@@ -80,10 +80,21 @@ const PRESCALERS: Readonly<Record<number, number>> = {
 // T1 is PD5 on the Uno, i.e. gpio 5 via the board map.
 const T1_GPIO = UNO_GPIO_MAP.find((entry) => entry.port === 'D' && entry.bit === 5)?.gpio ?? 5;
 
+// ICP1 is PB0 (Uno D8, gpio 8), read through the same PIN-read path the GPIO
+// bridge uses. ACSR lives at data address 0x50; ACIC is its bit 2.
+const ICP1_GPIO = UNO_GPIO_MAP.find((entry) => entry.port === 'B' && entry.bit === 0)?.gpio ?? 8;
+const ACSR = 0x50;
+const ACIC = 0x04;
+const ICNC1 = 0x80;
+const ICES1 = 0x40;
+const ICIE1 = 0x20;
+const ICF1 = 0x20;
+
 /**
  * Faithful Timer1 core: 16-bit counting, WGM modes 0-15, both compare
- * channels with flags/interrupts, overflow, and FOC strobes. No OC pin
- * driving and no capture edges yet (later tasks).
+ * channels with flags/interrupts, overflow, FOC strobes, and input capture
+ * off the ICP1 pin (feedCaptureEdge sampler below). OC pin driving lives in
+ * bindTimer1Outputs.
  */
 export function attachTimer1(
   cpu: CPU,
@@ -115,6 +126,13 @@ export function attachTimer1(
     enableRegister: TIMSK,
     enableMask: OCF1B,
   };
+  const CAP = {
+    address: 0x14,
+    flagRegister: TIFR,
+    flagMask: ICF1,
+    enableRegister: TIMSK,
+    enableMask: ICIE1,
+  };
 
   let tcnt = 0;
   let ocrA = 0;
@@ -130,6 +148,14 @@ export function attachTimer1(
   let ocrUpdate = OCR_IMMEDIATE;
   let tovUpdate = TOV_AT_MAX;
   let extLevel: boolean | null = null;
+  // Capture state: stable level baselined from the pin at attach (like the
+  // T1 external-clock level), plus the noise-canceler candidate run. The
+  // analog comparator itself is unmodeled and reads low; only the ACIC mux
+  // bit reroutes the source.
+  let stableCapture = readPin(ICP1_GPIO);
+  let captureCandidate: boolean | null = null;
+  let captureAgree = 0;
+  const comparatorOut = false;
 
   const top = (): number => {
     if (topSel === TOP_OCRA) return ocrA;
@@ -211,19 +237,71 @@ export function attachTimer1(
     else stepUp();
   };
 
+  // Fidelity limit: the sampler runs on every timer tick off the PIN-read
+  // path, but the level it reads only moves when the circuit re-solves (1–4
+  // ms solve cadence), so the canceler's consecutive-sample delay is
+  // unobservable in practice and sub-millisecond edge pairs alias; the
+  // acceptance uses slow (~100 ms) edges where the difference is unobservable.
+  const sampleCapture = (level: boolean): void => {
+    const src = (cpu.data[ACSR] & ACIC) !== 0 ? comparatorOut : level;
+    if (src === stableCapture) {
+      captureCandidate = null;
+      captureAgree = 0;
+      return;
+    }
+    if ((cpu.data[TCCRB] & ICNC1) !== 0) {
+      // Noise canceler: the edge latches only after 4 consecutive agreeing
+      // samples; a dissenting sample restarts the run.
+      if (captureCandidate !== src) {
+        captureCandidate = src;
+        captureAgree = 1;
+        return;
+      }
+      captureAgree++;
+      if (captureAgree < 4) return;
+    }
+    // Without the canceler the first agreeing sample latches.
+    stableCapture = src;
+    captureCandidate = null;
+    captureAgree = 0;
+    const rising = src;
+    if (rising !== ((cpu.data[TCCRB] & ICES1) !== 0)) return;
+    icr = tcnt;
+    cpu.data[ICRL] = icr & 0xff;
+    cpu.data[ICRL + 1] = (icr >> 8) & 0xff;
+    cpu.setInterruptFlag(CAP);
+  };
+
+  // Cycle base for the prescaler below. avr8js timers (Timer0/2 beside us)
+  // advance off cpu.cycles via clock events; one cpu.tick() call follows
+  // each executed instruction, which retires 1+ cycles, so tick invocations
+  // undercount the clock. Bare tick() calls with frozen cycles (the unit
+  // tests) count exactly one each.
+  let lastCycles = cpu.cycles;
+
   const tickTimer = (): void => {
+    sampleCapture(readPin(ICP1_GPIO));
     const cs = cpu.data[TCCRB] & 0x07;
-    if (cs === 0) return; // stopped
+    if (cs === 0) {
+      lastCycles = cpu.cycles;
+      return; // stopped
+    }
     if (cs === 6 || cs === 7) {
+      lastCycles = cpu.cycles;
       const level = readPin(T1_GPIO);
       const edge = extLevel !== null && (cs === 7 ? !extLevel && level : extLevel && !level);
       extLevel = level;
       if (edge) stepCounter();
       return;
     }
-    prescaleCounter++;
-    if (prescaleCounter >= (PRESCALERS[cs] ?? 0)) {
-      prescaleCounter = 0;
+    const now = cpu.cycles;
+    const elapsed = Math.max(1, now - lastCycles);
+    lastCycles = now;
+    prescaleCounter += elapsed;
+    const divider = PRESCALERS[cs] ?? 0;
+    if (divider <= 0) return;
+    while (prescaleCounter >= divider) {
+      prescaleCounter -= divider;
       stepCounter();
     }
   };
@@ -307,6 +385,7 @@ export function attachTimer1(
     cpu.updateInterruptEnable(OVF, masked);
     cpu.updateInterruptEnable(OCFA, masked);
     cpu.updateInterruptEnable(OCFB, masked);
+    cpu.updateInterruptEnable(CAP, masked);
     return true;
   };
   cpu.writeHooks[TIFR] = (value) => {
@@ -315,18 +394,47 @@ export function attachTimer1(
     cpu.clearInterruptByFlag(OVF, value);
     cpu.clearInterruptByFlag(OCFA, value);
     cpu.clearInterruptByFlag(OCFB, value);
+    cpu.clearInterruptByFlag(CAP, value);
     return true;
   };
 
-  // One timer source cycle per cpu.tick(): the harness only advances
-  // cpu.cycles inside avrInstruction, while the brief's tests drive the
-  // timer with bare tick() calls, so the prescaler counts tick invocations.
-  // This matches backend pacing, which ticks once per executed cycle.
+  // One timer source cycle per cpu.tick(): the backend ticks once per
+  // executed instruction while cpu.cycles advances by the retired
+  // instruction length, so the prescaler above counts elapsed cycles (a
+  // bare tick() with frozen cycles counts exactly one, which is what the
+  // unit tests drive).
   const baseTick = cpu.tick.bind(cpu);
   cpu.tick = () => {
     tickTimer();
     baseTick();
   };
+
+  // Single live sampler: the unit tests drive feedCaptureEdge directly while
+  // the tick poll above feeds the same machine from the PIN-read path, so
+  // the latest attached timer owns the module entry. ACSR needs no write
+  // hook: only the ACIC mux bit is modeled and it reads straight from data.
+  activeCaptureSample = (level) => sampleCapture(level);
+  activeCaptureIsComparator = () => (cpu.data[ACSR] & ACIC) !== 0;
+}
+
+let activeCaptureSample: ((level: boolean) => void) | null = null;
+let activeCaptureIsComparator: (() => boolean) | null = null;
+
+/**
+ * Module-level capture sampler: the tests drive scripted pin levels through
+ * this directly, and it feeds the latest attached timer's machine (the live
+ * tick poll feeds that same machine from the PIN-read path). `timeUs` is
+ * accepted for the wiring signature; the latched value is always the timer
+ * counter, so it carries no capture semantics here.
+ */
+export function feedCaptureEdge(level: boolean, timeUs: number): void {
+  void timeUs;
+  activeCaptureSample?.(level);
+}
+
+/** Which source the ACIC mux bit currently selects; default is the ICP1 pin. */
+export function captureSourceIsComparator(): boolean {
+  return activeCaptureIsComparator?.() ?? false;
 }
 
 // OC1A is PB1 (Uno D9); OC1B is PB2 (Uno D10), via the board map.
