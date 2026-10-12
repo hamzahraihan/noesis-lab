@@ -33,6 +33,7 @@ export interface RegistryEntry {
   readonly buildLabel: string;
   readonly makeSim: () => CountingSim;
   readonly checks: CheckDef[];
+  readonly extendedCapMs?: number;
 }
 
 /** Compile failures naming an unreachable backend record `skip`, not `fail`. */
@@ -81,12 +82,15 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
     sim.loadFirmware(project);
     sim.start();
     let total = 0;
+    let tickCount = 0;
     return {
       tick: (wallDeltaSeconds: number) => {
         sim.tick(wallDeltaSeconds);
         total += wallDeltaSeconds * 1000;
+        tickCount += 1;
       },
       simMs: () => total,
+      ticks: () => tickCount,
       glass: () => liveProbe(sim).readGlass(),
       pressButton: (index: number, down: boolean) => {
         const target = sim.bench.parts.filter((p) => p.definition.name === 'Tactile Button')[index];
@@ -189,6 +193,7 @@ const alarmRawChecks: CheckDef[] = [
     run: (sim) => {
       const started = performance.now();
       const name = 'rtc ticks under the display';
+      // Order-dependent: relies on "idles at midnight" (serial seconds accumulate over prior ticks).
       const seconds = [...sim.serialText().matchAll(/t=\d+:\d+:(\d+)/g)].map((match) =>
         Number(match[1]),
       );
@@ -481,6 +486,7 @@ const dashboardChecks: CheckDef[] = [
     run: (sim) => {
       const started = performance.now();
       const name = 'mid third selects the middle indicator';
+      // Order-dependent: relies on "reports knob and horn on serial" (its 10 frames ran the knob loop).
       if (sim.readGpio(6) !== false || sim.readGpio(7) !== true || sim.readGpio(8) !== false) {
         return verdict(name, started, 'fail', 'third pins mis-selected');
       }
@@ -517,6 +523,7 @@ const parkingChecks: CheckDef[] = [
     run: (sim) => {
       const started = performance.now();
       const name = 'far echo holds the band pins';
+      // Order-dependent: relies on "reports centimetres on serial" (its 10 frames ran the echo loop).
       if (
         sim.readGpio(10) !== true ||
         sim.readGpio(11) !== false ||
@@ -557,6 +564,7 @@ const weatherChecks: CheckDef[] = [
     run: (sim) => {
       const started = performance.now();
       const name = 'logs humidity on serial';
+      // Order-dependent: relies on "logs temperature on serial" (its 120 frames produced the readings).
       if (!sim.serialText().includes('rh 50 %')) {
         return verdict(name, started, 'fail', 'no humidity line');
       }
@@ -655,6 +663,8 @@ export function buildRegistry(): RegistryEntry[] {
         buildLabel: build.variant === undefined ? build.board : `${build.board}:${build.variant}`,
         makeSim: makeSimFor(build, project),
         checks: checksFor(entry.id, build),
+        // The AVR worker compile measures ~150 s, over the 120 s runner default.
+        extendedCapMs: entry.id === 'alarm-clock' && build.variant === 'library' ? 1_600_000 : undefined,
       };
     }),
   );

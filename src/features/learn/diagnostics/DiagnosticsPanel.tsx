@@ -6,9 +6,10 @@
  * registry sequentially through `runHarness`; each report is stamped with its
  * `projectId`/`buildLabel` (the runner leaves those blank and fills metrics
  * via the counting sim wrapper) and appended as a `formatReport` block. The
- * wall cap covers the worker-compile check (~150 s measured, over the 120 s
- * runner default); hung non-compile checks rely on Cancel, which sets the
- * ref flag the runner polls.
+ * alarm-clock library entry carries an extended wall cap for the
+ * worker-compile check (~150 s measured, over the 120 s runner default);
+ * other entries run under the default. Cancel stops between checks; an
+ * in-flight compile runs to its cap.
  */
 
 import { useMemo, useRef, useState } from 'react';
@@ -17,8 +18,7 @@ import { Button } from '@/components';
 import { formatReport, runHarness } from './harness';
 import { buildRegistry, type RegistryEntry } from './registry';
 
-/** Runs containing the worker-compile check need ~150 s; simplest compliant shape: every run. */
-const WALL_CAP_MS = 1_600_000;
+const DEFAULT_WALL_CAP_MS = 120_000;
 
 function entryKey(entry: RegistryEntry): string {
   return `${entry.projectId}@${entry.buildLabel}`;
@@ -41,28 +41,46 @@ export function DiagnosticsPanel() {
     setActiveKey(key);
     setProgress({ done: 0, total: entry.checks.length });
     setSummary((prev) => ({ ...prev, [key]: 'running' }));
-    const raw = await runHarness(entry.checks, entry.makeSim, {
-      onProgress: (done, total) => setProgress({ done, total }),
-      isCancelled: () => cancelRef.current,
-      yieldEvery: 1,
-      wallCapMs: WALL_CAP_MS,
-    });
-    const stamped = { ...raw, projectId: entry.projectId, buildLabel: entry.buildLabel };
-    const block = formatReport(stamped);
-    setReport((prev) => (prev === '' ? block : `${prev}\n\n${block}`));
-    const passed = stamped.results.filter((result) => result.status === 'pass').length;
-    setSummary((prev) => ({ ...prev, [key]: `${String(passed)}/${String(stamped.results.length)} pass` }));
+    try {
+      const raw = await runHarness(entry.checks, entry.makeSim, {
+        onProgress: (done, total) => setProgress({ done, total }),
+        isCancelled: () => cancelRef.current,
+        yieldEvery: 1,
+        wallCapMs: entry.extendedCapMs ?? DEFAULT_WALL_CAP_MS,
+      });
+      const stamped = { ...raw, projectId: entry.projectId, buildLabel: entry.buildLabel };
+      const block = formatReport(stamped);
+      setReport((prev) => (prev === '' ? block : `${prev}\n\n${block}`));
+      const passed = stamped.results.filter((result) => result.status === 'pass').length;
+      setSummary((prev) => ({ ...prev, [key]: `${String(passed)}/${String(stamped.results.length)} pass` }));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setSummary((prev) => ({ ...prev, [key]: `error: ${detail}` }));
+      const block = `${entry.projectId} (${entry.buildLabel}): error — ${detail}`;
+      setReport((prev) => (prev === '' ? block : `${prev}\n\n${block}`));
+    }
+  }
+
+  function manualSection(keys: readonly string[], flags: Record<string, boolean>): string {
+    return `manual:\n${keys.map((key) => `${key}=${String(flags[key] === true)}`).join('\n')}`;
   }
 
   async function handleRunAll(): Promise<void> {
     if (running) return;
     cancelRef.current = false;
     setRunning(true);
+    setReport('');
     try {
       for (const entry of entries) {
         if (cancelRef.current) break;
         await runEntry(entry);
       }
+      // Cancel stops between checks; an in-flight compile runs to its cap.
+      setReport((prev) =>
+        prev === ''
+          ? manualSection(entries.map(entryKey), manual)
+          : `${prev}\n\n${manualSection(entries.map(entryKey), manual)}`,
+      );
     } finally {
       setRunning(false);
       setActiveKey(null);
@@ -76,6 +94,10 @@ export function DiagnosticsPanel() {
     setRunning(true);
     try {
       await runEntry(entry);
+      const key = entryKey(entry);
+      setReport((prev) =>
+        prev === '' ? manualSection([key], manual) : `${prev}\n\n${manualSection([key], manual)}`,
+      );
     } finally {
       setRunning(false);
       setActiveKey(null);

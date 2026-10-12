@@ -21,11 +21,17 @@ export interface HarnessSim {
 
 export interface CountingSim extends HarnessSim {
   simMs(): number;
+  ticks?(): number;
 }
 
 function readSimMs(sim: HarnessSim): number {
   const counting = sim as Partial<CountingSim>;
   return typeof counting.simMs === 'function' ? counting.simMs() : 0;
+}
+
+function readSimTicks(sim: HarnessSim): number {
+  const counting = sim as Partial<CountingSim>;
+  return typeof counting.ticks === 'function' ? counting.ticks() : 0;
 }
 
 export interface CheckDef {
@@ -37,6 +43,7 @@ export interface HarnessMetrics {
   readonly wallMs: number;
   readonly simMs: number;
   readonly ratio: number;
+  readonly ticks: number;
 }
 
 export interface HarnessReport {
@@ -73,6 +80,26 @@ async function withCap(result: Promise<CheckResult> | CheckResult, wallCapMs: nu
   }
 }
 
+/** A faulty check lands a fail row instead of rejecting the whole run. */
+async function settleCheck(check: CheckDef, sim: HarnessSim, wallCapMs: number): Promise<CheckResult> {
+  const started = performance.now();
+  const fail = (error: unknown): CheckResult => {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { name: check.name, status: 'fail', detail, wallMs: performance.now() - started };
+  };
+  let pending: Promise<CheckResult> | CheckResult;
+  try {
+    pending = check.run(sim);
+  } catch (error) {
+    return fail(error);
+  }
+  try {
+    return await withCap(pending, wallCapMs, check.name);
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function runHarness(
   checks: CheckDef[],
   makeSim: () => HarnessSim,
@@ -89,7 +116,7 @@ export async function runHarness(
       results.push({ name: check.name, status: 'skip', detail: 'cancelled', wallMs: 0 });
       continue;
     }
-    const result = await withCap(check.run(sim), wallCapMs, check.name);
+    const result = await settleCheck(check, sim, wallCapMs);
     results.push(result);
     done += 1;
     opts.onProgress?.(done, checks.length);
@@ -97,16 +124,20 @@ export async function runHarness(
   }
   const wallMs = performance.now() - started;
   const simMs = readSimMs(sim);
-  return { projectId: '', buildLabel: '', results, metrics: { wallMs, simMs, ratio: simMs / Math.max(wallMs, 1) } };
+  const ticks = readSimTicks(sim);
+  return { projectId: '', buildLabel: '', results, metrics: { wallMs, simMs, ratio: simMs / Math.max(wallMs, 1), ticks } };
 }
 
 export function formatReport(report: HarnessReport): string {
+  const fps = report.metrics.wallMs > 0 ? report.metrics.ticks / (report.metrics.wallMs / 1000) : 0;
   const lines = [
     `${report.projectId} (${report.buildLabel}): ${report.results.filter((r) => r.status === 'pass').length}/${report.results.length} pass`,
-    `wall ${report.metrics.wallMs.toFixed(0)} ms, sim ${report.metrics.simMs.toFixed(0)} ms, ratio ${report.metrics.ratio.toFixed(2)}`,
+    `wall ${report.metrics.wallMs.toFixed(0)} ms, sim ${report.metrics.simMs.toFixed(0)} ms, ratio ${report.metrics.ratio.toFixed(2)}, fps ${fps.toFixed(1)}`,
   ];
   for (const result of report.results) {
-    lines.push(`[${result.status}] ${result.name}${result.detail === '' ? '' : ` — ${result.detail}`}`);
+    lines.push(
+      `[${result.status}] ${result.name} (${result.wallMs.toFixed(0)} ms)${result.detail === '' ? '' : ` — ${result.detail}`}`,
+    );
   }
   return lines.join('\n');
 }

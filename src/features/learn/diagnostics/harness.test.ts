@@ -97,4 +97,86 @@ describe('runHarness', () => {
     const report = await runHarness([ticking], () => counting, { yieldEvery: 1000 });
     expect(report.metrics.simMs).toBeCloseTo(50, 5);
   });
+
+  it('turns a synchronously throwing check into a fail row and keeps going', async () => {
+    const throwing: CheckDef = {
+      name: 'throwing',
+      run: () => {
+        throw new Error('boom-sync');
+      },
+    };
+    const after: CheckDef = {
+      name: 'after',
+      run: () => ({ name: 'after', status: 'pass', detail: '', wallMs: 0 }),
+    };
+    const report = await runHarness([throwing, after], fakeSim, { yieldEvery: 1000 });
+    expect(report.results.map((r) => r.status)).toEqual(['fail', 'pass']);
+    expect(report.results[0]?.detail).toContain('boom-sync');
+  });
+
+  it('turns an asynchronously rejecting check into a fail row and keeps going', async () => {
+    const rejecting: CheckDef = {
+      name: 'rejecting',
+      run: () => Promise.reject(new Error('boom-async')),
+    };
+    const after: CheckDef = {
+      name: 'after',
+      run: () => ({ name: 'after', status: 'pass', detail: '', wallMs: 0 }),
+    };
+    const report = await runHarness([rejecting, after], fakeSim, { yieldEvery: 1000 });
+    expect(report.results.map((r) => r.status)).toEqual(['fail', 'pass']);
+    expect(report.results[0]?.detail).toContain('boom-async');
+  });
+
+  it('counts ticks from the sim and reports fps in the header', async () => {
+    let tickCount = 0;
+    const base = fakeSim();
+    const counting = {
+      ...base,
+      tick: () => {
+        tickCount += 1;
+      },
+      simMs: () => 0,
+      ticks: () => tickCount,
+    };
+    const ticking: CheckDef = {
+      name: 'ticking',
+      run: (sim) => {
+        sim.tick(0.05);
+        sim.tick(0.05);
+        return { name: 'ticking', status: 'pass', detail: '', wallMs: 0 };
+      },
+    };
+    const report = await runHarness([ticking, ticking], () => counting, { yieldEvery: 1000 });
+    expect(report.metrics.ticks).toBe(4);
+    const text = formatReport({ ...report, projectId: 'demo', buildLabel: 'uno' });
+    const expectedFps = report.metrics.wallMs > 0 ? report.metrics.ticks / (report.metrics.wallMs / 1000) : 0;
+    expect(text).toContain(`fps ${expectedFps.toFixed(1)}`);
+  });
+
+  it('defaults ticks to 0 and guards fps at wallMs 0', async () => {
+    const report = await runHarness([passCheck], fakeSim, { yieldEvery: 1000 });
+    expect(report.metrics.ticks).toBe(0);
+    const text = formatReport({
+      ...report,
+      projectId: 'demo',
+      buildLabel: 'uno',
+      metrics: { ...report.metrics, wallMs: 0, ticks: 10 },
+    });
+    expect(text).toContain('fps 0.0');
+  });
+
+  it('prints per-check milliseconds on every result line', async () => {
+    const report = await runHarness([passCheck], fakeSim, { yieldEvery: 1000 });
+    const text = formatReport({ ...report, projectId: 'demo', buildLabel: 'uno' });
+    expect(text).toContain('[pass] always passes (1 ms) — ok');
+    const blank: CheckDef = {
+      name: 'quiet',
+      run: () => ({ name: 'quiet', status: 'pass', detail: '', wallMs: 0 }),
+    };
+    const quiet = await runHarness([blank], fakeSim, { yieldEvery: 1000 });
+    expect(formatReport({ ...quiet, projectId: 'demo', buildLabel: 'uno' })).toContain(
+      '[pass] quiet (0 ms)',
+    );
+  });
 });

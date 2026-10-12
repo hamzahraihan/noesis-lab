@@ -23,4 +23,24 @@ describe('registry', () => {
     for (let frame = 0; frame < 5; frame++) sim.tick(0.05);
     expect(sim.glass().glyphs).toEqual([ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH]);
   });
+
+  it('extends the wall cap on the alarm-clock library entry only', () => {
+    for (const entry of buildRegistry()) {
+      if (entry.projectId === 'alarm-clock' && entry.buildLabel === 'uno:library') {
+        expect(entry.extendedCapMs).toBe(1_600_000);
+      } else {
+        expect(entry.extendedCapMs).toBeUndefined();
+      }
+    }
+  });
+
+  it('counts ticks through the adapter', () => {
+    const entry = buildRegistry().find(
+      (candidate) => candidate.projectId === 'alarm-clock' && candidate.buildLabel === 'uno',
+    )!;
+    const sim = entry.makeSim();
+    sim.tick(0.05);
+    sim.tick(0.05);
+    expect(sim.ticks?.()).toBe(2);
+  });
 });

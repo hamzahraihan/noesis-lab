@@ -164,7 +164,7 @@ export class SevenSegment {
           }
         }
         if (popcount(mask) === 1) {
-          // One segment across whoever needs it: accumulate, keep the rest.
+          // One segment across whoever needs it: accumulate, keep the rest (no gallery build shows "-" or another G-only full pattern, so a G-only write is always a slice).
           this.latched[digit] |= mask;
           for (let index = 0; index < 8; index++) {
             if ((mask >> index) & 1) this.segSeenAt[digit * 8 + index] = nowMs;
