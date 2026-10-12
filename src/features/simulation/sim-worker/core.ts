@@ -104,6 +104,7 @@ export interface CoreHandle {
   step(budgetMs: number): void;
   applyInput(op: CoreInput): void;
   rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr'): void;
+  flash(words: Uint16Array): void;
   snapshot(): SharedArrayBuffer;
   readonly timeMs: number;
   readonly fault: string | null;
@@ -395,6 +396,22 @@ class SimCore implements CoreHandle {
       const hexText = hexForSourcesHash(sourcesHashForProject(project));
       if (hexText === null) return;
       this.flashAvrWords(parseIntelHex(hexText));
+    } catch (error) {
+      this.avrBackend = null;
+      this.faultText = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /**
+   * Flashes the given words onto an AVR core, establishing the same backend
+   * `rebuild` builds for a committed HEX but without touching bench, firmware
+   * runner, serial, or clock state. Construction failures clear the backend
+   * and report through `fault`, as in `tryFlashAvr`.
+   */
+  flash(words: Uint16Array): void {
+    try {
+      if (this.mcu.board.id !== 'uno') return;
+      this.flashAvrWords(words);
     } catch (error) {
       this.avrBackend = null;
       this.faultText = error instanceof Error ? error.message : String(error);

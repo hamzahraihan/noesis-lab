@@ -48,19 +48,19 @@ function handle(port: Port, msg: Incoming): void {
       break;
     }
     case 'flash': {
-      // No CoreHandle flash hook, so drive the core's own AVR-flash hook here.
-      const hook = core as unknown as { flashAvrWords?: (words: Uint16Array) => void };
-      if (!core || typeof hook.flashAvrWords !== 'function') { fail(msg.id, 'flash unavailable'); break; }
-      try { hook.flashAvrWords(msg.words); ok(msg.id, { fault: core.fault }); }
+      if (!core) { fail(msg.id, 'not initialised'); break; }
+      try { core.flash(msg.words); ok(msg.id, { fault: core.fault }); }
       catch (error) { fail(msg.id, detail(error)); }
       break;
     }
     case 'press': case 'knob': {
       if (!core) { fail(msg.id, 'not initialised'); break; }
-      core.applyInput(msg.type === 'press'
-        ? { kind: 'press', partId: msg.partId, value: msg.down }
-        : { kind: 'knob', partId: msg.partId, value: { spec: msg.spec, value: msg.value } });
-      ok(msg.id);
+      try {
+        core.applyInput(msg.type === 'press'
+          ? { kind: 'press', partId: msg.partId, value: msg.down }
+          : { kind: 'knob', partId: msg.partId, value: { spec: msg.spec, value: msg.value } });
+        ok(msg.id);
+      } catch (error) { fail(msg.id, detail(error)); }
       break;
     }
     case 'start': case 'stop': running = msg.type === 'start'; ok(msg.id); break;
