@@ -28,7 +28,7 @@ import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
 import type { FootprintState } from '../wokwi/footprints';
 import { Simulation } from '../simulations/simulation';
-import { createWorkerClient, lcdFromSnapshot, sevenSegmentFromSnapshot, type WorkerClient } from '../simulations/worker-client';
+import { createWorkerClient, lcdFromSnapshot, sevenSegmentFromSnapshot, tftFromSnapshot, type WorkerClient } from '../simulations/worker-client';
 import { CenterTabs } from '../ide/CenterTabs';
 import { BottomPanel } from '../ide/BottomPanel';
 import { ResizeHandle } from '../ide/ResizeHandle';
@@ -737,9 +737,11 @@ export default function Bench(props: BenchProps) {
       /*
        * Mirror-fed frame: pin volts remapped with the bench, servo horns as
        * real models driven to the mirrored angle, pixel dies as RGB triplets,
-       * 7-segment controllers rebuilt from latched patterns + colon, and LCD
-       * panels replayed from text bytes + flags. TFT stays empty — Task 7
-       * owns TFT transport, never faked here. Steppers show the last in-page
+       * 7-segment controllers rebuilt from latched patterns + colon, LCD
+       * panels replayed from text bytes + flags, and the colour TFT rebuilt
+       * from the mirrored `{ width, height, rgb565 }` frame onto the first
+       * ILI9341 part (the core transports one frame — the same first-match
+       * rule its sketch port uses). Steppers show the last in-page
        * angles by explicit decision: the core's display region carries no
        * stepper bytes (shaft angles derive from coil-volt edge counting
        * inside the solver, which has no frame encoding), so there is nothing
@@ -747,13 +749,16 @@ export default function Bench(props: BenchProps) {
        */
       const snapshots = workerClient.displaySnapshots();
       const colon = workerClient.colonFlags();
+      const tft = workerClient.tftSnapshot();
+      let tftPlaced = false;
       const servos = new Map<string, Servo>();
       const pixels = new Map<string, readonly { r: number; g: number; b: number }[]>();
       const displays = new Map<string, DisplayController>();
       const lcds = new Map<string, Lcd1602>();
       const logicVolts = simulation.mcu.board.logicVolts;
       for (const part of bench.parts) {
-        const kind = part.definition.component.kind;
+        const component = part.definition.component;
+        const kind = component.kind;
         const bytes = snapshots.get(part.id);
         if (kind === 'servo') {
           const servo = new Servo();
@@ -772,7 +777,7 @@ export default function Bench(props: BenchProps) {
           }
           pixels.set(part.id, colors);
         } else if (kind === '7segment' && bytes !== undefined) {
-          const digits = part.definition.component.digits ?? 1;
+          const digits = component.digits ?? 1;
           displays.set(
             part.id,
             sevenSegmentFromSnapshot(digits, bytes.slice(0, digits), colon.get(part.id) ?? false, logicVolts),
@@ -784,6 +789,17 @@ export default function Bench(props: BenchProps) {
             bytes[bytes.length - 1] ?? 0,
           );
           if (panel !== null) lcds.set(part.id, panel);
+        } else if (
+          component.kind === 'display' &&
+          component.controller === 'ili9341' &&
+          tft !== null &&
+          !tftPlaced
+        ) {
+          const panel = tftFromSnapshot(tft.width, tft.height, tft.rgb565);
+          if (panel !== null) {
+            displays.set(part.id, panel);
+            tftPlaced = true;
+          }
         }
       }
       return {

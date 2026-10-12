@@ -17,9 +17,12 @@
  *
  * Two deliberate deviations from `Simulation`, both forced by the module
  * boundary rather than by choice:
- * - The map tile port is a stub (never ready, `ready()` true): the real tile
- *   store lives beside the bench feature and cannot be imported here without
- *   a cross-feature edge. No shipped parity scenario uses the map.
+ * - The tile store and fetcher live in `../map/` (moved there from the bench
+ *   feature in Task 7 precisely so this import is in-feature): the map port
+ *   below is wired exactly like `Simulation`'s `tiles`/`fetcher`/`map` port —
+ *   same request/fetch/put/fail flow, same `blit` single-pixel exception, same
+ *   `ready`/`reset`. Tile decode (`createImageBitmap` + `OffscreenCanvas`) is
+ *   worker-safe.
  * - LCD line-to-board-pin resolution is derived per call from the current
  *   netlist (panel line net matched against board pin nets) instead of the
  *   remembered wiring map `Simulation` keeps while placing example parts.
@@ -36,6 +39,13 @@
  *   DIN order.
  * `displayBytesForBench` below computes the region size with the same
  * per-kind constants the writer uses; keep the two in sync.
+ *
+ * The colour TFT is not in that per-part region: it travels as one frame in
+ * the fixed-size `tft` sub-region (`tftView`): visible width/height plus
+ * visible-order RGB565 bytes for the first Ili9341 on the bench (the same
+ * first-match rule `tft()` uses for the sketch port), zeros when there is
+ * none. The mirror decodes it to an `ImageData`/controller for the existing
+ * canvas blit path.
  */
 
 import { Engine } from '../engine';
@@ -55,9 +65,14 @@ import {
   layoutFor,
   netView,
   pinNodeView,
+  tftView,
+  TFT_MAX_PIXELS,
   type DisplayView,
+  type TftView,
 } from './protocol';
 import type { SnapshotLayout } from './protocol';
+import { TileFetcher } from '../map/map-fetcher';
+import { TILE_SIZE, TileStore } from '../map/map-tiles';
 import {
   DISTANCE_KNOB,
   DynamicState,
@@ -157,6 +172,13 @@ class SimCore implements CoreHandle {
   private layout: SnapshotLayout | null = null;
   private lcdDriver: LcdDriver | null = null;
   private sonarArmed: string | null = null;
+  /**
+   * The map port a sketch talks to: the host standing in for the radio, kept
+   * exactly like `Simulation`'s `tiles`/`fetcher` pair (same store, same
+   * fetcher, same put/fail flow) now the modules live in-feature in `../map/`.
+   */
+  private readonly tiles = new TileStore();
+  private readonly fetcher = new TileFetcher();
 
   constructor(
     board: PartDefinition,
@@ -290,6 +312,7 @@ class SimCore implements CoreHandle {
     }
     for (; p < pins.length; p++) pins.write(p, 0);
     this.writeDisplay(displayView(buf));
+    this.writeTft(tftView(buf));
 
     this.serialCursor = Math.min(this.serialCursor, this.serial.length);
     for (let i = this.serialCursor; i < this.serial.length; i++) {
@@ -382,6 +405,34 @@ class SimCore implements CoreHandle {
       }
     }
     while (o < view.length) view.write(o++, 0);
+  }
+
+  /**
+   * Captures the colour TFT into the fixed `tft` sub-region: visible
+   * width/height plus visible-order RGB565 bytes (the same reading order
+   * `Ili9341.toRgba` hands the canvas, so rotation is already applied).
+   * Zeros when no TFT is on the bench, which is how the mirror tells "no
+   * panel" from "a panel showing black".
+   */
+  private writeTft(view: TftView): void {
+    const panel = this.tft();
+    if (!panel) {
+      view.writeFrame(0, 0, new Uint8Array(0));
+      return;
+    }
+    const width = Math.max(0, Math.floor(panel.width));
+    const height = Math.max(0, Math.floor(panel.height));
+    const count = Math.max(0, Math.min(width * height, TFT_MAX_PIXELS));
+    const rgb565 = new Uint8Array(count * 2);
+    let o = 0;
+    for (let y = 0; y < height && o < rgb565.length; y++) {
+      for (let x = 0; x < width && o < rgb565.length; x++) {
+        const colour = panel.pixelAt(x, y);
+        rgb565[o++] = colour >> 8;
+        rgb565[o++] = colour & 0xff;
+      }
+    }
+    view.writeFrame(width, height, rgb565);
   }
 
   /**
@@ -725,14 +776,35 @@ class SimCore implements CoreHandle {
         textWidth: (text) => this.tft()?.textWidth(text) ?? 0,
         textHeight: () => this.tft()?.textHeight() ?? 0,
       },
-      // No tile store here: it lives beside the bench feature and cannot be
-      // imported without a cross-feature edge. Sketches polling the map see
-      // "not yet" everywhere and a ready flag that is already true.
+      // No tile store here anymore: it lives in `../map/` in-feature, so the
+      // map port below is the real one, wired exactly like `Simulation`'s.
       map: {
-        request: () => false,
-        blit: () => false,
-        ready: () => true,
-        reset: () => {},
+        request: (z, x, y) => {
+          const ready = this.tiles.request(z, x, y);
+          if (!ready) {
+            void this.fetcher.fetch({ z, x, y }).then((pixels) => {
+              if (pixels) {
+                this.tiles.put(z, x, y, pixels);
+                return;
+              }
+              // Say so. Leaving it wanted meant the sketch polled for arrival
+              // forever over a tile that was never coming, and a map with one hole
+              // in it never drew at all -- fourteen good tiles held hostage by one
+              // the server would not serve.
+              this.tiles.fail(z, x, y);
+            });
+          }
+          return ready;
+        },
+        blit: (z, x, y, destX, destY) => {
+          const pixels = this.tiles.get(z, x, y);
+          const panel = this.tft();
+          if (!pixels || !panel) return false;
+          panel.blit(destX, destY, pixels.length === 1 ? 1 : TILE_SIZE, TILE_SIZE, pixels);
+          return true;
+        },
+        ready: () => this.tiles.complete && !this.fetcher.busy,
+        reset: () => this.tiles.clearWanted(),
       },
       nowMs: () => this.engine.timeMs,
       pinMode: (pin, mode) => {

@@ -7,7 +7,18 @@
  *   header (64 B): magic u32@0, version u32@4, generation u32@8, timeMs f64@16,
  *     fault u32@24, overflow u32@28, serial head (read index) u32@32,
  *     serial tail (buffered count) u32@36, dims u32@40/44/48/52, reserved@56..64
- *   then: net f64s, pinNode u32s, display bytes, serial ring bytes.
+ *   then: net f64s, pinNode u32s, display bytes, tft frame bytes (fixed size),
+ *   serial ring bytes.
+ *
+ * The tft frame is a fixed-size sub-region for the colour panel (Task 7): a
+ * width u32, a height u32, then visible-order RGB565 bytes (big-endian per
+ * pixel, row-major) sized for the largest panel RAM (320x480). Fixed rather
+ * than a layout dim so it never triggers a realloc and old `layoutFor` calls
+ * keep working; a zero width/height means no TFT on the bench.
+ *
+ * Version history: 1 = header/net/pinNode/display/serial; 2 = tft frame
+ * inserted between display and serial (serial base shifts; SHM is
+ * session-ephemeral so no migration path is kept).
  *
  * The header is self-describing: allocSnapshot stores the region dims in it,
  * so every view can be opened from the buffer alone (an explicit layout may
@@ -21,7 +32,7 @@
  */
 
 export const SNAP_MAGIC = 0x53494d57; // 'SIMW'
-export const SNAP_VERSION = 1;
+export const SNAP_VERSION = 2;
 
 export interface SnapshotLayout {
   headerBytes: number;
@@ -64,6 +75,26 @@ export interface DisplayView {
   write(i: number, v: number): void;
 }
 
+/**
+ * One colour-TFT frame: visible width/height plus visible-order RGB565 bytes
+ * (big-endian per pixel, row-major from the top-left of what a user sees, so
+ * rotation is already applied by the writer).
+ */
+export interface TftFrame {
+  readonly width: number;
+  readonly height: number;
+  readonly rgb565: Uint8Array;
+}
+
+export interface TftView {
+  readonly length: number;
+  readonly array: Uint8Array;
+  read(i: number): number;
+  write(i: number, v: number): void;
+  writeFrame(width: number, height: number, rgb565: Uint8Array): void;
+  readFrame(): TftFrame;
+}
+
 export interface SerialRing {
   readonly capacity: number;
   readonly length: number;
@@ -74,6 +105,20 @@ export interface SerialRing {
 const HEADER_BYTES = 64;
 const OFF_HEAD = 32;
 const OFF_TAIL = 36;
+
+/**
+ * Largest TFT RAM behind any panel we model: the 3.2" ILI9341 holds
+ * 320x480 pixels of 16-bit colour. Do not shrink this to a visible size —
+ * the same RAM reads out as 480x320 or 320x480 depending on rotation, and
+ * the region must hold either way up.
+ */
+export const TFT_MAX_WIDTH = 320;
+export const TFT_MAX_HEIGHT = 480;
+export const TFT_MAX_PIXELS = TFT_MAX_WIDTH * TFT_MAX_HEIGHT;
+/** Width u32 + height u32 ahead of the pixel bytes. */
+export const TFT_HEADER_BYTES = 8;
+/** Fixed frame size: header plus one RGB565 word per largest-panel pixel. */
+export const TFT_FRAME_BYTES = TFT_HEADER_BYTES + TFT_MAX_PIXELS * 2;
 
 interface Dims {
   netFloats: number;
@@ -86,6 +131,7 @@ interface Resolved extends Dims {
   netBase: number;
   pinBase: number;
   displayBase: number;
+  tftBase: number;
   serialBase: number;
   total: number;
 }
@@ -109,8 +155,9 @@ function regionOffsets(d: Dims): Omit<Resolved, keyof Dims> {
   const netBase = HEADER_BYTES;
   const pinBase = netBase + d.netFloats * 8;
   const displayBase = pinBase + d.pinNodeUints * 4;
-  const serialBase = displayBase + d.displayBytes;
-  return { netBase, pinBase, displayBase, serialBase, total: serialBase + d.serialBytes };
+  const tftBase = displayBase + d.displayBytes;
+  const serialBase = tftBase + TFT_FRAME_BYTES;
+  return { netBase, pinBase, displayBase, tftBase, serialBase, total: serialBase + d.serialBytes };
 }
 
 function assertOpen(buf: SharedArrayBuffer): void {
@@ -307,4 +354,45 @@ export function displayView(buf: SharedArrayBuffer, layout?: SnapshotLayout): Di
 export function serialRing(buf: SharedArrayBuffer, layout?: SnapshotLayout): SerialRing {
   const d = resolve(buf, layout);
   return makeRing(buf, d.serialBase, d.serialBytes);
+}
+
+export function tftView(buf: SharedArrayBuffer, layout?: SnapshotLayout): TftView {
+  const d = resolve(buf, layout);
+  const array = new Uint8Array(buf, d.tftBase, TFT_FRAME_BYTES);
+  const dims = new Uint32Array(buf, d.tftBase, 2);
+  return {
+    get length(): number {
+      return array.length;
+    },
+    array,
+    read(i: number): number {
+      checkIndex(i, array.length);
+      return array[i];
+    },
+    write(i: number, v: number): void {
+      checkIndex(i, array.length);
+      array[i] = v & 0xff;
+    },
+    writeFrame(width: number, height: number, rgb565: Uint8Array): void {
+      const w = Math.max(0, Math.floor(width));
+      const h = Math.max(0, Math.floor(height));
+      dims[0] = w >>> 0;
+      dims[1] = h >>> 0;
+      const capacity = TFT_FRAME_BYTES - TFT_HEADER_BYTES;
+      const count = Math.min(rgb565.length, capacity);
+      array.set(rgb565.subarray(0, count), TFT_HEADER_BYTES);
+      array.fill(0, TFT_HEADER_BYTES + count);
+    },
+    readFrame(): TftFrame {
+      const w = dims[0] ?? 0;
+      const h = dims[1] ?? 0;
+      const capacity = TFT_FRAME_BYTES - TFT_HEADER_BYTES;
+      const count = Math.max(0, Math.min(Math.floor(w) * Math.floor(h), TFT_MAX_PIXELS)) * 2;
+      return {
+        width: w,
+        height: h,
+        rgb565: array.slice(TFT_HEADER_BYTES, TFT_HEADER_BYTES + Math.min(count, capacity)),
+      };
+    },
+  };
 }

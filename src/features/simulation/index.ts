@@ -37,3 +37,8 @@ export { compileToolchainUnit } from './avr/toolchain/tools';
 // (bare `@/features/simulation` — the boundary gate forbids bench-deep
 // imports outside the owning feature). Pure layout math only, no Engine.
 export * from './sim-worker/protocol';
+// Task 7 relocated the tile store + fetcher here so the worker core owns the
+// map port without a cross-feature edge (bench reads them back through this
+// barrel via thin re-export shims at the old `bench/utils/map-*` paths).
+export * from './map/map-tiles';
+export * from './map/map-fetcher';

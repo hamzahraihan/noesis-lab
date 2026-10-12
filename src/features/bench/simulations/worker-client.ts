@@ -29,8 +29,11 @@
  * documented exception: the core's display region carries no stepper bytes
  * (shaft angles derive from coil-volt edge counting inside the solver, which
  * has no frame encoding), so the worker path shows the last in-page angles.
- * Map tiles and TFT framebuffers are OUT of scope (Task 7 owns tile
- * injection + TFT transport; no attempt here).
+ * Map tiles ride the real tile port in the core (Task 7: the store + fetcher
+ * moved in-feature to `simulation/map`, and tile decode is worker-safe). The
+ * colour TFT crosses in the fixed `tft` sub-region as
+ * `{ width, height, rgb565 }` and decodes here to `ImageData` — or to a
+ * rebuilt `Ili9341` for the existing canvas blit path.
  *
  * Worker entry sequencing: Task 5 owns the worker entry + message contract
  * (`attachBuffer` is its realloc-reply landing: the realloc reply carries
@@ -65,6 +68,7 @@ import {
   SNAP_MAGIC,
   SNAP_VERSION,
   sourcesHashForProject,
+  tftView,
   validateLibraries,
   type Bench,
   type CompileResult,
@@ -75,6 +79,7 @@ import {
 import {
   createLcd,
   DynamicState,
+  Ili9341,
   LcdDriver,
   pixelCount,
   SevenSegment,
@@ -160,6 +165,7 @@ export function ingestSnapshot(state: MirrorState, buf: SharedArrayBuffer): 'ok'
     state.pinVolts.clear();
     state.values.clear();
     state.colon.clear();
+    tftFrames.set(state, null);
     return 'reallocated';
   }
   if (lastGeneration.get(state) === generation) return 'stale';
@@ -189,6 +195,8 @@ function copyFrame(state: MirrorState, buf: SharedArrayBuffer): void {
   state.values.clear();
   state.values.set('raw', Array.from(display.array));
   state.colon.clear();
+  const frame = tftView(buf).readFrame();
+  tftFrames.set(state, frame.width > 0 && frame.height > 0 ? frame : null);
   const drained = serialRing(buf).drain();
   if (drained.length > 0) {
     const text = textDecoder.decode(new Uint8Array(drained));
@@ -314,6 +322,81 @@ export function lcdFromSnapshot(
   return panel;
 }
 
+/** One colour-TFT frame as it crosses SHM: visible size + RGB565 bytes. */
+export interface TftSnapshot {
+  readonly width: number;
+  readonly height: number;
+  readonly rgb565: Uint8Array;
+}
+
+/** Latest TFT frame per mirror (kept outside the verbatim shape, as above). */
+const tftFrames = new WeakMap<MirrorState, TftSnapshot | null>();
+
+/** Latest TFT frame a mirror holds, or null when no TFT is on the bench. */
+export function tftFromMirror(state: MirrorState): TftSnapshot | null {
+  return tftFrames.get(state) ?? null;
+}
+
+/**
+ * Expands visible-order RGB565 bytes to RGBA, for `ImageData`.
+ *
+ * The same 5/6/5-bit replication `Ili9341.toRgba` does, factored out so the
+ * mirror can hand the canvas path pixels without owning a controller: the
+ * frame is already in reading order, so no transpose and no panel model.
+ */
+export function tftRgbaFromFrame(
+  width: number,
+  height: number,
+  rgb565: Uint8Array,
+): Uint8ClampedArray<ArrayBuffer> {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  const pixels = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
+  const count = Math.min(w * h, Math.floor(rgb565.length / 2));
+  for (let i = 0; i < count; i++) {
+    const colour = ((rgb565[i * 2] ?? 0) << 8) | (rgb565[i * 2 + 1] ?? 0);
+    const o = i * 4;
+    const red = (colour >> 11) & 0x1f;
+    const green = (colour >> 5) & 0x3f;
+    const blue = colour & 0x1f;
+    pixels[o] = (red << 3) | (red >> 2);
+    pixels[o + 1] = (green << 2) | (green >> 4);
+    pixels[o + 2] = (blue << 3) | (blue >> 2);
+    pixels[o + 3] = 0xff;
+  }
+  return pixels;
+}
+
+/**
+ * Decodes a frame straight to `ImageData` for the existing canvas blit path
+ * (`createImageData` + `putImageData` at the panel's own size).
+ */
+export function tftImageDataFromFrame(width: number, height: number, rgb565: Uint8Array): ImageData {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  return new ImageData(tftRgbaFromFrame(w, h, rgb565), w, h);
+}
+
+/**
+ * Rebuilds a colour TFT from a mirrored frame for renderers that read a
+ * controller (the bench canvas blits `Ili9341.toRgba`). A fresh panel of the
+ * frame's own visible size with the whole frame blitted at the origin shows
+ * exactly what the worker's panel showed: the frame is already in visible
+ * order, so rotation is baked in rather than reapplied.
+ */
+export function tftFromSnapshot(width: number, height: number, rgb565: Uint8Array): Ili9341 | null {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  if (w <= 0 || h <= 0 || w * h * 2 > rgb565.length) return null;
+  const panel = new Ili9341(w, h);
+  const words = new Uint16Array(w * h);
+  for (let i = 0; i < words.length; i++) {
+    words[i] = ((rgb565[i * 2] ?? 0) << 8) | (rgb565[i * 2 + 1] ?? 0);
+  }
+  panel.blit(0, 0, w, h, words);
+  return panel;
+}
+
 /**
  * Seam for the compile path. Production uses the real toolchain clients;
  * tests inject stubs that record which path a project takes — the same way
@@ -355,7 +438,7 @@ function hasLibraryBuild(project: FirmwareProject): boolean {
   return projectSlots(project).some((slot) => slot.files.length > 0);
 }
 
-/** UI-read seam Bench uses (plain-data snapshots; TFT/map owned by Task 7). */
+/** UI-read seam Bench uses (plain-data snapshots; TFT arrives via `tftSnapshot`). */
 export interface WorkerClient {
   readonly controls: DynamicState;
   readonly running: boolean;
@@ -364,6 +447,8 @@ export interface WorkerClient {
   pinVoltages(): ReadonlyMap<string, number>;
   displaySnapshots(): ReadonlyMap<string, readonly number[]>;
   colonFlags(): ReadonlyMap<string, boolean>;
+  /** Latest colour-TFT frame, or null when no TFT is on the bench. */
+  tftSnapshot(): TftSnapshot | null;
   serialLines(): readonly string[];
   setPressed(partId: string, pressed: boolean): void;
   setKnob(partId: string, spec: KnobSpec, value: number): void;
@@ -452,6 +537,10 @@ class WorkerClientImpl implements WorkerClient {
 
   colonFlags(): ReadonlyMap<string, boolean> {
     return this.mirror.colon;
+  }
+
+  tftSnapshot(): TftSnapshot | null {
+    return tftFromMirror(this.mirror);
   }
 
   serialLines(): readonly string[] {
