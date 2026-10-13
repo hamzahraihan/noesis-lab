@@ -89,22 +89,17 @@ export class AvrBackend implements ExecutionBackend {
     const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
     if (this.wasm !== null) {
-      // TODO(wasm): unwired stub — reachable only via a future injection point
-      // (see field note). Cadence accounting is live (`sinceSettle` accrues the
-      // batch with remainder, one `onSettle` per `settleEvery`), but the core
-      // itself is NOT advanced here: neither `cpu.cycles`/`msCounter` (the tickMs
-      // clock event stays parked) nor the gpio/timer1/usart/twi bridges move, so
-      // `cycles`/`millis()` would go stale. Do not enable until the adapter syncs
-      // WASM↔CPU state, maps `stepCycles` faults onto the
-      // `core fault at PC=… cycles=…` contract (this branch has no try/catch by
-      // design — the fault type does not exist yet), and `reset()` clears WASM
-      // state alongside the CPU rebuild.
-      this.wasm.stepCycles(totalCycles);
-      this.sinceSettle += totalCycles;
-      while (this.sinceSettle >= settleEvery) {
-        this.sinceSettle -= settleEvery;
-        this.hooks.onSettle();
-      }
+      // Unwired WASM seam (Task 4, fix wave): loud by design. A prior
+      // revision advanced `sinceSettle`/cadence here while leaving
+      // `cpu.cycles`/`msCounter` and the gpio/timer1/usart/twi bridges
+      // parked, so `cycles`/`millis()` would go silently stale if the branch
+      // were ever reached. No injection point exists yet (`wasm` is always
+      // null — see field note), so reaching this branch means a wiring bug:
+      // throw instead of partially stepping. The wiring task must replace
+      // this throw with the adapter that syncs WASM↔CPU state, maps
+      // `stepCycles` faults onto the `core fault at PC=… cycles=…` contract,
+      // and extends `reset()` to clear WASM state.
+      throw new Error('wasm seam unwired');
     } else {
       for (let i = 0; i < totalCycles; i++) {
         try {
