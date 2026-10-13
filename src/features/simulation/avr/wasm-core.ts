@@ -32,3 +32,19 @@ export async function stepParity(cycles: number): Promise<{ jsCycles: number; wa
   step(cycles);
   return { jsCycles: cpu.cycles, wasmCycles: get() };
 }
+
+export async function stepWithTrap(cycles: number): Promise<{ traps: number; cycles: number }> {
+  const { CPU: Cpu, avrInstruction } = await import('avr8js');
+  const cpu = new Cpu(new Uint16Array([0x0000]));
+  let traps = 0;
+  for (let i = 0; i < cycles; i++) {
+    try {
+      avrInstruction(cpu);
+      cpu.tick();
+    } catch {
+      traps += 1;
+      break;
+    }
+  }
+  return { traps, cycles: cpu.cycles };
+}
