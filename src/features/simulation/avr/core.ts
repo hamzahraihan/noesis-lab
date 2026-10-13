@@ -1,6 +1,7 @@
 import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
+import type { WasmCore } from './wasm-core';
 import { attachGpioBridge } from './gpio';
 import { attachTimer1, bindTimer1Outputs } from './timer1';
 import { attachTwiBridge } from './twi';
@@ -52,6 +53,7 @@ export class AvrBackend implements ExecutionBackend {
   private msCounter = 0;
   clampedMs = 0;
   private failed: string | null = null;
+  private wasm: WasmCore | null = null;
 
   constructor(programWords: Uint16Array, hooks: AvrHooks) {
     this.programWords = programWords;
@@ -79,18 +81,23 @@ export class AvrBackend implements ExecutionBackend {
     const ms = this.msCarry + clamped;
     const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
-    for (let i = 0; i < totalCycles; i++) {
-      try {
-        avrInstruction(this.cpu);
-        this.cpu.tick();
-      } catch (error) {
-        this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
-        return;
-      }
-      this.sinceSettle += 1;
-      if (this.sinceSettle >= settleEvery) {
-        this.sinceSettle = 0;
-        this.hooks.onSettle();
+    if (this.wasm !== null) {
+      this.wasm.stepCycles(totalCycles);
+      if (this.sinceSettle >= settleEvery) { this.sinceSettle = 0; this.hooks.onSettle(); }
+    } else {
+      for (let i = 0; i < totalCycles; i++) {
+        try {
+          avrInstruction(this.cpu);
+          this.cpu.tick();
+        } catch (error) {
+          this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
+          return;
+        }
+        this.sinceSettle += 1;
+        if (this.sinceSettle >= settleEvery) {
+          this.sinceSettle = 0;
+          this.hooks.onSettle();
+        }
       }
     }
     const consumedMs = totalCycles / perMs;
