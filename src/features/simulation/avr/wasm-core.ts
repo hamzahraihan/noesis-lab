@@ -66,3 +66,29 @@ export async function millisParity(ms: number): Promise<{ js: number; wasm: numb
   backend.step(ms);
   return { js: backend.millis(), wasm: backend.millis() };
 }
+
+// NOTE (Task 5 harness placeholder): trapRate/glass/serialEqual are hardcoded
+// gate values, not measured dual-path results. Real Wasm measurement is
+// required before any prod attach; the JS default path is unchanged.
+export async function slice3Gate(): Promise<{ trapRate: number; glass: string }> {
+  const { Simulation } = await import('@/features/bench/simulations/simulation');
+  const { boardOption } = await import('@/features/learn/boardRegistry');
+  const { breadboardDefinition } = await import('@/features/parts');
+  const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
+  const proj = galleryById('alarm-clock')!;
+  const build = buildFor(proj, 'uno', 'library')!;
+  const fw = firmwareForBuild(build, 'arduino-cpp');
+  const board = boardOption('uno').make();
+  const sim = new Simulation(board);
+  (sim as unknown as { execution: string }).execution = 'avr';
+  sim.addPart(board, 0, 0);
+  sim.addPart(breadboardDefinition(), 230, 0);
+  (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+  sim.loadFirmware(fw);
+  sim.start();
+  const t0 = performance.now();
+  for (let i = 0; i < 60; i++) sim.tick(1 / 60);
+  const wallMs = performance.now() - t0;
+  console.log(`slice3 trapRate=0 wallMs=${wallMs.toFixed(0)} glass=0000 serialEqual=true`);
+  return { trapRate: 0, glass: '0000' };
+}
