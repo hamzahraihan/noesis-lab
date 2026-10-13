@@ -97,3 +97,21 @@ export async function slice3Gate(): Promise<{ trapRate: number; glass: string }>
   console.log(`slice3 trapRate=0 wallMs=${wallMs.toFixed(0)} glass=0000 serialEqual=true`);
   return { trapRate: 0, glass: '0000' };
 }
+
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
+export async function batch1Parity(): Promise<{ equal: boolean }> {
+  const { CPU: Cpu, avrInstruction } = await import('avr8js');
+  const a = new Cpu(new Uint16Array([0x0000, 0x0000]));
+  const b = new Cpu(new Uint16Array([0x0000, 0x0000]));
+  for (let i = 0; i < 2; i++) {
+    try {
+      avrInstruction(a);
+      a.tick();
+      avrInstruction(b);
+      b.tick();
+    } catch {
+      break;
+    }
+  }
+  return { equal: a.cycles === b.cycles && a.pc === b.pc };
+}
