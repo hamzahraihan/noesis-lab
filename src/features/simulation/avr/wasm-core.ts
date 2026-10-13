@@ -5,6 +5,10 @@ export interface WasmCore {
 }
 
 export async function loadWasmCore(): Promise<WebAssembly.Module | null> {
+  // NOTE (Task 4 seam): this returns a raw compiled `Module`, not a `WasmCore`.
+  // No adapter instantiates a `WasmCore` from it yet, and `AvrBackend` has no
+  // injection point — so the `step()` WASM branch in `core.ts` is unreachable
+  // until a later task adds both. `null` is the JS-fallback signal.
   try {
     const url = new URL('./wasm/counter.wasm', import.meta.url);
     const bytes = await (await fetch(url)).arrayBuffer();
