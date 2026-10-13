@@ -1,11 +1,14 @@
 /**
  * Sim worker entry: message port, self-paced loop, backpressure. Wiring only.
- * Frames travel via SAB, polled per rAF main-side. Ticks pause past
- * MAX_UNREAD_FRAMES unacked frames until `ack`. `edit` rebuilds, zeroes
- * generation, answers with a `realloc` notice carrying the new buffer.
+ * Frames travel via SAB, polled per rAF main-side. Ticks pause on an unread
+ * backlog only while the reader is also stale (no `ack` within
+ * ACK_STALE_MS, i.e. a hidden tab) — a slow-but-alive reader must never
+ * starve the sim, since the buffer overwrites and it always reads latest.
+ * `edit` rebuilds, zeroes generation, answers with a `realloc` notice
+ * carrying the new buffer.
  */
 import { createSimCore, type CoreHandle } from './core';
-import { headerView } from './protocol';
+import { ACK_STALE_MS, headerView, shouldThrottle } from './protocol';
 import type { Bench } from '../bench';
 import type { FirmwareProject } from '../firmware/project';
 import type { KnobSpec } from '@/features/parts';
@@ -22,6 +25,7 @@ let firmware: FirmwareProject | null = null;
 let execution: 'interpreter' | 'avr' = 'interpreter';
 let running = false;
 let unread = 0;
+let lastAckMs = 0;
 type Port = { postMessage(message: unknown): void };
 function handle(port: Port, msg: Incoming): void {
   const ok = (id: number, extra?: Record<string, unknown>): void => port.postMessage({ id, ok: true, ...extra });
@@ -64,7 +68,7 @@ function handle(port: Port, msg: Incoming): void {
       break;
     }
     case 'start': case 'stop': running = msg.type === 'start'; ok(msg.id); break;
-    case 'ack': unread = 0; ok(msg.id); break;
+    case 'ack': unread = 0; lastAckMs = Date.now(); ok(msg.id); break;
     case 'ping': ok(msg.id, { fault: core?.fault ?? null }); break;
   }
 }
@@ -72,7 +76,8 @@ if (typeof self !== 'undefined' && 'postMessage' in self) {
   const port = self as unknown as Port & { onmessage: ((event: { data: Incoming }) => void) | null };
   port.onmessage = (event) => handle(port, event.data);
   setInterval(() => {
-    if (!running || !core || unread >= MAX_UNREAD_FRAMES) return;
+    if (!running || !core) return;
+    if (shouldThrottle({ unread, maxUnread: MAX_UNREAD_FRAMES, nowMs: Date.now(), lastAckMs, staleMs: ACK_STALE_MS })) return;
     core.step(16); core.snapshot(); unread += 1;
   }, 16);
 }

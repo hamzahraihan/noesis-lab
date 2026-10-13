@@ -120,6 +120,34 @@ export const TFT_HEADER_BYTES = 8;
 /** Fixed frame size: header plus one RGB565 word per largest-panel pixel. */
 export const TFT_FRAME_BYTES = TFT_HEADER_BYTES + TFT_MAX_PIXELS * 2;
 
+/**
+ * How long without a consumed-frame `ack` before the worker treats the
+ * reader as gone (hidden tab) and pauses stepping. A slow-but-alive
+ * reader acks every consumed frame — even at 5fps that is every 200 ms —
+ * so render slowness alone never trips this; only an actually absent
+ * reader does. Count-only backpressure turned main-thread jank into sim
+ * slowdown (low fps *and* low ratio); the buffer is overwrite-latest, so
+ * an unread backlog is harmless dropped frames, not lost data.
+ */
+export const ACK_STALE_MS = 250;
+
+/**
+ * Whether the worker's self-paced tick should pause. Pauses only on an
+ * unread backlog *plus* a stale reader. A backlog with fresh acks means
+ * the reader is alive but slower than the tick — stepping on, since the
+ * snapshot buffer overwrites and the reader always sees the latest frame.
+ */
+export function shouldThrottle(opts: {
+  readonly unread: number;
+  readonly maxUnread: number;
+  readonly nowMs: number;
+  readonly lastAckMs: number;
+  readonly staleMs: number;
+}): boolean {
+  if (opts.unread < opts.maxUnread) return false;
+  return opts.nowMs - opts.lastAckMs > opts.staleMs;
+}
+
 interface Dims {
   netFloats: number;
   pinNodeUints: number;
