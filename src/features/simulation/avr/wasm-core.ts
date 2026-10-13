@@ -1,4 +1,5 @@
 import { AvrBackend } from './core';
+import type { Simulation } from '@/features/bench/simulations/simulation';
 
 export interface WasmCore {
   stepCycles(n: number): void;
