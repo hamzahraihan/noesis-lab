@@ -1,3 +1,4 @@
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 import { describe, expect, it } from 'vitest';
 import { AvrBackend } from './core';
 import { McuRuntime } from '@/features/simulation/mcu';

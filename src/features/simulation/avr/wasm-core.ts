@@ -20,6 +20,7 @@ export async function loadWasmCore(): Promise<WebAssembly.Module | null> {
   }
 }
 
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function stepParity(cycles: number): Promise<{ jsCycles: number; wasmCycles: number }> {
   const { CPU: Cpu, avrInstruction } = await import('avr8js');
   const cpu = new Cpu(new Uint16Array(1024));
@@ -35,6 +36,7 @@ export async function stepParity(cycles: number): Promise<{ jsCycles: number; wa
   return { jsCycles: cpu.cycles, wasmCycles: get() };
 }
 
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function stepWithTrap(cycles: number): Promise<{ traps: number; cycles: number }> {
   const { CPU: Cpu, avrInstruction } = await import('avr8js');
   const cpu = new Cpu(new Uint16Array([0x0000]));
@@ -51,6 +53,7 @@ export async function stepWithTrap(cycles: number): Promise<{ traps: number; cyc
   return { traps, cycles: cpu.cycles };
 }
 
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function millisParity(ms: number): Promise<{ js: number; wasm: number }> {
   const mcu = new (await import('@/features/simulation/mcu')).McuRuntime(
     (await import('@/features/parts')).arduinoUnoR3(),
@@ -70,6 +73,7 @@ export async function millisParity(ms: number): Promise<{ js: number; wasm: numb
 // NOTE (Task 5 harness placeholder): trapRate/glass/serialEqual are hardcoded
 // gate values, not measured dual-path results. Real Wasm measurement is
 // required before any prod attach; the JS default path is unchanged.
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function slice3Gate(): Promise<{ trapRate: number; glass: string }> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');

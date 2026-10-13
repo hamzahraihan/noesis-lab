@@ -1,3 +1,4 @@
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 import { describe, expect, it } from 'vitest';
 import { CPU, avrInstruction } from 'avr8js';
 
