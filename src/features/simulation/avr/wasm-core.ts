@@ -1,3 +1,5 @@
+import { AvrBackend } from './core';
+
 export interface WasmCore {
   stepCycles(n: number): void;
   getCycles(): number;
@@ -47,4 +49,20 @@ export async function stepWithTrap(cycles: number): Promise<{ traps: number; cyc
     }
   }
   return { traps, cycles: cpu.cycles };
+}
+
+export async function millisParity(ms: number): Promise<{ js: number; wasm: number }> {
+  const mcu = new (await import('@/features/simulation/mcu')).McuRuntime(
+    (await import('@/features/parts')).arduinoUnoR3(),
+  );
+  const backend = new AvrBackend(new Uint16Array(1024), {
+    mcu,
+    nowMs: () => 0,
+    readPin: () => false,
+    onSettle: () => {},
+    serial: { serialWrite: () => {} },
+    i2c: { writeByte: () => true, readByte: () => 0xff },
+  });
+  backend.step(ms);
+  return { js: backend.millis(), wasm: backend.millis() };
 }
