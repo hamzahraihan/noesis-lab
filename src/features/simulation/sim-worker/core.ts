@@ -485,6 +485,10 @@ class SimCore implements CoreHandle {
         }
         return this.engine.readDigital(gpio);
       },
+      // The Timer1 per-tick sampler observes without settling (see timer1.ts):
+      // sampling the settling reader above per instruction settles once per
+      // pin-intent revision instead of coalescing between firmware reads.
+      readPinRaw: (gpio) => this.engine.readDigital(gpio),
       onSettle: () => this.engine.settle(),
       isProbed: () => this.engine.isBeingProbed,
       serial: { serialWrite: (text) => this.pushSerial(text) },

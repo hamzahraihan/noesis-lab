@@ -10,6 +10,13 @@ export interface AvrHooks {
   readonly mcu: McuRuntime;
   readonly nowMs: () => number;
   readonly readPin: (gpio: number) => boolean;
+  /**
+   * Non-settling pin observation for the Timer1 per-tick sampler. Defaults
+   * to `readPin`. Production passes the engine's raw digital read: sampling
+   * the settling reader per instruction turned every pin-intent revision
+   * into a full solve (see timer1.ts).
+   */
+  readonly readPinRaw?: (gpio: number) => boolean;
   readonly onSettle: () => void;
   /**
    * Cycle-stamped driven-pin transitions with explicit level, for the engine's
@@ -113,7 +120,7 @@ export class AvrBackend implements ExecutionBackend {
     // bridge chains onto the DDRB/PORTB/PINB hooks, so it must bind after the
     // GPIO bridge; both lines are load-bearing (counter alone never stamps
     // duty). Attach once: a second attachTimer1 would double-wrap cpu.tick.
-    attachTimer1(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin);
+    attachTimer1(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin, this.hooks.readPinRaw ?? this.hooks.readPin);
     bindTimer1Outputs(cpu, this.hooks.mcu, this.hooks.nowMs);
     attachUsartBridge(cpu, this.hooks.serial);
     attachTwiBridge(cpu, {

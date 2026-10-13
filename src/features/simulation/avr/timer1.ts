@@ -101,6 +101,7 @@ export function attachTimer1(
   mcu: McuRuntime,
   nowMs: () => number,
   readPin: (gpio: number) => boolean,
+  readPinRaw: (gpio: number) => boolean = readPin,
 ): void {
   void mcu;
   void nowMs;
@@ -242,6 +243,12 @@ export function attachTimer1(
   // ms solve cadence), so the canceler's consecutive-sample delay is
   // unobservable in practice and sub-millisecond edge pairs alias; the
   // acceptance uses slow (~100 ms) edges where the difference is unobservable.
+  // The tick sampler observes the last solved level WITHOUT settling: the
+  // settling readPin settles once per pin-intent revision, and sampling it per
+  // instruction converted every real pin toggle anywhere into a full solve
+  // (~3360 extra settles on the alarm bench). The 1–4 ms onSettle cadence
+  // keeps the observed level fresh; settling reads stay on the rare paths
+  // (attach baseline, prescaler-change baseline) and firmware PIN reads.
   const sampleCapture = (level: boolean): void => {
     const src = (cpu.data[ACSR] & ACIC) !== 0 ? comparatorOut : level;
     if (src === stableCapture) {
@@ -280,7 +287,7 @@ export function attachTimer1(
   let lastCycles = cpu.cycles;
 
   const tickTimer = (): void => {
-    sampleCapture(readPin(ICP1_GPIO));
+    sampleCapture(readPinRaw(ICP1_GPIO));
     const cs = cpu.data[TCCRB] & 0x07;
     if (cs === 0) {
       lastCycles = cpu.cycles;
@@ -288,7 +295,7 @@ export function attachTimer1(
     }
     if (cs === 6 || cs === 7) {
       lastCycles = cpu.cycles;
-      const level = readPin(T1_GPIO);
+      const level = readPinRaw(T1_GPIO);
       const edge = extLevel !== null && (cs === 7 ? !extLevel && level : extLevel && !level);
       extLevel = level;
       if (edge) stepCounter();
