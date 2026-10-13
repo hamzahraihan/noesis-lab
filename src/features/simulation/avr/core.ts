@@ -62,6 +62,10 @@ export class AvrBackend implements ExecutionBackend {
   // explicit routing target so the seam is visible, not as live code.
   private wasm: WasmCore | null = null;
 
+  attachWasm(core: WasmCore | null): void {
+    this.wasm = core;
+  }
+
   constructor(programWords: Uint16Array, hooks: AvrHooks) {
     this.programWords = programWords;
     this.hooks = hooks;
