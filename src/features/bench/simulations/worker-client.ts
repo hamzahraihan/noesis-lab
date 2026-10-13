@@ -621,7 +621,12 @@ class WorkerClientImpl implements WorkerClient {
     this.compileAbort = controller;
     const signal = controller.signal;
 
-    if (this.boardDef.id !== 'uno') {
+    // PartDefinitions carry the catalogue id ('arduino-uno-r3'); the board
+    // id lives on the mcu component ('uno'). Test fakes pass a bare
+    // `{ id: 'uno' }`, so fall back to the top-level id when not an mcu.
+    const boardId =
+      this.boardDef.component?.kind === 'mcu' ? this.boardDef.component.board.id : this.boardDef.id;
+    if (boardId !== 'uno') {
       this.loadFirmware(project);
       this.faultText = 'AVR backend needs an Uno board';
       if (this.compileAbort === controller) this.compileAbort = null;

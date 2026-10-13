@@ -310,6 +310,16 @@ describe('compile routing', () => {
     expect(client.fault).toMatch(/Uno/);
     client.dispose();
   });
+
+  it('accepts the real Uno PartDefinition (catalogue id, mcu board uno)', async () => {
+    const { arduinoUnoR3 } = await import('@/features/parts');
+    const calls: string[] = [];
+    const client = new WorkerClientImpl(arduinoUnoR3() as never, stubs(calls));
+    await client.compileAndRun(plainProject());
+    expect(calls).toEqual(['single']);
+    expect(client.fault).toBeNull();
+    client.dispose();
+  });
 });
 
 /** Injected fake port: records posts, replays worker replies synchronously. */
