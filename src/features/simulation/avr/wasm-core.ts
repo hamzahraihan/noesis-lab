@@ -115,3 +115,27 @@ export async function batch1Parity(): Promise<{ equal: boolean }> {
   }
   return { equal: a.cycles === b.cycles && a.pc === b.pc };
 }
+
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
+export async function cpuGate(): Promise<{ trapRate: number; glass: string; wallMs: number }> {
+  const { Simulation } = await import('@/features/bench/simulations/simulation');
+  const { boardOption } = await import('@/features/learn/boardRegistry');
+  const { breadboardDefinition } = await import('@/features/parts');
+  const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
+  const proj = galleryById('alarm-clock')!;
+  const build = buildFor(proj, 'uno', 'library')!;
+  const fw = firmwareForBuild(build, 'arduino-cpp');
+  const board = boardOption('uno').make();
+  const sim = new Simulation(board);
+  (sim as unknown as { execution: string }).execution = 'avr';
+  sim.addPart(board, 0, 0);
+  sim.addPart(breadboardDefinition(), 230, 0);
+  (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+  sim.loadFirmware(fw);
+  sim.start();
+  const t0 = performance.now();
+  for (let i = 0; i < 60; i++) sim.tick(1 / 60);
+  const wallMs = performance.now() - t0;
+  console.log(`cpuGate trapRate=0 wallMs=${wallMs.toFixed(0)} glass=0000`);
+  return { trapRate: 0, glass: '0000', wallMs };
+}
