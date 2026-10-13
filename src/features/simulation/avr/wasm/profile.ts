@@ -1,4 +1,3 @@
-import { writeFileSync } from 'node:fs';
 import { CPU, avrInstruction } from 'avr8js';
 
 export interface OpCount {
@@ -28,6 +27,7 @@ export function rankOpcodes(program: Uint16Array, steps: number): OpCount[] {
     .sort((a, b) => b.count - a.count);
 }
 
-export function writeOpRank(path: string, rank: OpCount[]): void {
+export async function writeOpRank(path: string, rank: OpCount[]): Promise<void> {
+  const { writeFileSync } = await import('node:fs');
   writeFileSync(path, JSON.stringify(rank, null, 2));
 }

@@ -6,5 +6,6 @@ describe('cpu gate', () => {
     const r = await cpuGate();
     expect(r.trapRate).toBe(0);
     expect(r.glass).toBe('0000');
+    expect(r.placeholder).toBe(true);
   }, 90000);
 });

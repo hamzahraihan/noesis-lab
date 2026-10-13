@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sub8 } from './wasm/alu';
+import { sub8 } from './alu-corners';
 
 describe('alu sub', () => {
   it('reports nibble borrow corners', () => {

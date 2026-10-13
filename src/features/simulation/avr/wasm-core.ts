@@ -117,7 +117,7 @@ export async function batch1Parity(): Promise<{ equal: boolean }> {
 }
 
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */
-export async function cpuGate(): Promise<{ trapRate: number; glass: string; wallMs: number }> {
+export async function cpuGate(): Promise<{ trapRate: number; glass: string; wallMs: number; placeholder: true }> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');
   const { breadboardDefinition } = await import('@/features/parts');
@@ -137,5 +137,5 @@ export async function cpuGate(): Promise<{ trapRate: number; glass: string; wall
   for (let i = 0; i < 60; i++) sim.tick(1 / 60);
   const wallMs = performance.now() - t0;
   console.log(`cpuGate trapRate=0 wallMs=${wallMs.toFixed(0)} glass=0000`);
-  return { trapRate: 0, glass: '0000', wallMs };
+  return { trapRate: 0, glass: '0000', wallMs, placeholder: true as const };
 }

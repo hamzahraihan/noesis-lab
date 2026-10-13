@@ -53,13 +53,10 @@ export class AvrBackend implements ExecutionBackend {
   private msCounter = 0;
   clampedMs = 0;
   private failed: string | null = null;
-  // Unwired WASM seam (Task 4): no setter exists by design — `loadWasmCore`
-  // returns `WebAssembly.Module | null`, not a `WasmCore`, and no adapter
-  // instantiates one yet. The `step()` WASM branch below is therefore
-  // unreachable until a later task adds the injection point (e.g.
-  // `attachWasm(core: WasmCore)`) plus an adapter that syncs CPU state
-  // (cycles, msCounter, peripheral bridges — see branch note). Kept as the
-  // explicit routing target so the seam is visible, not as live code.
+  // WASM seam: `attachWasm` setter exists, but no adapter instantiates a
+  // `WasmCore` yet and `reset()` does not sync WASM state. The `step()`
+  // non-null branch below throws by design until the adapter lands.
+  // JS default path is unchanged.
   private wasm: WasmCore | null = null;
 
   attachWasm(core: WasmCore | null): void {
@@ -93,16 +90,9 @@ export class AvrBackend implements ExecutionBackend {
     const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
     if (this.wasm !== null) {
-      // Unwired WASM seam (Task 4, fix wave): loud by design. A prior
-      // revision advanced `sinceSettle`/cadence here while leaving
-      // `cpu.cycles`/`msCounter` and the gpio/timer1/usart/twi bridges
-      // parked, so `cycles`/`millis()` would go silently stale if the branch
-      // were ever reached. No injection point exists yet (`wasm` is always
-      // null — see field note), so reaching this branch means a wiring bug:
-      // throw instead of partially stepping. The wiring task must replace
-      // this throw with the adapter that syncs WASM↔CPU state, maps
-      // `stepCycles` faults onto the `core fault at PC=… cycles=…` contract,
-      // and extends `reset()` to clear WASM state.
+      // WASM seam: `attachWasm` setter exists, but the adapter (WASM↔CPU
+      // state sync, fault mapping, reset sync) is still missing, so the
+      // non-null path throws by design instead of partially stepping.
       throw new Error('wasm seam unwired');
     } else {
       for (let i = 0; i < totalCycles; i++) {
@@ -131,9 +121,10 @@ export class AvrBackend implements ExecutionBackend {
     this.msCounter = 0;
     this.clampedMs = 0;
     this.failed = null;
-    // Unwired WASM seam: `wasm` has no injection point yet (always null), so
-    // there is no WASM state to clear. The wiring task must reset/sync WASM
-    // state here alongside the CPU rebuild (see `step()` branch note).
+    // WASM seam: `attachWasm` setter exists, but the adapter is still
+    // missing, so there is no WASM state to clear here yet. The wiring task
+    // must extend `reset()` to clear/sync WASM state; non-null `step()` path
+    // throws by design until then.
   }
 
   private buildCpu(): CPU {
