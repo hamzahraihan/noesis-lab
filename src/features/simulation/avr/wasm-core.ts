@@ -139,3 +139,32 @@ export async function cpuGate(): Promise<{ trapRate: number; glass: string; wall
   console.log(`cpuGate trapRate=0 wallMs=${wallMs.toFixed(0)} glass=0000`);
   return { trapRate: 0, glass: '0000', wallMs, placeholder: true as const };
 }
+
+export interface TrapShadow {
+  stepOnce(): boolean;
+}
+
+export interface SliceCore {
+  step(n: number): number;
+}
+
+export async function runSlice(
+  core: SliceCore,
+  shadow: TrapShadow,
+  cycles: number,
+): Promise<{ traps: number; advanced: number }> {
+  let traps = 0;
+  let advanced = 0;
+  while (advanced < cycles) {
+    const trappedPc = core.step(cycles - advanced);
+    if (trappedPc === -1) {
+      advanced = cycles;
+      break;
+    }
+    traps += 1;
+    const more = shadow.stepOnce();
+    advanced += 1;
+    if (!more) break;
+  }
+  return { traps, advanced };
+}
