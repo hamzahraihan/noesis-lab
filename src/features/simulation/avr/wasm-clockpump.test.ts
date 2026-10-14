@@ -12,4 +12,12 @@ describe('clock pump', () => {
     pumpShadowClock(() => {}, 16000);
     console.log(`pump16000 wallMs=${(performance.now() - t0).toFixed(1)}`);
   });
+
+  it('returns without ticking on non-finite cycles', () => {
+    expect(() =>
+      pumpShadowClock(() => {
+        throw new Error('must not tick');
+      }, Infinity),
+    ).not.toThrow();
+  });
 });

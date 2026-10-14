@@ -30,4 +30,12 @@ describe('ring drain', () => {
     expect(bytes[1056 + 13]).toBe(1);
     expect(bytes[1056 + 0]).toBe(0);
   });
+
+  it('clamps a corrupt-large backlog to the ring cap', () => {
+    const buf = new ArrayBuffer(2048);
+    const view = new DataView(buf);
+    view.setInt32(1204, 1000, true);
+    view.setInt32(1208, 0, true);
+    expect(drainWasmEvents(buf).length).toBeLessThanOrEqual(64);
+  });
 });

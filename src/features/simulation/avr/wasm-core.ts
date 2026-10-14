@@ -258,7 +258,7 @@ export function drainWasmEvents(memory: ArrayBuffer, maxEvents = 256): Array<{ g
   const view = new DataView(memory);
   const head = view.getInt32(WASM_HEAD_OFF, true);
   const tail = view.getInt32(WASM_TAIL_OFF, true);
-  const count = Math.max(0, Math.min(head - tail, maxEvents));
+  const count = Math.max(0, Math.min(head - tail, maxEvents, WASM_EVENT_CAP));
   const out: Array<{ gpio: number; high: boolean }> = [];
   for (let i = 0; i < count; i++) {
     const slot = WASM_EVENT_BASE + ((tail + i) % WASM_EVENT_CAP) * 2;
@@ -268,6 +268,7 @@ export function drainWasmEvents(memory: ArrayBuffer, maxEvents = 256): Array<{ g
 }
 
 export function pumpShadowClock(tick: () => void, cycles: number): void {
+  if (!Number.isFinite(cycles)) return;
   const n = Math.max(0, Math.floor(cycles));
   for (let i = 0; i < n; i++) tick();
 }
