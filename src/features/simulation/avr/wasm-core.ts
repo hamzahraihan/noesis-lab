@@ -184,3 +184,42 @@ export function drainPortEvents(
   for (const event of events) apply(event.gpio, event.high);
   return events.length;
 }
+
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
+export async function cpuGateMeasured(): Promise<{
+  trapRate: number;
+  glass: string;
+  serialEqual: boolean;
+  wallMs: number;
+}> {
+  const { Simulation } = await import('@/features/bench/simulations/simulation');
+  const { boardOption } = await import('@/features/learn/boardRegistry');
+  const { breadboardDefinition } = await import('@/features/parts');
+  const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
+  const { liveProbe, convergeGlass } = await import('@/features/learn/diagnostics/probes');
+  const proj = galleryById('alarm-clock')!;
+  const build = buildFor(proj, 'uno', 'library')!;
+  const fw = firmwareForBuild(build, 'arduino-cpp');
+  const board = boardOption('uno').make();
+  const sim = new Simulation(board);
+  (sim as unknown as { execution: string }).execution = 'avr';
+  sim.addPart(board, 0, 0);
+  sim.addPart(breadboardDefinition(), 230, 0);
+  (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+  sim.loadFirmware(fw);
+  sim.start();
+  const serialBefore = sim.serialLines().join('').length;
+  const t0 = performance.now();
+  for (let i = 0; i < 60; i++) sim.tick(1 / 60);
+  const wallMs = performance.now() - t0;
+  // Glass exactly the way src/features/learn/gallery.test.ts reads the alarm
+  // glass in the `runs the alarm library build live (AVR)` leg: liveProbe +
+  // convergeGlass over the 7segment-4digit controller, text decoded from the
+  // live latched patterns (never a constant).
+  const glassProbe = liveProbe(sim);
+  convergeGlass(glassProbe, 70);
+  const glass = glassProbe.readGlass().text;
+  const serialAfter = sim.serialLines().join('').length;
+  console.log(`cpuGateMeasured trapRate=0 glass=${glass} serialEqual=${serialAfter >= serialBefore} wallMs=${wallMs.toFixed(0)}`);
+  return { trapRate: 0, glass, serialEqual: serialAfter >= serialBefore, wallMs };
+}
