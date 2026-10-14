@@ -6,4 +6,4 @@
 set -e
 npx -y wabt@1.0.35 --version >/dev/null 2>&1 || npm i -D wabt@1.0.35
 npx wat2wasm src/features/simulation/avr/wasm/counter.wat -o src/features/simulation/avr/wasm/counter.wasm
-npx -y -p assemblyscript@0.27 asc src/features/simulation/avr/wasm/cpu.ts --outFile src/features/simulation/avr/wasm/avr-core.wasm --optimize
+npx -y -p assemblyscript@0.27 asc src/features/simulation/avr/wasm/cpu.ts --outFile src/features/simulation/avr/wasm/avr-core.wasm --optimize --memoryBase 2048
