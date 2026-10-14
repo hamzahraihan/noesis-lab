@@ -1,5 +1,10 @@
 import { AvrBackend } from './core';
 import type { Simulation } from '@/features/bench/simulations/simulation';
+import { SREG_DATA_ADDR, pullWasmState } from './wasm/sync';
+
+// Re-exported from the cycle-free sync leaf so existing import sites keep
+// working (`./wasm-core` stays the public path).
+export { SREG_DATA_ADDR, pullWasmState, readShadowState } from './wasm/sync';
 
 export interface WasmCore {
   stepCycles(n: number): void;
@@ -198,7 +203,9 @@ export function runAttached(
   shadow: AttachedShadow,
   cycles: number,
 ): { traps: number } {
-  // runAttached is the attached-runner superset of the mock-only runSlice predecessor.
+  // NOTE (legacy mock-only): this standalone runner is for unit harnesses
+  // only; the real attached driver is AvrBackend's loop in core.ts
+  // (runAttachedSlice). No behavior change.
   let traps = 0;
   let advanced = 0;
   while (advanced < cycles) {
@@ -271,32 +278,12 @@ export function pumpShadowClock(tick: () => void, cycles: number): void {
   for (let i = 0; i < n; i++) tick();
 }
 
-export const SREG_DATA_ADDR = 0x5f;
-
 export function readShadowSreg(data: ArrayLike<number>): number {
   return (data[SREG_DATA_ADDR] ?? 0) & 0xff;
 }
 
 export function writeShadowSreg(data: { [index: number]: number }, value: number): void {
   data[SREG_DATA_ADDR] = value & 0xff;
-}
-
-export function pullWasmState(
-  wasm: AttachedWasm,
-  shadow: { regs: number[]; pc: number; sreg: number },
-): void {
-  for (let i = 0; i < 32; i++) wasm.setReg(i, shadow.regs[i] ?? 0);
-  wasm.setPc(shadow.pc);
-  wasm.setSreg(shadow.sreg);
-}
-
-export function readShadowState(cpu: {
-  data: ArrayLike<number>;
-  pc: number;
-}): { regs: number[]; pc: number; sreg: number } {
-  const regs: number[] = [];
-  for (let i = 0; i < 32; i++) regs.push((cpu.data[i] ?? 0) & 0xff);
-  return { regs, pc: cpu.pc, sreg: (cpu.data[SREG_DATA_ADDR] ?? 0) & 0xff };
 }
 
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */

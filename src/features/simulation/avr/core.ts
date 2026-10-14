@@ -2,6 +2,7 @@ import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8j
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import type { AttachedWasm, WasmCore } from './wasm-core';
+import { SREG_DATA_ADDR, pullWasmState, readShadowState } from './wasm/sync';
 import { attachGpioBridge } from './gpio';
 import { attachTimer1, bindTimer1Outputs } from './timer1';
 import { attachTwiBridge } from './twi';
@@ -44,11 +45,9 @@ export interface AvrHooks {
 /** Single step clamp, mirroring MAX_FRAME_MS in bench/simulation.ts. */
 export const MAX_STEP_MS = 40;
 
-// Duplicates SREG_DATA_ADDR in wasm-core.ts (which duplicates the layout in
-// wasm/io.ts): the SREG I/O address rides the data bus at 0x5f. Kept local
-// to avoid a core<->wasm-core import cycle; any address change must be
-// mirrored in both places.
-const SREG_DATA_ADDR = 0x5f;
+// SREG I/O address (0x5f) lives in the cycle-free sync leaf
+// (wasm/sync.ts, mirroring the layout in wasm/io.ts); imported here so the
+// address stays single-sourced. Any address change lands in the leaf.
 
 export class AvrBackend implements ExecutionBackend {
   private cpu: CPU;
@@ -134,9 +133,13 @@ export class AvrBackend implements ExecutionBackend {
       ) {
         return;
       }
-      for (let i = 0; i < 32; i++) wasm.setReg(i, (this.cpu.data[i] ?? 0) & 0xff);
-      wasm.setPc(this.cpu.pc);
-      wasm.setSreg((this.cpu.data[SREG_DATA_ADDR] ?? 0) & 0xff);
+      // SREG address coupling stays explicit via the shared leaf constant
+      // (state itself flows through the leaf helpers).
+      void SREG_DATA_ADDR;
+      pullWasmState(
+        wasm as unknown as { setReg(i: number, v: number): void; setPc(v: number): void; setSreg(v: number): void },
+        readShadowState(this.cpu),
+      );
     };
     // Prime Wasm from the shadow so a mid-run attach resumes correctly.
     syncShadowToWasm();

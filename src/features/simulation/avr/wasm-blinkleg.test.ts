@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AvrBackend } from './core';
@@ -70,11 +69,14 @@ interface AttachedCore {
 }
 
 async function instantiateBlinkCore(words: Uint16Array): Promise<AttachedCore> {
-  execSync('sh scripts/build-avr-wasm.sh', { stdio: 'pipe' });
+  // Committed-artifact read: avr-core.wasm is checked in, never rebuilt here.
   const bytes = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
   const mod = await WebAssembly.compile(bytes);
   const instance = await WebAssembly.instantiate(mod, {});
   const ex = instance.exports as unknown as BlinkWasmExports;
+  if (typeof (ex as unknown as Record<string, unknown>).set_pc !== 'function') {
+    throw new Error('avr-core.wasm missing `set_pc` export — rebuild with `sh scripts/build-avr-wasm.sh`');
+  }
   ex.reset_cpu();
   // Wasm flash holds 512 words; longer firmware runs past it and OOB-traps
   // to the shadow, which stays authoritative — edges still match.
@@ -143,8 +145,18 @@ describe('blink leg', () => {
     // digitalWrite internals trap to the shadow; edges must still match.
     const realEdges: Edge[] = [];
     const realAttached = backendWithEdges(words, realEdges);
-    realAttached.attachWasm((await instantiateBlinkCore(words)) as never);
+    const realCore = await instantiateBlinkCore(words);
+    let realTraps = 0;
+    const rawRealStep = realCore.step.bind(realCore);
+    realCore.step = (n: number): number => {
+      const r = rawRealStep(n);
+      if (r !== -1) realTraps += 1;
+      return r;
+    };
+    realAttached.attachWasm(realCore as never);
     realAttached.step(16);
+    console.log(`leg=blink traps=${realTraps}`);
+    expect(realTraps).toBeGreaterThan(0);
     expect(realAttached.fault).toBeNull();
     expect(realEdges).toEqual(jsEdges);
   }, 240000);

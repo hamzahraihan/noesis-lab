@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AvrBackend } from './core';
+import { SREG_DATA_ADDR } from './wasm-core';
 import { McuRuntime } from '@/features/simulation/mcu';
 import { arduinoUnoR3 } from '@/features/parts';
 
@@ -16,11 +17,11 @@ function hooks(mcu: McuRuntime, settles: { count: number }) {
   };
 }
 
-function cpuState(backend: AvrBackend): { regs: number[]; pc: number } {
+function cpuState(backend: AvrBackend): { regs: number[]; pc: number; sreg: number } {
   const cpu = (backend as unknown as { cpu: { data: ArrayLike<number>; pc: number } }).cpu;
   const regs: number[] = [];
   for (let i = 0; i < 32; i++) regs.push((cpu.data[i] ?? 0) & 0xff);
-  return { regs, pc: cpu.pc };
+  return { regs, pc: cpu.pc, sreg: (cpu.data[SREG_DATA_ADDR] ?? 0) & 0xff };
 }
 
 describe('attached dispatch', () => {
@@ -95,14 +96,25 @@ describe('attached dispatch', () => {
     const mcuWasm = new McuRuntime(arduinoUnoR3());
     const settlesWasm = { count: 0 };
     const attached = new AvrBackend(words, hooks(mcuWasm, settlesWasm));
+    const rawStep = fake.step.bind(fake);
+    let traps = 0;
+    fake.step = (n: number): number => {
+      const r = rawStep(n);
+      if (r !== -1) traps += 1;
+      return r;
+    };
     attached.attachWasm(fake as never);
     attached.step(2);
     expect(attached.fault).toBeNull();
+    expect(traps).toBeGreaterThan(0);
     expect(settlesWasm.count).toBe(settlesJs.count);
     expect(attached.cycles).toBe(js.cycles);
     const jsState = cpuState(js);
     const attachedState = cpuState(attached);
     expect(attachedState.pc).toBe(jsState.pc);
     expect(attachedState.regs).toEqual(jsState.regs);
+    // Shadow SREG round-trips through the sync leaf into the fake.
+    expect(attachedState.sreg).toBe(jsState.sreg);
+    expect(fake.getSreg()).toBe(attachedState.sreg);
   });
 });
