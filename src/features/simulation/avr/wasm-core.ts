@@ -148,6 +148,8 @@ export interface SliceCore {
   step(n: number): number;
 }
 
+// NOTE (mock-only contract): cycle accounting here is 1-per-trap
+// placeholder until Wasm get_cycles wiring lands; no behavior change.
 export async function runSlice(
   core: SliceCore,
   shadow: TrapShadow,
@@ -191,6 +193,7 @@ export async function cpuGateMeasured(): Promise<{
   glass: string;
   serialEqual: boolean;
   wallMs: number;
+  measured: false;
 }> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');
@@ -221,5 +224,9 @@ export async function cpuGateMeasured(): Promise<{
   const glass = glassProbe.readGlass().text;
   const serialAfter = sim.serialLines().join('').length;
   console.log(`cpuGateMeasured trapRate=0 glass=${glass} serialEqual=${serialAfter >= serialBefore} wallMs=${wallMs.toFixed(0)}`);
-  return { trapRate: 0, glass, serialEqual: serialAfter >= serialBefore, wallMs };
+  // NOTE (gate honesty): trapRate:0/serialEqual are harness placeholders
+  // pending dual-path work, not measured dual-path results. `serialAfter >=
+  // serialBefore` is weak (`>=` on an append-only buffer); real string
+  // equality lands with dual-path. `measured: false` marks this until then.
+  return { trapRate: 0, glass, serialEqual: serialAfter >= serialBefore, wallMs, measured: false as const };
 }

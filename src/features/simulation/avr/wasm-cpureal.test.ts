@@ -88,4 +88,13 @@ describe('wasm cpu state', () => {
     expect(exports.get_pc()).toBe(0);
     expect(exports.get_cycles()).toBe(0);
   }, 120000);
+
+  it('does not overshoot a 2-cycle RJMP on a 1-cycle budget', async () => {
+    const exports = await instantiate();
+    exports.reset_cpu();
+    flashView(exports, 4)[0] = 0xcfff;
+    expect(exports.step(1)).toBe(-1);
+    expect(exports.get_pc()).toBe(0);
+    expect(exports.get_cycles()).toBe(0);
+  }, 120000);
 });

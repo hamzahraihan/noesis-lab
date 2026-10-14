@@ -8,5 +8,6 @@ describe('measured gate', () => {
     expect(typeof r.glass).toBe('string');
     expect(typeof r.serialEqual).toBe('boolean');
     expect(r.glass.length).toBeGreaterThan(0);
+    expect(r.measured).toBe(false);
   }, 90000);
 });

@@ -53,10 +53,10 @@ export class AvrBackend implements ExecutionBackend {
   private msCounter = 0;
   clampedMs = 0;
   private failed: string | null = null;
-  // WASM seam: `attachWasm` setter exists, but no adapter instantiates a
-  // `WasmCore` yet and `reset()` does not sync WASM state. The `step()`
-  // non-null branch below throws by design until the adapter lands.
-  // JS default path is unchanged.
+  // WASM seam: the `attachWasm`/`attachWasmReset` setters exist, but no
+  // adapter instantiates a `WasmCore` or syncs real Wasm state/reset yet.
+  // The `step()` non-null branch below throws by design until the adapter
+  // lands. JS default path is unchanged.
   private wasm: WasmCore | null = null;
   private wasmReset: (() => void) | null = null;
 
@@ -95,9 +95,9 @@ export class AvrBackend implements ExecutionBackend {
     const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
     if (this.wasm !== null) {
-      // WASM seam: `attachWasm` setter exists, but the adapter (WASM↔CPU
-      // state sync, fault mapping, reset sync) is still missing, so the
-      // non-null path throws by design instead of partially stepping.
+      // WASM seam: the setter exists but the adapter (WASM↔CPU state sync,
+      // fault mapping, reset sync) is still missing, so the non-null path
+      // throws by design instead of partially stepping.
       throw new Error('wasm seam unwired');
     } else {
       for (let i = 0; i < totalCycles; i++) {
@@ -126,10 +126,11 @@ export class AvrBackend implements ExecutionBackend {
     this.msCounter = 0;
     this.clampedMs = 0;
     this.failed = null;
-    // Attached Wasm state resets alongside the JS shadow (spec: reset clears both).
+    // Attached Wasm reset hook fires alongside the JS rebuild (spec: reset
+    // clears both), but no adapter wires real Wasm state/reset sync yet.
     this.wasmReset?.();
     // WASM seam: non-null `step()` path throws by design until the step
-    // adapter lands; reset sync above is the only WASM state cleared here.
+    // adapter lands; the hook above is the only Wasm reset cleared here.
   }
 
   private buildCpu(): CPU {

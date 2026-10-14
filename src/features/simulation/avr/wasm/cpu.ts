@@ -48,6 +48,9 @@ function readFlash(addr: i32): i32 {
 }
 
 export function step(n: i32): i32 {
+  // Trap ABI (single-PC): a trap surfaces as the returned PC — out-of-bounds
+  // fetch and unported opcodes share this channel. A future `trapKind`
+  // getter will distinguish them; `-1` always means "no trap this call".
   let remaining = n;
   while (remaining > 0) {
     const w = readFlash(pc);
@@ -58,6 +61,9 @@ export function step(n: i32): i32 {
       cycles += 1;
       remaining -= 1;
     } else if ((w & 0xf000) === 0xc000) {
+      // Overshoot guard: RJMP costs 2 cycles — with fewer than 2 remaining,
+      // return -1 WITHOUT advancing pc/cycles (no partial execution).
+      if (remaining < 2) return -1;
       let k = w & 0x0fff;
       if ((k & 0x0800) !== 0) k -= 0x1000;
       pc = pc + 1 + k;
