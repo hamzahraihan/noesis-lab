@@ -168,3 +168,19 @@ export async function runSlice(
   }
   return { traps, advanced };
 }
+
+export function syncPins(
+  shm: { samplePin(gpio: number, level: boolean): void },
+  levels: ReadonlyMap<number, boolean>,
+): void {
+  for (const [gpio, level] of levels) shm.samplePin(gpio, level);
+}
+
+export function drainPortEvents(
+  shm: { drainEvents(): Array<{ gpio: number; high: boolean }> },
+  apply: (gpio: number, high: boolean) => void,
+): number {
+  const events = shm.drainEvents();
+  for (const event of events) apply(event.gpio, event.high);
+  return events.length;
+}

@@ -58,9 +58,14 @@ export class AvrBackend implements ExecutionBackend {
   // non-null branch below throws by design until the adapter lands.
   // JS default path is unchanged.
   private wasm: WasmCore | null = null;
+  private wasmReset: (() => void) | null = null;
 
   attachWasm(core: WasmCore | null): void {
     this.wasm = core;
+  }
+
+  attachWasmReset(fn: (() => void) | null): void {
+    this.wasmReset = fn;
   }
 
   constructor(programWords: Uint16Array, hooks: AvrHooks) {
@@ -121,10 +126,10 @@ export class AvrBackend implements ExecutionBackend {
     this.msCounter = 0;
     this.clampedMs = 0;
     this.failed = null;
-    // WASM seam: `attachWasm` setter exists, but the adapter is still
-    // missing, so there is no WASM state to clear here yet. The wiring task
-    // must extend `reset()` to clear/sync WASM state; non-null `step()` path
-    // throws by design until then.
+    // Attached Wasm state resets alongside the JS shadow (spec: reset clears both).
+    this.wasmReset?.();
+    // WASM seam: non-null `step()` path throws by design until the step
+    // adapter lands; reset sync above is the only WASM state cleared here.
   }
 
   private buildCpu(): CPU {
