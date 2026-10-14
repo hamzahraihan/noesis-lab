@@ -8,13 +8,14 @@
 // pointer the host writes words through. A managed `Uint16Array` was
 // rejected: any `new` pulls the AS runtime's `env.abort` import into the
 // module, breaking `{}` instantiation; raw load/store keeps zero imports.
-// No SREG yet (I=7..C=0 reserved for later).
+// SREG is an i32 global masked to 8 bits on write (I=7..C=0).
 const FLASH_BASE: i32 = 0;
 const FLASH_WORDS: i32 = 512;
 const REGS_BASE: i32 = 1024;
 
 let pc: i32 = 0;
 let cycles: i32 = 0;
+let sreg: i32 = 0;
 
 export function flash_base(): i32 {
   return FLASH_BASE;
@@ -24,6 +25,7 @@ export function reset_cpu(): void {
   for (let i = 0; i < 32; i++) store<u8>(REGS_BASE + i, 0);
   pc = 0;
   cycles = 0;
+  sreg = 0;
 }
 
 export function get_reg(i: i32): i32 {
@@ -36,6 +38,18 @@ export function set_reg(i: i32, v: i32): void {
 
 export function get_pc(): i32 {
   return pc;
+}
+
+export function set_pc(v: i32): void {
+  pc = v;
+}
+
+export function get_sreg(): i32 {
+  return sreg;
+}
+
+export function set_sreg(v: i32): void {
+  sreg = v & 0xff;
 }
 
 export function get_cycles(): i32 {
