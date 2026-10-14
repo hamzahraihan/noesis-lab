@@ -272,6 +272,16 @@ export function pumpShadowClock(tick: () => void, cycles: number): void {
   for (let i = 0; i < n; i++) tick();
 }
 
+export const SREG_DATA_ADDR = 0x5f;
+
+export function readShadowSreg(data: ArrayLike<number>): number {
+  return (data[SREG_DATA_ADDR] ?? 0) & 0xff;
+}
+
+export function writeShadowSreg(data: { [index: number]: number }, value: number): void {
+  data[SREG_DATA_ADDR] = value & 0xff;
+}
+
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function cpuGateMeasured(): Promise<{
   trapRate: number;
