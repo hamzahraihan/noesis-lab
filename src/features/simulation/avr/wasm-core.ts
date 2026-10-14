@@ -190,9 +190,7 @@ export interface AttachedShadow {
 }
 
 function pullToWasm(wasm: AttachedWasm, state: { regs: number[]; pc: number; sreg: number }): void {
-  for (let i = 0; i < 32; i++) wasm.setReg(i, state.regs[i] ?? 0);
-  wasm.setPc(state.pc);
-  wasm.setSreg(state.sreg);
+  pullWasmState(wasm, state);
 }
 
 export function runAttached(
@@ -281,6 +279,24 @@ export function readShadowSreg(data: ArrayLike<number>): number {
 
 export function writeShadowSreg(data: { [index: number]: number }, value: number): void {
   data[SREG_DATA_ADDR] = value & 0xff;
+}
+
+export function pullWasmState(
+  wasm: AttachedWasm,
+  shadow: { regs: number[]; pc: number; sreg: number },
+): void {
+  for (let i = 0; i < 32; i++) wasm.setReg(i, shadow.regs[i] ?? 0);
+  wasm.setPc(shadow.pc);
+  wasm.setSreg(shadow.sreg);
+}
+
+export function readShadowState(cpu: {
+  data: ArrayLike<number>;
+  pc: number;
+}): { regs: number[]; pc: number; sreg: number } {
+  const regs: number[] = [];
+  for (let i = 0; i < 32; i++) regs.push((cpu.data[i] ?? 0) & 0xff);
+  return { regs, pc: cpu.pc, sreg: (cpu.data[SREG_DATA_ADDR] ?? 0) & 0xff };
 }
 
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */

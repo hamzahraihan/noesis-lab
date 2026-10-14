@@ -1,7 +1,7 @@
 import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
-import type { WasmCore } from './wasm-core';
+import type { AttachedWasm, WasmCore } from './wasm-core';
 import { attachGpioBridge } from './gpio';
 import { attachTimer1, bindTimer1Outputs } from './timer1';
 import { attachTwiBridge } from './twi';
@@ -86,13 +86,9 @@ export class AvrBackend implements ExecutionBackend {
   }
 
   private stepShadowInstruction(settleEvery: number): boolean {
-    try {
-      avrInstruction(this.cpu);
-      this.cpu.tick();
-    } catch (error) {
-      this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
-      return false;
-    }
+    // Delegates to the single-step core so the fault string stays identical
+    // on both paths; settle accounting is the only addition.
+    if (!this.stepShadowOnce()) return false;
     this.sinceSettle += 1;
     if (this.sinceSettle >= settleEvery) {
       this.sinceSettle = 0;
@@ -109,16 +105,17 @@ export class AvrBackend implements ExecutionBackend {
    * into Wasm, and the slice resumes. `remaining` counts shadow
    * instructions so the shadow always executes exactly `totalCycles`
    * instructions — the same count as the JS loop — keeping cycles,
-   * msCarry, msCounter, and settles shadow-authoritative. SREG rides along
+   * msCarry, msCounter, and settles shadow-authoritative. The `wasm.step`
+   * budget is an acceleration hint in Wasm units; correctness never depends
+   * on it. SREG rides along
    * opaquely via setSreg (no flag-reading op is ported yet).
    */
   private runAttachedSlice(totalCycles: number, settleEvery: number): void {
-    const wasm = this.wasm as unknown as {
-      step?(n: number): number;
-      setReg?(i: number, v: number): void;
-      setPc?(v: number): void;
-      setSreg?(v: number): void;
-    } | null;
+    // AttachedWasm is type-only (erased at compile), so this keeps the
+    // core<->wasm-core seam free of a runtime import cycle. Partial because
+    // a degenerate attach may lack every method; each use guards with
+    // `typeof ... === 'function'`.
+    const wasm = this.wasm as unknown as Partial<AttachedWasm> | null;
     if (wasm === null) return;
     // Degenerate attach without a step function (test placeholder): the
     // shadow runs the whole slice, preserving settle cadence and fault
@@ -185,7 +182,7 @@ export class AvrBackend implements ExecutionBackend {
           // Wasm and shadow disagree about control flow; keep the shadow
           // authoritative by running out the slice from the shadow pc
           // (the same instructions the JS path runs from here).
-          const owed = remaining - steps;
+          const owed = Math.max(0, remaining - steps);
           for (let i = 0; i < owed; i++) {
             if (!this.stepShadowInstruction(settleEvery)) return;
           }
@@ -235,6 +232,10 @@ export class AvrBackend implements ExecutionBackend {
       // stay shadow-authoritative. SREG rides along opaquely via set_sreg
       // (no flag-reading op is ported yet).
       this.runAttachedSlice(totalCycles, settleEvery);
+      // Fault path: the JS loop returns early without advancing msCarry, so
+      // a partial attached slice must too — otherwise the next step would
+      // under-budget and diverge from the JS cadence.
+      if (this.failed) return;
       const consumedMs = totalCycles / perMs;
       this.msCarry = ms - consumedMs;
       return;
