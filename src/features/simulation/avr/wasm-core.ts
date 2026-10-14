@@ -171,6 +171,51 @@ export async function runSlice(
   return { traps, advanced };
 }
 
+export interface AttachedWasm {
+  step(n: number): number;
+  getPc(): number;
+  setPc(v: number): void;
+  getReg(i: number): number;
+  setReg(i: number, v: number): void;
+  getSreg(): number;
+  setSreg(v: number): void;
+}
+
+export interface AttachedShadow {
+  stepOnce(): boolean;
+  readState(): { regs: number[]; pc: number; sreg: number };
+  writeState(s: { regs: number[]; pc: number; sreg: number }): void;
+}
+
+function pullToWasm(wasm: AttachedWasm, state: { regs: number[]; pc: number; sreg: number }): void {
+  for (let i = 0; i < 32; i++) wasm.setReg(i, state.regs[i] ?? 0);
+  wasm.setPc(state.pc);
+  wasm.setSreg(state.sreg);
+}
+
+export function runAttached(
+  wasm: AttachedWasm,
+  shadow: AttachedShadow,
+  cycles: number,
+): { traps: number } {
+  let traps = 0;
+  let advanced = 0;
+  while (advanced < cycles) {
+    const trappedPc = wasm.step(cycles - advanced);
+    if (trappedPc === -1) {
+      advanced = cycles;
+      break;
+    }
+    traps += 1;
+    const more = shadow.stepOnce();
+    pullToWasm(wasm, shadow.readState());
+    advanced += 1;
+    void trappedPc;
+    if (!more) break;
+  }
+  return { traps };
+}
+
 export function syncPins(
   shm: { samplePin(gpio: number, level: boolean): void },
   levels: ReadonlyMap<number, boolean>,
