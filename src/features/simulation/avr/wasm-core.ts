@@ -235,6 +235,38 @@ export function drainPortEvents(
   return events.length;
 }
 
+// NOTE (Task 1 coupling): layout constants below duplicate wasm/io.ts
+// (PIN_BASE 1056 / EVENT_BASE 1076 / CAP 64 / HEAD 1204 / TAIL 1208).
+// Wasm linear memory has no shared header, so any Task 1 address change
+// must be mirrored here.
+const WASM_PIN_BASE = 1056;
+const WASM_PIN_COUNT = 20;
+const WASM_EVENT_BASE = 1076;
+const WASM_EVENT_CAP = 64;
+const WASM_HEAD_OFF = 1204;
+const WASM_TAIL_OFF = 1208;
+
+export function samplePinsToWasm(memory: ArrayBuffer, levels: ReadonlyMap<number, boolean>): void {
+  const bytes = new Uint8Array(memory);
+  for (const [gpio, level] of levels) {
+    if (gpio >= 0 && gpio < WASM_PIN_COUNT) bytes[WASM_PIN_BASE + gpio] = level ? 1 : 0;
+  }
+}
+
+export function drainWasmEvents(memory: ArrayBuffer, maxEvents = 256): Array<{ gpio: number; high: boolean }> {
+  const bytes = new Uint8Array(memory);
+  const view = new DataView(memory);
+  const head = view.getInt32(WASM_HEAD_OFF, true);
+  const tail = view.getInt32(WASM_TAIL_OFF, true);
+  const count = Math.max(0, Math.min(head - tail, maxEvents));
+  const out: Array<{ gpio: number; high: boolean }> = [];
+  for (let i = 0; i < count; i++) {
+    const slot = WASM_EVENT_BASE + ((tail + i) % WASM_EVENT_CAP) * 2;
+    out.push({ gpio: bytes[slot] ?? 0, high: (bytes[slot + 1] ?? 0) !== 0 });
+  }
+  return out;
+}
+
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function cpuGateMeasured(): Promise<{
   trapRate: number;
