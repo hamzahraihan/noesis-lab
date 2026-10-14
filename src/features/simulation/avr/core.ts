@@ -69,6 +69,7 @@ export class AvrBackend implements ExecutionBackend {
   }
 
   stepShadowOnce(): boolean {
+    if (this.failed) return false;
     try {
       avrInstruction(this.cpu);
       this.cpu.tick();

@@ -150,6 +150,7 @@ export interface SliceCore {
 
 // NOTE (mock-only contract): cycle accounting here is 1-per-trap
 // placeholder until Wasm get_cycles wiring lands; no behavior change.
+// runSlice is the mock-only predecessor; runAttached is the attached-runner superset.
 export async function runSlice(
   core: SliceCore,
   shadow: TrapShadow,
@@ -184,6 +185,7 @@ export interface AttachedWasm {
 export interface AttachedShadow {
   stepOnce(): boolean;
   readState(): { regs: number[]; pc: number; sreg: number };
+  // writeState is called by the future AvrBackend adapter (currently unused).
   writeState(s: { regs: number[]; pc: number; sreg: number }): void;
 }
 
@@ -198,6 +200,7 @@ export function runAttached(
   shadow: AttachedShadow,
   cycles: number,
 ): { traps: number } {
+  // runAttached is the attached-runner superset of the mock-only runSlice predecessor.
   let traps = 0;
   let advanced = 0;
   while (advanced < cycles) {

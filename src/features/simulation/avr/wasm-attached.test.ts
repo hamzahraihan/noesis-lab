@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runAttached, type AttachedWasm } from './wasm-core';
 
-describe('attached run', () => {
+describe('wasm-visible preservation', () => {
   it('syncs all 32 registers plus sreg plus pc both ways', async () => {
     const regs = new Array(32).fill(0);
     let pc = 0;
@@ -33,17 +33,19 @@ describe('attached run', () => {
         sreg = v & 0xff;
       },
     };
+    // DIVERGENT shadow: wasm regs start zeroed, shadow carries regs[i]=i,
+    // pc 5, sreg 3, so the post-run assertions prove wasm-visible state
+    // was overwritten from the shadow (not an echo of its own state).
+    const shadowRegs = Array.from({ length: 32 }, (_, i) => i);
     const shadow = {
       stepOnce: () => true,
-      readState: () => ({ regs: [...regs], pc, sreg }),
+      readState: () => ({ regs: [...shadowRegs], pc: 5, sreg: 3 }),
       writeState: () => {},
     };
-    regs[0] = 0x41;
-    sreg = 0x02;
     const r = runAttached(wasm, shadow, 5);
     expect(r.traps).toBe(1);
-    expect(wasm.getReg(0)).toBe(0x41);
-    expect(wasm.getPc()).toBe(0);
-    expect(wasm.getSreg()).toBe(0x02);
+    for (let i = 0; i < 32; i++) expect(wasm.getReg(i)).toBe(i);
+    expect(wasm.getPc()).toBe(5);
+    expect(wasm.getSreg()).toBe(3);
   });
 });

@@ -1,3 +1,4 @@
+/* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 import { describe, expect, it } from 'vitest';
 import { AvrBackend } from './core';
 import { McuRuntime } from '@/features/simulation/mcu';
@@ -45,6 +46,9 @@ describe('dual path', () => {
     expect(shadowCalls).toBe(4);
     const rank = rankJson as Array<{ opcode: string; count: number }>;
     const total = rank.reduce((sum, entry) => sum + entry.count, 0);
-    expect(coverage(rank, new Set()).total).toBe(total);
+    const ported = new Set([rank[0].opcode]);
+    const c = coverage(rank, ported);
+    expect(c.covered).toBe(rank[0].count);
+    expect(c.rate).toBe(rank[0].count / total);
   });
 });

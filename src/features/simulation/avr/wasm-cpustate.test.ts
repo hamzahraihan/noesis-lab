@@ -31,4 +31,13 @@ describe('wasm cpu state', () => {
     expect(exports.get_pc()).toBe(0);
     expect(exports.get_sreg()).toBe(0);
   }, 120000);
+
+  it('allows backwards set_pc', async () => {
+    const instance = await instantiate();
+    const exports = instance.exports as unknown as CpuExports;
+    exports.reset_cpu();
+    exports.set_pc(41);
+    exports.set_pc(0);
+    expect(exports.get_pc()).toBe(0);
+  }, 120000);
 });
