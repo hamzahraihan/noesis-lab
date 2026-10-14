@@ -267,6 +267,11 @@ export function drainWasmEvents(memory: ArrayBuffer, maxEvents = 256): Array<{ g
   return out;
 }
 
+export function pumpShadowClock(tick: () => void, cycles: number): void {
+  const n = Math.max(0, Math.floor(cycles));
+  for (let i = 0; i < n; i++) tick();
+}
+
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */
 export async function cpuGateMeasured(): Promise<{
   trapRate: number;
