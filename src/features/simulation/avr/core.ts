@@ -44,6 +44,12 @@ export interface AvrHooks {
 /** Single step clamp, mirroring MAX_FRAME_MS in bench/simulation.ts. */
 export const MAX_STEP_MS = 40;
 
+// Duplicates SREG_DATA_ADDR in wasm-core.ts (which duplicates the layout in
+// wasm/io.ts): the SREG I/O address rides the data bus at 0x5f. Kept local
+// to avoid a core<->wasm-core import cycle; any address change must be
+// mirrored in both places.
+const SREG_DATA_ADDR = 0x5f;
+
 export class AvrBackend implements ExecutionBackend {
   private cpu: CPU;
   private readonly programWords: Uint16Array;
@@ -53,10 +59,9 @@ export class AvrBackend implements ExecutionBackend {
   private msCounter = 0;
   clampedMs = 0;
   private failed: string | null = null;
-  // WASM seam: the `attachWasm`/`attachWasmReset` setters exist, but no
-  // adapter instantiates a `WasmCore` or syncs real Wasm state/reset yet.
-  // The `step()` non-null branch below throws by design until the adapter
-  // lands. JS default path is unchanged.
+  // WASM seam: `attachWasm`/`attachWasmReset` inject the attached core.
+  // `step()` routes to `runAttachedSlice` when non-null (tests only); the
+  // JS default path (`wasm` null) is unchanged.
   private wasm: WasmCore | null = null;
   private wasmReset: (() => void) | null = null;
 
@@ -77,6 +82,121 @@ export class AvrBackend implements ExecutionBackend {
     } catch (error) {
       this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
       return false;
+    }
+  }
+
+  private stepShadowInstruction(settleEvery: number): boolean {
+    try {
+      avrInstruction(this.cpu);
+      this.cpu.tick();
+    } catch (error) {
+      this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
+      return false;
+    }
+    this.sinceSettle += 1;
+    if (this.sinceSettle >= settleEvery) {
+      this.sinceSettle = 0;
+      this.hooks.onSettle();
+    }
+    return true;
+  }
+
+  /**
+   * Attached dispatch (tests only): Wasm runs each slice until it traps;
+   * the shadow then catches up from its slice-start pc up to and including
+   * the trapped pc (executing the prefix with side effects exactly once —
+   * Wasm prefix execution is side-effect-free by invariant), syncs state
+   * into Wasm, and the slice resumes. `remaining` counts shadow
+   * instructions so the shadow always executes exactly `totalCycles`
+   * instructions — the same count as the JS loop — keeping cycles,
+   * msCarry, msCounter, and settles shadow-authoritative. SREG rides along
+   * opaquely via setSreg (no flag-reading op is ported yet).
+   */
+  private runAttachedSlice(totalCycles: number, settleEvery: number): void {
+    const wasm = this.wasm as unknown as {
+      step?(n: number): number;
+      setReg?(i: number, v: number): void;
+      setPc?(v: number): void;
+      setSreg?(v: number): void;
+    } | null;
+    if (wasm === null) return;
+    // Degenerate attach without a step function (test placeholder): the
+    // shadow runs the whole slice, preserving settle cadence and fault
+    // contract exactly.
+    if (typeof wasm.step !== 'function') {
+      for (let i = 0; i < totalCycles; i++) {
+        if (!this.stepShadowInstruction(settleEvery)) return;
+      }
+      return;
+    }
+    const syncShadowToWasm = (): void => {
+      if (
+        typeof wasm.setReg !== 'function' ||
+        typeof wasm.setPc !== 'function' ||
+        typeof wasm.setSreg !== 'function'
+      ) {
+        return;
+      }
+      for (let i = 0; i < 32; i++) wasm.setReg(i, (this.cpu.data[i] ?? 0) & 0xff);
+      wasm.setPc(this.cpu.pc);
+      wasm.setSreg((this.cpu.data[SREG_DATA_ADDR] ?? 0) & 0xff);
+    };
+    // Prime Wasm from the shadow so a mid-run attach resumes correctly.
+    syncShadowToWasm();
+    let remaining = totalCycles;
+    while (remaining > 0) {
+      if (this.failed) return;
+      let trappedPc: number;
+      try {
+        trappedPc = wasm.step(remaining);
+      } catch {
+        // Wasm-side failure: the shadow stays authoritative and runs the
+        // rest of the slice on its own.
+        for (let i = 0; i < remaining; i++) {
+          if (!this.stepShadowInstruction(settleEvery)) return;
+        }
+        syncShadowToWasm();
+        return;
+      }
+      if (trappedPc === -1) {
+        for (let i = 0; i < remaining; i++) {
+          if (!this.stepShadowInstruction(settleEvery)) return;
+        }
+        syncShadowToWasm();
+        return;
+      }
+      if (!Number.isInteger(trappedPc) || trappedPc < 0) {
+        // Malformed trap channel: same fallback as a Wasm-side failure.
+        for (let i = 0; i < remaining; i++) {
+          if (!this.stepShadowInstruction(settleEvery)) return;
+        }
+        syncShadowToWasm();
+        return;
+      }
+      // Trap at trappedPc: the shadow catches up from its current pc up to
+      // and including the trapped op.
+      let steps = 0;
+      let guard = totalCycles + 1024;
+      while (this.cpu.pc !== trappedPc) {
+        if (!this.stepShadowInstruction(settleEvery)) return;
+        steps += 1;
+        guard -= 1;
+        if (guard <= 0) {
+          // Wasm and shadow disagree about control flow; keep the shadow
+          // authoritative by running out the slice from the shadow pc
+          // (the same instructions the JS path runs from here).
+          const owed = remaining - steps;
+          for (let i = 0; i < owed; i++) {
+            if (!this.stepShadowInstruction(settleEvery)) return;
+          }
+          syncShadowToWasm();
+          return;
+        }
+      }
+      if (!this.stepShadowInstruction(settleEvery)) return;
+      steps += 1;
+      syncShadowToWasm();
+      remaining -= steps;
     }
   }
 
@@ -107,24 +227,20 @@ export class AvrBackend implements ExecutionBackend {
     const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
     if (this.wasm !== null) {
-      // WASM seam: the setter exists but the adapter (WASM↔CPU state sync,
-      // fault mapping, reset sync) is still missing, so the non-null path
-      // throws by design instead of partially stepping.
-      throw new Error('wasm seam unwired');
+      // Attached dispatch (tests only): Wasm runs each slice until it traps;
+      // the shadow then catches up from the slice start (executing the prefix
+      // with side effects exactly once — Wasm prefix execution is
+      // side-effect-free by invariant) plus the trapped op, syncs state into
+      // Wasm, and the slice resumes. Cycles, msCarry, msCounter, and settles
+      // stay shadow-authoritative. SREG rides along opaquely via set_sreg
+      // (no flag-reading op is ported yet).
+      this.runAttachedSlice(totalCycles, settleEvery);
+      const consumedMs = totalCycles / perMs;
+      this.msCarry = ms - consumedMs;
+      return;
     } else {
       for (let i = 0; i < totalCycles; i++) {
-        try {
-          avrInstruction(this.cpu);
-          this.cpu.tick();
-        } catch (error) {
-          this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
-          return;
-        }
-        this.sinceSettle += 1;
-        if (this.sinceSettle >= settleEvery) {
-          this.sinceSettle = 0;
-          this.hooks.onSettle();
-        }
+        if (!this.stepShadowInstruction(settleEvery)) return;
       }
     }
     const consumedMs = totalCycles / perMs;
@@ -139,10 +255,8 @@ export class AvrBackend implements ExecutionBackend {
     this.clampedMs = 0;
     this.failed = null;
     // Attached Wasm reset hook fires alongside the JS rebuild (spec: reset
-    // clears both), but no adapter wires real Wasm state/reset sync yet.
+    // clears both).
     this.wasmReset?.();
-    // WASM seam: non-null `step()` path throws by design until the step
-    // adapter lands; the hook above is the only Wasm reset cleared here.
   }
 
   private buildCpu(): CPU {
