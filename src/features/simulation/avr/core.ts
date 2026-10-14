@@ -68,6 +68,17 @@ export class AvrBackend implements ExecutionBackend {
     this.wasmReset = fn;
   }
 
+  stepShadowOnce(): boolean {
+    try {
+      avrInstruction(this.cpu);
+      this.cpu.tick();
+      return true;
+    } catch (error) {
+      this.failed = `core fault at PC=${this.cpu.pc} cycles=${this.cpu.cycles}: ${String(error)}`;
+      return false;
+    }
+  }
+
   constructor(programWords: Uint16Array, hooks: AvrHooks) {
     this.programWords = programWords;
     this.hooks = hooks;
