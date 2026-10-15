@@ -549,12 +549,20 @@ class SimCore implements CoreHandle {
       this.faultText = loaded.cause;
       return;
     }
-    loaded.module.flashWords(program);
-    // attachWasm still declares the legacy WasmCore shape while the driver
-    // runs the AttachedWasm shape (cast lives inside runAttachedSlice); the
-    // parameter-level cast keeps this seam from widening.
-    backend.attachWasm(loaded.module.core as unknown as Parameters<AvrBackend['attachWasm']>[0]);
-    backend.attachWasmReset(() => loaded.module.reset());
+    try {
+      loaded.module.flashWords(program);
+      // attachWasm still declares the legacy WasmCore shape while the driver
+      // runs the AttachedWasm shape (cast lives inside runAttachedSlice); the
+      // parameter-level cast keeps this seam from widening.
+      backend.attachWasm(loaded.module.core as unknown as Parameters<AvrBackend['attachWasm']>[0]);
+      backend.attachWasmReset(() => loaded.module.reset());
+    } catch (error) {
+      if (generation !== this.wasmGeneration || this.avrBackend !== backend) return;
+      this.faultText = `wasm attach failed: ${error instanceof Error ? error.message : String(error)}`;
+      return;
+    }
+    if (generation !== this.wasmGeneration || this.avrBackend !== backend) return;
+    if (this.faultText?.startsWith('wasm ') ?? false) this.faultText = null;
     this.wasmAttachedTo = backend;
   }
 
