@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe, type ProbeSim } from './probes';
+import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe, type ProbeSim } from './probes';
 import { boardOption } from '../boardRegistry';
 import { firmwareForBuild, galleryById } from '../gallery';
 import { Simulation } from '@/features/bench';
@@ -21,10 +21,12 @@ function tinyAlarmSim(): Simulation {
 }
 
 describe('probes', () => {
-  it('snapshots midnight zeros on a fresh interpreter sim', () => {
-    const snap = liveProbe(tinyAlarmSim()).readGlass();
-    expect(snap.glyphs).toEqual([ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH]);
-  });
+  it('snapshots 15:00 on a driven interpreter sim', () => {
+    const sim = tinyAlarmSim();
+    for (let frame = 0; frame < 120; frame++) sim.tick(0.05);
+    const snap = liveProbe(sim).readGlass();
+    expect(snap.glyphs).toEqual([ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH]);
+  }, 60000);
 
   it('matches the Wokwi values rendering bit for bit', () => {
     const simulation = tinyAlarmSim();
@@ -41,6 +43,7 @@ describe('probes', () => {
     }
     expect(values).toHaveLength(32);
     expect(ONE_GLYPH).toEqual([0, 1, 1, 0, 0, 0, 0, 0]);
+    expect(FIVE_GLYPH).toEqual([1, 0, 1, 1, 0, 1, 1, 0]);
   });
 
   it('unions scripted single-segment slices into the converged full pattern', () => {

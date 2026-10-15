@@ -6,6 +6,6 @@ describe('slice3 gate', () => {
     const { slice3Gate } = await import('./wasm-core');
     const r = await slice3Gate();
     expect(r.trapRate).toBeLessThan(0.01);
-    expect(r.glass).toBe('0000');
+    expect(r.glass).toBe('1500');
   }, 60000);
 });

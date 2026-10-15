@@ -476,3 +476,19 @@ describe('ds1307 on a live bench', () => {
     expect([bus.read(), bus.read()]).toEqual([0x01, 0x01]);
   });
 });
+
+describe('ds1307 preset', () => {
+  it('reads back preset time and advances it with the host', async () => {
+    const { Ds1307 } = await import('./ds1307');
+    const rtc = new Ds1307();
+    rtc.applyPreset(15, 0, 0, [[0x08, 1], [0x09, 15], [0x0a, 10]]);
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 0));
+    rtc.receive(0x00, true);
+    expect([...rtc.read(3)]).toEqual([0x00, 0x00, 0x15]);
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 61));
+    rtc.receive(0x00, true);
+    expect([...rtc.read(3)]).toEqual([0x01, 0x01, 0x15]);
+    rtc.receive(0x08, true);
+    expect([...rtc.read(3)]).toEqual([1, 15, 10]);
+  });
+});

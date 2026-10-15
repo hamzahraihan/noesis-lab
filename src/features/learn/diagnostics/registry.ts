@@ -20,6 +20,7 @@ import { boardOption } from '../boardRegistry';
 import { firmwareForBuild, GALLERY, type GalleryBuild } from '../gallery';
 import {
   convergeGlass,
+  FIVE_GLYPH,
   F_GLYPH,
   liveProbe,
   N_GLYPH,
@@ -141,9 +142,9 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
  * Mirrors `runs each LCD project live on the bench` (alarm branch: 120
  * frames, GPIO commons, colon blink, released buttons, silent buzzer,
  * advancing serial seconds, 12-frame alarm tap) and `moves the
- * alarm-clock digits over time and on button taps` (30 frames to midnight,
- * 61 s jump plus 12 frames to 00:01, 12-frame Hour hold plus 22 frames to
- * 01/02:01, with the toggle last: arming parks the glass in the alarm-time
+ * alarm-clock digits over time and on button taps` (30 frames to 15:00,
+ * 61 s jump plus 12 frames to 15:01, 12-frame Hour hold plus 22 frames to
+ * 16/17:01, with the toggle last: arming parks the glass in the alarm-time
  * view, which would hide the clock-view minute/hour assertions behind it).
  * The colon blink reads through `glass().colon` (the live
  * solver bias) instead of the leg's Wokwi `colonValue` sampling.
@@ -176,15 +177,15 @@ const alarmRawChecks: CheckDef[] = [
     },
   },
   {
-    name: 'idles at midnight',
+    name: 'idles at 15:00',
     run: (sim) => {
       const started = performance.now();
-      const name = 'idles at midnight';
+      const name = 'idles at 15:00';
       for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
       const glass = sim.glass();
-      if (glass.text !== '0000') return verdict(name, started, 'fail', `glass reads ${glass.text}`);
-      if (!sameGlass(glass.glyphs, [ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH])) {
-        return verdict(name, started, 'fail', 'a digit is not zero');
+      if (glass.text !== '1500') return verdict(name, started, 'fail', `glass reads ${glass.text}`);
+      if (!sameGlass(glass.glyphs, [ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH])) {
+        return verdict(name, started, 'fail', 'a digit is not 1500');
       }
       return verdict(name, started, 'pass');
     },
@@ -194,7 +195,7 @@ const alarmRawChecks: CheckDef[] = [
     run: (sim) => {
       const started = performance.now();
       const name = 'rtc ticks under the display';
-      // Order-dependent: relies on "idles at midnight" (serial seconds accumulate over prior ticks).
+      // Order-dependent: relies on "idles at 15:00" (serial seconds accumulate over prior ticks).
       const seconds = [...sim.serialText().matchAll(/t=\d+:\d+:(\d+)/g)].map((match) =>
         Number(match[1]),
       );
@@ -205,14 +206,14 @@ const alarmRawChecks: CheckDef[] = [
     },
   },
   {
-    name: 'a minute later shows 00:01',
+    name: 'shows 15:01 a minute later',
     run: (sim) => {
       const started = performance.now();
-      const name = 'a minute later shows 00:01';
+      const name = 'shows 15:01 a minute later';
       sim.jumpTimeMs(61000);
       for (let frame = 0; frame < 12; frame++) sim.tick(0.05);
       const text = sim.glass().text;
-      if (text !== '0001') return verdict(name, started, 'fail', `glass reads ${text}`);
+      if (text !== '1501') return verdict(name, started, 'fail', `glass reads ${text}`);
       return verdict(name, started, 'pass');
     },
   },
@@ -226,7 +227,7 @@ const alarmRawChecks: CheckDef[] = [
       sim.pressButton(0, false);
       for (let frame = 0; frame < 22; frame++) sim.tick(0.05);
       const text = sim.glass().text;
-      if (!/^0[12]01$/.test(text)) return verdict(name, started, 'fail', `glass reads ${text}`);
+      if (!/^1[67]01$/.test(text)) return verdict(name, started, 'fail', `glass reads ${text}`);
       return verdict(name, started, 'pass');
     },
   },
@@ -251,14 +252,14 @@ const alarmRawChecks: CheckDef[] = [
  * alarm-clock on uno:library: the AVR build from the committed HEX.
  *
  * Mirrors `runs the alarm library build live (AVR)` (30 frames, 70-cap
- * converge to midnight; 61 s jump, 45-frame pre-wait, 70-cap converge to
- * 00:01) and `…live status, NVRAM, and buzzer (AVR)` (8 frames disarmed,
- * 20-frame 0.01 pre-wait plus 40-cap converge to the O/n status view, core
- * reset plus 60-cap converge to the persisted off view, staged armed save
- * plus 10 frames and a 25-frame siren watch). The siren block runs before
- * the minute jump: the staged save arms 00:00 while the RTC still sits
- * just past midnight, so jumping first would leave the alarm never due.
- * The colon blink reads
+ * converge to 15:00; 61 s jump, 45-frame pre-wait, 70-cap converge to
+ * 15:01) and `…live status, NVRAM, and buzzer (AVR)` (8 frames armed, a
+ * disarming tap plus 40-cap converge to the off view, a re-arming tap plus
+ * 40-cap converge back to On, core reset plus 60-cap converge to the
+ * persisted off view, staged armed save plus 10 frames, jump into the
+ * 15:10 minute and a 25-frame siren watch). The siren block computes its
+ * jump from the live glass and serial seconds so it lands inside the alarm
+ * minute whatever the prior checks consumed. The colon blink reads
  * through `glass().colon` over the leg's 60 frames instead of Wokwi
  * sampling; the I2C save assertion is covered by the NVRAM round-trip
  * glass (the bus log has no `HarnessSim` accessor).
@@ -266,26 +267,26 @@ const alarmRawChecks: CheckDef[] = [
 
 const alarmLibraryChecks: CheckDef[] = [
   {
-    name: 'idles at midnight',
+    name: 'idles at 15:00',
     run: (sim) => {
       const started = performance.now();
-      const name = 'idles at midnight';
+      const name = 'idles at 15:00';
       for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
       const midnight = convergeGlass(asProbe(sim), 70);
       if (!midnight.converged) return verdict(name, started, 'fail', 'multiplex never settled');
-      if (!sameGlass(midnight.glyphs, [ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH])) {
-        return verdict(name, started, 'fail', 'glass is not midnight');
+      if (!sameGlass(midnight.glyphs, [ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH])) {
+        return verdict(name, started, 'fail', 'glass is not 15:00');
       }
       return verdict(name, started, 'pass');
     },
   },
   {
-    name: 'buzzer silent while disarmed',
+    name: 'buzzer silent while armed but not due',
     run: (sim) => {
       const started = performance.now();
-      const name = 'buzzer silent while disarmed';
+      const name = 'buzzer silent while armed but not due';
       for (let frame = 0; frame < 8; frame++) sim.tick(0.05);
-      if (sim.readGpio(17)) return verdict(name, started, 'fail', 'buzzer driven while disarmed');
+      if (sim.readGpio(17)) return verdict(name, started, 'fail', 'buzzer driven while armed but not due');
       return verdict(name, started, 'pass');
     },
   },
@@ -298,8 +299,19 @@ const alarmLibraryChecks: CheckDef[] = [
       for (let frame = 0; frame < 20; frame++) sim.tick(0.01);
       const status = convergeGlass(asProbe(sim), 40);
       if (!status.converged) return verdict(name, started, 'fail', 'status view never settled');
-      if (!sameGlyph(status.glyphs[1], ZERO_GLYPH) || !sameGlyph(status.glyphs[2], N_GLYPH)) {
-        return verdict(name, started, 'fail', 'status view is not On');
+      if (!sameGlyph(status.glyphs[1], ZERO_GLYPH) || !sameGlyph(status.glyphs[2], F_GLYPH)) {
+        return verdict(name, started, 'fail', 'status view is not Off');
+      }
+      // Tap again to re-arm: the reset check below boots armed only if the
+      // saved state is armed, which is what gives its proof power.
+      sim.pressButton(2, false);
+      for (let frame = 0; frame < 8; frame++) sim.tick(0.05);
+      sim.pressButton(2, true);
+      for (let frame = 0; frame < 20; frame++) sim.tick(0.01);
+      const rearmed = convergeGlass(asProbe(sim), 40);
+      if (!rearmed.converged) return verdict(name, started, 'fail', 're-arm status never settled');
+      if (!sameGlyph(rearmed.glyphs[1], ZERO_GLYPH) || !sameGlyph(rearmed.glyphs[2], N_GLYPH)) {
+        return verdict(name, started, 'fail', 're-arm status is not On');
       }
       return verdict(name, started, 'pass');
     },
@@ -335,6 +347,20 @@ const alarmLibraryChecks: CheckDef[] = [
       sim.stageArmedAlarm?.();
       if (sim.resetAvrCore?.() !== true) return verdict(name, started, 'skip', 'no avr core flashed');
       for (let frame = 0; frame < 10; frame++) sim.tick(0.05);
+      // Land inside the 15:10 alarm minute from wherever prior checks left
+      // the clock, reading the same live glass and serial seconds the legs
+      // assert rather than assuming a fixed offset.
+      const shownMin = Number(sim.glass().text.slice(2));
+      const serials = [...sim.serialText().matchAll(/t=\d+:(\d+):(\d+)/g)];
+      const lastSerial = serials[serials.length - 1];
+      const serialSec = lastSerial !== undefined ? Number(lastSerial[2]) : 0;
+      if (!(shownMin >= 0 && shownMin <= 10)) {
+        return verdict(name, started, 'fail', 'clock left the alarm hour');
+      }
+      if (shownMin !== 10) {
+        sim.jumpTimeMs(((10 - shownMin) * 60 + (5 - serialSec)) * 1000);
+        for (let frame = 0; frame < 20; frame++) sim.tick(0.05);
+      }
       let buzzerSeenHigh = false;
       for (let frame = 0; frame < 25; frame++) {
         sim.tick(0.05);
@@ -345,16 +371,16 @@ const alarmLibraryChecks: CheckDef[] = [
     },
   },
   {
-    name: 'shows 00:01 a minute later',
+    name: 'shows 15:11 a minute after the siren minute',
     run: (sim) => {
       const started = performance.now();
-      const name = 'shows 00:01 a minute later';
+      const name = 'shows 15:11 a minute after the siren minute';
       sim.jumpTimeMs(61000);
       for (let frame = 0; frame < 45; frame++) sim.tick(0.05);
       const minute = convergeGlass(asProbe(sim), 70);
       if (!minute.converged) return verdict(name, started, 'fail', 'multiplex never settled');
-      if (!sameGlass(minute.glyphs, [ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH, ONE_GLYPH])) {
-        return verdict(name, started, 'fail', 'glass is not 00:01');
+      if (!sameGlass(minute.glyphs, [ONE_GLYPH, FIVE_GLYPH, ONE_GLYPH, ONE_GLYPH])) {
+        return verdict(name, started, 'fail', 'glass is not 15:11');
       }
       return verdict(name, started, 'pass');
     },

@@ -100,6 +100,19 @@ export interface PartInstance {
    * means the definition default. Display-only like `name`.
    */
   capColour?: string;
+  /**
+   * Seeded clock state for RTC parts, applied once when the engine first
+   * creates the part's device — later rebuilds carry the live device
+   * instead, so sketch edits and NVRAM saves survive bench edits. The
+   * declaration (not an in-setup write) is what survives load, start, and
+   * undo. Display-only in spirit: identity and nets keep keying on `id`.
+   */
+  initialRtc?: {
+    readonly hours: number;
+    readonly minutes: number;
+    readonly seconds: number;
+    readonly nvram?: ReadonlyArray<readonly [number, number]>;
+  };
   /** Header pin id to the terminal it occupies. */
   readonly terminals: Record<string, number>;
 }
@@ -183,6 +196,12 @@ export interface BenchSnapshot {
     readonly rotation: Rotation;
     readonly name?: string;
     readonly capColour?: string;
+    readonly initialRtc?: {
+      readonly hours: number;
+      readonly minutes: number;
+      readonly seconds: number;
+      readonly nvram?: ReadonlyArray<readonly [number, number]>;
+    };
     readonly terminals: Readonly<Record<string, number>>;
   }[];
   readonly wires: readonly {
@@ -241,6 +260,12 @@ export class BenchBuilder {
         rotation: part.rotation,
         name: part.name,
         capColour: part.capColour,
+        initialRtc: part.initialRtc && {
+          hours: part.initialRtc.hours,
+          minutes: part.initialRtc.minutes,
+          seconds: part.initialRtc.seconds,
+          nvram: part.initialRtc.nvram?.map(([address, value]) => [address, value] as const),
+        },
         terminals: { ...part.terminals },
       })),
       wires: this.wires.map((wire) => ({
@@ -284,6 +309,12 @@ export class BenchBuilder {
         rotation: part.rotation,
         name: part.name,
         capColour: part.capColour,
+        initialRtc: part.initialRtc && {
+          hours: part.initialRtc.hours,
+          minutes: part.initialRtc.minutes,
+          seconds: part.initialRtc.seconds,
+          nvram: part.initialRtc.nvram?.map(([address, value]) => [address, value] as const),
+        },
         terminals: { ...part.terminals },
       });
     }

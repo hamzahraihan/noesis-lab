@@ -3,6 +3,7 @@ import type { SevenSegment } from '@/features/parts';
 
 export const ZERO_GLYPH: readonly number[] = [1, 1, 1, 1, 1, 1, 0, 0];
 export const ONE_GLYPH: readonly number[] = [0, 1, 1, 0, 0, 0, 0, 0];
+export const FIVE_GLYPH: readonly number[] = [1, 0, 1, 1, 0, 1, 1, 0];
 export const N_GLYPH: readonly number[] = [0, 0, 1, 0, 1, 0, 1, 0];
 export const F_GLYPH: readonly number[] = [1, 0, 0, 0, 1, 1, 1, 0];
 

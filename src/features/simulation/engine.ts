@@ -187,6 +187,12 @@ export class Engine {
         this.relayEnergized.delete(partId);
       }
     }
+    // Drop seeded flags the same way, so a re-placed part takes a fresh seed.
+    for (const partId of [...this.seededRtcParts]) {
+      if (!this.bench.parts.some((part) => part.id === partId)) {
+        this.seededRtcParts.delete(partId);
+      }
+    }
     for (const partId of [...this.sonarMeasuring.keys()]) {
       if (!this.bench.parts.some((part) => part.id === partId)) {
         this.sonarMeasuring.delete(partId);
@@ -281,6 +287,8 @@ export class Engine {
    * Pruned on rebuild so a removed relay leaves no stale entry behind.
    */
   private readonly relayEnergized = new Map<string, boolean>();
+  /** Part ids whose RTC preset has been applied (applied once, never again). */
+  private readonly seededRtcParts = new Set<string>();
 
   /**
    * Live IR transmission, if any remote is being held.
@@ -366,6 +374,7 @@ export class Engine {
      * and the screen stayed black on a bench that was wired correctly.
      */
     const previousDisplays = new Map(this.displays);
+    const previousDevices = new Map(this.devices);
     this.displays.clear();
     this.devices.clear();
     this.servos.clear();
@@ -393,8 +402,26 @@ export class Engine {
        * A display that speaks I2C is one model, not two. Registering a second
        * copy here would let the bus write into a framebuffer the renderer
        * never reads, and the panel would sit dark on a bench wired correctly.
+       *
+       * Whatever was already on the bench keeps its device, the way displays
+       * keep their controllers above: a rebuild is a re-solve of the circuit,
+       * not a reset of the hardware. Recreating devices here wiped sketch
+       * NVRAM writes (disarming the alarm on every button release) and would
+       * re-apply part presets over live adjustments. A part's preset applies
+       * once, on the first rebuild after it appears — regardless of whether
+       * the device itself was created before or after the assignment — and
+       * never again for that part id.
        */
-      const device = controller && isI2cDevice(controller) ? controller : createI2cDevice(part.definition);
+      let device: I2cDevice | null | undefined =
+        controller && isI2cDevice(controller) ? controller : previousDevices.get(part.id);
+      if (!device) {
+        device = createI2cDevice(part.definition);
+      }
+      if (device instanceof Ds1307 && part.initialRtc && !this.seededRtcParts.has(part.id)) {
+        const seed = part.initialRtc;
+        device.applyPreset(seed.hours, seed.minutes, seed.seconds, seed.nvram ?? []);
+        this.seededRtcParts.add(part.id);
+      }
       if (device) this.devices.set(part.id, device);
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       const lcd = createLcd(part.definition);

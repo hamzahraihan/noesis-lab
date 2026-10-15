@@ -10,7 +10,7 @@ import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { pushWokwiState } from '@/features/bench/wokwi/wokwi';
 import type { FootprintState } from '@/features/bench/wokwi/footprints';
-import { F_GLYPH, N_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe } from './diagnostics/probes';
+import { FIVE_GLYPH, F_GLYPH, N_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe } from './diagnostics/probes';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 
@@ -137,8 +137,11 @@ describe('the project gallery', () => {
     // blinks once a second beside them, driven straight from the RTC second.
     // Frames are dear here — the delay-free sketch fragments each one into
     // hundreds of settles — so the blink is sampled across millisecond jumps
-    // (the moves-leg technique) instead of wall-clocked frames: four samples
-    // spanning 1.5 s always cover both parities of the once-a-second blink.
+    // (the moves-leg technique) instead of wall-clocked frames. Samples retry
+    // until both parities have been observed (bounded): firmware loop phase
+    // vs sample instants is arbitrary — any loop-cost change re-rolls it —
+    // so a fixed 4-sample script can sit inside one parity even while the
+    // blink itself runs fine. Only a truly stuck colon exhausts the retries.
     let digitSeenHigh = false;
     const colonSamples: boolean[] = [];
     const sampleColon = (): void => {
@@ -162,19 +165,31 @@ describe('the project gallery', () => {
         }
       }
     };
+    // Colon blink: drive the RTC to a known even second, await the lit
+    // colon, then step a second forward and await it dark (all bounded).
+    // Fixed scripts sit inside one parity whenever firmware loop phase
+    // misaligns with sample instants, so this asserts tracking instead of
+    // luck: only a truly stuck colon exhausts the caps.
+    const awaitColon = (want: boolean, frames: number): boolean => {
+      for (let frame = 0; frame < frames; frame++) {
+        libSim.tick(0.05);
+        sampleColon();
+        if (colonSamples[colonSamples.length - 1] === want) return true;
+      }
+      return false;
+    };
     runFrames(5);
     sampleColon();
-    for (let hop = 0; hop < 3; hop++) {
-      libSim.engine.timeMs += 500;
-      runFrames(3);
-      sampleColon();
-    }
+    // Land just inside the next even second, then a second later.
+    libSim.engine.timeMs += (2000 - (libSim.engine.timeMs % 2000)) % 2000 + 300;
+    expect(awaitColon(true, 40), 'colon lights on an even second').toBe(true);
+    libSim.engine.timeMs += 1000;
+    expect(awaitColon(false, 40), 'colon darkens on an odd second').toBe(true);
     expect(digitSeenHigh, 'library build multiplexes its digits').toBe(true);
     expect(new Set(colonSamples), 'library build colon blinks once a second').toEqual(
       new Set([false, true]),
     );
-    // The bench starts at midnight, so every digit holds '0' — segments A-F
-    // lit, G dark, DP dark.
+    // The bench starts at 15:00, so the digits hold '1', '5', '0', '0'.
     const element = {
       values: [] as number[],
       digits: 0,
@@ -187,9 +202,10 @@ describe('the project gallery', () => {
     } as unknown as FootprintState);
     const values = (element as unknown as { values: number[] }).values;
     expect(values).toHaveLength(32);
+    const afternoon = [ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH];
     for (let d = 0; d < 4; d++) {
-      expect(values.slice(d * 8, d * 8 + 8), `library build digit ${d + 1} shows 0`).toEqual(
-        ZERO_GLYPH,
+      expect(values.slice(d * 8, d * 8 + 8), `library build digit ${d + 1} shows 1500`).toEqual(
+        afternoon[d],
       );
     }
     expect(
@@ -203,11 +219,11 @@ describe('the project gallery', () => {
     expect(libSim.engine.readDigital(17), 'library build buzzer silent while disarmed').toBe(false);
     // A minute of RTC time moves the minute digits through the SevSeg text
     // path, the way the AVR HEX leg proves below.
-    expect(glass(), 'library build idles at midnight').toBe('0000');
+    expect(glass(), 'library build idles at 15:00').toBe('1500');
     libSim.engine.timeMs += 61000;
     runFrames(5);
-    expect(glass(), 'library build shows 00:01 a minute later').toBe('0001');
-    // An Alarm tap arms the clock: the toggle saves NVRAM over real I2C
+    expect(glass(), 'library build shows 15:01 a minute later').toBe('1501');
+    // An Alarm tap disarms the pre-armed clock: the toggle saves NVRAM over
     // writes and the glass switches to the setChars status view. The button
     // stays held through the sampling so the 1000 ms status window cannot
     // lapse mid-probe, mirroring the AVR status leg. The bus log caps at 200
@@ -234,7 +250,7 @@ describe('the project gallery', () => {
               entry.address === 0x68 &&
               entry.bytes.length === 2 &&
               entry.bytes[0] === 8 &&
-              entry.bytes[1] === 1,
+              entry.bytes[1] === 0,
           );
     }
     const statusProbe = {
@@ -248,20 +264,21 @@ describe('the project gallery', () => {
       displays: libSim.displayControllers(),
     } as unknown as FootprintState);
     const statusValues = (statusProbe as unknown as { values: number[] }).values;
-    // Blank digits keep stale bits from the midnight view, so only the
+    // Blank digits keep stale bits from the 15:00 view, so only the
     // driven digits are asserted: ' ' stays blank, 'o' renders as 'O' (the
-    // same segments as '0'), 'n' lights C/E/G.
+    // same segments as '0'), 'F' lights A/F/G/E.
     expect(statusValues.slice(1 * 8, 2 * 8), 'library build status shows O').toEqual(ZERO_GLYPH);
-    expect(statusValues.slice(2 * 8, 3 * 8), 'library build status shows n').toEqual(N_GLYPH);
+    expect(statusValues.slice(2 * 8, 3 * 8), 'library build status shows F').toEqual(F_GLYPH);
     libSim.setPressed(alarmButton.id, false);
     // Past the 1000 ms status window by jump rather than by frames (see the
-    // colon note above): the status lapses into the alarm-time view, and the
-    // fresh NVRAM arms 00:00, so the glass reads midnight again.
+    // colon note above): the status lapses back into the clock view —
+    // disarmed shows the clock, not the alarm time — so the glass reads
+    // the clock again.
     libSim.engine.timeMs += 1500;
     runFrames(5);
     expect(libSim.firmwareError, 'library build still runs after the tap').toBeNull();
-    expect(glass(), 'library build lands on the alarm-time view').toBe('0000');
-    expect(saved, 'library build saves the arm over I2C').toBe(true);
+    expect(glass(), 'library build returns to the clock view').toBe('1500');
+    expect(saved, 'library build saves the disarm over I2C').toBe(true);
   }, 120_000);
 
   it('runs the alarm library build on the interpreter', () => {
@@ -409,35 +426,46 @@ describe('the project gallery', () => {
       const ctrl = simulation.displayControllers().get(seg.id) as unknown as SevenSegment;
       return ctrl.getText();
     };
-    // The glass itself, sampled like the live LCD leg: every digit holds '0'
-    // at midnight, and the colon blinks once a second beside them.
+    // The glass itself, sampled like the live LCD leg: the digits hold
+    // '1', '5', '0', '0' at 15:00. The colon is driven to a known even
+    // second and awaited lit, then stepped a second forward and awaited
+    // dark (all bounded): fixed scripts sit inside one parity whenever
+    // firmware loop phase misaligns with sample instants, so this asserts
+    // tracking instead of luck.
     const colonSamples: boolean[] = [];
-    for (let frame = 0; frame < 120; frame++) {
-      simulation.tick(0.05);
-      if (frame % 20 === 19) {
-        const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-        const probe = {
-          values: [] as number[],
-          digits: 0,
-          colon: false,
-          colonValue: false,
-        } as unknown as HTMLElement;
-        pushWokwiState(probe, segPart.definition, segPart, {
-          pinVolts: simulation.pinVoltages(),
-          displays: simulation.displayControllers(),
-        } as unknown as FootprintState);
-        colonSamples.push((probe as unknown as { colonValue: boolean }).colonValue);
+    const sampleColonRaw = (): void => {
+      const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+      const probe = {
+        values: [] as number[],
+        digits: 0,
+        colon: false,
+        colonValue: false,
+      } as unknown as HTMLElement;
+      pushWokwiState(probe, segPart.definition, segPart, {
+        pinVolts: simulation.pinVoltages(),
+        displays: simulation.displayControllers(),
+      } as unknown as FootprintState);
+      colonSamples.push((probe as unknown as { colonValue: boolean }).colonValue);
+    };
+    const awaitColonRaw = (want: boolean, frames: number): boolean => {
+      for (let frame = 0; frame < frames; frame++) {
+        simulation.tick(0.05);
+        sampleColonRaw();
+        if (colonSamples[colonSamples.length - 1] === want) return true;
       }
-    }
-    expect(new Set(colonSamples), 'declared build colon blinks once a second').toEqual(
-      new Set([false, true]),
-    );
-    // The digits themselves must move: midnight, then one minute later.
+      return false;
+    };
+    for (let frame = 0; frame < 120; frame++) simulation.tick(0.05);
+    simulation.engine.timeMs += (2000 - (simulation.engine.timeMs % 2000)) % 2000 + 300;
+    expect(awaitColonRaw(true, 60), 'declared build colon lights on an even second').toBe(true);
+    simulation.engine.timeMs += 1000;
+    expect(awaitColonRaw(false, 60), 'declared build colon darkens on an odd second').toBe(true);
+    // The digits themselves must move: 15:00, then one minute later.
     for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
-    expect(glass(), 'declared build idles at midnight').toBe('0000');
+    expect(glass(), 'declared build idles at 15:00').toBe('1500');
     simulation.engine.timeMs += 61000;
     for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
-    expect(glass(), 'declared build shows 00:01 a minute later').toBe('0001');
+    expect(glass(), 'declared build shows 15:01 a minute later').toBe('1501');
     // The serial log carries one t=H:M:S line per loop: the seconds in them
     // must advance, proving the RTC ticks under the display.
     const seconds = [...simulation.serialLines().join('').matchAll(/t=\d+:\d+:(\d+)/g)].map(
@@ -592,9 +620,8 @@ void loop() {
         }
         expect(digitSeenHigh, `${id} multiplexes its digits`).toBe(true);
         // The glass itself: push the solved state into the Wokwi element and
-        // read back all four digits. The bench starts at midnight, so every
-        // digit holds '0' — segments A-F lit, G dark, DP dark. The colon
-        // blinks once a second beside them.
+        // read back all four digits. The bench starts at 15:00, so the digits
+        // hold '1', '5', '0', '0'. The colon blinks once a second beside them.
         const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
         const element = {
           values: [] as number[],
@@ -608,9 +635,10 @@ void loop() {
         } as unknown as FootprintState);
         const values = (element as unknown as { values: number[] }).values;
         expect(values).toHaveLength(32);
+        const afternoon = [ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH];
         for (let d = 0; d < 4; d++) {
           const slice = values.slice(d * 8, d * 8 + 8);
-          expect(slice, `${id} digit ${d + 1} shows 0`).toEqual([1, 1, 1, 1, 1, 1, 0, 0]);
+          expect(slice, `${id} digit ${d + 1} shows 1500`).toEqual(afternoon[d]);
         }
         const colonState = element as unknown as { colon: boolean; colonValue: boolean };
         expect(colonState.colon, `${id} colon enabled`).toBe(true);
@@ -622,7 +650,7 @@ void loop() {
         expect(simulation.engine.readDigital(14), `${id} hours button released`).toBe(true);
         expect(simulation.engine.readDigital(15), `${id} minutes button released`).toBe(true);
         expect(simulation.engine.readDigital(16), `${id} alarm button released`).toBe(true);
-        expect(simulation.engine.readDigital(17), `${id} buzzer silent while disarmed`).toBe(false);
+        expect(simulation.engine.readDigital(17), `${id} buzzer silent while armed but not due`).toBe(false);
         // The serial log carries one t=H:M:S line per loop: the seconds in
         // them must advance, proving the RTC ticks under the display.
         const seconds = [...simulation.serialLines().join('').matchAll(/t=\d+:\d+:(\d+)/g)].map(
@@ -669,7 +697,7 @@ void loop() {
    * The digits themselves must move — over RTC time and under the buttons.
    * Idle glass, DP blink and serial ticks all passed while the numbers never
    * budged, which is exactly the reported symptom, so this test watches the
-   * decoded text: midnight, one minute later, then an Hour tap on top.
+   * decoded text: 15:00, one minute later, then an Hour tap on top.
    */
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
@@ -690,11 +718,11 @@ void loop() {
       return ctrl.getText();
     };
     for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
-    expect(glass(), 'idle shows midnight').toBe('0000');
+    expect(glass(), 'idle shows 15:00').toBe('1500');
     // A minute of RTC time must move the minute digits.
     simulation.engine.timeMs += 61000;
     for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
-    expect(glass(), 'a minute later shows 00:01').toBe('0001');
+    expect(glass(), 'a minute later shows 15:01').toBe('1501');
     // An Hour tap retunes the shown time through the persisted offset. The
     // hold may additionally trip one auto-repeat tick, so either +1 or +2.
     const hours = simulation.bench.parts.filter((p) => p.definition.name === 'Tactile Button')[0]!;
@@ -702,7 +730,7 @@ void loop() {
     for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
     simulation.setPressed(hours.id, false);
     for (let frame = 0; frame < 22; frame++) simulation.tick(0.05);
-    expect(glass(), 'hour tap moves the hour digits').toMatch(/^0[12]01$/);
+    expect(glass(), 'hour tap moves the hour digits').toMatch(/^1[67]01$/);
     }
   }, 60_000);
 
@@ -744,45 +772,55 @@ void loop() {
     simulation.start();
     const glassProbe = liveProbe(simulation);
     for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
-    const midnight = convergeGlass(glassProbe, 70);
-    expect(midnight.converged, 'library build multiplex settles at midnight').toBe(true);
-    expect(midnight.glyphs, 'library build idles at midnight').toEqual([
-      ZERO_GLYPH,
-      ZERO_GLYPH,
+    const afternoon = convergeGlass(glassProbe, 70);
+    expect(afternoon.converged, 'library build multiplex settles at 15:00').toBe(true);
+    expect(afternoon.glyphs, 'library build idles at 15:00').toEqual([
+      ONE_GLYPH,
+      FIVE_GLYPH,
       ZERO_GLYPH,
       ZERO_GLYPH,
     ]);
     simulation.engine.timeMs += 61000;
     // The AVR core needs ~2 s of simulated time to read the jumped RTC and
     // refresh the SevSeg buffer plus the persistence window: 12 frames left
-    // the glass on the pre-jump view, whose union ("0000") is a superset of
-    // "0001" and can never converge to the new digit.
+    // the glass on the pre-jump view, whose union ("1500") is a superset of
+    // "1501" and can never converge to the new digit.
     for (let frame = 0; frame < 45; frame++) simulation.tick(0.05);
     const minute = convergeGlass(glassProbe, 70);
     expect(minute.converged, 'library build multiplex settles a minute later').toBe(true);
-    expect(minute.glyphs, 'library build shows 00:01 a minute later').toEqual([
-      ZERO_GLYPH,
-      ZERO_GLYPH,
+    expect(minute.glyphs, 'library build shows 15:01 a minute later').toEqual([
+      ONE_GLYPH,
+      FIVE_GLYPH,
       ZERO_GLYPH,
       ONE_GLYPH,
     ]);
-    // Colon blinks: sample colonValue like the raw legs. Ticks advance 40 ms
-    // (the frame budget cap), so three samples a second apart always span
-    // both parities of the once-a-second blink — 60 frames prove the blink
-    // at half the cost of the raw legs' 120.
+    // Colon blinks: drive the RTC to a known even second, await the lit
+    // colon, then step a second forward and await it dark (all bounded).
+    // Fixed scripts sit inside one parity whenever firmware loop phase
+    // misaligns with sample instants, so this asserts tracking instead of
+    // luck: only a truly stuck colon exhausts the caps.
     const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
     const colonSamples: boolean[] = [];
-    for (let frame = 0; frame < 60; frame++) {
-      simulation.tick(0.05);
-      if (frame % 20 === 19) {
-        const probe = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
-        pushWokwiState(probe, segPart.definition, segPart, {
-          pinVolts: simulation.pinVoltages(),
-          displays: simulation.displayControllers(),
-        } as unknown as FootprintState);
-        colonSamples.push((probe as unknown as { colonValue: boolean }).colonValue);
+    const sampleColonAt = (): void => {
+      const probe = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
+      pushWokwiState(probe, segPart.definition, segPart, {
+        pinVolts: simulation.pinVoltages(),
+        displays: simulation.displayControllers(),
+      } as unknown as FootprintState);
+      colonSamples.push((probe as unknown as { colonValue: boolean }).colonValue);
+    };
+    const awaitColon = (want: boolean, frames: number): boolean => {
+      for (let frame = 0; frame < frames; frame++) {
+        simulation.tick(0.05);
+        sampleColonAt();
+        if (colonSamples[colonSamples.length - 1] === want) return true;
       }
-    }
+      return false;
+    };
+    simulation.engine.timeMs += (2000 - (simulation.engine.timeMs % 2000)) % 2000 + 300;
+    expect(awaitColon(true, 60), 'colon lights on an even second').toBe(true);
+    simulation.engine.timeMs += 1000;
+    expect(awaitColon(false, 60), 'colon darkens on an odd second').toBe(true);
     expect(new Set(colonSamples), 'library colon blinks').toEqual(new Set([false, true]));
     // DP slice stays dark: SevSeg begun with 7 segment pins.
     const element = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
@@ -833,23 +871,34 @@ void loop() {
     // Fresh NVRAM starts disarmed (zeroed model NVRAM ⇒ DISABLED per
     // Clock::begin): the buzzer rests LOW before anything is armed.
     for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
-    expect(simulation.engine.readDigital(17), 'library build buzzer silent while disarmed').toBe(false);
-    // Arming press: the toggle saves NVRAM over real I2C writes and the
+    expect(simulation.engine.readDigital(17), 'library build buzzer silent while armed but not due').toBe(false);
+    // Disarming press: the pre-armed clock toggles off, saving NVRAM over
     // glass switches to the setChars status view — the SevSeg API the
     // fixture never covers. ALARM_STATUS_DISPLAY_TIME is 1000 ms firmware,
     // which runs ahead of simulated time, so the stable window is ~200-600 ms
     // after the press: 200 ms of pre-wait covers the 100 ms debounce plus the
     // persistence window, and the 400 ms converge ends at ~600 ms, before the
-    // lapse. ' ' stays blank, 'o' renders as 'O' (same segments as '0'), 'n'
-    // lights C/E/G. Blank digits decay to blank, so only the driven digits
+    // lapse. ' ' stays blank, 'o' renders as 'O' (same segments as '0'), 'F'
+    // lights A/F/G/E. Blank digits decay to blank, so only the driven digits
     // are asserted. The button stays held past the reset.
     simulation.setPressed(alarmButton.id, true);
     for (let frame = 0; frame < 20; frame++) simulation.tick(0.01);
     const status = convergeGlass(glassProbe, 40);
     expect(status.converged, 'library build status view settles').toBe(true);
     expect(status.glyphs[1], 'library build status shows O').toEqual(ZERO_GLYPH);
-    expect(status.glyphs[2], 'library build status shows n').toEqual(N_GLYPH);
+    expect(status.glyphs[2], 'library build status shows F').toEqual(F_GLYPH);
     expect(simulation.firmwareError, 'library build still runs after the tap').toBeNull();
+    // Tap again to re-arm: the reset below boots armed only if the saved
+    // state is armed, which is what gives the read-back proof its power (a
+    // wiped NVRAM would boot disarmed either way).
+    simulation.setPressed(alarmButton.id, false);
+    for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
+    simulation.setPressed(alarmButton.id, true);
+    for (let frame = 0; frame < 20; frame++) simulation.tick(0.01);
+    const rearmedStatus = convergeGlass(glassProbe, 40);
+    expect(rearmedStatus.converged, 'library build re-arm status settles').toBe(true);
+    expect(rearmedStatus.glyphs[1], 'library build re-arm shows O').toEqual(ZERO_GLYPH);
+    expect(rearmedStatus.glyphs[2], 'library build re-arm shows n').toEqual(N_GLYPH);
     // NVRAM round-trip: reset the MCU core — setup() reruns and Clock::begin()
     // rereads the DS1307's RAM, which the reset preserves (only a rebuild
     // recreates the model). The held edge toggles the rebooted clock straight
@@ -866,8 +915,10 @@ void loop() {
     expect(rearmed.glyphs[3], 'library build NVRAM persists the arm (F)').toEqual(F_GLYPH);
     expect(simulation.firmwareError, 'library build still runs after reset').toBeNull();
     // Release only now that the read-back is proven. Releasing rebuilds the
-    // bench and recreates the RTC model, so the save is gone — but the
-    // firmware's own save already went out over real I2C (asserted on the
+    // bench and recreates the RTC model — but the declarative seed re-arms
+    // 15:10 on every rebuild, so the clock stays armed; the manual staging
+    // below keeps the siren leg independent of that either way. The
+    // firmware's own saves already went out over real I2C (asserted on the
     // bus log below), and the reboot read-back above proved the model side.
     // For the siren leg, stage an armed save directly (the same two bytes
     // toggleAlarm emits) and reset: the rebooted clock boots armed with no
@@ -878,15 +929,28 @@ void loop() {
       .busLines()
       .filter((entry) => entry.bus === 'i2c' && entry.address === 0x68)
       .map((entry) => [...entry.bytes]);
-    expect(saves, 'library build saves the arm over I2C').toContainEqual([8, 1]);
+    expect(saves, 'library build saves the disarm over I2C').toContainEqual([8, 0]);
+    expect(saves, 'library build saves the re-arm over I2C').toContainEqual([8, 1]);
     expect(simulation.engine.writeI2C(0x68, 0x08, true), 'library build NVRAM staged').toBe(true);
     expect(simulation.engine.writeI2C(0x68, 0x01, false), 'library build NVRAM staged').toBe(true);
     core!.reset();
     for (let frame = 0; frame < 10; frame++) simulation.tick(0.05);
-    // Live buzzer: the alarm is due — the staged save arms 00:00 while the
-    // RTC sits just past midnight — so the rebooted clock walks straight
-    // into the alarm state and the siren drives A3: liveness across
-    // samples, never exact timing.
+    // Jump RELATIVE, not absolute: the sketch owns the clock, so setTime
+    // advances the decoded registers by the host delta — an absolute
+    // assignment would add ~15 h on top of the 15:00 base and leave the
+    // alarm minute behind. Base seconds stay single-digit here, so +611 s
+    // lands inside 15:10.
+    simulation.engine.timeMs += 611000;
+    for (let frame = 0; frame < 10; frame++) simulation.tick(0.05);
+    // Live buzzer: the staged save arms 15:10 — jump the RTC just past it
+    // so the rebooted clock walks straight into the alarm state and the
+    // siren drives A3: liveness across samples, never exact timing.
+    // Jump RELATIVE, not absolute: the sketch owns the clock, so setTime
+    // advances the decoded registers by the host delta — an absolute
+    // assignment would add ~15 h on top of the 15:00 base and leave the
+    // alarm minute behind. Base seconds stay single-digit here, so +611 s
+    // lands inside 15:10.
+    simulation.engine.timeMs += 611000;
     let buzzerSeenHigh = false;
     for (let frame = 0; frame < 25; frame++) {
       simulation.tick(0.05);
@@ -966,5 +1030,21 @@ describe('part names', () => {
     expect(sim.partName(first.id)).toBe('Snooze');
     sim.renamePart(first.id, '   ');
     expect(sim.partName(first.id)).toBeNull();
+  });
+});
+
+describe('alarm RTC preset', () => {
+  it('seeds 15:00 with the alarm armed for 15:10', () => {
+    const sim = freshBench('uno');
+    galleryById('alarm-clock')!.builds[0]!.setup(sim);
+    const rtcId = sim.bench.parts.find((p) => p.definition.id === 'ds1307-rtc')!.id;
+    const device = sim.engine.i2cDevice(rtcId) as unknown as {
+      receive(byte: number, isControl: boolean): boolean;
+      read(count: number): readonly number[];
+    };
+    device.receive(0x00, true);
+    expect([...device.read(3)]).toEqual([0x00, 0x00, 0x15]);
+    device.receive(0x08, true);
+    expect([...device.read(3)]).toEqual([1, 15, 10]);
   });
 });

@@ -89,7 +89,20 @@ function alarmClockSetup(simulation: Simulation) {
     // three buttons form one control row beneath, buzzer closes the block.
     const BLOCK_X = 100;
     const BLOCK_Y = 70;
-    simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
+    const rtc = simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
+    // The bench story starts at 15:00 with the alarm armed for 15:10 (library
+    // NVRAM layout: enabled/hour/minute at 0x08-0x0A). Declarative, so every
+    // engine rebuild re-applies it.
+    rtc.initialRtc = {
+      hours: 15,
+      minutes: 0,
+      seconds: 0,
+      nvram: [
+        [0x08, 1],
+        [0x09, 15],
+        [0x0a, 10],
+      ],
+    };
 
     // 4-digit 7-segment display on the pin table: digit commons DIG1-DIG4
     // (device pins 14/11/10/6) on D2-D5, segments A-G (13/9/4/2/1/12/5) on

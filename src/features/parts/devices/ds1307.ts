@@ -124,11 +124,14 @@ export class Ds1307 implements I2cDevice {
    */
   setTime(date: Date): void {
     const hostMs = date.getTime();
-    if (this.followingHost || !Number.isFinite(this.lastHostMs)) {
+    if (this.followingHost) {
       this.clock = new Date(hostMs);
     } else {
+      // No host contact yet (preset before the first advance): zero delta
+      // keeps the decoded base exactly instead of clobbering it.
+      const delta = Number.isFinite(this.lastHostMs) ? hostMs - this.lastHostMs : 0;
       const base = this.decodeRegisters();
-      this.clock = base === null ? new Date(hostMs) : new Date(base + (hostMs - this.lastHostMs));
+      this.clock = base === null ? new Date(hostMs) : new Date(base + delta);
     }
     this.lastHostMs = hostMs;
     this.pack();
@@ -169,6 +172,35 @@ export class Ds1307 implements I2cDevice {
    */
   setOscillatorStopped(stopped: boolean): void {
     this.oscillatorStopped = stopped;
+  }
+
+  /**
+   * Seeds the chip to a starting time plus NVRAM bytes, for benches whose
+   * story starts mid-day (an alarm clock at 15:00, not midnight).
+   *
+   * Writes go through the same path as a sketch transmission, so ownership
+   * flips to the chip exactly as if firmware had set it: the host advances
+   * the seeded time from here rather than replacing it. NVRAM addresses are
+   * absolute registers (the alarm layout lives at 0x08-0x0A, matching
+   * RTClib's 0x08-based nvram mapping); out-of-range addresses are ignored.
+   */
+  applyPreset(
+    hours: number,
+    minutes: number,
+    seconds: number,
+    nvram: ReadonlyArray<readonly [number, number]> = [],
+  ): void {
+    const at = new Date(2000, 0, 1, hours, minutes, seconds);
+    this.write(SECONDS, toBcd(at.getSeconds()));
+    this.write(MINUTES, toBcd(at.getMinutes()));
+    this.write(HOURS, toBcd(at.getHours()));
+    this.write(DAY_OF_WEEK, toBcd(6));
+    this.write(DATE, toBcd(at.getDate()));
+    this.write(MONTH, toBcd(at.getMonth() + 1));
+    this.write(YEAR, toBcd(at.getFullYear() % 100));
+    for (const [address, value] of nvram) {
+      if (address >= 0 && address < REGISTER_COUNT) this.write(address, value);
+    }
   }
 
   receive(byte: number, isControlPosition: boolean): boolean {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GALLERY } from '../gallery';
 import { buildRegistry } from './registry';
-import { ZERO_GLYPH } from './probes';
+import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH } from './probes';
 
 describe('registry', () => {
   it('covers every gallery project and build', () => {
@@ -15,14 +15,14 @@ describe('registry', () => {
     }
   });
 
-  it('shows midnight on the raw alarm glass after five ticks', () => {
+  it('shows 15:00 on the driven alarm glass', () => {
     const entry = buildRegistry().find(
       (candidate) => candidate.projectId === 'alarm-clock' && candidate.buildLabel === 'uno',
     )!;
     const sim = entry.makeSim();
-    for (let frame = 0; frame < 5; frame++) sim.tick(0.05);
-    expect(sim.glass().glyphs).toEqual([ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH, ZERO_GLYPH]);
-  });
+    for (let frame = 0; frame < 120; frame++) sim.tick(0.05);
+    expect(sim.glass().glyphs).toEqual([ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH]);
+  }, 60000);
 
   it('extends the wall cap on the alarm-clock library entry only', () => {
     for (const entry of buildRegistry()) {
