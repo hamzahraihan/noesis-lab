@@ -1780,6 +1780,9 @@ export default function Bench(props: BenchProps) {
                 // independent -- turning the panel does not tell the sketch.
                 if (selected) simulation.rotatePart(selected.id);
               }}
+              onRename={(name) => {
+                if (selected) simulation.renamePart(selected.id, name);
+              }}
               panelSize={selected ? simulation.displaySize(selected.id) : undefined}
               rotation={selected ? simulation.partRotation(selected.id) : 0}
             />

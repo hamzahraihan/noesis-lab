@@ -95,6 +95,11 @@ export interface InspectorProps {
    * direct action makes that honest.
    */
   onRotate(): void;
+  /**
+   * Renames the selected part for the operator. Blank clears back to the
+   * definition default. Display-only: identity and nets keep the part id.
+   */
+  onRename(name: string): void;
   /** The colour panel's visible size, when the part is one. */
   panelSize?: string;
   /** Which way up the part is, in degrees. 0 is as it was drawn. */
@@ -109,6 +114,7 @@ export function Inspector({
   rotation,
   onDelete,
   onRotate,
+  onRename,
   onSetPressed,
   onSetKnob,
 }: InspectorProps) {
@@ -148,8 +154,20 @@ export function Inspector({
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">{definition.name}</h2>
+          <h2 className="text-sm font-semibold text-slate-100">{part.name ?? definition.name}</h2>
           <p className="mt-0.5 font-mono text-[11px] text-slate-500">{definition.id}</p>
+          <Input
+            key={part.id}
+            defaultValue={part.name ?? ''}
+            placeholder={`Name this ${definition.name}`}
+            aria-label="Component name"
+            maxLength={40}
+            onBlur={(event) => onRename(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
+            className="mt-1.5 h-8"
+          />
         </div>
 
         <dl className="flex flex-col gap-1 text-xs">

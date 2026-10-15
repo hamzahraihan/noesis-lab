@@ -1193,6 +1193,21 @@ export class Simulation {
     return part?.rotation ?? 0;
   }
 
+  /**
+   * Names a part for the operator. Blank clears back to the definition
+   * default. Display-only: identity and nets keep keying on the part id.
+   */
+  renamePart(partId: string, name: string): void {
+    this.builder.renamePart(partId, name);
+    this.rebuild();
+  }
+
+  /** Operator-given name, or null when the part shows its definition name. */
+  partName(partId: string): string | null {
+    const part = this.bench.parts.find((candidate) => candidate.id === partId);
+    return part?.name ?? null;
+  }
+
   /** Servo models, so the artwork can draw each horn where it was told to. */
   servoModels(): ReadonlyMap<string, Servo> {
     const servos = new Map<string, Servo>();

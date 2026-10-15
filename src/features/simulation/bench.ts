@@ -89,6 +89,12 @@ export interface PartInstance {
   x: number;
   y: number;
   rotation: Rotation;
+  /**
+   * Operator-given name, shown in place of the definition name. Absent means
+   * the default: renaming to blank clears it rather than storing emptiness.
+   * Display-only — identity, nets, and snapshots key on `id`.
+   */
+  name?: string;
   /** Header pin id to the terminal it occupies. */
   readonly terminals: Record<string, number>;
 }
@@ -157,6 +163,7 @@ export interface BenchSnapshot {
     readonly x: number;
     readonly y: number;
     readonly rotation: Rotation;
+    readonly name?: string;
     readonly terminals: Readonly<Record<string, number>>;
   }[];
   readonly wires: readonly {
@@ -213,6 +220,7 @@ export class BenchBuilder {
         x: part.x,
         y: part.y,
         rotation: part.rotation,
+        name: part.name,
         terminals: { ...part.terminals },
       })),
       wires: this.wires.map((wire) => ({
@@ -254,6 +262,7 @@ export class BenchBuilder {
         x: part.x,
         y: part.y,
         rotation: part.rotation,
+        name: part.name,
         terminals: { ...part.terminals },
       });
     }
@@ -359,6 +368,23 @@ export class BenchBuilder {
     part.y = centreY - drawnHeight / 2;
     part.rotation = wrapped;
     this.resolveHoles(part);
+    this.markChanged();
+  }
+
+  /**
+   * Names a part for the operator. Trims the input; blank clears back to the
+   * definition default rather than storing emptiness. Unknown ids are ignored
+   * the way the other id-keyed mutations ignore them.
+   */
+  renamePart(id: string, name: string): void {
+    const part = this.parts.find((candidate) => candidate.id === id);
+    if (!part) return;
+    const trimmed = name.trim();
+    if (trimmed === '') {
+      delete part.name;
+    } else {
+      part.name = trimmed;
+    }
     this.markChanged();
   }
 

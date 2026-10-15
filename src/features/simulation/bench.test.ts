@@ -331,3 +331,24 @@ describe('taking a jumper off the bench', () => {
     expect(terminals[wires[0].from]).toBeDefined();
   });
 });
+
+describe('renaming a part', () => {
+  it('stores a trimmed name and bumps the revision', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    const before = builder.build().revision;
+    builder.renamePart(board.id, '  Main board  ');
+    const named = builder.build().parts.find((p) => p.id === board.id)!;
+    expect(named.name).toBe('Main board');
+    expect(builder.build().revision).toBeGreaterThan(before);
+  });
+
+  it('clears the name on blank input and ignores unknown ids', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    builder.renamePart(board.id, 'Clock');
+    builder.renamePart(board.id, '   ');
+    expect(builder.build().parts.find((p) => p.id === board.id)!.name).toBeUndefined();
+    expect(() => builder.renamePart('p999', 'Ghost')).not.toThrow();
+  });
+});

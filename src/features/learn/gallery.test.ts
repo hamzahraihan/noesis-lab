@@ -948,3 +948,19 @@ describe('avr wasm opt-in', () => {
     expect(optsIn(undefined)).toBe(false);
   });
 });
+
+describe('part names', () => {
+  it('seeds the alarm buttons Hours/Minutes/Alarm and renames round-trip', () => {
+    const sim = freshBench('uno');
+    const alarm = galleryById('alarm-clock')!;
+    alarm.builds[0]!.setup(sim);
+    const buttons = sim.bench.parts.filter((p) => p.definition.id === 'button-tactile');
+    expect(buttons).toHaveLength(3);
+    expect(buttons.map((b) => sim.partName(b.id)).sort()).toEqual(['Alarm', 'Hours', 'Minutes']);
+    const first = buttons[0]!;
+    sim.renamePart(first.id, '  Snooze  ');
+    expect(sim.partName(first.id)).toBe('Snooze');
+    sim.renamePart(first.id, '   ');
+    expect(sim.partName(first.id)).toBeNull();
+  });
+});

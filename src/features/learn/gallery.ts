@@ -138,7 +138,7 @@ function alarmClockSetup(simulation: Simulation) {
       if (!boardPin || !legA || !legB) return;
       simulation.routeWire(boardPin, legA);
       simulation.routeWire(legB, ground);
-      void label;
+      simulation.renamePart(button.id, label);
     });
 
     const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 46);
