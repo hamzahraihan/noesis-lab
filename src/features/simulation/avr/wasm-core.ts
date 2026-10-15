@@ -145,38 +145,6 @@ export async function cpuGate(): Promise<{ trapRate: number; glass: string; wall
   return { trapRate: 0, glass: '0000', wallMs, placeholder: true as const };
 }
 
-export interface TrapShadow {
-  stepOnce(): boolean;
-}
-
-export interface SliceCore {
-  step(n: number): number;
-}
-
-// NOTE (mock-only contract): cycle accounting here is 1-per-trap
-// placeholder until Wasm get_cycles wiring lands; no behavior change.
-// runSlice is the mock-only predecessor; runAttached is the attached-runner superset.
-export async function runSlice(
-  core: SliceCore,
-  shadow: TrapShadow,
-  cycles: number,
-): Promise<{ traps: number; advanced: number }> {
-  let traps = 0;
-  let advanced = 0;
-  while (advanced < cycles) {
-    const trappedPc = core.step(cycles - advanced);
-    if (trappedPc === -1) {
-      advanced = cycles;
-      break;
-    }
-    traps += 1;
-    const more = shadow.stepOnce();
-    advanced += 1;
-    if (!more) break;
-  }
-  return { traps, advanced };
-}
-
 export interface AttachedWasm {
   step(n: number): number;
   getPc(): number;
