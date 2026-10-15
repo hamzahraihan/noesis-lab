@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { loadWasmModule } from './wasm-core';
+import { loadWasmModule, WASM_DEFAULT, resolveWasmFlag } from './wasm-core';
 
 const realBytes = () => {
   const buf = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
@@ -31,5 +31,17 @@ describe('loadWasmModule', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.cause).toBe('wasm fetch failed: offline');
+  });
+});
+
+describe('rollout default', () => {
+  it('defaults off until the gates pass', () => {
+    expect(WASM_DEFAULT).toBe(false);
+  });
+
+  it('explicit choice always wins over the default', () => {
+    expect(resolveWasmFlag(true)).toBe(true);
+    expect(resolveWasmFlag(false)).toBe(false);
+    expect(resolveWasmFlag(undefined)).toBe(WASM_DEFAULT);
   });
 });

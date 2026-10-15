@@ -65,6 +65,7 @@ import {
   parseIntelHex,
   pinNodeView,
   projectSlots,
+  resolveWasmFlag,
   restoreInstalledIndex,
   serialRing,
   SNAP_MAGIC,
@@ -1040,7 +1041,7 @@ export function createWorkerClient(opts: {
     bench: opts.bench ?? minimalBench(board),
     firmware: opts.firmware ?? minimalFirmware(),
     execution: opts.execution ?? 'interpreter',
-    wasm: opts.wasm ?? false,
+    wasm: resolveWasmFlag(opts.wasm),
     onFallback,
   });
 }

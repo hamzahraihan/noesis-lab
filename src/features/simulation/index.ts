@@ -46,3 +46,8 @@ export { createSimWorker } from './sim-worker/entry-factory';
 // barrel via thin re-export shims at the old `bench/utils/map-*` paths).
 export * from './map/map-tiles';
 export * from './map/map-fetcher';
+// Rollout seam (Stages 2-3): bench threads the wasm default through this
+// barrel (bare `@/features/simulation` — the boundary gate forbids bench-deep
+// imports). Named re-export only, so the harness-only helpers in wasm-core
+// stay off the public surface. Stage 3 flips WASM_DEFAULT once the gates pass.
+export { WASM_DEFAULT, resolveWasmFlag } from './avr/wasm-core';
