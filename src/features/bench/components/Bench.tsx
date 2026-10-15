@@ -1783,6 +1783,9 @@ export default function Bench(props: BenchProps) {
               onRename={(name) => {
                 if (selected) simulation.renamePart(selected.id, name);
               }}
+              onSetCapColour={(colour) => {
+                if (selected) simulation.setCapColour(selected.id, colour);
+              }}
               panelSize={selected ? simulation.displaySize(selected.id) : undefined}
               rotation={selected ? simulation.partRotation(selected.id) : 0}
             />

@@ -957,6 +957,10 @@ describe('part names', () => {
     const buttons = sim.bench.parts.filter((p) => p.definition.id === 'button-tactile');
     expect(buttons).toHaveLength(3);
     expect(buttons.map((b) => sim.partName(b.id)).sort()).toEqual(['Alarm', 'Hours', 'Minutes']);
+    const byName = new Map(buttons.map((b) => [sim.partName(b.id), b]));
+    expect(byName.get('Alarm')!.capColour).toBe('#ef4444');
+    expect(byName.get('Hours')!.capColour).toBe('#22c55e');
+    expect(byName.get('Minutes')!.capColour).toBe('#22c55e');
     const first = buttons[0]!;
     sim.renamePart(first.id, '  Snooze  ');
     expect(sim.partName(first.id)).toBe('Snooze');

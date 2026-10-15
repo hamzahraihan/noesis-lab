@@ -95,9 +95,27 @@ export interface PartInstance {
    * Display-only — identity, nets, and snapshots key on `id`.
    */
   name?: string;
+  /**
+   * Operator-picked button cap colour, one of BUTTON_CAP_COLOURS. Absent
+   * means the definition default. Display-only like `name`.
+   */
+  capColour?: string;
   /** Header pin id to the terminal it occupies. */
   readonly terminals: Record<string, number>;
 }
+
+/**
+ * Button cap colours the operator can pick, in Wokwi's palette. Fixed set:
+ * arbitrary hex would leak unserialisable taste into snapshots and shares.
+ */
+export const BUTTON_CAP_COLOURS = [
+  '#22c55e',
+  '#ef4444',
+  '#3b82f6',
+  '#eab308',
+  '#f8fafc',
+  '#111111',
+] as const;
 
 export interface Wire {
   readonly id: string;
@@ -164,6 +182,7 @@ export interface BenchSnapshot {
     readonly y: number;
     readonly rotation: Rotation;
     readonly name?: string;
+    readonly capColour?: string;
     readonly terminals: Readonly<Record<string, number>>;
   }[];
   readonly wires: readonly {
@@ -221,6 +240,7 @@ export class BenchBuilder {
         y: part.y,
         rotation: part.rotation,
         name: part.name,
+        capColour: part.capColour,
         terminals: { ...part.terminals },
       })),
       wires: this.wires.map((wire) => ({
@@ -263,6 +283,7 @@ export class BenchBuilder {
         y: part.y,
         rotation: part.rotation,
         name: part.name,
+        capColour: part.capColour,
         terminals: { ...part.terminals },
       });
     }
@@ -385,6 +406,19 @@ export class BenchBuilder {
     } else {
       part.name = trimmed;
     }
+    this.markChanged();
+  }
+
+  /**
+   * Paints a button cap from the fixed palette. Anything off-palette is
+   * ignored rather than stored, so snapshots and shares never carry an
+   * unserialisable whim. Unknown ids are ignored like the other mutations.
+   */
+  setCapColour(id: string, colour: string): void {
+    const part = this.parts.find((candidate) => candidate.id === id);
+    if (!part) return;
+    if (!(BUTTON_CAP_COLOURS as readonly string[]).includes(colour)) return;
+    part.capColour = colour;
     this.markChanged();
   }
 

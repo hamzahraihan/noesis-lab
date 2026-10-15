@@ -1208,6 +1208,14 @@ export class Simulation {
     return part?.name ?? null;
   }
 
+  /**
+   * Paints a button cap from the fixed palette. Display-only like renaming.
+   */
+  setCapColour(partId: string, colour: string): void {
+    this.builder.setCapColour(partId, colour);
+    this.rebuild();
+  }
+
   /** Servo models, so the artwork can draw each horn where it was told to. */
   servoModels(): ReadonlyMap<string, Servo> {
     const servos = new Map<string, Servo>();

@@ -352,3 +352,24 @@ describe('renaming a part', () => {
     expect(() => builder.renamePart('p999', 'Ghost')).not.toThrow();
   });
 });
+
+describe('painting a button cap', () => {
+  it('stores a palette colour and bumps the revision', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    const before = builder.build().revision;
+    builder.setCapColour(board.id, '#22c55e');
+    const painted = builder.build().parts.find((p) => p.id === board.id)!;
+    expect(painted.capColour).toBe('#22c55e');
+    expect(builder.build().revision).toBeGreaterThan(before);
+  });
+
+  it('ignores unknown colours and unknown ids', () => {
+    const builder = new BenchBuilder();
+    const board = builder.addPart(esp32DevKitV1(), 0, 0);
+    builder.setCapColour(board.id, 'hotpink');
+    builder.setCapColour(board.id, '#22c55g');
+    expect(builder.build().parts.find((p) => p.id === board.id)!.capColour).toBeUndefined();
+    expect(() => builder.setCapColour('p999', '#22c55e')).not.toThrow();
+  });
+});

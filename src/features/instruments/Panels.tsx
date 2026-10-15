@@ -12,6 +12,7 @@ import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
   buildIndexObjects,
+  BUTTON_CAP_COLOURS,
   compileToolchainUnit,
   createProductionBackend,
   CURATED_LIBRARIES,
@@ -96,6 +97,11 @@ export interface InspectorProps {
    */
   onRotate(): void;
   /**
+   * Paints a button cap from the fixed palette. Rendered only for button
+   * parts; display-only like renaming.
+   */
+  onSetCapColour(colour: string): void;
+  /**
    * Renames the selected part for the operator. Blank clears back to the
    * definition default. Display-only: identity and nets keep the part id.
    */
@@ -115,6 +121,7 @@ export function Inspector({
   onDelete,
   onRotate,
   onRename,
+  onSetCapColour,
   onSetPressed,
   onSetKnob,
 }: InspectorProps) {
@@ -197,6 +204,33 @@ export function Inspector({
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {definition.component.kind === 'button' && (
+          <div>
+            <p className="mb-1.5 text-xs text-slate-500">Cap colour</p>
+            <div className="flex gap-1.5" role="group" aria-label="Button cap colour">
+              {BUTTON_CAP_COLOURS.map((colour) => {
+                const active = (part.capColour ?? '#111111') === colour;
+                return (
+                  <button
+                    key={colour}
+                    type="button"
+                    title={colour}
+                    aria-label={`Cap colour ${colour}`}
+                    aria-pressed={active}
+                    onClick={() => onSetCapColour(colour)}
+                    className="h-6 w-6 rounded-full border border-slate-700"
+                    style={{
+                      backgroundColor: colour,
+                      outline: active ? '2px solid #38bdf8' : 'none',
+                      outlineOffset: 1,
+                    }}
+                  />
+                );
+              })}
+            </div>
           </div>
         )}
 

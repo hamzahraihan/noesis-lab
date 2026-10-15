@@ -118,6 +118,19 @@ export function PartFootprint({
       {shapeFor(definition, part, state, onTogglePressed)}
       {!showsOwnHoles &&
         definition.pins.map((pin) => <PinMark key={pin.id} pin={pin} part={part} state={state} />)}
+      {part.name !== undefined && part.name !== '' && (
+        <text
+          x={definition.widthMm / 2}
+          y={definition.heightMm + 2.4}
+          textAnchor="middle"
+          fontSize={2}
+          fontFamily={SILKSCREEN_FONT}
+          fill={definition.legendColour}
+          opacity={0.85}
+        >
+          {part.name}
+        </text>
+      )}
     </g>
   );
 }
@@ -840,7 +853,7 @@ function ButtonBody({
       <rect x={0.6} y={0.6} width={5.2} height={5.2} rx={0.5} fill={definition.bodyColour} stroke="#000" strokeWidth={0.18} />
       <rect x={0.6} y={0.6} width={5.2} height={5.2} rx={0.5} fill="url(#nz-body)" />
       {/* The actuator, which visibly sinks when the switch is held. */}
-      <circle cx={3.1} cy={3.1 + travel} r={1.62 - travel * 0.28} fill="#2b2f36" stroke="#4b515c" strokeWidth={0.16} />
+      <circle cx={3.1} cy={3.1 + travel} r={1.62 - travel * 0.28} fill={part.capColour ?? '#2b2f36'} stroke="#4b515c" strokeWidth={0.16} />
       <circle cx={3.1} cy={3.1 + travel} r={1.62 - travel * 0.28} fill="url(#nz-knob)" />
       <circle cx={2.7} cy={2.6 + travel} r={0.42} fill="#ffffff" opacity={0.28} />
       {pressed && <circle cx={3.1} cy={3.1} r={2.5} fill="#38bdf8" opacity={0.16} filter="url(#nz-bloom)" />}

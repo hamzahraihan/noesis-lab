@@ -139,6 +139,8 @@ function alarmClockSetup(simulation: Simulation) {
       simulation.routeWire(boardPin, legA);
       simulation.routeWire(legB, ground);
       simulation.renamePart(button.id, label);
+      // Wokwi's alarm project: Hours and Minutes green, Alarm red.
+      simulation.setCapColour(button.id, label === 'Alarm' ? '#ef4444' : '#22c55e');
     });
 
     const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 46);
