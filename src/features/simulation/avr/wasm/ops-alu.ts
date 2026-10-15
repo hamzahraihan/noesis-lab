@@ -1,4 +1,9 @@
 // H, S, V, N, Z, C packed at ATmega positions; I/T always zero here.
+// H CONTRACT: matches avr8js 0.21.1 (carry into bit 1), NOT the datasheet
+// (carry from bit 3). Verified against node_modules/avr8js instruction.js:
+// ADD/SUB set 0x20 from bit 0 of the carry expression. Parity with the JS
+// path is this port's contract, so the quirk is reproduced deliberately;
+// do NOT "fix" H to the datasheet without a matching avr8js upgrade.
 function packFlags(h: boolean, s: boolean, v: boolean, n: boolean, z: boolean, c: boolean): i32 {
   let sreg: i32 = 0;
   if (h) sreg |= 0x20;
@@ -16,7 +21,9 @@ export function alu_add(a: i32, b: i32, carryIn: i32): i32 {
   const cc = carryIn & 0x01;
   const r = aa + bb + cc;
   const result = r & 0xff;
-  const h = ((aa & 0x0f) + (bb & 0x0f) + cc) > 0x0f;
+  // avr8js-parity H (see header): carry into bit 1, proven equal to
+  // avr8js's bit-0 carry-expression test on all 8 (d0, r0, c0) inputs.
+  const h = ((((aa & 1) & (bb & 1)) | (cc & ((aa ^ bb) & 1))) !== 0);
   const c = r > 0xff;
   const v = (((~(aa ^ bb)) & (aa ^ result)) & 0x80) !== 0;
   const n = (result & 0x80) !== 0;

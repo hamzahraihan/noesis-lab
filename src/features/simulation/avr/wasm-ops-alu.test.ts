@@ -7,7 +7,9 @@ function unpack(packed: number): { result: number; sreg: number } {
 describe('alu_add', () => {
   it('computes result and all six flags', async () => {
     const { alu_add, alu_sub } = await import('./wasm/ops-alu-stub');
-    expect(unpack(alu_add(0x05, 0x03, 0))).toEqual({ result: 0x08, sreg: 0x00 });
+    // 0x05+0x03: avr8js sets H (carry into bit 1), unlike the datasheet
+    // (carry from bit 3) — parity with avr8js is the contract (see ops-alu.ts).
+    expect(unpack(alu_add(0x05, 0x03, 0))).toEqual({ result: 0x08, sreg: 0x20 });
     expect(unpack(alu_add(0x7f, 0x01, 0))).toEqual({ result: 0x80, sreg: 0x2c });
     expect(unpack(alu_add(0xff, 0x01, 0))).toEqual({ result: 0x00, sreg: 0x23 });
     expect(unpack(alu_add(0x0f, 0x01, 0)).sreg & 0x20).toBe(0x20);

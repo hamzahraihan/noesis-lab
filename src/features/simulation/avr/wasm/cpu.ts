@@ -9,6 +9,7 @@
 // rejected: any `new` pulls the AS runtime's `env.abort` import into the
 // module, breaking `{}` instantiation; raw load/store keeps zero imports.
 // SREG is an i32 global masked to 8 bits on write (I=7..C=0).
+import { alu_add } from './ops-alu';
 const FLASH_BASE: i32 = 0;
 const FLASH_WORDS: i32 = 512;
 const REGS_BASE: i32 = 1024;
@@ -87,6 +88,18 @@ export function step(n: i32): i32 {
       const rd = 16 + ((w >> 4) & 0x0f);
       const k = ((w >> 8) & 0x0f) * 16 + (w & 0x0f);
       store<u8>(REGS_BASE + rd, k as u8);
+      pc += 1;
+      cycles += 1;
+      remaining -= 1;
+    } else if ((w & 0xfc00) === 0x0c00) {
+      // ADD Rd,Rr: only flag writer ported so far (carryIn is always 0 —
+      // no flag reading yet, so the attached driver's side-effect-free
+      // prefix invariant holds). I/T bits survive; HSVNZC are replaced.
+      const rd = (((w >> 8) & 1) << 4) | ((w >> 4) & 0x0f);
+      const rr = (((w >> 9) & 1) << 4) | (w & 0x0f);
+      const packed = alu_add(load<u8>(REGS_BASE + rd) as i32, load<u8>(REGS_BASE + rr) as i32, 0);
+      store<u8>(REGS_BASE + rd, (packed & 0xff) as u8);
+      sreg = (sreg & 0xc0) | ((packed >> 8) & 0x3f);
       pc += 1;
       cycles += 1;
       remaining -= 1;

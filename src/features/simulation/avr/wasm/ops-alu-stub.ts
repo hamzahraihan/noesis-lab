@@ -4,7 +4,8 @@ export function alu_add(a: number, b: number, carryIn: number): number {
   const cc = carryIn & 0x01;
   const r = aa + bb + cc;
   const result = r & 0xff;
-  const h = ((aa & 0x0f) + (bb & 0x0f) + cc) > 0x0f;
+  // Mirror of the avr8js-parity H in ops-alu.ts (carry into bit 1).
+  const h = (((aa & 1) & (bb & 1)) | (cc & ((aa ^ bb) & 1))) !== 0;
   const c = r > 0xff;
   const v = (((~(aa ^ bb)) & (aa ^ result)) & 0x80) !== 0;
   const n = (result & 0x80) !== 0;
