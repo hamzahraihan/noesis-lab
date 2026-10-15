@@ -14,7 +14,7 @@ import type { FirmwareProject } from '../firmware/project';
 import type { KnobSpec } from '@/features/parts';
 export const MAX_UNREAD_FRAMES = 4;
 type Incoming =
-  | { id: number; type: 'init'; bench: Bench; firmware: FirmwareProject; execution: 'interpreter' | 'avr' }
+  | { id: number; type: 'init'; bench: Bench; firmware: FirmwareProject; execution: 'interpreter' | 'avr'; wasm?: boolean }
   | { id: number; type: 'start' } | { id: number; type: 'stop' } | { id: number; type: 'ping' }
   | { id: number; type: 'press'; partId: string; down: boolean }
   | { id: number; type: 'knob'; partId: string; spec: KnobSpec; value: number }
@@ -23,6 +23,7 @@ type Incoming =
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
 let execution: 'interpreter' | 'avr' = 'interpreter';
+let wasm = false;
 let running = false;
 let unread = 0;
 let lastAckMs = 0;
@@ -36,8 +37,8 @@ function handle(port: Port, msg: Incoming): void {
       const board = msg.bench.parts[0]?.definition;
       if (!board) { fail(msg.id, 'init needs a board part first'); break; }
       try {
-        core = createSimCore(board); firmware = msg.firmware; execution = msg.execution; running = false; unread = 0;
-        core.rebuild(msg.bench, msg.firmware, msg.execution);
+        core = createSimCore(board); firmware = msg.firmware; execution = msg.execution; wasm = msg.wasm ?? false; running = false; unread = 0;
+        core.rebuild(msg.bench, msg.firmware, msg.execution, wasm);
         ok(msg.id, { buffer: core.snapshot(), fault: core.fault });
       } catch (error) { fail(msg.id, detail(error)); }
       break;
@@ -45,7 +46,7 @@ function handle(port: Port, msg: Incoming): void {
     case 'edit': {
       if (!core || !firmware) { fail(msg.id, 'not initialised'); break; }
       try {
-        core.rebuild(msg.bench, firmware, execution);
+        core.rebuild(msg.bench, firmware, execution, wasm);
         const buffer = core.snapshot(); headerView(buffer).generation = 0; unread = 0;
         ok(msg.id, { realloc: true, buffer, fault: core.fault });
       } catch (error) { fail(msg.id, detail(error)); }

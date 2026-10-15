@@ -501,6 +501,7 @@ class WorkerClientImpl implements WorkerClient {
   private live: SharedArrayBuffer | null = null;
   private loadedFirmware: FirmwareProject | null = null;
   private execution: 'interpreter' | 'avr' = 'interpreter';
+  private wasm = false;
   private faultText: string | null = null;
   private compileAbort: AbortController | null = null;
   private stagedHex: Uint16Array | null = null;
@@ -525,6 +526,7 @@ class WorkerClientImpl implements WorkerClient {
       bench: Bench;
       firmware: FirmwareProject;
       execution: 'interpreter' | 'avr';
+      wasm?: boolean;
       onFallback: (reason: string) => void;
     },
   ) {
@@ -538,6 +540,7 @@ class WorkerClientImpl implements WorkerClient {
       this.bench = portInit.bench;
       this.loadedFirmware = portInit.firmware;
       this.execution = portInit.execution;
+      this.wasm = portInit.wasm ?? false;
       this.onPortFallback = portInit.onFallback;
       this.port.onmessage = (event) => this.handleReply(event.data);
       this.sendInit();
@@ -793,7 +796,7 @@ class WorkerClientImpl implements WorkerClient {
     const id = this.nextId++;
     this.pending.set(id, 'init');
     try {
-      port.postMessage({ id, type: 'init', bench, firmware, execution: this.execution });
+      port.postMessage({ id, type: 'init', bench, firmware, execution: this.execution, wasm: this.wasm });
     } catch {
       this.demote('sim worker post failed');
     }
@@ -999,6 +1002,7 @@ export function createWorkerClient(opts: {
   bench?: Bench;
   firmware?: FirmwareProject;
   execution?: 'interpreter' | 'avr';
+  wasm?: boolean;
   onFallback: (reason: string) => void;
   forceNoWorker?: boolean;
   createPort?: () => SimWorkerPort;
@@ -1036,6 +1040,7 @@ export function createWorkerClient(opts: {
     bench: opts.bench ?? minimalBench(board),
     firmware: opts.firmware ?? minimalFirmware(),
     execution: opts.execution ?? 'interpreter',
+    wasm: opts.wasm ?? false,
     onFallback,
   });
 }

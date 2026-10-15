@@ -118,7 +118,7 @@ export interface CoreInput {
 export interface CoreHandle {
   step(budgetMs: number): void;
   applyInput(op: CoreInput): void;
-  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr'): void;
+  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr', wasm?: boolean): void;
   flash(words: Uint16Array): void;
   snapshot(): SharedArrayBuffer;
   readonly timeMs: number;
@@ -207,7 +207,10 @@ class SimCore implements CoreHandle {
     return this.faultText;
   }
 
-  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr'): void {
+  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr', wasm = false): void {
+    // Lab flag (rollout stage 1): accepted and ignored — the attached driver
+    // lands in a follow-up, so behavior is identical with the flag on or off.
+    void wasm;
     this.bench = bench;
     this.engine.timeMs = 0;
     this.mcu.reset();
