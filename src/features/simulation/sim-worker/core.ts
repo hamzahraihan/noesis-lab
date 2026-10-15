@@ -165,6 +165,9 @@ class SimCore implements CoreHandle {
   private avrBackend: AvrBackend | null = null;
   private avrSettledRevision = -1;
   private pendingDelayMs = 0;
+  // Fault-cause contract: Wasm attach failures must set a `'wasm ...'`-prefixed
+  // cause here without touching the interpreter runner (reserved: the
+  // fallback-demote path is for transport failures only).
   private faultText: string | null = null;
   private serial: string[] = [];
   private serialCursor = 0;
