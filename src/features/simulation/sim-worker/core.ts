@@ -285,7 +285,14 @@ class SimCore implements CoreHandle {
         this.avrBackend.step(Math.max(frameEnd - this.engine.timeMs, 0));
         this.engine.settle();
         if (this.avrBackend.fault) {
-          this.faultText = this.avrBackend.fault;
+          if (this.wasmAttachedTo === this.avrBackend) {
+            this.faultText = `wasm ${this.avrBackend.fault}`;
+            this.wasmDemoted = true;
+            this.wasmAttachedTo = null;
+            this.avrBackend.attachWasm(null);
+          } else {
+            this.faultText = this.avrBackend.fault;
+          }
           this.avrBackend = null;
         }
         this.advanceBy(frameEnd - this.engine.timeMs);
