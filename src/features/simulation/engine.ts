@@ -880,8 +880,9 @@ export class Engine {
    * a `skip` that jumps time without solving still lands on the right second.
    *
    * A sketch that writes the time registers takes the calendar over in the
-   * model, and the next step takes it back — no shipped sketch does that, and
-   * a frozen clock would be the stranger untruth.
+   * model, and the next step advances that set time rather than taking it
+   * back — the alarm sketch sets the clock from its Hour/Minute buttons, so
+   * taking it back froze the bench at midnight.
    */
   private advanceClocks(): void {
     for (const device of this.devices.values()) {

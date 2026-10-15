@@ -7,8 +7,10 @@
  * wrong register and it gets a plausible-looking wrong answer, which is exactly
  * what a real clock does.
  *
- * The time comes from the host, so what a sketch reads is the bench's
- * simulated time rather than a date frozen into the part when it was placed.
+ * The time comes from the host while no sketch has set it; once a sketch
+ * writes the time registers, the host only advances that set time at host
+ * rate — the way the crystal would carry a set clock — instead of replacing
+ * it. Untouched, the chip follows simulated time from its power-up midnight.
  *
  * The MPU-6050 answers at the same 0x68, because the address is fixed on both
  * chips. That is not a shortcut in the model: it is what the two parts do, and
@@ -71,6 +73,16 @@ function toBcd(value: number): number {
   return (Math.floor(value / 10) << 4) | (value % 10);
 }
 
+/**
+ * Decodes two binary-coded digits, or null when either nibble is no digit.
+ */
+function fromBcd(value: number): number | null {
+  const tens = value >> 4;
+  const units = value & 0x0f;
+  if (tens > 9 || units > 9) return null;
+  return tens * 10 + units;
+}
+
 export class Ds1307 implements I2cDevice {
   readonly address = DS1307_ADDRESS;
   onBus = false;
@@ -85,22 +97,66 @@ export class Ds1307 implements I2cDevice {
    * here is the bench's choice, and that is the one it makes.
    */
   private clock = new Date(2000, 0, 1);
-  /** True while the host's clock, rather than a sketch's write, owns the time. */
-  private followingHost = false;
+  /**
+   * True while the host's clock, rather than a sketch's write, owns the time.
+   *
+   * Power-up follows the host until the first sketch write to a time
+   * register. After that the host only ADVANCES the sketch-set time (see
+   * setTime): taking it back erased Hour/Minute button edits on the very
+   * next step, freezing the alarm clock at midnight.
+   */
+  private followingHost = true;
+  /** Host milliseconds of the last setTime, for advancing sketch-set time. */
+  private lastHostMs = Number.NEGATIVE_INFINITY;
   private oscillatorStopped = false;
 
   /**
    * Tells the clock what time it is.
    *
    * Call this as the bench's simulated time moves rather than once when the
-   * part is placed: the seconds only advance when the host advances them. A
-   * sketch that writes the time registers takes the calendar over -- the chip
-   * holds what was written, as it does -- and the next `setTime` takes it back.
+   * part is placed: the seconds only advance when the host advances them.
+   *
+   * While the host owns the time the registers track it exactly. Once a
+   * sketch has written the time registers, the host time only moves the
+   * sketch-set time forward at host rate — the way the crystal would carry
+   * a set clock — instead of replacing it. A sketch that writes the time
+   * registers takes the calendar over and keeps it.
    */
   setTime(date: Date): void {
-    this.clock = new Date(date.getTime());
-    this.followingHost = true;
+    const hostMs = date.getTime();
+    if (this.followingHost || !Number.isFinite(this.lastHostMs)) {
+      this.clock = new Date(hostMs);
+    } else {
+      const base = this.decodeRegisters();
+      this.clock = base === null ? new Date(hostMs) : new Date(base + (hostMs - this.lastHostMs));
+    }
+    this.lastHostMs = hostMs;
     this.pack();
+  }
+
+  /**
+   * Reads the sketch-written time registers as milliseconds, or null when
+   * they hold no valid calendar (all-zero power-up state, never written).
+   * Hours decode in 24-hour mode, which is what every shipped sketch uses.
+   */
+  private decodeRegisters(): number | null {
+    const seconds = fromBcd(this.registers[SECONDS] & 0x7f);
+    const minutes = fromBcd(this.registers[MINUTES] & 0x3f);
+    const hours = fromBcd(this.registers[HOURS] & 0x3f);
+    const date = fromBcd(this.registers[DATE] & 0x1f);
+    const month = fromBcd(this.registers[MONTH] & 0x1f);
+    const year = fromBcd(this.registers[YEAR]);
+    if (
+      seconds === null || seconds > 59 ||
+      minutes === null || minutes > 59 ||
+      hours === null || hours > 23 ||
+      date === null || date < 1 || date > 31 ||
+      month === null || month < 1 || month > 12 ||
+      year === null
+    ) {
+      return null;
+    }
+    return new Date(2000 + year, month - 1, date, hours, minutes, seconds).getTime();
   }
 
   /**

@@ -422,3 +422,57 @@ describe('a sketch using the new APIs', () => {
     expect(hornModel.angle).toBe(170);
   });
 });
+
+describe('ds1307 sketch-set time', () => {
+  it('advances a sketch-written time instead of taking it back', async () => {
+    const { Ds1307 } = await import('./ds1307');
+    const rtc = new Ds1307();
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 23));
+    // RTClib adjust() burst: pointer at 0x00, then sec/min/hr/dow/date/month/year.
+    rtc.receive(0x00, true);
+    for (const b of [0x00, 0x01, 0x00, 0x06, 0x01, 0x01, 0x00]) rtc.receive(b, false);
+    // One host second later the chip must read 00:01:01, not host 00:00:24.
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 24));
+    rtc.receive(0x00, true);
+    expect([...rtc.read(2)]).toEqual([0x01, 0x01]);
+  });
+
+  it('follows the host until a sketch first writes the time', async () => {
+    const { Ds1307 } = await import('./ds1307');
+    const rtc = new Ds1307();
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 23));
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 24));
+    rtc.receive(0x00, true);
+    expect([...rtc.read(2)]).toEqual([0x24, 0x00]);
+  });
+
+  it('ignores NVRAM writes for clock ownership', async () => {
+    const { Ds1307 } = await import('./ds1307');
+    const rtc = new Ds1307();
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 23));
+    rtc.receive(0x08, true);
+    rtc.receive(0xa5, false);
+    rtc.setTime(new Date(2000, 0, 1, 0, 0, 24));
+    rtc.receive(0x00, true);
+    expect([...rtc.read(2)]).toEqual([0x24, 0x00]);
+    rtc.receive(0x08, true);
+    expect([...rtc.read(1)]).toEqual([0xa5]);
+  });
+});
+
+describe('ds1307 on a live bench', () => {
+  it('keeps advancing a sketch-set time across engine steps', () => {
+    const { bus, engine } = i2cBench(ds1307Definition());
+    engine.skip(23);
+    bus.beginTransmission(0x68);
+    bus.write(0x00);
+    for (const b of [0x00, 0x01, 0x00, 0x06, 0x01, 0x01, 0x00]) bus.write(b);
+    bus.endTransmission();
+    engine.skip(1);
+    bus.beginTransmission(0x68);
+    bus.write(0x00);
+    bus.endTransmission();
+    expect(bus.requestFrom(0x68, 2)).toBe(2);
+    expect([bus.read(), bus.read()]).toEqual([0x01, 0x01]);
+  });
+});
