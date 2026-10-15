@@ -51,6 +51,8 @@
 import { Engine } from '../engine';
 import { McuRuntime } from '../mcu';
 import { AvrBackend } from '../avr/core';
+import { loadWasmModule } from '../avr/wasm-core';
+import avrCoreWasmUrl from '../avr/wasm/avr-core.wasm?url';
 import { hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '../avr/hex';
 import { GROUND } from '../elements';
 import { I2CBus } from '../bus/i2c';
@@ -95,6 +97,13 @@ import type {
 import type { Bench, PartInstance } from '../bench';
 import type { FirmwareProject } from '../firmware/project';
 
+function defaultFetchWasmBytes(): Promise<ArrayBuffer> {
+  return fetch(avrCoreWasmUrl).then((res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.arrayBuffer();
+  });
+}
+
 /** Longest slice of simulated time one `step` call may cover. */
 const MAX_FRAME_MS = 40;
 /** Upper bound on interpreter slices per step, so a runaway loop cannot hang. */
@@ -118,11 +127,12 @@ export interface CoreInput {
 export interface CoreHandle {
   step(budgetMs: number): void;
   applyInput(op: CoreInput): void;
-  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr', wasm?: boolean): void;
+  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr', wasm?: boolean, fetchWasm?: () => Promise<ArrayBuffer>): void;
   flash(words: Uint16Array): void;
   snapshot(): SharedArrayBuffer;
   readonly timeMs: number;
   readonly fault: string | null;
+  readonly wasmAttached: boolean;
 }
 
 export function createSimCore(
@@ -164,6 +174,11 @@ class SimCore implements CoreHandle {
   private runner: FirmwareRunner | null = null;
   private avrBackend: AvrBackend | null = null;
   private avrSettledRevision = -1;
+  private wantWasm = false;
+  private wasmDemoted = false;
+  private wasmGeneration = 0;
+  private wasmAttachedTo: AvrBackend | null = null;
+  private wasmFetch: () => Promise<ArrayBuffer> = defaultFetchWasmBytes;
   private pendingDelayMs = 0;
   // Fault-cause contract: Wasm attach failures must set a `'wasm ...'`-prefixed
   // cause here without touching the interpreter runner (reserved: the
@@ -210,10 +225,25 @@ class SimCore implements CoreHandle {
     return this.faultText;
   }
 
-  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr', wasm = false): void {
-    // Lab flag (rollout stage 1): accepted and ignored — the attached driver
-    // lands in a follow-up, so behavior is identical with the flag on or off.
-    void wasm;
+  /** Test seam: whether the live AVR backend has Wasm attached. */
+  get wasmAttached(): boolean {
+    return this.avrBackend !== null && this.wasmAttachedTo === this.avrBackend;
+  }
+
+  rebuild(
+    bench: Bench,
+    firmware: FirmwareProject,
+    execution: 'interpreter' | 'avr',
+    wasm = false,
+    fetchWasm: () => Promise<ArrayBuffer> = defaultFetchWasmBytes,
+  ): void {
+    // Lab flag (rollout stage 1): when set, the module loads async and
+    // attaches on arrival — the backend runs the JS path until then.
+    this.wantWasm = wasm;
+    this.wasmDemoted = false;
+    this.wasmGeneration += 1;
+    this.wasmAttachedTo = null;
+    this.wasmFetch = fetchWasm;
     this.bench = bench;
     this.engine.timeMs = 0;
     this.mcu.reset();
@@ -501,6 +531,24 @@ class SimCore implements CoreHandle {
       i2c: this.avrI2cSink(),
     });
     this.avrBackend = flashed;
+    if (this.wantWasm && !this.wasmDemoted) void this.attachWasmAsync(flashed, this.wasmGeneration, program);
+  }
+
+  /** Async attach: JS path until the module arrives; stale loads never land. */
+  private async attachWasmAsync(backend: AvrBackend, generation: number, program: Uint16Array): Promise<void> {
+    const loaded = await loadWasmModule(this.wasmFetch);
+    if (generation !== this.wasmGeneration || this.avrBackend !== backend) return;
+    if (!loaded.ok) {
+      this.faultText = loaded.cause;
+      return;
+    }
+    loaded.module.flashWords(program);
+    // attachWasm still declares the legacy WasmCore shape while the driver
+    // runs the AttachedWasm shape (cast lives inside runAttachedSlice); the
+    // parameter-level cast keeps this seam from widening.
+    backend.attachWasm(loaded.module.core as unknown as Parameters<AvrBackend['attachWasm']>[0]);
+    backend.attachWasmReset(() => loaded.module.reset());
+    this.wasmAttachedTo = backend;
   }
 
   private avrI2cSink(): {

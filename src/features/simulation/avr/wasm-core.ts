@@ -301,3 +301,74 @@ export async function cpuGateMeasured(): Promise<{
   // equality lands with dual-path. `measured: false` marks this until then.
   return { trapRate: 0, glass, serialEqual: serialAfter >= serialBefore, wallMs, measured: false as const };
 }
+
+export const REQUIRED_WASM_EXPORTS = [
+  'flash_base', 'reset_cpu', 'get_reg', 'set_reg', 'get_pc', 'set_pc',
+  'get_sreg', 'set_sreg', 'step', 'memory',
+] as const;
+
+const WASM_FLASH_WORDS = 512;
+
+export interface WasmModule {
+  core: AttachedWasm;
+  flashWords(words: Uint16Array): void;
+  reset(): void;
+}
+
+export type LoadWasmResult =
+  | { ok: true; module: WasmModule }
+  | { ok: false; cause: string };
+
+function wasmCause(prefix: string, error: unknown): string {
+  return `${prefix}: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+export async function loadWasmModule(fetchBytes: () => Promise<ArrayBuffer>): Promise<LoadWasmResult> {
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await fetchBytes();
+  } catch (error) {
+    return { ok: false, cause: wasmCause('wasm fetch failed', error) };
+  }
+  let instance: WebAssembly.Instance;
+  try {
+    instance = await WebAssembly.instantiate(await WebAssembly.compile(bytes), {});
+  } catch (error) {
+    return { ok: false, cause: wasmCause('wasm compile failed', error) };
+  }
+  const ex = instance.exports as unknown as Record<string, unknown>;
+  const missing = REQUIRED_WASM_EXPORTS.filter((k) =>
+    k === 'memory' ? !(ex[k] instanceof WebAssembly.Memory) : typeof ex[k] !== 'function',
+  );
+  if (missing.length > 0) return { ok: false, cause: `wasm version mismatch: missing exports ${missing.join(',')}` };
+  const e = ex as unknown as {
+    flash_base(): number; reset_cpu(): void;
+    get_reg(i: number): number; set_reg(i: number, v: number): void;
+    get_pc(): number; set_pc(v: number): void;
+    get_sreg(): number; set_sreg(v: number): void;
+    step(n: number): number; memory: WebAssembly.Memory;
+  };
+  const core: AttachedWasm = {
+    step: (n: number): number => e.step(n),
+    getPc: (): number => e.get_pc(),
+    setPc: (v: number): void => e.set_pc(v),
+    getReg: (i: number): number => e.get_reg(i),
+    setReg: (i: number, v: number): void => e.set_reg(i, v),
+    getSreg: (): number => e.get_sreg(),
+    setSreg: (v: number): void => e.set_sreg(v),
+  };
+  return {
+    ok: true,
+    module: {
+      core,
+      flashWords: (words: Uint16Array): void => {
+        e.reset_cpu();
+        const len = Math.min(words.length, WASM_FLASH_WORDS);
+        new Uint16Array(e.memory.buffer, e.flash_base(), len).set(words.subarray(0, len));
+      },
+      reset: (): void => {
+        e.reset_cpu();
+      },
+    },
+  };
+}

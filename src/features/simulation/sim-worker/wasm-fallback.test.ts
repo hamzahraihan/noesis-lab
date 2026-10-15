@@ -16,7 +16,7 @@ describe('wasm fallback cause', () => {
     expect(String(onFallback.mock.calls[0]?.[0] ?? '')).not.toBe('');
   });
 
-  it('rebuilds cleanly with the flag on and no module present', () => {
+  it('records a wasm cause with the flag on and no loadable module', () => {
     const core = createSimCore(boardOption('uno').make());
     const bench = { parts: [], wires: [], terminals: [], revision: 0 };
     const firmware = {
@@ -24,7 +24,14 @@ describe('wasm fallback cause', () => {
       activeName: 'main.ino',
       files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
     };
-    core.rebuild(bench as never, firmware as never, 'interpreter', true);
-    expect(core.fault).toBeNull();
+    core.rebuild(bench as never, firmware as never, 'interpreter', true, () => Promise.reject(new Error('offline')));
+    core.flash(new Uint16Array([0x0000]));
+    return new Promise<void>((done) => {
+      setTimeout(() => {
+        expect(String(core.fault).startsWith('wasm ')).toBe(true);
+        expect(core.wasmAttached).toBe(false);
+        done();
+      }, 500);
+    });
   });
 });
