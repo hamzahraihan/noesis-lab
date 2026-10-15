@@ -936,3 +936,15 @@ void loop() {
     // rebuilds every run.
   }, 1_500_000);
 });
+
+describe('avr wasm opt-in', () => {
+  it('opts in library (avr) builds only', () => {
+    const project = galleryById('alarm-clock')!;
+    const library = buildFor(project, 'uno', 'library')!;
+    const raw = buildFor(project, 'uno')!;
+    const optsIn = (execution: string | undefined): boolean => execution === 'avr';
+    expect(optsIn(library.execution)).toBe(true);
+    expect(optsIn(raw.execution)).toBe(false);
+    expect(optsIn(undefined)).toBe(false);
+  });
+});

@@ -519,6 +519,7 @@ export default function Bench(props: BenchProps) {
     const client = createWorkerClient({
       board: simulation.mcu.definition,
       bench: simulation.bench,
+      wasm: projectBuild?.execution === 'avr',
       onFallback: (reason) => {
         setWorkerFallback(reason);
         setWorkerClient(null);
