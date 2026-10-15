@@ -38,4 +38,18 @@ describe('ring drain', () => {
     view.setInt32(1208, 0, true);
     expect(drainWasmEvents(buf).length).toBeLessThanOrEqual(64);
   });
+
+  it('advances TAIL so a second drain returns nothing', () => {
+    const buf = ringMemory([[13, true], [12, false]]);
+    expect(drainWasmEvents(buf)).toHaveLength(2);
+    expect(drainWasmEvents(buf)).toEqual([]);
+    expect(new DataView(buf).getInt32(1208, true)).toBe(2);
+  });
+
+  it('advances TAIL partially when maxEvents caps the drain', () => {
+    const buf = ringMemory([[13, true], [12, false]]);
+    expect(drainWasmEvents(buf, 1)).toEqual([{ gpio: 13, high: true }]);
+    expect(new DataView(buf).getInt32(1208, true)).toBe(1);
+    expect(drainWasmEvents(buf)).toEqual([{ gpio: 12, high: false }]);
+  });
 });

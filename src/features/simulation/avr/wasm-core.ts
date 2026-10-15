@@ -269,6 +269,10 @@ export function drainWasmEvents(memory: ArrayBuffer, maxEvents = 256): Array<{ g
     const slot = WASM_EVENT_BASE + ((tail + i) % WASM_EVENT_CAP) * 2;
     out.push({ gpio: bytes[slot] ?? 0, high: (bytes[slot + 1] ?? 0) !== 0 });
   }
+  // Consume what was drained: absolute-counter protocol shared with the
+  // Wasm side (io.ts drops oldest by bumping TAIL the same way). A zero
+  // count writes back the same value (no-op).
+  view.setInt32(WASM_TAIL_OFF, tail + count, true);
   return out;
 }
 
