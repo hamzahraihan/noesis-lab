@@ -126,10 +126,10 @@ interface SevSegState {
  * Segment patterns by character, in A-G bit order.
  *
  * Digits and the display letters match the bench's own glass table;
- * `'o'` renders as `'0'` and `'n'` lights C/E/G per the SevSeg alpha table
- * the gallery status views rely on. No decimal point is ever wired (the
- * gallery passes seven segment pins with the point disabled), so the alarm
- * snooze mark lights every bar instead.
+ * `'o'` renders as `'0'`, `'n'` lights C/E/G, and `'f'` shares `'F'`'s bars
+ * per the SevSeg alpha table the gallery status views rely on. No decimal
+ * point is ever wired (the gallery passes seven segment pins with the point
+ * disabled), so the alarm snooze mark lights every bar instead.
  */
 const SEVSEG_GLYPHS: Readonly<Record<string, number>> = {
   ' ': 0x00,
@@ -150,6 +150,7 @@ const SEVSEG_GLYPHS: Readonly<Record<string, number>> = {
   d: 0x5e,
   E: 0x79,
   F: 0x71,
+  f: 0x71,
   H: 0x76,
   h: 0x74,
   L: 0x38,
