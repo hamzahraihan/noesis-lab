@@ -42,10 +42,15 @@ export interface Solution {
  *
  * A junction knee is far sharper than the rest of the circuit's resolution, so
  * an unconstrained step can throw the bias across it and land on the wrong side
- * of the characteristic. Walking the bias in bounded steps costs a few extra
- * iterations and makes convergence reliable instead of luck.
+ * of the characteristic. Walking the bias in bounded steps makes convergence
+ * reliable instead of luck. The constant paces that walk, it is not a
+ * correctness threshold: a multiplexed display swings its segment diodes ~7 V
+ * per refresh and every read settle re-walks the swing, which at 0.25 V cost
+ * the alarm bench 30.6 iterations per settle (about two thirds of its AVR wall
+ * clock). 1 V keeps the bounded walk -- no new failures anywhere in the suite,
+ * zero non-converged solves on the heavy bench -- at 9.4 iterations.
  */
-const JUNCTION_LIMIT_STEP_VOLTS = 0.25;
+const JUNCTION_LIMIT_STEP_VOLTS = 1.0;
 
 /**
  * Grow-only shared solve buffers. The single shared instance is what makes
