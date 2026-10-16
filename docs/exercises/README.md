@@ -1,6 +1,6 @@
 # Embedded Systems Exercise Curriculum
 
-Nine hands-on exercises, arranged as a **five-level ladder**, that take a learner
+Eleven hands-on exercises, arranged as a **five-level ladder**, that take a learner
 from "I have never wired anything" to "it counts interrupts". Every exercise is
 built twice: once on a real bench, once as a **digital twin** in this repository's
 simulator, so the concepts survive without hardware on the desk.
@@ -34,12 +34,17 @@ That choice is deliberate, not default. The Uno's limits are the lesson:
 - **2 KB of SRAM** — an SSD1306 frame buffer is 1024 bytes. Half the RAM, gone. That
   constraint is the whole point of Exercise 3.1.
 
+Module 5 is where the track leaves the Uno behind: 5.1 runs on an ESP32 DevKit V1 and
+5.2 on a Raspberry Pi 4 — 3.3 V logic on both, BCM pin numbers on the Pi, no analogue
+input on the Pi at all, and a 5 V line that ends either board. Same breadboard, same
+jumpers, different rules about what a pin is.
+
 **Digital twin:** every exercise has a **Noesis Lab twin** section mapping the circuit
 onto parts this repo already models — `Tactile Button`, `10k Potentiometer`,
 `Slide Potentiometer`, `Red LED`, `Thermistor (NTC) Module`,
 `Photoresistor (LDR) Module`, `Rotary Encoder (KY-040)`,
 `Ultrasonic Sensor (HC-SR04)`, `128x64 OLED (SSD1306)` (I²C),
-`128x64 OLED (SSD1306 SPI)` and `2.4" TFT (ILI9341)` — driven by the firmware
+`128x64 OLED (SSD1306 SPI)`, `2.4" TFT (ILI9341)` and `3.2" TFT (ILI9341)` — driven by the firmware
 interpreter (`pinMode`, `digitalRead/Write`, `analogRead/Write`, `millis`,
 `micros`, `pulseIn`, `Wire`, `SPI`) and read back on the Multimeter, Scope, Logic
 Analyser, and Bus Monitor panels.
@@ -92,7 +97,10 @@ These hold for every exercise in the track.
    1.1 onwards). At Level 1 the program genuinely has nothing else to do, so
    `delay()` is the correct tool. From 1.1 on, your program *does* have other work,
    and a program that stops to wait cannot do it. The reason is taught in the
-   exercise that withdraws it, not asserted here. Time is acquired with
+   exercise that withdraws it, not asserted here. The one late exception is
+   5.1's fetch loop, where there is genuinely nothing to draw until a picture
+   arrives — the exception is argued in that lesson's own constraints.
+   Time is acquired with
    `millis()`/`micros()` and unsigned subtraction so the comparison survives the
    49.7-day `millis()` wrap:
    `if (now - last >= INTERVAL) { last = now; ... }`
@@ -114,7 +122,7 @@ descriptions, entry tests and exit checks are in [`LEVELS.md`](LEVELS.md).
 | **2** | Reading the world | `digitalRead` · pull-ups and active-LOW · non-blocking time | [1.1](module-1-gpio.md) · [1.2](module-1-gpio.md) |
 | **3** | Signals that are not on or off | ADC resolution · PWM duty · voltage dividers | [2.1](module-2-analog.md) · [2.2](module-2-analog.md) |
 | **4** | Talking to other chips | open-drain and addressing · chip-select framing · the RAM budget | [3.1](module-3-bus-protocols.md) · [3.2](module-3-bus-protocols.md) |
-| **5** | Faster than the loop | interrupts and `volatile` · atomic reads · microsecond timing | [4.1](module-4-interrupts.md) · [4.2](module-4-interrupts.md) |
+| **5** | Faster than the loop | interrupts and `volatile` · atomic reads · microsecond timing | [4.1](module-4-interrupts.md) · [4.2](module-4-interrupts.md) · [5.1](module-5-maps.md) · [5.2](module-5-single-board-computers.md) |
 
 ---
 
@@ -152,6 +160,8 @@ each level, plus the pre-submission checklist.
 | [3.2](module-3-bus-protocols.md) | 4 | SPI High-Speed Display Control | Intermediate | 75–90 mins | CPOL/CPHA, latch discipline, 595 sink budget | `128x64 OLED SPI module (SSD1306)`, `2.4" TFT (ILI9341)`, Bus Monitor |
 | [4.1](module-4-interrupts.md) | 5 | High-Speed Rotary Encoder & Optical Tachometer | Advanced | 90–120 mins | `attachInterrupt`, Gray-code x4, `volatile`, ISR budget | `Rotary Encoder (KY-040)`, polling-only twin |
 | [4.2](module-4-interrupts.md) | 5 | Distance Radar with Ultrasonic Sensor (HC-SR04) | Advanced | 60–75 mins | `micros()`, round-trip propagation, timing window | `Ultrasonic Sensor (HC-SR04)`, `pulseIn`, Scope |
+| [5.1](module-5-maps.md) | 5 | A map on a TFT, from OpenStreetMap | Intermediate | 60–75 mins | Slippy tiles, Mercator, async fetching, MADCTL rotation | `3.2" TFT (ILI9341)`, `Tactile Button` ×3, Bus Monitor |
+| [5.2](module-5-single-board-computers.md) | 5 | A pocket map on a TFT | Intermediate | 45–60 mins | SPI on a Pi, the address window, RGB565, no analogue input | `2.4" TFT (ILI9341)`, `Tactile Button` |
 
 ---
 
@@ -161,7 +171,9 @@ Buy once, use across the track.
 
 | Part | Value | Exercises | Note |
 | --- | --- | --- | --- |
-| Arduino Uno R3 | — | all | ATmega328P |
+| Arduino Uno R3 | — | 0.1–4.2 | ATmega328P |
+| ESP32 DevKit V1 | — | 5.1 | 3.3 V logic; the map tiles arrive over its Wi-Fi |
+| Raspberry Pi 4 | — | 5.2 | Runs Linux; GPIO is 3.3 V and there is no ADC |
 | Breadboard | full-size, 830 tie points | all | Split the rails, and note the centre channel break |
 | Resistors | 220 Ω | 1.1, 1.2, 2.1, 3.2, 4.2 | LED current limit |
 | Resistors | 330 Ω | — | Standard blink resistor; 9.4 mA with red |
@@ -172,7 +184,7 @@ Buy once, use across the track.
 | Capacitors | 100 nF | 1.1, 2.1, 2.2, 3.1, 4.1, 3.2 | Filtering and 74HC595 decoupling |
 | Capacitors | 10 nF | 4.1 | Encoder edge filter (τ = 10 µs) |
 | LEDs | 5 mm red/green/blue | 1.1, 1.2, 2.1, 3.2, 4.2 | $V_f$: red ≈ 1.9 V, blue ≈ 3.0 V |
-| Tactile buttons | 6 mm | 1.1, 1.2 | Momentary, normally open |
+| Tactile buttons | 6 mm | 1.1, 1.2, 5.1, 5.2 | Momentary, normally open |
 | Potentiometer | 10 kΩ linear | 2.1 | 3-terminal |
 | Thermistor | 10 kΩ NTC, β = 3950 | 2.2 | B-value determines the curve |
 | LDR | GL5528 | 2.2 | ≈ 3.5 kΩ bright, ≈ 50 kΩ dark |
@@ -182,6 +194,8 @@ Buy once, use across the track.
 | Rotary encoder | KY-040 | 4.1 | 20 detents/rev, on-board pull-ups |
 | Ultrasonic | HC-SR04 | 4.2 | 5 V module, 2–400 cm |
 | IR reflective sensor | TCRT5000 + slotted disc | 4.1 | For the optical tachometer |
+| TFT | 3.2" ILI9341, SPI | 5.1 | 480×320, 3.3 V, 8-pin SPI breakout |
+| TFT | 2.4" ILI9341, SPI | 5.2 | 320×240, 3.3 V, 8-pin SPI breakout |
 
 ---
 
@@ -192,6 +206,7 @@ Buy once, use across the track.
 2. **[Module 2 — Analog Interfaces & Signals](module-2-analog.md)** *(Level 3)*: 2.1 Precision Light Dimmer & Potentiometer Sampling · 2.2 Analog Sensor Calibration & Voltage Dividers
 3. **[Module 3 — Serial Protocols & Hardware Bus Communication](module-3-bus-protocols.md)** *(Level 4)*: 3.1 $I^2C$ Environmental Monitor with OLED & Sensor · 3.2 SPI High-Speed Display Control
 4. **[Module 4 — Hardware Interrupts & Low-Level Control](module-4-interrupts.md)** *(Level 5)*: 4.1 High-Speed Rotary Encoder & Optical Tachometer · 4.2 Distance Radar with Ultrasonic Sensor (HC-SR04)
+5. **[Module 5 — Maps on a Screen](module-5-maps.md)** *(Level 5)*: 5.1 A map on a TFT, from OpenStreetMap · **[Module 5 — Single-Board Computers](module-5-single-board-computers.md)**: 5.2 A pocket map on a TFT
 
 Also: **[LEVELS.md](LEVELS.md)** — the ladder, placement test and exit checks ·
 **[TEMPLATE.md](TEMPLATE.md)** — how to write a new exercise at any level.
