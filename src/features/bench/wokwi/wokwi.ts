@@ -25,7 +25,7 @@
  */
 
 import type { PartInstance } from '@/features/simulation';
-import type { PartDefinition, Rotation, SensorVariant } from '@/features/parts';
+import type { PartDefinition, PinRole, Rotation, SensorVariant } from '@/features/parts';
 import { Ili9341, ILI9341_HEIGHT, ILI9341_WIDTH } from '@/features/parts';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from '@/features/parts';
 import { SevenSegment } from '@/features/parts';
@@ -584,6 +584,21 @@ export function pushWokwiState(
  */
 const SEVEN_SEGMENT_LIT = '#ff0000';
 const SEVEN_SEGMENT_GHOST = '#565656';
+
+/**
+ * Bench header tag for one MCU pin: HIGH/LOW at half logic level, silent
+ * for rails and unknown pins. Volts-only on purpose — direction needs a
+ * pin-mode channel the worker snapshot does not carry, so both paths share
+ * this rather than the in-page path showing more.
+ */
+export function headerPinLevel(
+  role: PinRole | undefined,
+  volts: number,
+  logicVolts: number,
+): 'HIGH' | 'LOW' | null {
+  if (role === undefined || role === 'power' || role === 'ground') return null;
+  return volts >= logicVolts / 2 ? 'HIGH' : 'LOW';
+}
 
 /**
  * Brightness for a package of diodes: the bar graph's ten segments and the

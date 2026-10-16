@@ -42,7 +42,7 @@ import {
   SolderPad,
   UsbB,
 } from './hardware';
-import { wokwiPartFor } from './wokwi';
+import { headerPinLevel, wokwiPartFor } from './wokwi';
 import { WokwiFootprint } from './WokwiFootprint';
 
 /*
@@ -173,8 +173,56 @@ function shapeFor(
   }
 }
 
-function PinMark({
-  pin,
+/**
+ * Live HIGH/LOW tags beside an MCU's header pins, Wokwi-style.
+ *
+ * Volts-only by design (see headerPinLevel): direction would need a pin-mode
+ * channel the worker snapshot does not carry. Rails stay silent; text sits
+ * outside the pin toward the board edge so 2.54 mm pitch never collides.
+ */
+function PinLevelTags({
+  definition,
+  part,
+  state,
+  runs,
+}: {
+  definition: PartDefinition;
+  part: PartInstance;
+  state: FootprintState;
+  runs: readonly PinSpec[][];
+}) {
+  if (definition.component.kind !== 'mcu') return null;
+  const logicVolts = definition.component.board.logicVolts;
+  const roleOf = new Map((definition.boardPins ?? []).map((entry) => [entry.id, entry.role] as const));
+  return (
+    <g fontFamily={SILKSCREEN_FONT} fontSize={1.4} opacity={0.9}>
+      {runs.flatMap((pins) =>
+        pins.map((pin) => {
+          const level = headerPinLevel(
+            roleOf.get(pin.id),
+            state.pinVolts.get(`${part.id}:${pin.id}`) ?? 0,
+            logicVolts,
+          );
+          if (level === null) return null;
+          const side = pin.x < definition.widthMm / 2 ? -1 : 1;
+          return (
+            <text
+              key={pin.id}
+              x={pin.x + side * 2}
+              y={pin.y + 0.5}
+              textAnchor={side < 0 ? 'end' : 'start'}
+              fill={level === 'HIGH' ? '#fbbf24' : '#64748b'}
+            >
+              {level}
+            </text>
+          );
+        }),
+      )}
+    </g>
+  );
+}
+
+function PinMark({  pin,
   part,
   state,
 }: {
@@ -540,6 +588,10 @@ const BoardBody = staticBody(function BoardBody({
       {headerRuns.map((pins) => (
         <PinHeader key={pins[0] ? `${pins[0].x}:${pins[0].y}` : 'empty'} pins={pins} labelColour={silk} />
       ))}
+
+      {definition.component.kind === 'mcu' && (
+        <PinLevelTags definition={definition} part={part} state={state} runs={headerRuns} />
+      )}
 
       {/*
        * Per-pin silkscreen, only where the pins run down the edges. A 2x20 block
