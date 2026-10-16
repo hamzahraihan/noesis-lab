@@ -123,16 +123,38 @@ function alarmClockSetup(simulation: Simulation) {
       ['G', 'D12'],
       ['CLN', 'D13'],
     ];
+    // Wokwi-style lane routing: the fan-out never crosses a part body.
+    // Top-edge pins hop just above the row; bottom-edge pins drop below
+    // it, cross in the clear lanes left of the RTC, and rise in the open
+    // corridor beside the board. Lane indices stagger shared runs so
+    // parallel jumpers do not lie on top of each other. Threshold 80
+    // splits the top pin row (~71) from the bottom row (~89).
+    let displayLane = 0;
     for (const [segPin, boardPin] of segWires) {
       const from = simulation.pinAt(seg, segPin);
       const to = simulation.boardTerminal(boardPin);
       if (!from || !to) return;
-      simulation.routeWire(from, to);
+      const k = displayLane++;
+      const bends =
+        from.y < 80
+          ? [{ x: from.x, y: 67 + (k % 2) }]
+          : [
+              { x: from.x, y: 94.5 + (k % 2) },
+              { x: 90 + (k % 3) * 2, y: 94.5 + (k % 2) },
+              { x: 90 + (k % 3) * 2, y: 61 + (k % 2) * 2 },
+            ];
+      simulation.routeWire(from, to, bends);
     }
     {
       const com = simulation.pinAt(seg, 'COM');
       if (!com || !supply) return;
-      simulation.routeWire(com, supply);
+      // Same lane routing as the bottom-edge fan-out: drops below the row,
+      // crosses left of the RTC, and rises in the board-side corridor.
+      simulation.routeWire(com, supply, [
+        { x: com.x, y: 95 },
+        { x: 92, y: 95 },
+        { x: 92, y: 63 },
+      ]);
     }
 
     // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
@@ -149,8 +171,17 @@ function alarmClockSetup(simulation: Simulation) {
       const legA = simulation.pinAt(button, 'a');
       const legB = simulation.pinAt(button, 'b');
       if (!boardPin || !legA || !legB) return;
-      simulation.routeWire(boardPin, legA);
-      simulation.routeWire(legB, ground);
+      // Lane routing like the display above: signals drop below the button
+      // row into the clear corridor and rise in the open lane left of the
+      // RTC, instead of stabbing up through the buttons and the module.
+      simulation.routeWire(boardPin, legA, [
+        { x: boardPin.x, y: 110 },
+        { x: legA.x, y: 110 },
+      ]);
+      simulation.routeWire(legB, ground, [
+        { x: legB.x, y: 110 },
+        { x: 95, y: 110 },
+      ]);
       simulation.renamePart(button.id, label);
       // Wokwi's alarm project: Hours and Minutes green, Alarm red.
       simulation.setCapColour(button.id, label === 'Alarm' ? '#ef4444' : '#22c55e');
@@ -162,7 +193,12 @@ function alarmClockSetup(simulation: Simulation) {
     const negative = simulation.pinAt(buzzer, 'negative');
     if (!buzzPin || !positive || !negative) return;
     simulation.routeWire(buzzPin, positive);
-    simulation.routeWire(negative, ground);
+    // Drops below the buzzer into open space, then rises in the same clear
+    // corridor the buttons use, instead of stabbing up through the module.
+    simulation.routeWire(negative, ground, [
+      { x: negative.x, y: 140 },
+      { x: 95, y: 140 },
+    ]);
 }
 
 const ALARM_CLOCK: GalleryProject = {

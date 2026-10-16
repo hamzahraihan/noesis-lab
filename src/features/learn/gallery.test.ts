@@ -1048,3 +1048,70 @@ describe('alarm RTC preset', () => {
     expect([...device.read(3)]).toEqual([1, 15, 10]);
   });
 });
+
+describe('alarm wiring paths', () => {
+  it('routes no jumper through a part it does not terminate on', async () => {
+    const { routeWireViaCorners } = await import('@/features/bench/wiring/wire-route');
+    const sim = freshBench('uno');
+    galleryById('alarm-clock')!.builds[0]!.setup(sim);
+    type Box = { x0: number; y0: number; x1: number; y1: number; id: string };
+    const boxes: Box[] = sim.bench.parts.map((p) => {
+      const def = p.definition as unknown as { widthMm: number; heightMm: number };
+      return { x0: p.x, y0: p.y, x1: p.x + def.widthMm, y1: p.y + def.heightMm, id: p.id };
+    });
+    const terminals = sim.bench.terminals;
+    const crosses = (
+      ax: number, ay: number, bx: number, by: number, box: Box,
+    ): boolean => {
+      // Shrunk box: grazes along an edge do not count, crossings do.
+      const x0 = box.x0 + 0.4;
+      const y0 = box.y0 + 0.4;
+      const x1 = box.x1 - 0.4;
+      const y1 = box.y1 - 0.4;
+      if (x0 >= x1 || y0 >= y1) return false;
+      const inside = (x: number, y: number): boolean => x > x0 && x < x1 && y > y0 && y < y1;
+      if (inside(ax, ay) || inside(bx, by)) return true;
+      const orient = (px: number, py: number, qx: number, qy: number, rx: number, ry: number): number =>
+        Math.sign((qy - py) * (rx - qx) - (qx - px) * (ry - qy));
+      const intersect = (cx: number, cy: number, dx: number, dy: number): boolean => {
+        const o1 = orient(ax, ay, bx, by, cx, cy);
+        const o2 = orient(ax, ay, bx, by, dx, dy);
+        const o3 = orient(cx, cy, dx, dy, ax, ay);
+        const o4 = orient(cx, cy, dx, dy, bx, by);
+        return o1 !== o2 && o3 !== o4;
+      };
+      return (
+        intersect(x0, y0, x1, y0) ||
+        intersect(x1, y0, x1, y1) ||
+        intersect(x1, y1, x0, y1) ||
+        intersect(x0, y1, x0, y0)
+      );
+    };
+    for (const wire of sim.bench.wires) {
+      const a = terminals[wire.from]!;
+      const b = terminals[wire.to]!;
+      const corners = routeWireViaCorners(a, wire.bends, b);
+      // A wire must touch its own endpoint parts: any part containing an
+      // endpoint (with margin) is excluded for that wire.
+      const owned = new Set(
+        boxes.filter((box) => {
+          const near = (x: number, y: number): boolean =>
+            x > box.x0 - 1 && x < box.x1 + 1 && y > box.y0 - 1 && y < box.y1 + 1;
+          return near(a.x, a.y) || near(b.x, b.y);
+        }).map((box) => box.id),
+      );
+      for (let i = 0; i + 1 < corners.length; i++) {
+        const p = corners[i]!;
+        const q = corners[i + 1]!;
+        for (const box of boxes) {
+          if (owned.has(box.id)) continue;
+          expect(
+            crosses(p.x, p.y, q.x, q.y, box),
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            `wire ${wire.id} crosses ${sim.bench.parts.find((part) => part.id === box.id)!.definition.id}`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+});
