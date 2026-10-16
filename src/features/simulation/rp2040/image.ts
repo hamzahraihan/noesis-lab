@@ -35,6 +35,9 @@ interface LittlefsWasm {
  * Format a LittleFS image carrying `files` at its root. The image is a plain
  * Uint8Array so the caller can drop it straight into flash.
  *
+ * Throws when littlefs reports a failure — callers never receive a silently
+ * broken image.
+ *
  * `wasmBinary` is passed explicitly to keep this module context-free: Node
  * tests hand over bytes read from disk, and the worker will later hand over a
  * fetched asset.
@@ -78,11 +81,29 @@ export async function buildLittlefsImage(
     LITTLEFS_BLOCK_SIZE,
   );
   const lfs = module._new_lfs();
-  module._lfs_format(lfs, config);
-  module._lfs_mount(lfs, config);
-  const writeFile = module.cwrap('lfs_write_file', null, ['number', 'string', 'string', 'number']);
+  const formatResult = module._lfs_format(lfs, config);
+  if (formatResult !== 0) {
+    throw new Error(`littlefs: lfs_format failed (${formatResult})`);
+  }
+  const mountResult = module._lfs_mount(lfs, config);
+  if (mountResult !== 0) {
+    throw new Error(`littlefs: lfs_mount failed (${mountResult})`);
+  }
+  const writeFile = module.cwrap('lfs_write_file', 'number', ['number', 'string', 'string', 'number']);
   for (const file of files) {
-    writeFile(lfs, file.name, file.content, new TextEncoder().encode(file.content).length);
+    let result: number;
+    try {
+      result = writeFile(lfs, file.name, file.content, new TextEncoder().encode(file.content).length);
+    } catch (cause) {
+      // The wasm shim aborts the instance for some failures (e.g. an
+      // over-long name trips a littlefs assertion) instead of returning an
+      // error code, so both failure shapes get a label here.
+      throw new Error(`littlefs: lfs_write_file failed for ${file.name}: ${String(cause)}`);
+    }
+    // Negative results are littlefs error codes (LFS_ERR_*); 0 is success.
+    if (result < 0) {
+      throw new Error(`littlefs: lfs_write_file failed for ${file.name} (${result})`);
+    }
   }
   module._lfs_unmount(lfs);
   module._free(lfs);
