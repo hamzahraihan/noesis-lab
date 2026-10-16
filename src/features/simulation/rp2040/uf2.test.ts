@@ -30,6 +30,19 @@ describe('uf2 decoder', () => {
     expect(Array.from(image.data)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
+  it('places out-of-order blocks at their addresses', () => {
+    const file = new Uint8Array(1024);
+    file.set(block(0x10000004, new Uint8Array([5, 6]), 1, 2), 0);
+    file.set(block(0x10000000, new Uint8Array([1, 2, 3, 4]), 0, 2), 512);
+    const image = decodeUf2(file);
+    expect(image.baseAddress).toBe(0x10000000);
+    expect(Array.from(image.data)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('rejects a payload larger than a block can carry', () => {
+    expect(() => decodeUf2(block(0x10000000, new Uint8Array(477), 0, 1))).toThrow(/UF2/);
+  });
+
   it('rejects a corrupt block and a partial block', () => {
     const good = block(0x10000000, new Uint8Array([9]), 0, 1);
     const corrupt = good.slice();
