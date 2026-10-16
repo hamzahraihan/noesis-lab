@@ -460,6 +460,21 @@ describe('worker port protocol', () => {
     client.dispose();
   });
 
+  it('posts the speed multiplier for the worker tick', () => {
+    const onFallback = vi.fn();
+    const port = fakePort();
+    const client = portClient(port, onFallback);
+    replyInitOk(port);
+    expect(client.poll()).toBe('ok');
+    port.sent.length = 0;
+    client.setSpeed(2);
+    const speed = port.sent[0] as { type: string; scale: number };
+    expect(speed.type).toBe('speed');
+    expect(speed.scale).toBe(2);
+    expect(onFallback).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
   it('lands the realloc reply as a new buffer', () => {
     const onFallback = vi.fn();
     const port = fakePort();

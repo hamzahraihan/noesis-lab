@@ -12,6 +12,10 @@ import { ACK_STALE_MS, headerView, shouldThrottle } from './protocol';
 import type { Bench } from '../bench';
 import type { FirmwareProject } from '../firmware/project';
 import type { KnobSpec } from '@/features/parts';
+
+/** Simulated milliseconds one self-paced tick advances, before the multiplier. */
+const TICK_MS = 16;
+
 export const MAX_UNREAD_FRAMES = 4;
 type Incoming =
   | { id: number; type: 'init'; bench: Bench; firmware: FirmwareProject; execution: 'interpreter' | 'avr'; wasm?: boolean }
@@ -19,12 +23,19 @@ type Incoming =
   | { id: number; type: 'press'; partId: string; down: boolean }
   | { id: number; type: 'knob'; partId: string; spec: KnobSpec; value: number }
   | { id: number; type: 'edit'; bench: Bench } | { id: number; type: 'flash'; words: Uint16Array }
+  | { id: number; type: 'speed'; scale: number }
   | { id: number; type: 'ack'; generation: number };
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
 let execution: 'interpreter' | 'avr' = 'interpreter';
 let wasm = false;
 let running = false;
+/**
+ * Fast-forward multiplier for the tick budget: 1 is real time, 2 buys twice
+ * the sketch time per tick. Kept across `edit` rebuilds so the operator's
+ * choice survives a recompile; a page reload starts a fresh worker at 1.
+ */
+let speed = 1;
 let unread = 0;
 let lastAckMs = 0;
 type Port = { postMessage(message: unknown): void };
@@ -69,6 +80,7 @@ function handle(port: Port, msg: Incoming): void {
       break;
     }
     case 'start': case 'stop': running = msg.type === 'start'; ok(msg.id); break;
+    case 'speed': speed = Number.isFinite(msg.scale) && msg.scale > 0 ? msg.scale : 1; ok(msg.id); break;
     case 'ack': unread = 0; lastAckMs = Date.now(); ok(msg.id); break;
     case 'ping': ok(msg.id, { fault: core?.fault ?? null }); break;
   }
@@ -79,6 +91,8 @@ if (typeof self !== 'undefined' && 'postMessage' in self) {
   setInterval(() => {
     if (!running || !core) return;
     if (shouldThrottle({ unread, maxUnread: MAX_UNREAD_FRAMES, nowMs: Date.now(), lastAckMs, staleMs: ACK_STALE_MS })) return;
-    core.step(16); core.snapshot(); unread += 1;
-  }, 16);
+    // The core clamps each slice, so even a runaway multiplier steps at most
+    // one MAX_FRAME_MS slice per tick.
+    core.step(TICK_MS * speed); core.snapshot(); unread += 1;
+  }, TICK_MS);
 }

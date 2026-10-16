@@ -455,6 +455,8 @@ export interface WorkerClient {
   serialLines(): readonly string[];
   setPressed(partId: string, pressed: boolean): void;
   setKnob(partId: string, spec: KnobSpec, value: number): void;
+  /** Fast-forward multiplier for the self-paced tick: 1 is real time. */
+  setSpeed(scale: number): void;
   loadFirmware(project: FirmwareProject): void;
   compileAndRun(project: FirmwareProject): Promise<void>;
   cancelCompile(): void;
@@ -602,6 +604,15 @@ class WorkerClientImpl implements WorkerClient {
   setKnob(partId: string, spec: KnobSpec, value: number): void {
     this.controls.setKnob(partId, spec, value);
     this.post('knob', { partId, spec, value });
+  }
+
+  /**
+   * Fast-forward multiplier for the worker's self-paced tick: 1 is real
+   * time, 2 buys twice the sketch time per tick. The worker keeps the value
+   * across rebuilds; a fresh worker starts at 1 until this arrives.
+   */
+  setSpeed(scale: number): void {
+    this.post('speed', { scale });
   }
 
   loadFirmware(project: FirmwareProject): void {

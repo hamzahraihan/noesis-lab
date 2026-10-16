@@ -79,11 +79,12 @@ const MAX_FRAME_MS = 40;
 const MAX_SLICES_PER_FRAME = 400;
 
 /**
- * Simulated time per second of wall-clock time. 1 keeps the bench running at
- * the speed a person would actually observe; raise it to watch a slow sketch
- * without waiting for it.
+ * Simulated time per second of wall-clock time, until the operator asks for
+ * more. 1 keeps the bench running at the speed a person would actually
+ * observe; `setTimeScale` raises it to watch a slow sketch without waiting
+ * for it.
  */
-const TIME_SCALE = 1;
+const DEFAULT_TIME_SCALE = 1;
 
 /**
  * The sketch the bench opens with: a blinking LED, a bar on the OLED over
@@ -714,6 +715,19 @@ export class Simulation {
     // dark. Only reload when neither runner exists.
     if (!this.runner && !this.avrBackend && this.firmwareProject) this.loadFirmware(this.firmwareProject);
     this.running = true;
+  }
+
+  /** Simulated milliseconds per wall-clock millisecond; 1 is real time. */
+  private timeScale = DEFAULT_TIME_SCALE;
+
+  /**
+   * Sets how much simulated time each wall-clock millisecond buys: 1 is real
+   * time, 2 is fast forward. Takes effect on the next frame, mid-run
+   * included; a single frame's slice stays capped, so this changes how fast
+   * the sketch gets there, never how a `delay` is spent.
+   */
+  setTimeScale(scale: number): void {
+    this.timeScale = Number.isFinite(scale) && scale > 0 ? scale : DEFAULT_TIME_SCALE;
   }
 
   private probedPinId: string | null = null;
@@ -1347,18 +1361,18 @@ export class Simulation {
 
   /**
    * Advances one rendered frame.
-
    *
-   * Simulated time tracks wall-clock time: each frame gets a budget derived
-   * from how long the frame actually took, and a firmware `delay` is spent
-   * across as many frames as it needs rather than all at once. Without that,
-   * a 400 ms delay would complete inside a single frame and the whole
-   * simulation would run several times faster than the hardware it models.
+   * Simulated time tracks wall-clock time at the chosen time scale: each
+   * frame gets a budget derived from how long the frame actually took, and a
+   * firmware `delay` is spent across as many frames as it needs rather than
+   * all at once. Without that, a 400 ms delay would complete inside a single
+   * frame and the whole simulation would run several times faster than the
+   * hardware it models.
    */
   tick(wallDeltaSeconds: number): void {
     if (!this.running) return;
 
-    const budgetMs = Math.min(wallDeltaSeconds * 1000 * TIME_SCALE, MAX_FRAME_MS);
+    const budgetMs = Math.min(wallDeltaSeconds * 1000 * this.timeScale, MAX_FRAME_MS);
     const frameEnd = this.engine.timeMs + budgetMs;
 
     let slice = 0;

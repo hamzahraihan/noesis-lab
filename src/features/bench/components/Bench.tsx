@@ -416,6 +416,12 @@ export default function Bench(props: BenchProps) {
   const [avrMode, setAvrMode] = useState(projectBuild?.execution === 'avr');
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
+  /*
+   * Fast forward: run the sketch at twice speed until switched off. A
+   * property of the run rather than of either backend, so the toggle
+   * survives pause/resume and recompiles, and takes effect mid-run.
+   */
+  const [fastForward, setFastForward] = useState(false);
   /* Guards the progress flag when a second Run supersedes the first. */
   const compileSeq = useRef(0);
   /*
@@ -557,6 +563,19 @@ export default function Bench(props: BenchProps) {
       setWorkerLive(false);
     };
   }, [simulation]);
+
+  /*
+   * The speed multiplier belongs to the run, not to either backend: push it
+   * to the in-page tick and to the worker (which keeps its copy across
+   * recompiles) whenever the toggle flips or a worker appears. The worker's
+   * post queue holds the message until the handshake, so setting it before
+   * the first Run is safe.
+   */
+  useEffect(() => {
+    const speed = fastForward ? 2 : 1;
+    simulation.setTimeScale(speed);
+    workerClient?.setSpeed(speed);
+  }, [simulation, workerClient, fastForward]);
 
   /* Which backend owns stepping + its running flag. One owner only: the
    * worker once its first live frame has landed, else the in-page simulation. */
@@ -1319,6 +1338,26 @@ export default function Bench(props: BenchProps) {
               <PlayIcon className="icon" aria-hidden="true" />
             )}
             {isRunning ? 'Pause' : 'Run'}
+          </Button>
+
+          {/*
+           * Fast forward: the sketch's clock at twice wall-clock speed. No
+           * 4× option on purpose -- a worker tick caps its slice, so a bigger
+           * multiplier would promise more than the engine could deliver.
+           */}
+          <Button
+            type="button"
+            variant={fastForward ? 'default' : 'secondary'}
+            size="sm"
+            aria-pressed={fastForward}
+            onClick={() => setFastForward((on) => !on)}
+            title={
+              fastForward
+                ? 'Running at 2× — click to return to real time'
+                : 'Fast forward: run the sketch at 2× until you switch it off'
+            }
+          >
+            2×
           </Button>
 
           {/*

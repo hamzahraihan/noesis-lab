@@ -21,26 +21,30 @@ void loop() {
 `;
 
 /** Drives the sketch through the real frame loop, recording pin transitions. */
-function observe(durationMs: number, frameSeconds: number) {
+function observe(durationMs: number, frameSeconds: number, scale = 1) {
   // The engine finds the board through the bench, so an empty bench would leave
   // every pin unplaced and the reading stuck at zero.
   const simulation = new Simulation(esp32DevKitV1());
   simulation.addPart(esp32DevKitV1(), 0, 0);
+  simulation.setTimeScale(scale);
   simulation.loadFirmware(BLINK);
   simulation.start();
   const net = simulation.engine.netOfMcuPin('R_D2');
   const edges: number[] = [];
   let previous = simulation.engine.voltageOfNet(net);
 
+  // How much wall-clock work the run cost: one entry per rendered frame.
+  let frames = 0;
   let guard = 0;
   while (simulation.engine.timeMs < durationMs && guard++ < 20_000) {
     simulation.tick(frameSeconds);
+    frames += 1;
     const volts = simulation.engine.voltageOfNet(net);
     if ((volts > 1.65) !== (previous > 1.65)) edges.push(simulation.engine.timeMs);
     previous = volts;
   }
 
-  return { edges, finalTime: simulation.engine.timeMs, finalVolts: previous };
+  return { edges, finalTime: simulation.engine.timeMs, finalVolts: previous, frames };
 }
 
 
@@ -70,6 +74,27 @@ describe('frame pacing', () => {
     const { finalTime } = observe(1000, 0.016);
     expect(finalTime).toBeGreaterThan(950);
     expect(finalTime).toBeLessThan(1050);
+  });
+
+  it('buys twice the sketch time per frame when the time scale is two', () => {
+    // The Run row's 2× toggle: the same wall-clock frames, each worth twice
+    // the simulated time, so the run costs half as many frames to reach the
+    // same point in the sketch.
+    const at1 = observe(2000, 0.016);
+    const at2 = observe(2000, 0.016, 2);
+    expect(at2.frames).toBeGreaterThanOrEqual(at1.frames / 2 - 2);
+    expect(at2.frames).toBeLessThanOrEqual(at1.frames / 2 + 2);
+  });
+
+  it('keeps delays honest when running at 2×', () => {
+    // Half the frames, but a delay is still a delay: the blink cadence lives
+    // in simulated time, so it must not shrink along with the frame count.
+    const { edges } = observe(2000, 0.016, 2);
+    expect(edges.length).toBeGreaterThanOrEqual(3);
+    for (let i = 1; i < edges.length; i++) {
+      expect(edges[i] - edges[i - 1]).toBeGreaterThan(350);
+      expect(edges[i] - edges[i - 1]).toBeLessThan(450);
+    }
   });
 
   it('gives the same answer at any frame rate', () => {
