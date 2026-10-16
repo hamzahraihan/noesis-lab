@@ -25,3 +25,6 @@ dist-ssr
 
 # Isolated worktrees (superpowers:using-git-worktrees)
 .worktrees/
+
+# Wasm build temp files (scripts/build-avr-wasm.mjs)
+src/features/simulation/avr/wasm/.build-tmp-*
