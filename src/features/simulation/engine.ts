@@ -89,6 +89,19 @@ export class Engine {
   private dynamicState: DynamicState;
   private netlist: Netlist | null = null;
   private solution: Solution | null = null;
+  /**
+   * Per-gpio last answer for `readDigital`, keyed on the solved state.
+   *
+   * The Timer1 capture sampler reads a pin on every executed instruction, and
+   * between solves the answer cannot change — a solution and a netlist are
+   * both replaced, never mutated, so identity comparison is exact. This
+   * collapses that per-instruction traffic to a map hit plus two identity
+   * checks instead of a net lookup plus a voltage walk.
+   */
+  private readonly digitalReadMemo = new Map<
+    number,
+    { solution: Solution | null; netlist: Netlist | null; value: boolean }
+  >();
   private previousVoltages: Float64Array | null = null;
   private mcuPart: PartInstance | null = null;
   /** Pin id to the index of the voltage source driving it in the last solve. */
@@ -951,9 +964,18 @@ export class Engine {
 
   /** Reads a pin as a boolean, using the midpoint of the supply as the threshold. */
   readDigital(gpio: number): boolean {
+    const memo = this.digitalReadMemo.get(gpio);
+    if (memo !== undefined && memo.solution === this.solution && memo.netlist === this.netlist) {
+      return memo.value;
+    }
     const pinId = this.mcu.pinIdForGpio(gpio);
-    if (!pinId) return false;
-    return this.readPinDigital(pinId);
+    const value = pinId === undefined ? false : this.readPinDigital(pinId);
+    this.digitalReadMemo.set(gpio, {
+      solution: this.solution,
+      netlist: this.netlist,
+      value,
+    });
+    return value;
   }
 
   readPinDigital(pinId: string): boolean {
