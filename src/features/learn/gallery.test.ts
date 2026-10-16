@@ -272,12 +272,12 @@ describe('the project gallery', () => {
     libSim.setPressed(alarmButton.id, false);
     // Past the 1000 ms status window by jump rather than by frames (see the
     // colon note above): the status lapses back into the clock view —
-    // disarmed shows the clock, not the alarm time — so the glass reads
-    // the clock again.
+    // disarmed shows the clock, which the minute jump above already moved
+    // to 15:01 — so the glass reads the clock again.
     libSim.engine.timeMs += 1500;
     runFrames(5);
     expect(libSim.firmwareError, 'library build still runs after the tap').toBeNull();
-    expect(glass(), 'library build returns to the clock view').toBe('1500');
+    expect(glass(), 'library build returns to the clock view').toBe('1501');
     expect(saved, 'library build saves the disarm over I2C').toBe(true);
   }, 120_000);
 
