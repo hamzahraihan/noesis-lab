@@ -26,7 +26,7 @@ const LONGITUDE = -0.1427;
  *
  * At zoom `z` the world is cut into `2^z` squares a side, so each step in is a
  * doubling: 12 is a continent, 16 is a city, 19 is a street. Each tile is 256
- * pixels, so at 16 a tile covers about 600 m across at this latitude.
+ * pixels, so at 16 a tile covers about 380 m across at this latitude.
  */
 const ZOOM = 16;
 
@@ -119,9 +119,10 @@ int tileY(double lat, int z) {
 /*
  * Ask for every tile the screen needs.
  *
- * Three across and two down for a 480x320 panel, which is nine on the 2.4" and
- * six here. Asking for more than you need is cheap the first time and free
- * afterwards, because the tiles are already in the cache.
+ * Three across and three down would cover a 480x320 panel; the half-tile
+ * margin the division adds asks for five by three -- nine on the 2.4" and
+ * fifteen here. Asking for more than you need is cheap the first time and
+ * free afterwards, because the tiles are already in the cache.
  */
 void requestArea() {
   for (int dy = -reachY; dy <= reachY; dy++) {
@@ -212,7 +213,7 @@ void setup() {
    *
    * The division has to be an integer one, and that is not a detail: 480+128
    * over 256 is 2.375, and a reach of 2.375 walks the loop to 2.375, so the
-   * requests go out as tiles 32742.625 and 21790.25 -- addresses that do not
+   * requests go out as tiles 32739.625 and 21789.625 -- addresses that do not
    * exist. Nothing comes back, map.ready() never turns true, and the panel
    * stays black while the serial monitor cheerfully reports the centre tile.
    * A wrong tile number looks exactly like a dead network from here.
@@ -297,7 +298,7 @@ const OSM_MAP: Exercise = {
   id: '5.1',
   title: 'A map on a TFT, from OpenStreetMap',
   level: 5,
-  module: 'Maps on a screen',
+  module: 'Module 5 — Maps on a Screen',
   board: 'esp32',
   difficulty: 'Intermediate',
   minutes: '60–75 mins',
@@ -396,7 +397,7 @@ const OSM_MAP: Exercise = {
         '480 for 320, so the number of tiles to ask for has to be worked out from ' +
         '`tft.width()` and `tft.height()` rather than written down — and with `idiv()`, ' +
         'because a reach of 2.375 walks the request loop to 2.375 and asks for tiles ' +
-        '32742.625 and 21790.25, which do not exist.',
+        '32739.625 and 21789.625, which do not exist.',
       'Decide that panning moves the centre tile, not the pixels. A press nudges ' +
         '`centreX` by one and re-requests, and `drawArea()` works out the offset that puts ' +
         'the centre tile under the centre of the glass — so the picture moves by one ' +
@@ -513,15 +514,15 @@ const OSM_MAP: Exercise = {
       },
     ],
     working: [
-      'At 115200 the serial monitor prints `centred on tile 32798,21782` and then, a moment ' +
+      'At 115200 the serial monitor prints `centred on tile 32742,21792` and then, a moment ' +
         'later, `map drawn`. The first line is the arithmetic naming a real tile — that ' +
-        'address is a square of streets in Green Park — and the second is `map.ready()` ' +
+        'address is a square of land in Green Park — and the second is `map.ready()` ' +
         'turning true and the blit having run.',
       'The panel shows real streets rather than a blank rectangle, and they fill in from ' +
         'the middle outwards rather than appearing all at once. That order is the double ' +
         'loop in `requestArea()` asking for the centre tile first, and it is the proof that ' +
         '`drawArea()` skips what has not arrived instead of waiting for all of it.',
-      'A button press prints `moved to tile 32799` and the picture shifts by one whole ' +
+      'A button press prints `moved to tile 32743` and the picture shifts by one whole ' +
         'map. The Bus Monitor stays empty at the same time, which is the cache: asking for ' +
         'a tile the board already has costs nothing and is not a second download.',
       'The rotate key prints `rotated to 320x480`, the panel clears, and the same streets ' +
@@ -598,7 +599,7 @@ const OSM_MAP: Exercise = {
       term: 'Slippy map',
       what:
         'The tile scheme every web map uses: the world in square powers of two, at a ' +
-        'zoom you choose. Tile 16/32798/21782 is a square about 600 m across in London.',
+        'zoom you choose. Tile 16/32742/21792 is a square about 380 m across in London.',
       readMore: 'wiki.openstreetmap.org/wiki/Slippy_map_tilenames',
     },
     {
@@ -697,6 +698,6 @@ const OSM_MAP: Exercise = {
   },
 };
 
-export const MODULE_5: readonly Exercise[] = [OSM_MAP];
+export const MODULE_5_MAPS: readonly Exercise[] = [OSM_MAP];
 
 export { LATITUDE, LONGITUDE, ZOOM };
