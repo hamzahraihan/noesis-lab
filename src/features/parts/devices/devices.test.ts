@@ -491,4 +491,19 @@ describe('ds1307 preset', () => {
     rtc.receive(0x08, true);
     expect([...rtc.read(3)]).toEqual([1, 15, 10]);
   });
+
+  it('keeps ticking through sub-second host steps', async () => {
+    const { Ds1307 } = await import('./ds1307');
+    const rtc = new Ds1307();
+    rtc.applyPreset(15, 0, 0);
+    const epoch = new Date(2000, 0, 1).getTime();
+    // The live bench advances the host in ~16 ms steps, never a whole second
+    // at once. The sub-second remainder has to survive between steps: the
+    // registers truncate to the second, so a clock rebuilt from them each
+    // step stands still instead of carrying the fraction forward.
+    for (let ms = 0; ms < 3000; ms += 16) rtc.setTime(new Date(epoch + ms));
+    rtc.setTime(new Date(epoch + 3000));
+    rtc.receive(0x00, true);
+    expect([...rtc.read(3)]).toEqual([0x03, 0x00, 0x15]);
+  });
 });
