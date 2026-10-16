@@ -36,7 +36,7 @@ concept it introduces must be one of:
 - something they can **break on purpose** (a reversed LED, a missing resistor);
 - something they **already needed** and were getting by without.
 
-If a fourth concept seems necessary, it belongs in the next exercise. Nine
+If a fourth concept seems necessary, it belongs in the next exercise. Eleven
 exercises over five levels works because each one is small enough to finish.
 
 ---
