@@ -44,13 +44,20 @@ export interface Solution {
  * an unconstrained step can throw the bias across it and land on the wrong side
  * of the characteristic. Walking the bias in bounded steps makes convergence
  * reliable instead of luck. The constant paces that walk, it is not a
- * correctness threshold: a multiplexed display swings its segment diodes ~7 V
- * per refresh and every read settle re-walks the swing, which at 0.25 V cost
- * the alarm bench 30.6 iterations per settle (about two thirds of its AVR wall
- * clock). 1 V keeps the bounded walk -- no new failures anywhere in the suite,
- * zero non-converged solves on the heavy bench -- at 9.4 iterations.
+ * correctness threshold: the window never lets the operating point overshoot
+ * the demand it is walking towards, so a swing converges to the same fixed
+ * point however coarsely it is approached -- only the iteration count changes.
+ * What the pace costs and buys, measured on the alarm bench (segment diodes
+ * swing ~7 V per refresh and every read settle re-walks the swing): 0.25 V cost
+ * 30.6 iterations per settle (about two thirds of its AVR wall clock), 1 V took
+ * it to 9.4, 3.5 V to 5.1 -- zero non-converged solves on the heavy bench at
+ * every value, and no new suite failures at 3.5 V. Widening to 5 V buys nothing
+ * further (5.2): the remainder is the Newton finish, not the walk. A
+ * reversal-sensitive walk (pace only once successive demands start hopping) was
+ * tried and regressed to 22.3, because the hops start before they can be
+ * detected; blanket pacing is what works.
  */
-const JUNCTION_LIMIT_STEP_VOLTS = 1.0;
+const JUNCTION_LIMIT_STEP_VOLTS = 3.5;
 
 /**
  * Grow-only shared solve buffers. The single shared instance is what makes
