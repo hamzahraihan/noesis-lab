@@ -413,6 +413,9 @@ export function pushWokwiState(
 
   if (definition.momentary) {
     set(element, 'pressed', state.controls.isPressed(part.id));
+    // Instance cap colour (Inspector swatches); absent leaves the element
+    // default, which is why unpainted buttons stay red.
+    if (part.capColour !== undefined) set(element, 'color', part.capColour);
     return;
   }
 
