@@ -44,6 +44,8 @@ describe('multiplexed 7-segment frame', () => {
       values: [] as number[],
       colon: false,
       colonValue: false,
+      color: '',
+      offColor: '',
     } as unknown as HTMLElement;
 
     // '1' is segments B and C: mask 0x06. Blank the other commons first,
@@ -53,6 +55,9 @@ describe('multiplexed 7-segment frame', () => {
     const afterFirst = [...(element as unknown as { values: number[] }).values];
     expect(afterFirst.slice(0, 8)).toEqual([0, 1, 1, 0, 0, 0, 0, 0]);
     expect(afterFirst.slice(8)).toEqual(new Array(24).fill(0));
+    const colours = element as unknown as { color: string; offColor: string };
+    expect(colours.color).toBe('#ff0000');
+    expect(colours.offColor).toBe('#565656');
 
     drive(controller, 2, 0x5b);
     pushWokwiState(element, definition, part, state);

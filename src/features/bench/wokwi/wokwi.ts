@@ -576,6 +576,16 @@ export function pushWokwiState(
 }
 
 /**
+ * Pinned 7-segment glass colours (Wokwi parity, bench-tuned).
+ *
+ * Lit red matches the element default so the active look cannot drift;
+ * the ghost grey sits one step above the stock `#444` so unlit segments
+ * read at bench scale and contrast.
+ */
+const SEVEN_SEGMENT_LIT = '#ff0000';
+const SEVEN_SEGMENT_GHOST = '#565656';
+
+/**
  * Brightness for a package of diodes: the bar graph's ten segments and the
  * seven-segment display's digits.
  *
@@ -596,6 +606,15 @@ function pushSegmentLevels(
 
   if (!isBarGraph && definition.component.kind === '7segment') {
     const digits = definition.component.digits ?? 1;
+    /*
+     * Pinned Wokwi-parity glass colours: bench-tuned rather than element
+     * defaults so a future element upgrade cannot silently restyle the
+     * bench. The ghost grey is one step above the stock #444 so unlit
+     * segments read at bench scale and contrast — confirmed against a
+     * close-up screenshot, tune here if the bench theme changes.
+     */
+    set(element, 'color', SEVEN_SEGMENT_LIT);
+    set(element, 'offColor', SEVEN_SEGMENT_GHOST);
     /*
      * The whole latched frame, every push. The controller latches each digit
      * while its common is asserted on every solve, so what goes across never
