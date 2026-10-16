@@ -1,0 +1,12 @@
+{
+  "name": "MicroPython (RP2 port, RPI_PICO variant)",
+  "version": "v1.29.0",
+  "releaseDate": "2026-08-24",
+  "file": "RPI_PICO-20260824-v1.29.0.uf2",
+  "bytes": 680960,
+  "sha256": "e1160e602e277d85920adb5fe741435edccba9ba6ecadc85fdab75252eeff4e9",
+  "url": "https://micropython.org/resources/firmware/RPI_PICO-20260824-v1.29.0.uf2",
+  "license": "MIT",
+  "source": "https://github.com/micropython/micropython",
+  "note": "Pinned firmware for the RP2040 engine. Re-verify with the sha256 above; never patch in place."
+}
