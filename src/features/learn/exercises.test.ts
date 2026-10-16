@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   EXERCISES,
   exerciseBoard,
@@ -259,6 +261,34 @@ describe('the exercise curriculum', () => {
           true,
         );
       }
+    }
+  });
+
+  it('carries module 5 as two lessons: the map, then the pocket map', () => {
+    /*
+     * The Pi lesson was written and then left out of EXERCISES -- a lesson
+     * nobody could take, and nothing failed. The whole module is the guard:
+     * both lessons and their order, because a lesson that drops off the
+     * curriculum is a page that 404s rather than a build that fails.
+     */
+    const moduleFive = EXERCISES.filter((exercise) => exercise.id.startsWith('5.')).map(
+      (exercise) => exercise.id,
+    );
+    expect(moduleFive).toEqual(['5.1', '5.2']);
+  });
+
+  it('points every lesson at a write-up that exists', () => {
+    /*
+     * The exercise page tells the learner the full write-up is in the
+     * repository at this path. A path that names a file nobody wrote is a
+     * promise the repository cannot keep -- and both halves of module 5 have
+     * made that mistake once, in opposite directions.
+     */
+    for (const exercise of EXERCISES) {
+      expect(
+        existsSync(join(__dirname, '..', '..', '..', exercise.writeUp)),
+        `${exercise.id} write-up "${exercise.writeUp}"`,
+      ).toBe(true);
     }
   });
 });
