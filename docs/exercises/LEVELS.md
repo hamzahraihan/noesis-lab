@@ -1,7 +1,7 @@
 # The Level Ladder
 
 How to find where to start, what each level assumes, and what you are expected to
-be able to do before moving up. Nine exercises, five levels, roughly 9 hours of
+be able to do before moving up. Eleven exercises, five levels, roughly 12 hours of
 bench time in total.
 
 Work the levels in order. They are cumulative: every level assumes the previous
@@ -40,7 +40,7 @@ will beat you, and the second time they will not.
 | **2** | Reading the world | Level 1 | `digitalRead` · pull-ups and active-LOW · non-blocking time | [1.1](module-1-gpio.md) · [1.2](module-1-gpio.md) | 105–135 mins |
 | **3** | Signals that are not on or off | Level 2 | ADC resolution · PWM duty · voltage dividers and filtering | [2.1](module-2-analog.md) · [2.2](module-2-analog.md) | 120–150 mins |
 | **4** | Talking to other chips | Level 3 | open-drain and addressing · chip-select framing · the RAM budget | [3.1](module-3-bus-protocols.md) · [3.2](module-3-bus-protocols.md) | 150–180 mins |
-| **5** | Faster than the loop | Level 4 | interrupts and `volatile` · atomic reads · microsecond timing | [4.1](module-4-interrupts.md) · [4.2](module-4-interrupts.md) | 150–195 mins |
+| **5** | Faster than the loop | Level 4 | interrupts and `volatile` · atomic reads · microsecond timing | [4.1](module-4-interrupts.md) · [4.2](module-4-interrupts.md) · [5.1](module-5-maps.md) · [5.2](module-5-single-board-computers.md) | 255–330 mins |
 
 ---
 
@@ -152,7 +152,7 @@ the hardware stops cooperating.
 
 | | |
 | --- | --- |
-| **Exercises** | [4.1 Encoder & Tachometer](module-4-interrupts.md) · [4.2 Ultrasonic Radar](module-4-interrupts.md) |
+| **Exercises** | [4.1 Encoder & Tachometer](module-4-interrupts.md) · [4.2 Ultrasonic Radar](module-4-interrupts.md) · [5.1 A map on a TFT](module-5-maps.md) · [5.2 A pocket map on a TFT](module-5-single-board-computers.md) |
 | **You will use** | KY-040 encoder, optical sensor, HC-SR04, `attachInterrupt`, `volatile`, `ATOMIC_BLOCK`, `micros` |
 | **You will learn** | that a signal faster than your loop needs the chip to come to you; that `volatile` is a promise to the compiler, not to you; that a 32-bit number read while an interrupt writes it can be torn in half |
 
@@ -179,6 +179,7 @@ writing new exercises — see [`TEMPLATE.md`](TEMPLATE.md).
    plain language rather than in terms of each other.
 3. **`delay()` is permitted at Level 1 and banned from Level 2 onwards.** Not a
    stylistic preference — the reason is taught in the exercise that withdraws it.
+   The single late exception — 5.1's fetch wait — is argued in that lesson.
 4. **Hardware is reused before it is added.** Each level's first exercise uses
    parts already in the bin. New parts arrive only where the concept requires them,
    and the reason is written down.
