@@ -76,6 +76,7 @@ import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue }
 import { decodeShareToProject, encodeProjectToShare, isShareable } from '../utils/share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
 import { avrAvailableFor, resolveBackendSelection } from '../simulations/avr-mode';
+import { canResumeRun, type RunSession } from '../simulations/run-session';
 
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -417,6 +418,12 @@ export default function Bench(props: BenchProps) {
    * always loads/compiles exactly what the editor's Run button would.
    */
   const handleRunRef = useRef<() => void>(() => {});
+  /*
+   * What the last Run loaded: sketch, backend, wiring revision, and owning
+   * backend. A paused bench that still matches this record resumes on Run
+   * instead of recompiling; anything else misses it and takes the full path.
+   */
+  const runSession = useRef<RunSession | null>(null);
 
   /*
    * Switching boards reloads that board's tabs from its own autosave (or its
@@ -515,6 +522,8 @@ export default function Bench(props: BenchProps) {
   const [workerFallback, setWorkerFallback] = useState<string | null>(null);
   const [workerLive, setWorkerLive] = useState(false);
   useEffect(() => {
+    // A fresh simulation has nothing loaded to resume.
+    runSession.current = null;
     setWorkerLive(false);
     const client = createWorkerClient({
       board: simulation.mcu.definition,
@@ -1067,7 +1076,26 @@ export default function Bench(props: BenchProps) {
     // A real firmware verdict replaces the corrupt-share notice: the bar
     // shows one thing at a time, and the run just produced something newer.
     setShareError(null);
-    if (avrMode && avr.ok) {
+    /*
+     * What this Run would load. While a paused bench still matches the last
+     * load on all four counts, Run is a play on a paused player: start the
+     * core where it stands, no recompile and no reload. Any difference --
+     * an edited sketch, a switched backend, a moved wire, a new owner --
+     * misses the record and takes the full load below, exactly as before.
+     */
+    const session: RunSession = {
+      project,
+      backend: avrMode && avr.ok ? 'avr' : 'interpreter',
+      benchRevision,
+      owner: workerClient ? 'worker' : 'in-page',
+    };
+    if (!isRunning && canResumeRun(runSession.current, session)) {
+      if (workerClient) workerClient.start();
+      else simulation.start();
+      forceRender((n) => n + 1);
+      return;
+    }
+    if (session.backend === 'avr') {
       // A second Run supersedes the first: the new build aborts the previous
       // one inside compileAndRun, and only the latest run clears progress or
       // lands a verdict.
@@ -1116,6 +1144,13 @@ export default function Bench(props: BenchProps) {
     }
     if (workerClient) workerClient.start();
     else simulation.start();
+    /*
+     * The record trails the load: a verdict (compile failed, syntax error)
+     * leaves nothing worth resuming, so the next Run takes the full path --
+     * and the retry -- again.
+     */
+    const clean = workerClient ? workerClient.fault === null : simulation.firmwareError === null;
+    runSession.current = clean ? session : null;
     forceRender((n) => n + 1);
   }
   // Published to the keyboard shortcut above (declared below, hoisted).
@@ -1641,6 +1676,8 @@ export default function Bench(props: BenchProps) {
                 onChangeLanguage={handleLanguageChange}
                 onRun={handleRun}
                 onReset={() => {
+                  // Reset discards the run, so the next Run can no longer resume it.
+                  runSession.current = null;
                   if (workerClient !== null && workerLive) workerClient.loadFirmware(project);
                   else simulation.reset();
                   forceRender((n) => n + 1);
