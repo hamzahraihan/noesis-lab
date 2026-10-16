@@ -129,9 +129,14 @@ export class Ds1307 implements I2cDevice {
     } else {
       // No host contact yet (preset before the first advance): zero delta
       // keeps the decoded base exactly instead of clobbering it.
+      //
+      // The delta rides the live clock, never a base rebuilt from the
+      // registers: those truncate to whole seconds (BCD), so rebuilding
+      // every step threw the sub-second remainder away — a 16 ms march
+      // stood on the same second forever. A sketch's writes re-base this
+      // clock instead (see write).
       const delta = Number.isFinite(this.lastHostMs) ? hostMs - this.lastHostMs : 0;
-      const base = this.decodeRegisters();
-      this.clock = base === null ? new Date(hostMs) : new Date(base + delta);
+      this.clock = new Date(this.clock.getTime() + delta);
     }
     this.lastHostMs = hostMs;
     this.pack();
@@ -232,10 +237,28 @@ export class Ds1307 implements I2cDevice {
       this.registers[SECONDS] =
         (value & REGISTER_MASK[SECONDS]) | (this.registers[SECONDS] & OSCILLATOR_STOPPED);
       this.followingHost = false;
+      this.adoptRegisters();
       return;
     }
     this.registers[register] = value & (REGISTER_MASK[register] ?? 0xff);
-    if (register < CONTROL) this.followingHost = false;
+    if (register < CONTROL) {
+      this.followingHost = false;
+      this.adoptRegisters();
+    }
+  }
+
+  /**
+   * Re-bases the running clock onto the written time registers.
+   *
+   * A sketch write is the calendar's new address, so the clock the host
+   * carries forward must start from it — otherwise the next setTime would
+   * advance the pre-write time and pack it back over the edit. Packs land at
+   * whole seconds, so the adopted time has none; mid-burst writes that decode
+   * to no valid calendar leave the clock as it stands until the burst does.
+   */
+  private adoptRegisters(): void {
+    const base = this.decodeRegisters();
+    if (base !== null) this.clock = new Date(base);
   }
 
   /** Lays the host's clock into the time registers, the way the crystal would. */
