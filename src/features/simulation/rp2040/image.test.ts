@@ -24,4 +24,11 @@ describe('littlefs image builder', () => {
     expect(latin).toContain('main.py');
     expect(latin).toContain('helper.py');
   }, 60000);
+
+  it('surfaces a littlefs write failure instead of resolving a broken image', async () => {
+    // LittleFS caps file names at 255 bytes; the write must fail loudly.
+    await expect(
+      buildLittlefsImage([{ name: 'x'.repeat(300), content: 'print("hi")\n' }], wasmBinary),
+    ).rejects.toThrow(/lfs_write_file/);
+  }, 60000);
 });
