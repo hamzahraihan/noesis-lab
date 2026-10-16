@@ -97,6 +97,31 @@ export class AvrBackend implements ExecutionBackend {
   }
 
   /**
+   * Runs `count` shadow instructions behind one try/catch.
+   *
+   * The JS loop batches its per-instruction accounting into settle-sized
+   * chunks: the single-step path paid two method calls plus a try/catch per
+   * instruction, which profiling priced above the cost of `avrInstruction`
+   * itself. Fault reporting (message, PC, cycles) and settle cadence are
+   * identical to the single-step walk — chunks stop exactly at `settleEvery`
+   * boundaries, and the catch reads the same live CPU state the
+   * per-instruction catch read.
+   */
+  private runShadowChunk(count: number): boolean {
+    const cpu = this.cpu;
+    try {
+      for (let i = 0; i < count; i++) {
+        avrInstruction(cpu);
+        cpu.tick();
+      }
+      return true;
+    } catch (error) {
+      this.failed = `core fault at PC=${cpu.pc} cycles=${cpu.cycles}: ${String(error)}`;
+      return false;
+    }
+  }
+
+  /**
    * Attached dispatch (tests only): Wasm runs each slice until it traps;
    * the shadow then catches up from its slice-start pc up to and including
    * the trapped pc (executing the prefix with side effects exactly once —
@@ -243,8 +268,16 @@ export class AvrBackend implements ExecutionBackend {
       this.msCarry = ms - consumedMs;
       return;
     } else {
-      for (let i = 0; i < totalCycles; i++) {
-        if (!this.stepShadowInstruction(settleEvery)) return;
+      let remaining = totalCycles;
+      while (remaining > 0) {
+        const chunk = Math.min(remaining, settleEvery - this.sinceSettle);
+        if (!this.runShadowChunk(chunk)) return;
+        remaining -= chunk;
+        this.sinceSettle += chunk;
+        if (this.sinceSettle >= settleEvery) {
+          this.sinceSettle = 0;
+          this.hooks.onSettle();
+        }
       }
     }
     const consumedMs = totalCycles / perMs;
