@@ -16,8 +16,15 @@ import { PartPreview } from '../components/PartPreview';
 import { PlusIcon } from '@radix-ui/react-icons';
 
 export function CatalogueGrid({
+  locked = false,
   onPlace,
 }: {
+  /**
+   * True while the simulation is running: dropping a part onto the bench is a
+   * layout edit the run refuses, so the cards come disabled rather than
+   * silently doing nothing.
+   */
+  locked?: boolean;
   onPlace(definition: PartDefinition, entry: CatalogueEntry): void;
 }) {
   const [query, setQuery] = useState('');
@@ -82,7 +89,7 @@ export function CatalogueGrid({
             </h3>
             <div className="grid grid-cols-2 gap-1.5">
               {section.entries.map((entry) => (
-                <CatalogueCard key={entry.id} entry={entry} onPlace={onPlace} />
+                <CatalogueCard key={entry.id} entry={entry} locked={locked} onPlace={onPlace} />
               ))}
             </div>
           </section>
@@ -94,9 +101,11 @@ export function CatalogueGrid({
 
 function CatalogueCard({
   entry,
+  locked,
   onPlace,
 }: {
   entry: CatalogueEntry;
+  locked: boolean;
   onPlace(definition: PartDefinition, entry: CatalogueEntry): void;
 }) {
   const definition = useMemo(() => entry.make(), [entry]);
@@ -104,7 +113,9 @@ function CatalogueCard({
     <button
       type="button"
       onClick={() => onPlace(definition, entry)}
-      className="group flex flex-col rounded-lg border border-slate-800 bg-slate-950 p-2 text-left transition-colors hover:border-sky-600 hover:bg-slate-900"
+      disabled={locked}
+      title={locked ? 'Pause the run to edit the bench' : undefined}
+      className="group flex flex-col rounded-lg border border-slate-800 bg-slate-950 p-2 text-left transition-colors hover:border-sky-600 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-800 disabled:hover:bg-slate-950"
     >
       <div className="relative mb-1.5 flex h-16 items-center justify-center rounded bg-slate-900/60 p-1.5">
         <PartPreview definition={definition} className="h-full w-full" />

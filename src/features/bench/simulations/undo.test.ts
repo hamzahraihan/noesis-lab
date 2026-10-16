@@ -178,4 +178,43 @@ describe('undo and redo', () => {
       expect(simulation.bench.parts.some((candidate) => candidate.id === part.id)).toBe(false);
     }
   });
+
+  it('steps a quarter turn back, and takes nothing else with it', () => {
+    const simulation = bench();
+    simulation.routeWire({ id: -1, x: 20, y: 20 }, { id: -1, x: 60, y: 20 });
+    const part = simulation.addPart(resistorDefinition(220), 40, 80);
+
+    simulation.rotatePart(part.id);
+    expect(simulation.partRotation(part.id)).toBe(90);
+
+    // Turning a part is an edit like any other. If the turn itself were not in
+    // the history, this undo would step back over the part's placement instead
+    // -- and on a freshly loaded project, over the project's own last wire.
+    expect(simulation.undo()).toBe(true);
+    expect(simulation.bench.parts.some((candidate) => candidate.id === part.id)).toBe(true);
+    expect(simulation.partRotation(part.id)).toBe(0);
+    expect(simulation.bench.wires).toHaveLength(1);
+  });
+
+  it('forgets the history of a bench that was just built', () => {
+    // Building a bench goes through the same methods the operator edits with,
+    // so it pushes history like any other change. Forgetting that history is
+    // what keeps the first Ctrl+Z from pulling apart a project that was just
+    // loaded and never touched.
+    const simulation = bench();
+    expect(simulation.canUndo()).toBe(true);
+
+    simulation.clearHistory();
+
+    expect(simulation.canUndo()).toBe(false);
+    expect(simulation.canRedo()).toBe(false);
+    expect(simulation.undo()).toBe(false);
+    expect(simulation.redo()).toBe(false);
+
+    // And edits after the reset are stepped back as usual.
+    simulation.routeWire({ id: -1, x: 20, y: 20 }, { id: -1, x: 60, y: 20 });
+    expect(simulation.canUndo()).toBe(true);
+    simulation.undo();
+    expect(simulation.bench.wires).toHaveLength(0);
+  });
 });

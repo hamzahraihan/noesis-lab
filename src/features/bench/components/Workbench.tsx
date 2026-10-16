@@ -55,6 +55,13 @@ export interface WorkbenchProps {
   /** The wire whose endpoint handles are shown; null shows none. */
   selectedWireId: string | null;
   onSelectWire(wireId: string | null): void;
+  /**
+   * True while the simulation is running: the bench layout is frozen as it was
+   * at Run, so no press may start a move, re-clip, re-route, or bend. Selecting
+   * and panning stay live, and a momentary button's own press is input for the
+   * firmware rather than a layout edit, so it still works.
+   */
+  locked?: boolean;
 }
 
 const MIN_VIEW_WIDTH_MM = 24;
@@ -304,6 +311,7 @@ export function Workbench({
   onMovePart,
   onRouteWire,
   onTogglePressed,
+  locked = false,
 }: WorkbenchProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const wireAnchor = useWorkbenchStore((s) => s.wireAnchor);
@@ -451,7 +459,11 @@ export function Workbench({
      * "route", and a press that quietly grabbed a waypoint instead would send
      * the wire somewhere the operator never pointed.
      */
-    if (wireAnchor === null && event.button === 0 && !event.shiftKey) {
+    /*
+     * Handle grabs and the bend-new drag are layout edits: while locked the
+     * press falls through to a pan, and the click behind it still selects.
+     */
+    if (!locked && wireAnchor === null && event.button === 0 && !event.shiftKey) {
       const grab = event.target as Element;
       const wireId = grab.closest('[data-wire-id]')?.getAttribute('data-wire-id');
 
@@ -535,12 +547,34 @@ export function Workbench({
       }
     }
 
+    const part =
+      partId === null ? null : (bench.parts.find((candidate) => candidate.id === partId) ?? null);
+
+    /*
+     * A momentary button's own body is the firmware's input, not the bench's
+     * layout: that press keeps working while everything else is locked.
+     */
+    const buttonPress =
+      part !== null &&
+      event.button === 0 &&
+      !event.shiftKey &&
+      wireAnchor === null &&
+      part.definition.momentary === true &&
+      !pressHitsOwnPin(part, bench.terminals, world, HOLE_PICK_RADIUS_MM);
+
     /*
      * Middle button, shift, bare bench, and anything pressed mid-route all pan.
-     * Capture either way: a drag that wanders off the canvas has to keep going,
-     * or the part is left wherever the pointer happened to cross the edge.
+     * So does any press that would edit the layout while locked. Capture either
+     * way: a drag that wanders off the canvas has to keep going, or the part is
+     * left wherever the pointer happened to cross the edge.
      */
-    if (event.button === 1 || event.shiftKey || !partId || wireAnchor !== null) {
+    if (
+      event.button === 1 ||
+      event.shiftKey ||
+      !partId ||
+      wireAnchor !== null ||
+      (locked && !buttonPress)
+    ) {
       dragRef.current = {
         kind: 'pan',
         startX: event.clientX,
@@ -552,15 +586,8 @@ export function Workbench({
       return;
     }
 
-    const part = bench.parts.find((candidate) => candidate.id === partId);
     if (!part) return;
-    if (
-      event.button === 0 &&
-      !event.shiftKey &&
-      wireAnchor === null &&
-      part.definition.momentary === true &&
-      !pressHitsOwnPin(part, bench.terminals, world, HOLE_PICK_RADIUS_MM)
-    ) {
+    if (buttonPress) {
       dragRef.current = {
         kind: 'press',
         partId,
@@ -799,6 +826,12 @@ export function Workbench({
       return;
     }
     if (action === 'split' && wireId !== null) {
+      // While locked the click only greets the wire: putting a corner on it is
+      // a layout edit, and the palette's second click still recolours.
+      if (locked) {
+        onSelectWire(wireId);
+        return;
+      }
       // Unsnapped: the node must sit on the run that was clicked, and an
       // automatic lane can sit off the grid -- snapping here would visibly
       // shunt the wire sideways. Dragging the node afterwards still snaps.
@@ -832,6 +865,15 @@ export function Workbench({
       ) {
         onSelectWire(null);
         onSelect(pressedPart.id);
+        return;
+      }
+      /*
+       * Starting a jumper is a layout edit; while locked a pin press selects
+       * its part instead, so the inspector can still read it.
+       */
+      if (locked) {
+        onSelectWire(null);
+        onSelect(pressedPartRef.current);
         return;
       }
       startDraft(terminal);
@@ -1145,7 +1187,7 @@ export function Workbench({
                  * Only the selected wire carries one, so the bench is not
                  * blanketed in buttons for wires nobody is editing.
                  */}
-                {wire.id === selectedWireId && (
+                {wire.id === selectedWireId && !locked && (
                   <RemoveDot
                     x={bend.x + REMOVE_OFFSET_MM / scale}
                     y={bend.y - REMOVE_OFFSET_MM / scale}

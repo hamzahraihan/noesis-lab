@@ -110,6 +110,13 @@ export interface InspectorProps {
   panelSize?: string;
   /** Which way up the part is, in degrees. 0 is as it was drawn. */
   rotation: number;
+  /**
+   * True while the simulation is running: turning and removing are layout
+   * edits the running bench refuses, so their controls come disabled with the
+   * reason shown. Renaming and a button's cap colour stay live -- they never
+   * re-solve the circuit.
+   */
+  locked?: boolean;
 }
 
 export function Inspector({
@@ -118,6 +125,7 @@ export function Inspector({
   controls,
   panelSize,
   rotation,
+  locked = false,
   onDelete,
   onRotate,
   onRename,
@@ -279,7 +287,8 @@ export function Inspector({
             onClick={onRotate}
             variant="secondary"
             className="h-8 w-full"
-            title="Turn this part a quarter turn clockwise (R)"
+            disabled={locked}
+            title={locked ? 'Pause the run to edit the bench' : 'Turn this part a quarter turn clockwise (R)'}
           >
             <RotateIcon className="icon" aria-hidden="true" />
             Turn part
@@ -293,7 +302,14 @@ export function Inspector({
           )}
         </div>
 
-        <Button type="button" onClick={onDelete} variant="destructive" className="mt-1 w-full">
+        <Button
+          type="button"
+          onClick={onDelete}
+          variant="destructive"
+          className="mt-1 w-full"
+          disabled={locked}
+          title={locked ? 'Pause the run to edit the bench' : undefined}
+        >
           <TrashIcon className="icon" aria-hidden="true" />
           Remove part
         </Button>

@@ -89,6 +89,12 @@ const BREADBOARD_ORIGIN_X = 230;
 /** Column the starter LED circuit is wired onto. */
 const SIGNAL_COLUMN = 20;
 
+/**
+ * Shown on every control the running bench refuses to act on, so a dead
+ * button says why it is dead and what revives it.
+ */
+const LAYOUT_LOCK_HINT = 'Pause the run to edit the bench';
+
 /** A terminal-shaped placeholder, for routing wires before a hole exists. */
 function at(x: number, y: number): Terminal {
   return { id: -1, x, y };
@@ -500,11 +506,20 @@ export default function Bench(props: BenchProps) {
           boardOption(boardId).language,
         );
       }
-      // Deliberately left stopped. The bench opens on a loaded sketch at
-      // t=0 that the operator has to run themselves, which is the honest
-      // initial state -- starting the moment the page loads ran the firmware
-      // before anyone had looked at it, and left the status lamp claiming
-      // "running" over a simulation nobody had started.
+      /*
+       * Deliberately left stopped. The bench opens on a loaded sketch at
+       * t=0 that the operator has to run themselves, which is the honest
+       * initial state -- starting the moment the page loads ran the firmware
+       * before anyone had looked at it, and left the status lamp claiming
+       * "running" over a simulation nobody had started.
+       */
+      /*
+       * And the history starts here too. Building the bench went through the
+       * same methods the operator edits with, so it pushed history like any
+       * other change; without this the first Ctrl+Z on a freshly loaded
+       * project would dismantle the project one wire at a time.
+       */
+      created.clearHistory();
       return created;
     },
     [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild],
@@ -547,6 +562,15 @@ export default function Bench(props: BenchProps) {
    * worker once its first live frame has landed, else the in-page simulation. */
   const workerActive = workerLive && workerClient !== null;
   const isRunning = workerActive ? workerClient.running : simulation.running;
+  /*
+   * The bench layout is frozen while the core steps: moving, turning, or
+   * rewiring a part mid-run unclips its jumpers and the firmware is suddenly
+   * driving a circuit nobody wired. Every layout edit below refuses while this
+   * is set. Inputs (button presses, knobs) and cosmetic touches that never
+   * re-solve (wire colour, cap colour, rename) stay live, and Pause unlocks
+   * everything -- edits then take effect, and the next Run recompiles cleanly.
+   */
+  const layoutLocked = isRunning;
   const activeStop = useCallback(() => {
     if (workerActive) workerClient.stop();
     else simulation.stop();
@@ -622,21 +646,23 @@ export default function Bench(props: BenchProps) {
    */
   const removeWire = useCallback(
     (wireId: string) => {
+      if (layoutLocked) return;
       simulation.removeWire(wireId);
       clearWire();
       forceRender((n) => n + 1);
     },
-    [simulation, clearWire],
+    [simulation, clearWire, layoutLocked],
   );
 
   /** Steps the bench back/forward, dropping selections that may be gone. */
   const stepHistory = useCallback(
     (forward: boolean) => {
+      if (layoutLocked) return;
       if (!(forward ? simulation.redo() : simulation.undo())) return;
       clearSelection();
       forceRender((n) => n + 1);
     },
-    [simulation, clearSelection],
+    [simulation, clearSelection, layoutLocked],
   );
 
   /*
@@ -693,7 +719,8 @@ export default function Bench(props: BenchProps) {
           forceRender((n) => n + 1);
           break;
         case 'r':
-          if (selectedId === null) return;
+          // Turning a part is a layout edit; a running layout is frozen.
+          if (selectedId === null || layoutLocked) return;
           event.preventDefault();
           simulation.rotatePart(selectedId);
           forceRender((n) => n + 1);
@@ -712,7 +739,8 @@ export default function Bench(props: BenchProps) {
           break;
         case 'Delete':
         case 'Backspace':
-          if (selectedWireId === null) return;
+          // Pulling a jumper is a layout edit; a running layout is frozen.
+          if (selectedWireId === null || layoutLocked) return;
           event.preventDefault();
           removeWire(selectedWireId);
           break;
@@ -726,7 +754,7 @@ export default function Bench(props: BenchProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [simulation, isRunning, activeStop, paletteFor, selectedId, selectedWireId, removeWire, stepHistory, toggleSidebar, showActivity, toggleInstruments, toggleBottom, closePalette, selectPart]);
+  }, [simulation, isRunning, layoutLocked, activeStop, paletteFor, selectedId, selectedWireId, removeWire, stepHistory, toggleSidebar, showActivity, toggleInstruments, toggleBottom, closePalette, selectPart]);
 
 
   const bench = simulation.bench;
@@ -906,6 +934,7 @@ export default function Bench(props: BenchProps) {
 
   const onMovePart = useCallback(
     (partId: string, x: number, y: number) => {
+      if (layoutLocked) return;
       simulation.movePart(partId, Math.round(x), Math.round(y));
       // Asked for explicitly, because the animation loop only re-renders while
       // the simulation is running. A stopped bench relied on that loop drawing
@@ -913,7 +942,7 @@ export default function Bench(props: BenchProps) {
       // moved it in the model and left it exactly where it was on screen.
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, layoutLocked],
   );
 
   /**
@@ -939,10 +968,11 @@ export default function Bench(props: BenchProps) {
    */
   const moveWireEnd = useCallback(
     (wireId: string, end: WireEnd, to: Terminal) => {
+      if (layoutLocked) return;
       simulation.moveWireEnd(wireId, end, to);
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, layoutLocked],
   );
 
 
@@ -952,33 +982,38 @@ export default function Bench(props: BenchProps) {
    * disagree about what "the next colour" means.
    */
   const onRouteWire = useCallback(
-    (from: Terminal, to: Terminal, bends: readonly BendPoint[]) =>
-      simulation.routeWire(from, to, bends, wireColour),
-    [simulation, wireColour],
+    (from: Terminal, to: Terminal, bends: readonly BendPoint[]) => {
+      if (layoutLocked) return;
+      simulation.routeWire(from, to, bends, wireColour);
+    },
+    [simulation, wireColour, layoutLocked],
   );
 
   const onSetWireBends = useCallback(
     (wireId: string, bends: readonly BendPoint[]) => {
+      if (layoutLocked) return;
       simulation.setWireBends(wireId, bends);
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, layoutLocked],
   );
 
   const onRemoveWireBend = useCallback(
     (wireId: string, index: number) => {
+      if (layoutLocked) return;
       simulation.removeWireBend(wireId, index);
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, layoutLocked],
   );
 
   const onInsertWireBend = useCallback(
     (wireId: string, index: number, bend: BendPoint) => {
+      if (layoutLocked) return;
       simulation.insertWireBend(wireId, index, bend);
       forceRender((n) => n + 1);
     },
-    [simulation],
+    [simulation, layoutLocked],
   );
 
   const bendIndexNear = useCallback(
@@ -1021,6 +1056,13 @@ export default function Bench(props: BenchProps) {
       // bench fills with duplicates that all look live.
       simulation.clearExampleParts();
       example.wire(simulation);
+      /*
+       * The example is a starting point, not an edit. Its wiring went down
+       * through the same methods an operator's would, so without this the
+       * first Ctrl+Z would step back into the example's own setup and start
+       * pulling out the jumpers it just placed.
+       */
+      simulation.clearHistory();
       const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
       setProject(next);
       setExampleId(example.id);
@@ -1158,6 +1200,7 @@ export default function Bench(props: BenchProps) {
 
   const onPlacePart = useCallback(
     (definition: PartDefinition, entry: CatalogueEntry) => {
+      if (layoutLocked) return;
       const part = isLargePart(entry.id)
         ? (() => {
             const slot = nextBenchSlot++;
@@ -1179,7 +1222,7 @@ export default function Bench(props: BenchProps) {
           })();
       selectPart(part.id);
     },
-    [simulation, selectPart],
+    [simulation, selectPart, layoutLocked],
   );
 
   /*
@@ -1381,8 +1424,8 @@ export default function Bench(props: BenchProps) {
             variant="secondary"
             size="icon-sm"
             onClick={() => stepHistory(false)}
-            disabled={!simulation.canUndo()}
-            title="Undo the last change to the bench (Ctrl+Z)"
+            disabled={layoutLocked || !simulation.canUndo()}
+            title={layoutLocked ? LAYOUT_LOCK_HINT : 'Undo the last change to the bench (Ctrl+Z)'}
             aria-label="Undo"
           >
             <ArrowLeftIcon className="icon" aria-hidden="true" />
@@ -1392,8 +1435,8 @@ export default function Bench(props: BenchProps) {
             variant="secondary"
             size="icon-sm"
             onClick={() => stepHistory(true)}
-            disabled={!simulation.canRedo()}
-            title="Redo the change you just undid (Ctrl+Shift+Z)"
+            disabled={layoutLocked || !simulation.canRedo()}
+            title={layoutLocked ? LAYOUT_LOCK_HINT : 'Redo the change you just undid (Ctrl+Shift+Z)'}
             aria-label="Redo"
           >
             <ArrowRightIcon className="icon" aria-hidden="true" />
@@ -1533,6 +1576,7 @@ export default function Bench(props: BenchProps) {
             onProjectChange={setProject}
             componentsPane={
               <CatalogueGrid
+                locked={layoutLocked}
                 onPlace={(def, entry) => {
                   onPlacePart(def, entry);
                   setActiveCenter('circuit');
@@ -1590,6 +1634,7 @@ export default function Bench(props: BenchProps) {
               netOfTerminal={netOfTerminal}
               selectedId={selectedId}
               selectedWireId={selectedWireId}
+              locked={layoutLocked}
               onSelect={(partId) => selectPart(partId)}
               onSelectWire={selectWire}
               onWirePicked={(wireId, x, y) => openPalette({ wireId, x, y })}
@@ -1796,7 +1841,9 @@ export default function Bench(props: BenchProps) {
               part={selected}
               pinVoltages={renderState.pinVolts}
               controls={renderState.controls}
+              locked={layoutLocked}
               onDelete={() => {
+                if (layoutLocked) return;
                 if (selected) simulation.removePart(selected.id);
                 selectPart(null);
               }}
@@ -1815,6 +1862,7 @@ export default function Bench(props: BenchProps) {
                 // A colour panel has a second rotation of its own, the one a
                 // sketch asks for through `tft.setRotation`, and the two are
                 // independent -- turning the panel does not tell the sketch.
+                if (layoutLocked) return;
                 if (selected) simulation.rotatePart(selected.id);
               }}
               onRename={(name) => {

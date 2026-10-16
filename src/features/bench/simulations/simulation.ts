@@ -367,6 +367,22 @@ export class Simulation {
     this.rebuild();
   }
 
+  /**
+   * Forgets the history.
+   *
+   * A bench that has just been built -- a project's parts and jumpers going
+   * down, an example loading -- is a starting point, not a list of edits. The
+   * build goes through the same methods the operator uses, so it pushes history
+   * like any other mutation; without this the very first Ctrl+Z on a freshly
+   * loaded project dismantles the project one wire at a time instead of undoing
+   * something the operator actually did.
+   */
+  clearHistory(): void {
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+    this.editRun = null;
+  }
+
   canUndo(): boolean {
     return this.undoStack.length > 0;
   }
@@ -1183,6 +1199,14 @@ export class Simulation {
   rotatePart(partId: string): void {
     const part = this.bench.parts.find((candidate) => candidate.id === partId);
     if (!part) return;
+    /*
+     * A turn is a bench edit like any other, so it goes in the history. Without
+     * this the undo an operator reaches for after an accidental turn steps back
+     * over whatever came before it instead -- and on a freshly loaded project
+     * that "whatever" is the project's own last wire, so the recovery gesture
+     * quietly breaks the circuit it was meant to protect.
+     */
+    this.checkpoint();
     this.builder.rotatePart(partId, (part.rotation + 90) as Rotation);
     this.rebuild();
   }
