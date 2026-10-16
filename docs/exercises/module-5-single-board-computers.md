@@ -6,11 +6,13 @@ Those are not trivia. They are the four things you cannot learn from an Uno, whi
 
 | ID | Exercise | Difficulty | Time |
 | --- | --- | --- | --- |
-| 5.1 | A pocket map on a TFT | Intermediate | 45–60 mins |
+| 5.2 | A pocket map on a TFT | Intermediate | 45–60 mins |
+
+Companion lesson: [5.1 A map on a TFT, from OpenStreetMap](module-5-maps.md) is this module's other half — the same kind of picture, but fetched from a network and drawn on an ESP32.
 
 ---
 
-### 5.1: A pocket map on a TFT
+### 5.2: A pocket map on a TFT
 **Difficulty Level:** Intermediate
 **Level:** 5
 **Estimated Completion Time:** 45–60 mins
