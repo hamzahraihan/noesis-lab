@@ -244,12 +244,12 @@ while True:
  * meant to be portable even when the board is not.
  */
 const POCKET_MAP: Exercise = {
-  id: '5.1',
+  id: '5.2',
   title: 'A pocket map on a TFT',
   level: 5,
-  module: 'Single-board computers',
+  module: 'Module 5 — Single-Board Computers',
   difficulty: 'Intermediate',
-  minutes: '45 min',
+  minutes: '45–60 mins',
   brief:
     'Put a 320×240 colour display on a Raspberry Pi and draw a map of a route on it, ' +
     'then walk a marker along that route one waypoint at a time. Nothing here is a ' +
@@ -324,6 +324,150 @@ const POCKET_MAP: Exercise = {
       'still being spoken to. That is the honest answer to "why did my screen freeze": ' +
       'nothing broke, nothing reported, and no byte arrived.',
   ],
+  solution: {
+    approach: [
+      'Decide which of the two numbers on the header you are wiring, because on this ' +
+        'board they disagree. Every number in the table is a BCM number — what the pin ' +
+        'is attached to inside the chip — and none of them is a position: GPIO11 is ' +
+        'physical pin 23, and the silkscreen beside that hole says GPIO11 while the ' +
+        'header counts it as 23. The program only ever names BCM, so the translation ' +
+        'happens once, at the table, before anything is picked up.',
+      'Decide the supply before the signals. The Pi’s pins are 3.3 V and not 5 V ' +
+        'tolerant — a 5 V line into one is a way to end the board — and the panel’s ' +
+        'logic and backlight run happily at 3.3 V, so 3V3 is the only right rail here. ' +
+        'Nothing in this exercise needs 5 V, and the one wire that could supply it is ' +
+        'the one that kills a Pi.',
+      'Decide what the panel’s four lines actually are, because only three of them are ' +
+        'SPI. CLK and DIN come out of the hardware peripheral and cannot be moved; D/C ' +
+        'is an ordinary GPIO the program drives by hand, exactly as the Uno’s D9 was in ' +
+        'Module 3. Treat it as a peripheral line and the program loses its only way to ' +
+        'say “command” rather than “colour”, and every pixel byte is read as an opcode.',
+      'Decide that the panel is chosen by a wire, not an address. SPI has no ' +
+        'addressing: the device that responds is the one whose chip-select is asserted, ' +
+        'which is why CS is a pin of its own. Share it with a second device, or park it ' +
+        'on a pin nobody asserts, and the bytes go onto the bus unclaimed — the window ' +
+        'is never opened and the panel does nothing while the program reports success.',
+      'Decide the button the way gpiozero wants it: one leg to a GPIO, one to ground, ' +
+        'nothing between. Constructing a Button turns that pin’s pull-up on, so the ' +
+        'line idles high and a press grounds it — the same no-resistor reasoning as ' +
+        'Module 1, restated because the object doing the pulling is new.',
+      'Decide what a frame costs before writing the next one. 320 × 240 × 2 bytes is ' +
+        '153,600 bytes, about 150 ms on an 8 MHz bus — which is why every button press, ' +
+        'a full redraw, is a whole picture’s worth of time, and why the address window ' +
+        'is the thing that makes anything faster possible.',
+    ],
+    wiring: [
+      {
+        pin: 'GPIO11',
+        terminal: 'CLK',
+        why:
+          'SPI0’s clock is fixed here; there is no second pin to move it to. On any other ' +
+          'pin the panel is powered and being sent data it has no way to time — the screen ' +
+          'stays black while the serial monitor keeps printing waypoints, which points at ' +
+          'the program and never at the one wire that is wrong.',
+      },
+      {
+        pin: 'GPIO10',
+        terminal: 'DIN',
+        why:
+          'This is SPI0’s data line, the fixed other half of the clock. The window ' +
+          'commands are a handful of bytes and would survive some noise, but every colour ' +
+          'after them is data on this line: moved to the wrong pin, the map is a smear or ' +
+          'nothing at all, and no byte anywhere looks like an error.',
+      },
+      {
+        pin: 'GPIO8',
+        terminal: 'CS',
+        why:
+          'The one panel wire that chooses rather than describes. It is deliberately a ' +
+          'pin of its own: two devices sharing a select are one byte stream with two ' +
+          'readers, each drawing something different from the same bytes. Loose, it is ' +
+          'the classic frozen screen — the panel holds its last frame and never checks ' +
+          'whether anyone is still talking.',
+      },
+      {
+        pin: 'GPIO24',
+        terminal: 'D/C',
+        why:
+          'Data/command must be an ordinary GPIO the program drives by hand, which is ' +
+          'why it is not one of the three SPI lines. It is the panel’s only way to tell ' +
+          '0x2A, a window command, from a colour byte. Tie it to the wrong level and every ' +
+          'colour is read as an opcode — an opcode the panel does not know is discarded ' +
+          'in silence, so the panel goes dark and nothing complains.',
+      },
+      {
+        pin: '3V3',
+        terminal: 'VCC',
+        why:
+          'The panel’s logic and backlight run at 3.3 V, and 3.3 V is what the Pi’s pins ' +
+          'are. The failure mode here is not a dead screen but a dead Pi: 5 V into a GPIO ' +
+          'pin ends the board rather than making the display brighter, and no warning ' +
+          'arrives before the damage does.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'GND',
+        why:
+          'SPI is two voltages compared against a shared reference, and without the ' +
+          'ground there is no reference. The level on DIN floats and the bits are ' +
+          'whatever the wire couples — plausible one moment and a smear the next, which ' +
+          'reads as a software bug and never as the missing ground it is.',
+      },
+      {
+        pin: 'GPIO4',
+        terminal: 'a',
+        why:
+          'The button’s readable leg. gpiozero polls this line and treats a grounded ' +
+          'press as the whole event; on a pin the program never reads, the key is simply ' +
+          'ignored — the marker never moves and the button looks worn out rather than ' +
+          'misplaced.',
+      },
+      {
+        pin: 'GND',
+        terminal: 'b',
+        why:
+          'The press itself: the pull-up holds the line high, and joining it to ground ' +
+          'pulls it down. Left floating, the pin reads noise — the marker walks its ' +
+          'waypoints on its own, or the button seems to work only when you are touching ' +
+          'the wrong thing.',
+      },
+    ],
+    working: [
+      'Press Run and the panel lights first, then the map arrives a moment later. That ' +
+        'gap is not the bench being slow: it is 153,600 bytes crossing the bus, which is ' +
+        'a full frame’s worth of time even at 8 MHz.',
+      'The serial monitor prints `waypoint 0 at 24,200` — the marker sits on the first ' +
+        'waypoint, named in panel pixels. Those coordinates exist nowhere but in the ' +
+        'program: nothing here opened an image, and every pixel of that map is two bytes ' +
+        'this sketch decided to send.',
+      'Press the button and the monitor prints `waypoint 1 at 70,140`, and the whole map ' +
+        'is redrawn to move one small marker. Keep pressing and it wraps back to the ' +
+        'start. Each press costing a full frame is the exercise’s real subject: the cost ' +
+        'of a frame is what decides how real display programs draw.',
+      'Now the experiment worth doing: shrink the sea fill to a corner and run it again. ' +
+        'The rest of the glass keeps whatever it held — the program no longer writes ' +
+        'those pixels, and nothing on the panel ever goes back to being blank on its ' +
+        'own. Knowing what your last frame actually covered is the only cure.',
+    ],
+    traps: [
+      'Moving the D/C wire onto ground, as the fault does. Every byte is now read as a ' +
+        'command, and an opcode the panel does not know is discarded without a word — so ' +
+        'it goes dark and nothing anywhere reports. The Bus Monitor shows the bytes going ' +
+        'out unchanged, which is the point: the wire, not the bytes, is what broke.',
+      'A loose or mispinned CS. The panel keeps its last picture and never checks ' +
+        'whether it is still being spoken to, so “the screen froze” and “the wire came ' +
+        'loose” are the same picture. This is the fault that sends people into the code ' +
+        'for an hour when the answer is one jumper.',
+      'Reading the button as a bare pin instead of building a Button. Nothing turns the ' +
+        'pull-up on, the line floats, and the pin reports presses nobody made — the ' +
+        'marker drifting on its own looks like a ghost in the program rather than a ' +
+        'missing resistor.',
+      'A wrong window or wrongly packed RGB565. A window that names the wrong rectangle ' +
+        'still fills it, so a single wrong byte shifts everything after it rather than ' +
+        'failing cleanly — the result reads as a damaged display, and the place to look ' +
+        'is 0x2A and 0x2B.',
+    ],
+  },
   sketch: SKETCH,
   fault: {
     break_:
@@ -460,4 +604,4 @@ const POCKET_MAP: Exercise = {
   },
 };
 
-export const MODULE_5: readonly Exercise[] = [POCKET_MAP];
+export const MODULE_5_SBC: readonly Exercise[] = [POCKET_MAP];
