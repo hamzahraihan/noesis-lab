@@ -70,6 +70,8 @@ import {
   PlusIcon,
   Link2Icon,
   ReaderIcon,
+  DownloadIcon,
+  UploadIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
@@ -77,6 +79,13 @@ import { decodeShareToProject, encodeProjectToShare, isShareable } from '../util
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
 import { resolveCircuitSeed, loadCircuit, hasCircuit, saveCircuit } from '../store/circuit-store';
 import { decodeShareToCircuit, isCircuitShareable, encodeCircuitToShare } from '../utils/circuit-codec';
+import {
+  CIRCUIT_FILE_MAX_BYTES,
+  UNREADABLE_FILE_NOTICE,
+  circuitFileName,
+  circuitFileText,
+  readCircuitFile,
+} from '../utils/circuit-file';
 import { avrAvailableFor, resolveBackendSelection } from '../simulations/avr-mode';
 import { canResumeRun, type RunSession } from '../simulations/run-session';
 
@@ -1364,6 +1373,57 @@ export default function Bench(props: BenchProps) {
   };
 
   /*
+   * A circuit leaves as a file, and arrives as one.
+   *
+   * The document is the file: what this writes is the same text the repository
+   * stores under `learn/circuits/`, so a circuit off the bench can be renamed
+   * and committed, and one checked in can be opened here unchanged. The save is
+   * never disabled — a circuit too large for a link is exactly the one worth
+   * writing to a file — and the open goes through the same gate a link does
+   * (`parseCircuit` for the format, `loadCircuit` for the board), so a wrong
+   * file leaves the bench as it was and says so.
+   */
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const saveCircuitFile = () => {
+    const blob = new Blob([circuitFileText(currentCircuitDoc)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = circuitFileName(boardId);
+    // In the document, because Firefox ignores a click on a detached anchor.
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    // Revoked late: a browser may still be reading the blob when click returns,
+    // and Firefox cancels a download whose URL is revoked under it.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const openCircuitFile = (file: File) => {
+    // Rewiring the bench mid-run leaves the firmware driving a circuit nobody
+    // wired, which is why every layout edit refuses while one is live; opening
+    // a file replaces the whole circuit, so it refuses too.
+    if (layoutLocked) return;
+    void (async () => {
+      try {
+        if (file.size > CIRCUIT_FILE_MAX_BYTES) throw new Error(`${file.name}: too large to be a circuit`);
+        const doc = readCircuitFile(await file.text(), file.name);
+        const refused = simulation.loadCircuit(doc);
+        if (refused.length > 0) throw new Error(`${file.name}: ${refused.join('; ')}`);
+        setShareError(null);
+        // A load replaces every part and terminal under the renderer, so the
+        // bench has to be repainted the way any other edit repaints it.
+        forceRender((n) => n + 1);
+      } catch (error) {
+        // The reason goes to the console -- which file, and why -- and the
+        // operator gets one sentence, the same one the other circuit paths
+        // would give them.
+        console.warn('circuit file rejected:', error instanceof Error ? error.message : String(error));
+        setShareError(UNREADABLE_FILE_NOTICE);
+      }
+    })();
+  };
+
+  /*
    * Swapping boards is a navigation, not a state change: the board is in the
    * path, so the bench is shareable and the back button steps through the
    * boards actually visited. React Router keeps this component mounted across
@@ -1656,11 +1716,50 @@ export default function Bench(props: BenchProps) {
             title={
               circuitShareable
                 ? 'Copy a link carrying this circuit'
-                : 'Too large to share by link — circuit stays local'
+                : 'Too large to share by link — save it as a file instead'
             }
           >
             Copy circuit link
           </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={saveCircuitFile}
+            title={`Write this circuit as ${circuitFileName(boardId)}`}
+          >
+            <DownloadIcon className="icon" aria-hidden="true" />
+            Save circuit
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={layoutLocked}
+            title={
+              layoutLocked
+                ? LAYOUT_LOCK_HINT
+                : 'Open a circuit file, replacing the circuit on the bench'
+            }
+          >
+            <UploadIcon className="icon" aria-hidden="true" />
+            Open circuit…
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Cleared first, so choosing the same file twice fires again.
+              event.target.value = '';
+              if (file) openCircuitFile(file);
+            }}
+          />
 
           <Button
             type="button"
