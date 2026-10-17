@@ -210,7 +210,7 @@ describe('decompile', () => {
       state: { knobs: { 'ghost:turn': 0.5 } },
     };
     const compiled = compile(doc);
-    // compile reports the unknown part; decompile of the (empty-knob) result must not carry it
+    // Unknown knob keys are ignored (forward-compat); decompile of the (empty-knob) result must not carry it.
     const { doc: out } = decompile(compiled.bench!, compiled.dynamicState!);
     expect(out.state).toBeUndefined();
   });
