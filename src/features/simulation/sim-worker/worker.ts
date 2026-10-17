@@ -18,7 +18,7 @@ const TICK_MS = 16;
 
 export const MAX_UNREAD_FRAMES = 4;
 type Incoming =
-  | { id: number; type: 'init'; bench: Bench; firmware: FirmwareProject; execution: 'interpreter' | 'avr'; wasm?: boolean }
+  | { id: number; type: 'init'; bench: Bench; firmware: FirmwareProject; execution: 'interpreter' | 'avr' | 'rp2040'; wasm?: boolean }
   | { id: number; type: 'start' } | { id: number; type: 'stop' } | { id: number; type: 'ping' }
   | { id: number; type: 'press'; partId: string; down: boolean }
   | { id: number; type: 'knob'; partId: string; spec: KnobSpec; value: number }
@@ -27,7 +27,7 @@ type Incoming =
   | { id: number; type: 'ack'; generation: number };
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
-let execution: 'interpreter' | 'avr' = 'interpreter';
+let execution: 'interpreter' | 'avr' | 'rp2040' = 'interpreter';
 let wasm = false;
 let running = false;
 /**
