@@ -183,6 +183,30 @@ export function compile(doc: unknown): { bench: Bench | null; snapshot: BenchSna
   return { bench, snapshot, dynamicState, errors };
 }
 
+/**
+ * Picks a pin reference string for `pinId` on `part` that (a) resolves back
+ * to the same pin through `findPin`, and (b) is as short/human as possible.
+ * Preferring the label or suffix keeps round-trips stable for hand-authored
+ * documents that use short forms like `D13` or `A`; falling back to the full id
+ * keeps ambiguous pins (e.g. multiple GNDs) unambiguous.
+ */
+function pinRef(part: PartInstance, pinId: string): string {
+  const pin = part.definition.pins.find((p) => p.id === pinId);
+  if (!pin) return pinId;
+  // Parts with prefixed pin ids (e.g. Arduino headers `J1_D13`) expose the
+  // silkscreen name as the suffix; simple parts (e.g. LEDs) expose it as the
+  // label. Prefer the short, unique form in that order so hand-authored
+  // references round-trip.
+  if (pin.id.includes('_')) {
+    const suffix = pin.id.split('_').pop() ?? '';
+    if (suffix !== '' && findPin(part, suffix)?.id === pinId) return suffix;
+  }
+  if (pin.label !== '' && findPin(part, pin.label)?.id === pinId) return pin.label;
+  const suffix = pin.id.split('_').pop() ?? pin.id;
+  if (suffix !== '' && findPin(part, suffix)?.id === pinId) return suffix;
+  return pinId;
+}
+
 export function decompile(bench: Bench, dynamicState: DynamicState): { doc: CircuitDocument; warnings: string[] } {
   const warnings: string[] = [];
   const owners = new Map<number, { partId: string; pinId: string }[]>();
@@ -223,10 +247,12 @@ export function decompile(bench: Bench, dynamicState: DynamicState): { doc: Circ
       warnings.push(`wire ${wire.id} connects a pin to itself; skipped`);
       continue;
     }
+    const fromPart = bench.parts.find((p) => p.id === from.partId)!;
+    const toPart = bench.parts.find((p) => p.id === to.partId)!;
     wires.push({
       id: wire.id,
-      from: `${from.partId}:${from.pinId}`,
-      to: `${to.partId}:${to.pinId}`,
+      from: `${from.partId}:${pinRef(fromPart, from.pinId)}`,
+      to: `${to.partId}:${pinRef(toPart, to.pinId)}`,
       colour: wire.colour,
       gaugeAwg: wire.gaugeAwg,
       bends: wire.bends.map((b) => ({ x: b.x, y: b.y })),

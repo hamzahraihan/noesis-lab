@@ -98,7 +98,7 @@ export function resistorDefinition(ohms: number): PartDefinition {
  */
 export function ledDefinition(profile: DiodeProfile, colourName: string): PartDefinition {
   return {
-    id: `led-${profile === DIODE_PROFILES.blue ? 'blue' : 'generic'}`,
+    id: `led-${colourName.toLowerCase()}`,
     name: `${colourName} LED`,
     category: 'output',
     widthMm: 10.583,

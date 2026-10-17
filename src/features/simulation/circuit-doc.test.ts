@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { BenchBuilder } from '@/features/simulation';
+import { arduinoUnoR3, DynamicState, rotateOffset } from '@/features/parts';
 import {
   compile,
   decompile,
@@ -155,5 +157,74 @@ describe('decompile', () => {
     const { doc } = decompile(result.bench!, result.dynamicState!);
     expect(doc.parts).toHaveLength(1);
     expect(doc.parts[0].id).toBe('b');
+  });
+});
+
+describe('decompile', () => {
+  it('round-trips a hand-authored document', () => {
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [
+        { id: 'led', type: 'led-red', x: 50, y: 0, rotation: 0 },
+        { id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0, name: 'Main' },
+      ],
+      wires: [{ id: 'w', from: 'u:D13', to: 'led:A', colour: '#f00', gaugeAwg: 26, bends: [{ x: 10, y: 5 }] }],
+      state: { knobs: {} },
+    };
+    const compiled = compile(doc);
+    expect(compiled.errors).toEqual([]);
+    const { doc: out, warnings } = decompile(compiled.bench!, compiled.dynamicState!);
+    expect(warnings).toEqual([]);
+    expect(out.version).toBe(1);
+    expect(out.parts).toEqual(doc.parts);
+    expect(out.wires).toEqual(doc.wires);
+  });
+
+  it('drops a loose-end wire with a warning', () => {
+    const b = new BenchBuilder();
+    const p = b.addPart(arduinoUnoR3(), 0, 0);
+    const pinSpec = p.definition.pins[0];
+    const off = rotateOffset(pinSpec.x, pinSpec.y, 0, p.definition.widthMm, p.definition.heightMm);
+    const x = p.x + off.x;
+    const y = p.y + off.y;
+    b.addWire(x, y, x + 100, y + 100); // far end claims a loose contact
+    const { doc, warnings } = decompile(b.build(), new DynamicState());
+    expect(warnings.some((w) => w.includes('loose'))).toBe(true);
+    expect(doc.wires).toHaveLength(0);
+  });
+
+  it('is pure: the input bench is unchanged', () => {
+    const doc: CircuitDocument = { version: 1, parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const compiled = compile(doc);
+    const before = JSON.stringify(compiled.bench);
+    decompile(compiled.bench!, compiled.dynamicState!);
+    expect(JSON.stringify(compiled.bench)).toBe(before);
+  });
+
+  it('filters knob entries for parts not on the bench (Review Focus #4)', () => {
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+      state: { knobs: { 'ghost:turn': 0.5 } },
+    };
+    const compiled = compile(doc);
+    // compile reports the unknown part; decompile of the (empty-knob) result must not carry it
+    const { doc: out } = decompile(compiled.bench!, compiled.dynamicState!);
+    expect(out.state).toBeUndefined();
+  });
+
+  it('sorts parts and wires by id', () => {
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [
+        { id: 'z', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 },
+        { id: 'a', type: 'arduino-uno-r3', x: 10, y: 0, rotation: 0 },
+      ],
+      wires: [],
+    };
+    const compiled = compile(doc);
+    const { doc: out } = decompile(compiled.bench!, compiled.dynamicState!);
+    expect(out.parts.map((p) => p.id)).toEqual(['a', 'z']);
   });
 });
