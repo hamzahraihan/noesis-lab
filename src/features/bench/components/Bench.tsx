@@ -1315,9 +1315,11 @@ export default function Bench(props: BenchProps) {
   };
   const copyCircuitLink = () => {
     const encoded = encodeCircuitToShare(currentCircuitDoc);
-    const url = new URL(window.location.href);
-    url.searchParams.set('circuit', encoded);
-    void navigator.clipboard.writeText(url.toString());
+    const base = window.location.href.split('#')[0];
+    const url = `${base}#/bench/${boardId}?circuit=${encoded}`;
+    void navigator.clipboard.writeText(url).catch(() => {
+      /* Clipboard unavailable: the button stays, the circuit stays local. */
+    });
   };
 
   /*
