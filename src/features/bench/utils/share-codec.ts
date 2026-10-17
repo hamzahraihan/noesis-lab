@@ -8,6 +8,20 @@ export const SHARE_URL_LIMIT = 1800;
 export const CORRUPT_SHARE_NOTICE =
   'That share link could not be read, so the bench opened a fresh project instead.';
 
+/**
+ * The `?files=` pair for a project, ready to hang off a url.
+ *
+ * The payload is *escaped*, not merely encoded. lz-string's URI-safe alphabet
+ * includes `+`, and a query string read back through `URLSearchParams` -- which
+ * is how the bench reads it -- turns a bare `+` into a space. lz-string then
+ * decodes the mangled string into a *different* project rather than failing, so
+ * an unescaped link is silently wrong rather than visibly broken. `%2B`
+ * survives that read.
+ */
+export function projectShareQuery(project: FirmwareProject): string {
+  return `files=${encodeURIComponent(encodeProjectToShare(project))}`;
+}
+
 export function encodeProjectToShare(project: FirmwareProject): string {
   return compressToEncodedURIComponent(JSON.stringify({ language: project.language, files: project.files, libraries: project.libraries, slots: project.slots }));
 }

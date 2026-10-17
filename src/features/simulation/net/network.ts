@@ -1,0 +1,196 @@
+/**
+ * The bench's network, which is the whole internet as far as a sketch can tell.
+ *
+ * A board cannot reach the real network from here: the page is COEP
+ * `require-corp`, so only hosts that send CORS are reachable at all, a page has
+ * no sockets (so MQTT over TCP and TLS are unrepresentable), the app's own
+ * value is that the bench works with no network, and a real network would make
+ * every test that touches it non-deterministic. So the bench owns the network:
+ * it knows a few names, answers a few paths, and — the part that matters —
+ * takes time and sometimes fails.
+ *
+ * Time here is *simulated*. A request is pending until `NET_LATENCY_MS` of
+ * engine time has passed, which makes a sketch poll the way it would on a real
+ * board while keeping every test a matter of ticking a clock rather than
+ * awaiting the real one. Nothing in this file is asynchronous.
+ */
+
+import type { NetPort } from '../firmware/interpreter';
+
+/** The network a bench is joined to. Its credentials are the lesson's first fact. */
+export const NET_SSID = 'noesis-bench';
+export const NET_PASSWORD = 'benchwifi';
+
+/** The address a joined board is handed. */
+export const NET_LOCAL_IP = '192.168.4.10';
+
+/** How long the network takes to answer, in simulated milliseconds. */
+export const NET_LATENCY_MS = 35;
+
+/**
+ * The instant `/time` counts from: midday on the day this was written.
+ *
+ * Anchored so the same sketch, run twice, prints the same clock — a lesson that
+ * showed the wall clock of whoever ran it would teach that time is free.
+ */
+export const NET_EPOCH_MS = Date.UTC(2026, 9, 17, 12, 0, 0);
+
+/* The status codes Arduino's WiFi library uses, kept at their real values so a
+ * sketch that compares against them reads the way it does on a real board. */
+export const WL_IDLE_STATUS = 0;
+export const WL_NO_SSID_AVAIL = 1;
+export const WL_CONNECTED = 3;
+export const WL_CONNECT_FAILED = 4;
+export const WL_DISCONNECTED = 6;
+
+/** What a request came back with: a body, or nothing and a reason. */
+export interface NetAnswer {
+  readonly ok: boolean;
+  readonly body: string;
+}
+
+/**
+ * Wires a network to the sketch: the only code either backend needs.
+ *
+ * The port's type lives with the other ports (`firmware/interpreter.ts`), which
+ * is where a reader looks for what a sketch can call; the implementation lives
+ * here, beside the network it adapts.
+ */
+export function createNetPort(network: VirtualNetwork): NetPort {
+  return {
+    join: (ssid, password) => {
+      network.begin(ssid, password);
+      return network.status();
+    },
+    status: () => network.status(),
+    localIp: () => network.localIp(),
+    get: (url) => network.get(url),
+    read: () => network.read(),
+    failed: () => network.failed(),
+    reset: () => network.reset(),
+  };
+}
+
+/** One name the network answers for, and the paths it serves. */
+interface NetHost {
+  readonly address: string;
+  readonly routes: Readonly<Record<string, () => string>>;
+}
+
+type JoinState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'joining'; readonly readyAt: number; readonly status: number };
+
+type RequestState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'pending'; readonly url: string; readonly readyAt: number }
+  | { readonly kind: 'answered'; readonly url: string; readonly answer: NetAnswer };
+
+export class VirtualNetwork {
+  private joinState: JoinState = { kind: 'idle' };
+
+  private request: RequestState = { kind: 'idle' };
+
+  private readonly nowMs: () => number;
+
+  constructor(nowMs: () => number) {
+    this.nowMs = nowMs;
+  }
+
+  /**
+   * Starts joining the bench's network.
+   *
+   * The outcome is decided here and *delivered* later, which is what makes the
+   * poll loop in a sketch honest: a board that neither waits nor checks finds
+   * itself not connected, exactly as it would with a real radio.
+   */
+  begin(ssid: string, password: string): void {
+    const status =
+      ssid !== NET_SSID ? WL_NO_SSID_AVAIL : password !== NET_PASSWORD ? WL_CONNECT_FAILED : WL_CONNECTED;
+    this.joinState = { kind: 'joining', readyAt: this.nowMs() + NET_LATENCY_MS, status };
+  }
+
+  status(): number {
+    if (this.joinState.kind === 'idle') return WL_DISCONNECTED;
+    if (this.nowMs() < this.joinState.readyAt) return WL_IDLE_STATUS;
+    return this.joinState.status;
+  }
+
+  /** The address the network handed out, or "" while there is none. */
+  localIp(): string {
+    return this.status() === WL_CONNECTED ? NET_LOCAL_IP : '';
+  }
+
+  /**
+   * Asks for a url: 1 when the answer is ready, 0 while it is not.
+   *
+   * Asking again is not a second request — a board has one radio and does one
+   * thing with it. A different url replaces whatever was in flight, and every
+   * request settles: an unknown name, a path nothing serves, and a request made
+   * with no connection all arrive as failures rather than as a wait that never
+   * ends.
+   */
+  get(url: string): number {
+    if (this.request.kind === 'answered' && this.request.url === url) return 1;
+
+    if (this.request.kind === 'pending' && this.request.url === url) {
+      if (this.nowMs() < this.request.readyAt) return 0;
+      this.request = { kind: 'answered', url, answer: this.resolve(url) };
+      return 1;
+    }
+
+    // Anything else -- nothing asked yet, a different url, an old answer -- is a
+    // new request, and a new request is never ready on the turn it starts.
+    this.request = { kind: 'pending', url, readyAt: this.nowMs() + NET_LATENCY_MS };
+    return 0;
+  }
+
+  /** The body of the ready answer, or "" when there is none or it failed. */
+  read(): string {
+    return this.request.kind === 'answered' ? this.request.answer.body : '';
+  }
+
+  /** 1 when the ready answer is a failure. */
+  failed(): number {
+    return this.request.kind === 'answered' && !this.request.answer.ok ? 1 : 0;
+  }
+
+  reset(): void {
+    this.request = { kind: 'idle' };
+  }
+
+  private resolve(url: string): NetAnswer {
+    if (this.status() !== WL_CONNECTED) return { ok: false, body: '' };
+
+    // A url is `http://name/path`; anything else is not something this network
+    // can be asked for.
+    const match = /^http:\/\/([^/]+)(\/.*)?$/.exec(url);
+    if (!match) return { ok: false, body: '' };
+
+    const host = this.hosts()[match[1]];
+    if (!host) return { ok: false, body: '' };
+
+    const route = host.routes[match[2] ?? '/'];
+    if (!route) return { ok: false, body: '' };
+
+    return { ok: true, body: route() };
+  }
+
+  /** The names the network answers for. Data, so more arrive without new code. */
+  private hosts(): Readonly<Record<string, NetHost>> {
+    return {
+      'api.noesis': {
+        address: '192.168.4.1',
+        routes: {
+          '/hello': () => 'hello from api.noesis',
+          /*
+           * The clock route, and the reason this host exists: a board keeps
+           * time only as well as it can count milliseconds, so the honest way
+           * to know the time is to ask someone who has it.
+           */
+          '/time': () => new Date(NET_EPOCH_MS + this.nowMs()).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        },
+      },
+    };
+  }
+}

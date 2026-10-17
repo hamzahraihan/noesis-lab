@@ -171,6 +171,11 @@ const ARDUINO_CONSTANTS: ReadonlyArray<[name: string, detail: string, doc: strin
   ['INPUT', '0', 'Read the pin. Floating inputs read erratically, which is the point.'],
   ['OUTPUT', '1', 'Drive the pin. Only pins with an output driver can do this.'],
   ['INPUT_PULLUP', '2', 'Read the pin with an internal pull-up. An open button then reads LOW.'],
+  ['WL_CONNECTED', '3', 'The join has landed. Poll WiFi.status() until it reads this.'],
+  ['WL_IDLE_STATUS', '0', 'A join is in flight. The radio is not connected yet.'],
+  ['WL_NO_SSID_AVAIL', '1', 'No network by that name. The SSID is wrong, or out of reach.'],
+  ['WL_CONNECT_FAILED', '4', 'The network refused the password.'],
+  ['WL_DISCONNECTED', '6', 'Not joined. Nothing was asked for, or the join failed.'],
 ];
 
 const ARDUINO_FUNCTIONS: ReadonlyArray<[signature: string, doc: string]> = [
@@ -217,6 +222,23 @@ const ARDUINO_OBJECTS: ReadonlyArray<[name: string, members: ReadonlyArray<[memb
       ['begin()', 'Bring up the SPI controller.'],
       ['transfer(value)', 'Exchange one byte and return the byte shifted back.'],
       ['end()', 'Tear the controller down.'],
+    ],
+  ],
+  [
+    'WiFi',
+    [
+      ['begin(ssid, password)', 'Start joining a network. Poll status() until it reads WL_CONNECTED.'],
+      ['status()', 'How the join is going, as a WL_ code. WL_IDLE_STATUS while it is in flight.'],
+      ['localIP()', 'The address the network handed out, or nothing while there is none.'],
+    ],
+  ],
+  [
+    'net',
+    [
+      ['get(url)', 'Ask for a url. Answers whether the answer has arrived, so poll it.'],
+      ['read()', 'The body of the answer, once get() has said it is here.'],
+      ['failed()', 'Whether the answer was a failure: a name or a path the network does not serve.'],
+      ['reset()', 'Forget the last request, so a new one starts from nothing.'],
     ],
   ],
 ];

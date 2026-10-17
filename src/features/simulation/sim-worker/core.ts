@@ -78,6 +78,7 @@ import {
 } from './protocol';
 import type { SnapshotLayout } from './protocol';
 import { TileFetcher } from '../map/map-fetcher';
+import { VirtualNetwork, createNetPort } from '../net/network';
 import { TILE_SIZE, TileStore } from '../map/map-tiles';
 import {
   DISTANCE_KNOB,
@@ -212,6 +213,13 @@ class SimCore implements CoreHandle {
    */
   private readonly tiles = new TileStore();
   private readonly fetcher = new TileFetcher();
+  /*
+   * The bench's network, on the same simulated clock the sketch is. Built from
+   * the shared adapter rather than wired by hand: a port implemented twice is a
+   * port that drifts, which is why the type and the adapter both live in
+   * `../net/`.
+   */
+  private readonly net = new VirtualNetwork(() => this.engine.timeMs);
 
   constructor(
     board: PartDefinition,
@@ -961,6 +969,7 @@ class SimCore implements CoreHandle {
         ready: () => this.tiles.complete && !this.fetcher.busy,
         reset: () => this.tiles.clearWanted(),
       },
+      net: createNetPort(this.net),
       nowMs: () => this.engine.timeMs,
       pinMode: (pin, mode) => {
         // No settle here: pin writes only retarget future solves, and the

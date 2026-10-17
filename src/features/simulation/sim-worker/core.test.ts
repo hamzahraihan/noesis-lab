@@ -11,7 +11,7 @@ import {
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
 import { exerciseById } from '@/features/learn';
-import { ili9341Definition, type Ili9341 } from '@/features/parts';
+import { esp32DevKitV1, ili9341Definition, type Ili9341 } from '@/features/parts';
 
 describe('sim core', () => {
   it('steps an interpreter blink without Worker globals', () => {
@@ -269,5 +269,60 @@ describe('map sketch parity', () => {
       g.createImageBitmap = saved.cib;
       g.OffscreenCanvas = saved.oc;
     }
+  });
+
+  /*
+   * The bench network runs in whichever side owns the sketch, so both sides
+   * have to answer identically. Unlike the map this needs no stubs at all:
+   * the network is driven by simulated time rather than by the real network,
+   * so the two runs agree exactly rather than approximately.
+   */
+  it('worker core answers the network the same way in-page Simulation does', async () => {
+    const decoder = new TextDecoder();
+    const sketch = `
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) { delay(20); }
+  Serial.print("ip ");
+  Serial.println(WiFi.localIP());
+  while (net.get("http://api.noesis/time") == 0) { delay(20); }
+  Serial.print("time ");
+  Serial.println(net.read());
+  while (net.get("http://nowhere.noesis/x") == 0) { delay(20); }
+  if (net.failed()) { Serial.println("failed"); }
+}
+
+void loop() { delay(500); }
+`;
+    // Side A: in-page.
+    const sim = new Simulation(esp32DevKitV1());
+    sim.loadFirmware(sketch);
+    sim.start();
+    for (let i = 0; i < 200; i++) {
+      sim.tick(0.05);
+      if (sim.serialLines().join('').includes('failed')) break;
+    }
+    const simSerial = sim.serialLines().join('');
+
+    // Side B: worker core, same sketch.
+    const core = createSimCore(esp32DevKitV1());
+    core.rebuild(
+      sim.bench,
+      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: sketch }] } as never,
+      'interpreter',
+    );
+    expect(core.fault).toBeNull();
+    let coreSerial = '';
+    for (let i = 0; i < 200; i++) {
+      core.step(40);
+      const drained = serialRing(core.snapshot()).drain();
+      if (drained.length > 0) coreSerial += decoder.decode(new Uint8Array(drained));
+      if (coreSerial.includes('failed')) break;
+    }
+
+    expect(simSerial).toContain('ip 192.168.4.10');
+    expect(simSerial).toContain('failed');
+    expect(coreSerial).toBe(simSerial);
   });
 });

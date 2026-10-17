@@ -47,6 +47,10 @@ export { createSimWorker } from './sim-worker/entry-factory';
 // barrel via thin re-export shims at the old `bench/utils/map-*` paths).
 export * from './map/map-tiles';
 export * from './map/map-fetcher';
+// The bench's network, exported for the same reason the map is: both backends
+// (in-page `Simulation` and the sim worker) wire the same port, and the worker
+// core must reach it without a cross-feature edge.
+export * from './net/network';
 // Rollout seam (Stages 2-3): bench threads the wasm default through this
 // barrel (bare `@/features/simulation` — the boundary gate forbids bench-deep
 // imports). Named re-export only, so the harness-only helpers in wasm-core

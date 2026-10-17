@@ -7,6 +7,17 @@ export function encodeCircuitToShare(doc: CircuitDocument): string {
   return compressToEncodedURIComponent(JSON.stringify(doc));
 }
 
+/**
+ * The `?circuit=` pair for a circuit, ready to hang off a url.
+ *
+ * Escaped for the same reason the project's is: lz-string's alphabet contains
+ * `+`, and `URLSearchParams` reads a bare `+` as a space, after which a
+ * different circuit decodes without complaint. `%2B` survives.
+ */
+export function circuitShareQuery(doc: CircuitDocument): string {
+  return `circuit=${encodeURIComponent(encodeCircuitToShare(doc))}`;
+}
+
 export function decodeShareToCircuit(payload: string): CircuitDocument | null {
   try {
     const raw = decompressFromEncodedURIComponent(payload);

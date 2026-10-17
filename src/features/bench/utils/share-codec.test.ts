@@ -1,10 +1,28 @@
 // src/features/bench/share-codec.test.ts
 import { describe, expect, it } from 'vitest';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { decodeShareToProject, encodeProjectToShare, isShareable, SHARE_URL_LIMIT } from './share-codec';
+import { decodeShareToProject, encodeProjectToShare, isShareable, projectShareQuery, SHARE_URL_LIMIT } from './share-codec';
 import { toSingleFileProject, validateProject, type FirmwareProject } from '@/features/simulation';
 
 describe('share codec', () => {
+  /*
+   * The link, not just the payload.
+   *
+   * lz-string's URI-safe alphabet contains `+`, and the bench reads `?files=`
+   * through `URLSearchParams`, which turns a bare `+` into a space -- after
+   * which a *different* project decodes without complaint. So the pair put on
+   * the url has to be escaped, and this is the boundary that proves it: the
+   * premise (`+` is in there) and the round trip through a query read.
+   */
+  it('escapes the query pair so a payload survives being read back', () => {
+    const project = toSingleFileProject('#include "h.h"\nvoid setup() {}\nvoid loop() {}\n', 'arduino-cpp');
+    const payload = encodeProjectToShare(project);
+    expect(payload, 'the alphabet this guards against').toContain('+');
+
+    const read = new URLSearchParams(projectShareQuery(project)).get('files');
+    expect(read).toBe(payload);
+    expect(decodeShareToProject(read!)).not.toBeNull();
+  });
   it('round-trips a two-file project', () => {
     const project = {
       ...toSingleFileProject('#include "h.h"\nvoid setup() {}\nvoid loop() {}\n', 'arduino-cpp'),

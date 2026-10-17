@@ -54,6 +54,7 @@ import type { DisplayController } from '@/features/parts';
 import { Ili9341, type PanelRotation } from '@/features/parts';
 import { TileFetcher } from '../utils/map-fetcher';
 import { TILE_SIZE, TileStore } from '../utils/map-tiles';
+import { VirtualNetwork, createNetPort } from '@/features/simulation';
 import type { MapPort, TftPort } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
@@ -1819,6 +1820,15 @@ export class Simulation {
 
   private readonly fetcher = new TileFetcher();
 
+  /**
+   * The bench's network, on this simulation's clock.
+   *
+   * Built from the shared adapter (`simulation/net/`), so the in-page bench and
+   * the worker run the same network rather than two that have to be kept in
+   * step by hand.
+   */
+  private readonly net = new VirtualNetwork(() => this.engine.timeMs);
+
   private readonly map: MapPort = {
     request: (z, x, y) => {
       const ready = this.tiles.request(z, x, y);
@@ -1897,6 +1907,7 @@ export class Simulation {
     return {
       tft: this.tftPort,
       map: this.map,
+    net: createNetPort(this.net),
       nowMs: () => this.engine.timeMs,
       pinMode: (pin, mode) => {
         // No settle here: pin writes only retarget future solves, and the

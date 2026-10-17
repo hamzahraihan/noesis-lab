@@ -13,6 +13,13 @@
  */
 
 import { parsePython } from './python';
+import {
+  WL_CONNECT_FAILED,
+  WL_CONNECTED,
+  WL_DISCONNECTED,
+  WL_IDLE_STATUS,
+  WL_NO_SSID_AVAIL,
+} from '../net/network';
 
 /**
  * Which grammar a program is written in.
@@ -247,6 +254,14 @@ export interface FirmwareServices {
    */
   pixels?: PixelsPort;
   /**
+   * The bench's network, for a board with a radio.
+   *
+   * Optional because a host with no network has nothing to join, for the same
+   * reason `sd` and `dht` are -- and because a bench that never asks for a
+   * page should not have to grow one.
+   */
+  net?: NetPort;
+  /**
    * Sonar echo measurement, split across the wait it reports.
    *
    * Optional for the same reason `lcd` and `servo` are: hosts without a
@@ -284,6 +299,35 @@ export interface MapPort {
   /** True once everything asked for has arrived. */
  ready(): boolean;
   /** Forgets outstanding requests, so a new region starts from nothing. */
+  reset(): void;
+}
+
+/**
+ * The bench's network, as firmware sees it.
+ *
+ * Two halves, deliberately spelled the way the real board spells them. Joining
+ * is Arduino's: `begin`, then `status` until it says `WL_CONNECTED`, because
+ * that is the loop every ESP32 sketch in the world starts with and it needs no
+ * sockets to be true here. Asking for something is the bench's: a url goes out,
+ * `get` answers whether the answer has arrived, and `read` hands it over --
+ * the same "not yet, ask again" shape `MapPort` uses, for the same reason. A
+ * page cannot open a socket, so a method that pretended to would be a lie the
+ * learner only discovers later.
+ */
+export interface NetPort {
+  /** Starts joining a network by name and password. */
+  join(ssid: string, password: string): number;
+  /** The connection status, in `WL_*` codes. Idle until the join lands. */
+  status(): number;
+  /** The address the network handed out, or "" while there is none. */
+  localIp(): string;
+  /** Asks for a url: 1 when the answer is ready, 0 while it is not. */
+  get(url: string): number;
+  /** The body of the ready answer, or "". */
+  read(): string;
+  /** 1 when the ready answer is a failure rather than a body. */
+  failed(): number;
+  /** Forgets the last request, so a new one starts from nothing. */
   reset(): void;
 }
 
@@ -859,6 +903,16 @@ export class FirmwareRuntime {
     this.globals.values.set('COMMON_ANODE', 1);
     this.globals.values.set('true', 1);
     this.globals.values.set('false', 0);
+    /*
+     * The network's status codes, imported rather than copied: a sketch written
+     * here compares against `WL_CONNECTED` and means what it would on a real
+     * board, and the values live with the network that produces them.
+     */
+    this.globals.values.set('WL_IDLE_STATUS', WL_IDLE_STATUS);
+    this.globals.values.set('WL_NO_SSID_AVAIL', WL_NO_SSID_AVAIL);
+    this.globals.values.set('WL_CONNECTED', WL_CONNECTED);
+    this.globals.values.set('WL_CONNECT_FAILED', WL_CONNECT_FAILED);
+    this.globals.values.set('WL_DISCONNECTED', WL_DISCONNECTED);
     /*
      * Uno analog aliases: A0 is GPIO 14 through A5 at 19. Sketches name pins
      * `A0`, and an unknown identifier would otherwise read zero and bind the
@@ -2002,6 +2056,18 @@ export class FirmwareRuntime {
           if (callee.target.name === 'SPI') {
             return (yield* this.evaluateSpiCall(callee.member, args, services)) ?? 0;
           }
+          /*
+           * The network, before the Serial fallback below: an unmatched member
+           * call lands there, where `WiFi.begin("ssid", "pw")` would quietly
+           * become `serialBegin(0)` and the sketch would never connect with
+           * nothing said about why.
+           */
+          if (callee.target.name === 'WiFi' || callee.target.name === 'wifi') {
+            return this.evaluateWifiCall(callee.member, args, services);
+          }
+          if (callee.target.name === 'net' || callee.target.name === 'Net') {
+            return this.evaluateNetCall(callee.member, args, services);
+          }
           return this.evaluateSerialCall(callee.member, args, services);
         }
         return 0;
@@ -2301,6 +2367,56 @@ export class FirmwareRuntime {
         if (written > 0) yield written / 1000;
         return 0;
       }
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles a `WiFi.*` call: joining a network, and reporting on the join.
+   *
+   * The spellings are Arduino's, including `localIP`'s capitalisation, because
+   * this is the part of a real ESP32 sketch that needs no sockets to be honest:
+   * `begin`, then `status` until it reads `WL_CONNECTED`. The radio's work
+   * happens in the host, which is the same arrangement as the map's.
+   */
+  private evaluateWifiCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const net = services.net;
+    if (!net) return 0;
+    switch (member) {
+      case 'begin':
+        net.join(formatValue(args[0] ?? ''), formatValue(args[1] ?? ''));
+        // `begin` returns void on a real board: the answer is read from status.
+        return 0;
+      case 'status':
+        return net.status();
+      case 'localIP':
+        return net.localIp();
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles a `net.*` call: asking the network for a url, and reading it.
+   *
+   * `get` answers whether the answer has arrived rather than what it says, so a
+   * sketch polls -- the shape a real request has, and the reason a program that
+   * uses the network has a loop in it that one that does not never needs.
+   */
+  private evaluateNetCall(member: string, args: Value[], services: FirmwareServices): Value {
+    const net = services.net;
+    if (!net) return 0;
+    switch (member) {
+      case 'get':
+        return net.get(formatValue(args[0] ?? ''));
+      case 'read':
+        return net.read();
+      case 'failed':
+        return net.failed();
+      case 'reset':
+        net.reset();
+        return 0;
       default:
         return 0;
     }

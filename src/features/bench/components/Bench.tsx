@@ -75,10 +75,10 @@ import {
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
-import { decodeShareToProject, encodeProjectToShare, isShareable } from '../utils/share-codec';
+import { decodeShareToProject, isShareable, projectShareQuery } from '../utils/share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
 import { resolveCircuitSeed, loadCircuit, hasCircuit, saveCircuit } from '../store/circuit-store';
-import { decodeShareToCircuit, isCircuitShareable, encodeCircuitToShare } from '../utils/circuit-codec';
+import { circuitShareQuery, decodeShareToCircuit, isCircuitShareable } from '../utils/circuit-codec';
 import {
   CIRCUIT_FILE_MAX_BYTES,
   UNREADABLE_FILE_NOTICE,
@@ -1345,15 +1345,14 @@ export default function Bench(props: BenchProps) {
   const circuitShareable = isCircuitShareable(currentCircuitDoc);
   const copyShareLink = () => {
     const base = window.location.href.split('#')[0];
-    const url = `${base}#/bench/${boardId}?files=${encodeProjectToShare(project)}`;
+    const url = `${base}#/bench/${boardId}?${projectShareQuery(project)}`;
     void navigator.clipboard.writeText(url).catch(() => {
       /* Clipboard unavailable: the button stays, the project stays local. */
     });
   };
   const copyCircuitLink = () => {
-    const encoded = encodeCircuitToShare(currentCircuitDoc);
     const base = window.location.href.split('#')[0];
-    const url = `${base}#/bench/${boardId}?circuit=${encoded}`;
+    const url = `${base}#/bench/${boardId}?${circuitShareQuery(currentCircuitDoc)}`;
     void navigator.clipboard.writeText(url).catch(() => {
       /* Clipboard unavailable: the button stays, the circuit stays local. */
     });

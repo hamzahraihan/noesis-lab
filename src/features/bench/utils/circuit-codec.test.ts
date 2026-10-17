@@ -1,10 +1,28 @@
 // src/features/bench/utils/circuit-codec.test.ts
 import { describe, expect, it } from 'vitest';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { decodeShareToCircuit, encodeCircuitToShare, isCircuitShareable, CIRCUIT_SHARE_URL_LIMIT } from './circuit-codec';
+import { circuitShareQuery, decodeShareToCircuit, encodeCircuitToShare, isCircuitShareable, CIRCUIT_SHARE_URL_LIMIT } from './circuit-codec';
 import { validateCircuit, compile, type CircuitDocument } from '@/features/simulation';
 
 describe('circuit codec', () => {
+  /*
+   * The link, not just the payload: a bare `+` from lz-string's alphabet reads
+   * back as a space through `URLSearchParams`, and a *different* circuit then
+   * decodes quietly -- see the same test in `share-codec.test.ts`.
+   */
+  it('escapes the query pair so a circuit survives being read back', () => {
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
+    const payload = encodeCircuitToShare(doc);
+    expect(payload, 'the alphabet this guards against').toContain('+');
+
+    const read = new URLSearchParams(circuitShareQuery(doc)).get('circuit');
+    expect(read).toBe(payload);
+    expect(decodeShareToCircuit(read!)).toEqual(doc);
+  });
   it('round-trips a small document', () => {
     const doc: CircuitDocument = {
       version: 1,
