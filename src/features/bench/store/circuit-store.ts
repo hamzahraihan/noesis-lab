@@ -1,5 +1,5 @@
 import { validateCircuit, compile, type CircuitDocument, type BenchSnapshot } from '@/features/simulation';
-import { DynamicState } from '@/features/parts';
+import type { DynamicState } from '@/features/parts';
 import { CORRUPT_SAVE_NOTICE, CORRUPT_SHARE_NOTICE } from './project-store';
 
 export const circuitStorageKey = (boardId: string) => `noesis:circuit:${boardId}`;
