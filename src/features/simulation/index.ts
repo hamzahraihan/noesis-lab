@@ -2,6 +2,7 @@
 // Code outside this folder must import from '@/features/simulation', never deep.
 export * from './engine';
 export * from './circuit';
+export * from './circuit-doc';
 export * from './netlist';
 export * from './mcu';
 export * from './bench';
