@@ -4,6 +4,7 @@ import { arduinoUnoR3, DynamicState, rotateOffset } from '@/features/parts';
 import {
   compile,
   decompile,
+  parseCircuit,
   validateCircuit,
   type CircuitDocument,
 } from './circuit-doc';
@@ -252,5 +253,42 @@ describe('decompile', () => {
     const compiled = compile(doc);
     const { doc: out } = decompile(compiled.bench!, compiled.dynamicState!);
     expect(out.parts.map((p) => p.id)).toEqual(['a', 'z']);
+  });
+});
+
+describe('parseCircuit', () => {
+  it('returns the document once both gates pass', () => {
+    expect(parseCircuit(minimalDoc, '0.1')).toBe(minimalDoc);
+  });
+
+  it('names the circuit it rejected, and why', () => {
+    const bad: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
+    expect(() => parseCircuit(bad, '3.1')).toThrow(/3\.1: unknown part type: no-such-part/);
+  });
+
+  it('rejects a rotation no part can take', () => {
+    const bad = {
+      version: 1,
+      parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 45 }],
+      wires: [],
+    };
+    expect(() => parseCircuit(bad, '1.2')).toThrow(/1\.2: parts\[0\]\.rotation/);
+  });
+
+  it('rejects a wire to a pin the part does not have', () => {
+    const bad = {
+      version: 1,
+      parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+      wires: [{ id: 'w', from: 'u:D13', to: 'u:NOPE', colour: '#f00', gaugeAwg: 26, bends: [] }],
+    };
+    expect(() => parseCircuit(bad, '4.1')).toThrow(/4\.1: wire w references unknown pin/);
+  });
+
+  it('rejects a version it cannot compile', () => {
+    expect(() => parseCircuit({ ...minimalDoc, version: 2 }, '5.1')).toThrow(/5\.1: unsupported circuit version: 2/);
   });
 });

@@ -95,6 +95,24 @@ export function validateCircuit(doc: unknown): string[] {
 }
 
 /**
+ * Turns untrusted document data into a `CircuitDocument`, or throws naming the
+ * circuit it came from.
+ *
+ * Every document that enters from outside the type system — an imported data
+ * file, a fetched submission — is shape-checked *and* compiled here, so a
+ * broken circuit fails where an author can see which one it is instead of
+ * half-loading onto a bench. Compiling twice (once here, once at seed time) is
+ * the price of that single gate; a document is a few hundred bytes and a
+ * shelved bench, not a per-frame cost.
+ */
+export function parseCircuit(raw: unknown, label: string): CircuitDocument {
+  const errors = validateCircuit(raw);
+  if (errors.length === 0) errors.push(...compile(raw).errors);
+  if (errors.length > 0) throw new Error(`${label}: ${errors.join('; ')}`);
+  return raw as CircuitDocument;
+}
+
+/**
  * Resolves a pin reference against a part's definition.
  *
  * Exact id matches win outright (ids are unique within a part). The suffix

@@ -17,6 +17,8 @@ import {
 } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
+import { compile } from '@/features/simulation';
+import type { CircuitDocument } from '@/features/simulation';
 import { AvrBackend, hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '@/features/simulation';
 import {
   compileInWorker as builtinCompileInWorker,
@@ -957,6 +959,38 @@ export class Simulation {
     const part = this.builder.addPart(definition, x, y);
     this.rebuild();
     return part;
+  }
+
+  /**
+   * Puts a whole circuit on the bench, replacing whatever was there.
+   *
+   * This is how every stored, shared or shipped circuit arrives: the document
+   * is compiled to a bench snapshot and an operator state, and the bench is put
+   * back from them. A document that fails to compile changes nothing and hands
+   * back its errors, so the caller can keep the bench it had and say why -- a
+   * half-wired circuit would be worse than the one the operator was looking at.
+   *
+   * `compile` builds its own bench from an empty one, so a document carries the
+   * board and the breadboard itself; nothing is placed before this call on
+   * purpose, because the restore discards it.
+   */
+  loadCircuit(doc: CircuitDocument): string[] {
+    const { bench, snapshot, dynamicState, errors } = compile(doc);
+    if (errors.length > 0 || bench === null || snapshot === null || dynamicState === null) return errors;
+    // The pin model belongs to the board this Simulation was built for, so a
+    // document naming another board -- or no board at all -- would place its
+    // parts against the wrong pin map and wire nothing. Document and bench have
+    // to agree before anything is put down.
+    const board = bench.parts.find((part) => part.definition.component.kind === 'mcu');
+    if (!board) return ['circuit has no board'];
+    if (board.definition.id !== this.mcu.definition.id) {
+      return [`circuit is for ${board.definition.id}, this bench is ${this.mcu.definition.id}`];
+    }
+    this.clearHistory();
+    this.builder.restore(snapshot);
+    this.controls.copyValuesFrom(dynamicState);
+    this.rebuild();
+    return [];
   }
 
   /**
