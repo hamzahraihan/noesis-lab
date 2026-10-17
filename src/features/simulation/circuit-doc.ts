@@ -202,8 +202,6 @@ function pinRef(part: PartInstance, pinId: string): string {
     if (suffix !== '' && findPin(part, suffix)?.id === pinId) return suffix;
   }
   if (pin.label !== '' && findPin(part, pin.label)?.id === pinId) return pin.label;
-  const suffix = pin.id.split('_').pop() ?? pin.id;
-  if (suffix !== '' && findPin(part, suffix)?.id === pinId) return suffix;
   return pinId;
 }
 
@@ -259,10 +257,13 @@ export function decompile(bench: Bench, dynamicState: DynamicState): { doc: Circ
     });
   }
   wires.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const entries = dynamicState.entries();
   const knobs: Record<string, number> = {};
-  for (const [key, value] of dynamicState.entries()) {
-    const partId = key.split(':')[0];
-    if (bench.parts.some((p) => p.id === partId)) knobs[key] = value;
+  const knobKeys = [...entries.keys()]
+    .filter((key) => bench.parts.some((p) => p.id === key.split(':')[0]))
+    .sort();
+  for (const key of knobKeys) {
+    knobs[key] = entries.get(key)!;
   }
   const state = Object.keys(knobs).length > 0 ? { knobs } : undefined;
   const doc: CircuitDocument = { version: 1, parts, wires, ...(state ? { state } : {}) };
