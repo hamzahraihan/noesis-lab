@@ -54,6 +54,10 @@ import { AvrBackend } from '../avr/core';
 import { loadWasmModule } from '../avr/wasm-core';
 import avrCoreWasmUrl from '../avr/wasm/avr-core.wasm?url';
 import { hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '../avr/hex';
+import { Rp2040Backend } from '../rp2040/core';
+import { fetchRp2040Assets, type Rp2040Assets } from '../rp2040/assets';
+import { buildLittlefsImage } from '../rp2040/image';
+import type { Rp2040Hooks } from '../rp2040/backend';
 import { GROUND } from '../elements';
 import { I2CBus } from '../bus/i2c';
 import { SpiBus } from '../bus/spi';
@@ -127,12 +131,20 @@ export interface CoreInput {
 export interface CoreHandle {
   step(budgetMs: number): void;
   applyInput(op: CoreInput): void;
-  rebuild(bench: Bench, firmware: FirmwareProject, execution: 'interpreter' | 'avr', wasm?: boolean, fetchWasm?: () => Promise<ArrayBuffer>): void;
+  rebuild(
+    bench: Bench,
+    firmware: FirmwareProject,
+    execution: 'interpreter' | 'avr' | 'rp2040',
+    wasm?: boolean,
+    fetchWasm?: () => Promise<ArrayBuffer>,
+    fetchRp2040?: () => Promise<Rp2040Assets>,
+  ): void;
   flash(words: Uint16Array): void;
   snapshot(): SharedArrayBuffer;
   readonly timeMs: number;
   readonly fault: string | null;
   readonly wasmAttached: boolean;
+  readonly rp2040Attached: boolean;
 }
 
 export function createSimCore(
@@ -179,6 +191,9 @@ class SimCore implements CoreHandle {
   private wasmGeneration = 0;
   private wasmAttachedTo: AvrBackend | null = null;
   private wasmFetch: () => Promise<ArrayBuffer> = defaultFetchWasmBytes;
+  private rp2040Backend: Rp2040Backend | null = null;
+  /** Bumped by every rebuild; an attach whose generation is stale never lands. */
+  private rp2040Generation = 0;
   private pendingDelayMs = 0;
   // Fault-cause contract: Wasm attach failures must set a `'wasm ...'`-prefixed
   // cause here without touching the interpreter runner (reserved: the
@@ -230,12 +245,18 @@ class SimCore implements CoreHandle {
     return this.avrBackend !== null && this.wasmAttachedTo === this.avrBackend;
   }
 
+  /** Test seam: whether the RP2040 backend finished attaching. */
+  get rp2040Attached(): boolean {
+    return this.rp2040Backend !== null;
+  }
+
   rebuild(
     bench: Bench,
     firmware: FirmwareProject,
-    execution: 'interpreter' | 'avr',
+    execution: 'interpreter' | 'avr' | 'rp2040',
     wasm = false,
     fetchWasm: () => Promise<ArrayBuffer> = defaultFetchWasmBytes,
+    fetchRp2040: () => Promise<Rp2040Assets> = fetchRp2040Assets,
   ): void {
     // Lab flag (rollout stage 1): when set, the module loads async and
     // attaches on arrival — the backend runs the JS path until then.
@@ -266,10 +287,15 @@ class SimCore implements CoreHandle {
             : String(error);
     }
     // An AVR run needs a flashed core on top of the interpreter runner above;
-    // anything missing falls back to that runner silently.
+    // anything missing falls back to that runner silently. The RP2040 engine
+    // attaches asynchronously (assets must arrive first), so the interpreter
+    // runs until it lands -- same contract as the Wasm attach.
     this.avrBackend = null;
     this.avrSettledRevision = -1;
+    this.rp2040Backend = null;
+    this.rp2040Generation += 1;
     if (execution === 'avr') this.tryFlashAvr(firmware);
+    if (execution === 'rp2040') void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
     this.engine.rebuild(bench, this.controls);
     this.engine.settle();
     this.ensureSnapshotBuffer();
@@ -294,6 +320,16 @@ class SimCore implements CoreHandle {
             this.faultText = this.avrBackend.fault;
           }
           this.avrBackend = null;
+        }
+        this.advanceBy(frameEnd - this.engine.timeMs);
+        return;
+      }
+      if (this.rp2040Backend) {
+        this.rp2040Backend.step(Math.max(frameEnd - this.engine.timeMs, 0));
+        this.engine.settle();
+        if (this.rp2040Backend.fault) {
+          this.faultText = this.rp2040Backend.fault;
+          this.rp2040Backend = null;
         }
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
@@ -564,6 +600,51 @@ class SimCore implements CoreHandle {
     if (generation !== this.wasmGeneration || this.avrBackend !== backend) return;
     if (this.faultText?.startsWith('wasm ') ?? false) this.faultText = null;
     this.wasmAttachedTo = backend;
+  }
+
+  /**
+   * Async attach for `execution === 'rp2040'`: fetch the pinned artifacts,
+   * mount the project's files as a LittleFS image, and seat the engine. Gated
+   * twice like `tryFlashAvr`: only the Nano RP2040 Connect's board spec can
+   * run it, and only if the generation is still current when each await
+   * returns. Anything thrown lands in `fault`, labeled by `image.ts`.
+   */
+  private async attachRp2040Async(
+    firmware: FirmwareProject,
+    generation: number,
+    fetcher: () => Promise<Rp2040Assets>,
+  ): Promise<void> {
+    if (this.mcu.board.id !== 'rp2040') return;
+    try {
+      const assets = await fetcher();
+      if (generation !== this.rp2040Generation) return;
+      const image = await buildLittlefsImage(
+        firmware.files,
+        new Uint8Array(assets.littlefsWasm),
+      );
+      if (generation !== this.rp2040Generation) return;
+      this.rp2040Backend = new Rp2040Backend(
+        { uf2: new Uint8Array(assets.uf2), image },
+        this.rp2040Hooks(),
+      );
+    } catch (error) {
+      if (generation !== this.rp2040Generation) return;
+      this.faultText = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /** Engine hooks: same shape the AVR backend gets, minus the AVR-only ports. */
+  private rp2040Hooks(): Rp2040Hooks {
+    return {
+      mcu: this.mcu,
+      nowMs: () => this.engine.timeMs,
+      onEdge: (gpio, cycles, high) => this.engine.recordGpioEdge(gpio, cycles, high),
+      // Reads happen inside the engine's settle cadence, right after
+      // `onSettle`, so the solve is always fresh here -- no revision dance.
+      readPin: (gpio) => this.engine.readDigital(gpio),
+      onSettle: () => this.engine.settle(),
+      serial: { serialWrite: (text) => this.pushSerial(text) },
+    };
   }
 
   private avrI2cSink(): {
