@@ -89,9 +89,15 @@ describe.skipIf(!haveFirmware)('rp2040 attach', () => {
     core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, () => gate);
     core.rebuild(EMPTY_BENCH, pythonProject(), 'interpreter');
     release(await realAssets());
-    await Promise.resolve();
-    await Promise.resolve();
+    // Load-bearing macrotask wait: littlefs settles on a macrotask, so microtask
+    // flushes alone would reach the assertions while a gapless attach is still in
+    // flight. A real macrotask gives one long enough to land the stale backend.
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(core.rp2040Attached).toBe(false);
     expect(core.fault).toBeNull();
+
+    // Two-sided: the core must still attach after dropping the stale load.
+    core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, realAssets);
+    await vi.waitFor(() => expect(core.rp2040Attached).toBe(true), { timeout: 15000 });
   });
 });
