@@ -41,6 +41,7 @@ import {
 import { FirmwareSyntaxError } from '@/features/simulation';
 import { validateLibraries, libraryDeclarations, projectSlots } from '@/features/simulation';
 import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
+import { breadboardDefinition } from '@/features/parts';
 import type { ExampleDevice } from '@/features/learn';
 import { nextAutomaticWireColour, WIRE_COLOURS } from '../wiring/wire-colours';
 
@@ -123,16 +124,27 @@ const HISTORY_LIMIT = 60;
 const EDIT_COALESCE_MS = 700;
 
 /**
- * One undoable step: the bench, plus the bookkeeping that describes it.
+ * Where the breadboard sits on a fresh bench: clear of the board plugged in
+ * beside it. Every bench the app builds agrees on this number, because a hole
+ * is a coordinate and two benches that disagree cannot share a circuit.
+ */
+export const BREADBOARD_ORIGIN_X = 230;
+
+/**
+ * One undoable step: the bench, frozen.
  *
- * The extras are not decoration. `examplePartIds` decides which parts the next
- * example load clears, and `lcdBoardPins` is how an LCD finds the board pins
- * its lines were wired to; restoring the bench without them would leave the
- * model describing a bench that is no longer there.
+ * A snapshot rather than inverse operations. Every mutation would otherwise
+ * need a matching undo, including the ones that renumber contacts when a wire
+ * leaves a hole, and the tenth one added later would silently be the one nobody
+ * can undo. A state cannot drift out of step with the model because it *is* the
+ * model, frozen.
+ *
+ * Everything else the model holds is derived from this now: the LCD's
+ * line-to-board-pin map is read back off the wiring on every rebuild, so
+ * restoring the bench restores it too.
  */
 interface BenchHistoryEntry {
   readonly bench: BenchSnapshot;
-  readonly examplePartIds: string[];
 }
 
 /**
@@ -280,16 +292,6 @@ export class Simulation {
   private analysedPins: string[] = [];
   private readonly busLog = new BusLog();
 
-  /**
-   * Part ids the current example placed, so the next load can take them away.
-   *
-   * An example owns the parts it adds and nothing else. Without this, loading
-   * an example twice stacks a second LCD on top of the first at the same
-   * coordinates and doubles every wire -- which reads as the bench falling
-   * apart rather than as parts accumulating. The board, the breadboard and
-   * anything the operator placed by hand are untouched.
-   */
-  private examplePartIds: string[] = [];
   private serialDirty = true;
 
   constructor(board: PartDefinition, deps?: SimulationDeps) {
@@ -324,9 +326,15 @@ export class Simulation {
   private redoStack: BenchHistoryEntry[] = [];
   /** The continuous edit currently being coalesced, and when it started. */
   private editRun: { kind: string; at: number } | null = null;
+  /** True while a compound edit is running, so its parts share one entry. */
+  private compoundEdit = false;
 
   /** Records the bench as it is, before the caller changes it. */
   private checkpoint(kind?: string): void {
+    // Inside a compound edit (`replaceBench`), the whole thing is one step:
+    // the caller has already recorded the state undo should return to, and an
+    // entry per part would make one Ctrl+Z undo one wire.
+    if (this.compoundEdit) return;
     const now = performance.now();
     if (
       kind !== undefined &&
@@ -350,16 +358,12 @@ export class Simulation {
 
   /** The whole of the bench's restorable state, frozen. */
   private historyEntry(): BenchHistoryEntry {
-    return {
-      bench: this.builder.snapshot(),
-      examplePartIds: [...this.examplePartIds],
-    };
+    return { bench: this.builder.snapshot() };
   }
 
   /** Puts a history entry back into the live model. */
   private applyHistory(entry: BenchHistoryEntry): void {
     this.builder.restore(entry.bench);
-    this.examplePartIds = entry.examplePartIds;
     // The next edit starts a fresh run: coalescing into whatever was undone
     // would swallow the edit into a history entry that no longer describes it.
     this.editRun = null;
@@ -369,12 +373,16 @@ export class Simulation {
   /**
    * Forgets the history.
    *
-   * A bench that has just been built -- a project's parts and jumpers going
-   * down, an example loading -- is a starting point, not a list of edits. The
-   * build goes through the same methods the operator uses, so it pushes history
-   * like any other mutation; without this the very first Ctrl+Z on a freshly
-   * loaded project dismantles the project one wire at a time instead of undoing
-   * something the operator actually did.
+   * A bench that has just been seeded -- a project's parts and jumpers going
+   * down, a circuit arriving from a link or a file -- is a starting point, not a
+   * list of edits, and it must not be undone wire by wire. The seed goes through
+   * the same methods the operator uses, so it pushes history like any other
+   * mutation; without this the very first Ctrl+Z on a freshly loaded project
+   * dismantles the project instead of undoing something the operator did.
+   *
+   * An example is the exception, deliberately: it replaces the bench *and*
+   * records one entry (`replaceBench`), because the operator may well want the
+   * circuit they had back.
    */
   clearHistory(): void {
     this.undoStack.length = 0;
@@ -1022,9 +1030,6 @@ export class Simulation {
     this.checkpoint();
     const definition = devices[what]();
     const part = this.builder.addPart(definition, x, y);
-    // Recorded before the wiring so `clearExampleParts` can take the whole
-    // example away, however many parts it ends up owning.
-    this.examplePartIds.push(part.id);
     const bench = this.builder.build();
     const terminal = (pin: string): Terminal | undefined => {
       const id = part.terminals[pin];
@@ -1103,21 +1108,31 @@ export class Simulation {
   }
 
   /**
-   * Lifts every part the previous example placed.
+   * Empties the bench and builds a new one: the board, the breadboard, and
+   * whatever `seed` wires onto them — as a single undoable step.
    *
-   * Called before an example wires itself, so the bench holds one example at a
-   * time. `removePart` takes each part's wires with it, which is what stops the
-   * net count from climbing every time the same example is loaded again -- the
-   * visible symptom of which is a bench that slowly fills with duplicate
-   * modules and twice as many jumpers.
+   * This is how an example is loaded. The bench before it is *replaced*, not
+   * added to: an example is a circuit with a sketch that assumes it, and a
+   * leftover part from the operator's own circuit sitting in the middle of it
+   * teaches the wrong thing twice, the same way a missing part does. What
+   * makes that safe to offer is the one entry this records: a single Ctrl+Z
+   * puts the operator's bench back, so replacing it is a step they can take
+   * back rather than a thing they lose.
+   *
+   * Every edit the seed makes runs inside this one entry, which is why
+   * `checkpoint` stands down while it runs.
    */
-  clearExampleParts(): void {
-    if (this.examplePartIds.length === 0) return;
-    // Recorded before anything is lifted, so one undo brings the whole example
-    // back rather than only the parts after the first.
+  replaceBench(seed: (simulation: Simulation) => void): void {
     this.checkpoint();
-    for (const id of this.examplePartIds) this.builder.removePart(id);
-    this.examplePartIds = [];
+    for (const part of [...this.builder.build().parts]) this.builder.removePart(part.id);
+    this.builder.addPart(this.mcu.definition, 0, 0);
+    this.builder.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
+    this.compoundEdit = true;
+    try {
+      seed(this);
+    } finally {
+      this.compoundEdit = false;
+    }
     this.rebuild();
   }
 

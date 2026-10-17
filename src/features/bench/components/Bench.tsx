@@ -27,7 +27,7 @@ import { Workbench } from './Workbench';
 import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
 import type { FootprintState } from '../wokwi/footprints';
-import { Simulation } from '../simulations/simulation';
+import { BREADBOARD_ORIGIN_X, Simulation } from '../simulations/simulation';
 import { createWorkerClient, lcdFromSnapshot, sevenSegmentFromSnapshot, tftFromSnapshot, type WorkerClient } from '../simulations/worker-client';
 import { CenterTabs } from '../ide/CenterTabs';
 import { BottomPanel } from '../ide/BottomPanel';
@@ -94,8 +94,6 @@ import { canResumeRun, type RunSession } from '../simulations/run-session';
 const PALETTE_FLIP_X = 200;
 /** Above this the palette opens downwards, for the same reason. */
 const PALETTE_FLIP_Y = 60;
-/** Where the breadboard sits, clear of the board plugged in beside it. */
-const BREADBOARD_ORIGIN_X = 230;
 
 /** Column the starter LED circuit is wired onto. */
 const SIGNAL_COLUMN = 20;
@@ -1157,32 +1155,24 @@ export default function Bench(props: BenchProps) {
    * Loads an example: the sketch, and the bench it expects to find.
    *
    * Both halves or neither. A sketch that talks to a clock nobody wired reads
-   * nothing and looks exactly like a broken API, so the parts go down first and
-   * the sketch is loaded onto them. The bench keeps the board and the breadboard
-   * and everything already wired to them, because the examples share the
-   * displays and the clock that one of them reads.
+   * nothing and looks exactly like a broken API, so the circuit goes down and
+   * the sketch is loaded onto it.
    *
-   * The sketch arrives wrapped as a single-file project, so any tabs the
-   * operator had open are replaced rather than merged: an example is a fresh
-   * starting point, not an extra file.
+   * The bench is *replaced*, not added to: an example is a fresh starting point,
+   * which is also how its sketch arrives (the project is swapped, not merged).
+   * A part left over from the operator's own circuit sitting in the middle of
+   * one teaches the wrong thing twice — once when the sketch ignores it, and
+   * again when the reader assumes the example put it there. What makes replacing
+   * safe to offer is that the operator's bench comes back with a single Ctrl+Z:
+   * `replaceBench` records the whole load as one undoable step. The sketch is
+   * not part of that step, so undo restores the circuit they had under the
+   * example's code.
    */
   const loadExample = useCallback(
     (id: string) => {
       const example = EXAMPLES.find((candidate) => candidate.id === id);
       if (!example) return;
-      // The previous example's parts come off first. Every example places its
-      // modules at the same few coordinates, so without this a second load puts
-      // a second LCD exactly on top of the first and doubles every wire -- the
-      // bench fills with duplicates that all look live.
-      simulation.clearExampleParts();
-      example.wire(simulation);
-      /*
-       * The example is a starting point, not an edit. Its wiring went down
-       * through the same methods an operator's would, so without this the
-       * first Ctrl+Z would step back into the example's own setup and start
-       * pulling out the jumpers it just placed.
-       */
-      simulation.clearHistory();
+      simulation.replaceBench((bench) => example.wire(bench));
       const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
       setProject(next);
       setExampleId(example.id);

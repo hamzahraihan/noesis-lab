@@ -169,18 +169,17 @@ describe('the examples', () => {
 
 describe('loading one example replaces the last', () => {
   /*
-   * Every example places its modules at the same handful of coordinates, so a
-   * load that does not clear the previous one first stacks a second LCD exactly
-   * on top of the first and doubles every jumper. The bench then fills with
-   * duplicates that all look live, and the net count climbs on each load --
-   * which reads as the simulator coming apart rather than as parts stacking.
+   * An example is a circuit plus the sketch that assumes it, so loading one
+   * replaces the bench rather than adding to it: a part left over from the
+   * operator's own circuit, or from the previous example, sitting in the middle
+   * of one teaches the wrong thing twice. What makes that safe is the single
+   * undo entry `replaceBench` records -- both halves are pinned below.
    */
   it('leaves one of each module however often it is loaded', () => {
     const simulation = bench();
 
     for (let round = 0; round < 3; round++) {
-      simulation.clearExampleParts();
-      LCD_EXAMPLE.wire(simulation);
+      simulation.replaceBench(LCD_EXAMPLE.wire);
     }
 
     const countOf = (needle: string) =>
@@ -193,33 +192,30 @@ describe('loading one example replaces the last', () => {
   it('keeps the wire count stable across repeated loads', () => {
     const simulation = bench();
 
-    simulation.clearExampleParts();
-    LCD_EXAMPLE.wire(simulation);
+    simulation.replaceBench(LCD_EXAMPLE.wire);
     const first = simulation.bench.wires.length;
     expect(first).toBeGreaterThan(0);
 
-    // The wires of the parts just lifted have to go with them, or the bench
-    // keeps jumpers to holes nothing holds any more.
     for (let round = 0; round < 3; round++) {
-      simulation.clearExampleParts();
-      LCD_EXAMPLE.wire(simulation);
+      simulation.replaceBench(LCD_EXAMPLE.wire);
       expect(simulation.bench.wires.length).toBe(first);
     }
   });
 
-  it('leaves the board, the breadboard and anything placed by hand', () => {
+  it('discards anything placed by hand, and one undo brings it back', () => {
     const simulation = bench();
-    // A part the operator dropped is not the example's to remove.
     const mine = simulation.addPart(esp32DevKitV1(), 300, 300);
 
-    simulation.clearExampleParts();
-    LCD_EXAMPLE.wire(simulation);
-    simulation.clearExampleParts();
+    simulation.replaceBench(LCD_EXAMPLE.wire);
 
-    const ids = simulation.bench.parts.map((part) => part.id);
-    expect(ids).toContain(mine.id);
-    expect(partNamed(simulation, 'Solderless Breadboard')).toBeDefined();
+    expect(simulation.bench.parts.map((part) => part.id)).not.toContain(mine.id);
+    expect(partNamed(simulation, 'LCD 16x2')).toBeDefined();
+
+    // One step, not one per part or per wire: the whole load is recorded once.
+    expect(simulation.undo()).toBe(true);
+    expect(simulation.bench.parts.map((part) => part.id)).toContain(mine.id);
     expect(partNamed(simulation, 'LCD 16x2')).toBeUndefined();
+    expect(partNamed(simulation, 'Solderless Breadboard')).toBeDefined();
   });
 
   it('leaves the bench holding only the example it last loaded', () => {
@@ -245,8 +241,7 @@ describe('loading one example replaces the last', () => {
         const example = EXAMPLES.find((candidate) => candidate.id === id);
         if (!example) throw new Error(`no example ${id}`);
 
-        simulation.clearExampleParts();
-        example.wire(simulation);
+        simulation.replaceBench(example.wire);
 
         // Exactly the modules this example places: a survivor from an earlier
         // load would make this list longer than it should ever be.
