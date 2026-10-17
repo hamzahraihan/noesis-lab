@@ -414,6 +414,24 @@ describe('worker port protocol', () => {
     client?.dispose();
   });
 
+  it('sends the rp2040 execution when the build asks for it', () => {
+    const port = fakePort();
+    const client = createWorkerClient({
+      board: { id: 'rp2040' } as never,
+      bench: benchWith([]),
+      firmware: plainProject(),
+      execution: 'rp2040',
+      onFallback: vi.fn(),
+      createPort: () => port,
+    });
+    expect(client).not.toBeNull();
+    const init = port.sent[0] as Record<string, unknown>;
+    expect(init.execution).toBe('rp2040');
+    replyInitOk(port);
+    expect(client?.poll()).toBe('ok');
+    client?.dispose();
+  });
+
   it('falls back when the handshake reports a version mismatch', () => {
     const onFallback = vi.fn();
     const port = fakePort();
