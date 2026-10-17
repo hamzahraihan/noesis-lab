@@ -125,7 +125,11 @@ export function loadToolFactory(tool: ToolName): Promise<EmscriptenFactory> {
     hit = (async () => {
       const res = await fetch(new URL(`tools/${tool}.mjs`, CDN_BASE));
       if (!res.ok) throw new Error(`Failed to fetch tools/${tool}.mjs: ${res.status}`);
-      const mod = (await import(/* @vite-ignore */ toolModuleUrl(await res.text()))) as {
+      // Hoist the await: the production bundler wraps dynamic imports in a
+      // non-async arrow (__vitePreload), so an await nested in the import()
+      // argument is a SyntaxError in the built chunk.
+      const text = await res.text();
+      const mod = (await import(/* @vite-ignore */ toolModuleUrl(text))) as {
         default?: unknown;
       };
       const factory = mod.default ?? mod;
