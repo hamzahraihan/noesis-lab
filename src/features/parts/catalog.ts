@@ -249,6 +249,17 @@ export class DynamicState {
   setKnob(partId: string, spec: KnobSpec, value: number): void {
     this.values.set(`${partId}:${spec.id}`, Math.min(spec.max, Math.max(spec.min, value)));
   }
+
+  entries(): ReadonlyMap<string, number> {
+    return new Map(this.values);
+  }
+
+  copyValuesFrom(other: DynamicState): void {
+    this.values.clear();
+    for (const [key, value] of other.entries()) {
+      this.values.set(key, value);
+    }
+  }
 }
 
 export const NO_DYNAMIC_STATE = new DynamicState();

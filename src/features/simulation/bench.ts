@@ -355,6 +355,22 @@ export class BenchBuilder {
     return part;
   }
 
+  addPartWithId(id: string, definition: PartDefinition, x: number, y: number, rotation: Rotation = 0): PartInstance {
+    const match = /^p(\d+)$/.exec(id);
+    if (match) {
+      const n = Number(match[1]);
+      if (n >= this.nextPartSerial) this.nextPartSerial = n + 1;
+    }
+    if (this.parts.some((p) => p.id === id)) {
+      return this.addPart(definition, x, y, rotation);
+    }
+    const part: PartInstance = { id, definition, x, y, rotation, terminals: {} };
+    this.resolveHoles(part);
+    this.parts.push(part);
+    this.markChanged();
+    return part;
+  }
+
   /**
    * Moves a part to a new origin, carrying its pins' contacts along with it.
    *
@@ -479,6 +495,37 @@ export class BenchBuilder {
       // A wire bent round corners is longer than the straight line between its
       // ends, and the solver turns this into resistance, so it has to be the
       // length actually run rather than the crow-flies distance.
+      lengthMm: routedLengthMm(fromX, fromY, bends, toX, toY),
+      colour: options.colour ?? '#d94f4f',
+      bends: [...bends],
+    };
+    this.wires.push(wire);
+    this.markChanged();
+    return wire;
+  }
+
+  addWireWithId(
+    id: string,
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    options: { colour?: string; gaugeAwg?: number; bends?: readonly BendPoint[] } = {},
+  ): Wire {
+    const match = /^w(\d+)$/.exec(id);
+    if (match) {
+      const n = Number(match[1]);
+      if (n >= this.nextWireSerial) this.nextWireSerial = n + 1;
+    }
+    const duplicate = this.wires.some((w) => w.id === id);
+    const from = this.terminalAt(fromX, fromY);
+    const to = this.terminalAt(toX, toY);
+    const bends = options.bends ?? [];
+    const wire: Wire = {
+      id: duplicate ? `w${this.nextWireSerial++}` : id,
+      from,
+      to,
+      gaugeAwg: options.gaugeAwg ?? 26,
       lengthMm: routedLengthMm(fromX, fromY, bends, toX, toY),
       colour: options.colour ?? '#d94f4f',
       bends: [...bends],

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from './bench';
-import { esp32DevKitV1 } from '@/features/parts';
+import { esp32DevKitV1, rotateOffset } from '@/features/parts';
 import { breadboardDefinition, columnX, stripRowY } from '@/features/parts';
 import { buildNetlist } from './netlist';
 import { NO_DYNAMIC_STATE } from '@/features/parts';
@@ -371,5 +371,39 @@ describe('painting a button cap', () => {
     builder.setCapColour(board.id, '#22c55g');
     expect(builder.build().parts.find((p) => p.id === board.id)!.capColour).toBeUndefined();
     expect(() => builder.setCapColour('p999', '#22c55e')).not.toThrow();
+  });
+});
+
+describe('BenchBuilder id-accepting placement', () => {
+  it('addPartWithId preserves the given id', () => {
+    const b = new BenchBuilder();
+    const part = b.addPartWithId('mcu', esp32DevKitV1(), 0, 0);
+    expect(part.id).toBe('mcu');
+  });
+
+  it('addPartWithId with a pN id advances nextPartSerial past it', () => {
+    const b = new BenchBuilder();
+    b.addPartWithId('p5', esp32DevKitV1(), 0, 0);
+    const next = b.addPart(esp32DevKitV1(), 10, 10);
+    expect(next.id).toBe('p6');
+  });
+
+  it('addPartWithId falls back to a fresh id on collision', () => {
+    const b = new BenchBuilder();
+    b.addPartWithId('dup', esp32DevKitV1(), 0, 0);
+    const second = b.addPartWithId('dup', esp32DevKitV1(), 10, 10);
+    expect(second.id).not.toBe('dup');
+    expect(b.build().parts.map((p) => p.id)).toContain('dup');
+  });
+
+  it('addWireWithId preserves the given id', () => {
+    const b = new BenchBuilder();
+    const p = b.addPartWithId('a', esp32DevKitV1(), 0, 0);
+    const pinSpec = p.definition.pins[0];
+    const off = rotateOffset(pinSpec.x, pinSpec.y, 0, p.definition.widthMm, p.definition.heightMm);
+    const x = p.x + off.x;
+    const y = p.y + off.y;
+    const wire = b.addWireWithId('w9', x, y, x + 5, y + 5);
+    expect(wire.id).toBe('w9');
   });
 });

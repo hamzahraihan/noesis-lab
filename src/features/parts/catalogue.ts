@@ -9,6 +9,15 @@
  */
 
 import type { PartDefinition, SensorVariant } from './catalog';
+import {
+  arduinoMega2560,
+  arduinoNano,
+  nanoRp2040Connect,
+  arduinoUnoR3,
+  esp32DevKitV1,
+  franzininhoBoard,
+  raspberryPi4,
+} from './boards';
 import { breadboardDefinition } from './breadboard';
 import {
   buttonDefinition,
@@ -478,6 +487,23 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
 
 export function isLargePart(id: string): boolean {
   return LARGE_PARTS[id] === true;
+}
+
+const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
+  'esp32-devkit-v1': esp32DevKitV1,
+  'arduino-uno-r3': arduinoUnoR3,
+  'arduino-mega-2560': arduinoMega2560,
+  'arduino-nano': arduinoNano,
+  'arduino-nano-rp2040-connect': nanoRp2040Connect,
+  'franzininho': franzininhoBoard,
+  'raspberry-pi-4': raspberryPi4,
+};
+
+export function partDefinitionById(id: string): PartDefinition | undefined {
+  const entry = PART_CATALOGUE.find((e) => e.id === id);
+  if (entry) return entry.make();
+  const factory = BOARD_FACTORIES[id];
+  return factory ? factory() : undefined;
 }
 
 /** Group headings, in the order the browser shows them. */
