@@ -14,6 +14,18 @@ export function avrAvailableFor(boardId: BoardId): AvrAvailability {
   return { ok: false, reason: 'AVR mode needs an Uno board' };
 }
 
+/**
+ * Whether the RP2040 engine can run on a board.
+ *
+ * The firmware path is seated on the Nano RP2040 Connect only (the engine is
+ * board-agnostic, its wiring is not); every other board refuses with the
+ * reason the selector shows on its disabled option.
+ */
+export function rp2040AvailableFor(boardId: BoardId): AvrAvailability {
+  if (boardId === 'rp2040') return { ok: true };
+  return { ok: false, reason: 'RP2040 mode needs the Nano RP2040 Connect' };
+}
+
 export interface BackendSelection {
   readonly value: 'avr' | 'interpreter';
   readonly interpreterDisabled: boolean;
