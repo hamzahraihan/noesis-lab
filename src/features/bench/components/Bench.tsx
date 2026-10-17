@@ -327,6 +327,13 @@ export default function Bench(props: BenchProps) {
     exercise === null && foundProject !== null ? buildFor(foundProject, boardId, requestedVariant ?? undefined) : null;
 
   /*
+   * Whether this bench is pinned to an exercise or gallery build: in that case
+   * the circuit document is not owned by the operator, so autosave must not
+   * persist its wiring into this board's circuit slot.
+   */
+  const pinned = exercise !== null || projectBuild !== null;
+
+  /*
    * The firmware project: every tab, the language they are written in, and
    * which tab is open.
    *
@@ -482,8 +489,10 @@ export default function Bench(props: BenchProps) {
   // Rebuilt on board change only: a sketch's pin numbers mean something
   // different on each board, so carrying one across would silently misfire.
   const circuitSeedParam = search.get('circuit');
+  const circuitSeedErrorRef = useRef<string | null>(null);
   const simulation = useMemo(
     () => {
+      circuitSeedErrorRef.current = null;
       const created = new Simulation(boardOption(boardId).make());
 
       /*
@@ -522,7 +531,7 @@ export default function Bench(props: BenchProps) {
         } else {
           buildStartingBench(created, STARTER_WIRING[boardId]);
         }
-        if (circuitSeed.error) setShareError(circuitSeed.error);
+        circuitSeedErrorRef.current = circuitSeed.error ?? null;
         created.loadFirmware(
           boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
           boardOption(boardId).language,
@@ -550,9 +559,19 @@ export default function Bench(props: BenchProps) {
   /*
    * Autosave: every 500 ms decompile the live bench and persist the circuit
    * document when it changed, so a reload reopens the same parts and wiring.
+   *
+   * Pinned benches (exercise / gallery build) never autosave their wiring: it
+   * belongs to the lesson/build, not to this board's circuit slot. Gating here
+   * keeps a plain bench reload from resurrecting lesson wiring.
    */
   const lastSavedCircuitRef = useRef<string | null>(null);
+  // Reset the "last saved" hash on any pinned transition so a stale hash
+  // cannot suppress the first save on an unpinned bench.
   useEffect(() => {
+    lastSavedCircuitRef.current = null;
+  }, [pinned]);
+  useEffect(() => {
+    if (pinned) return;
     const id = window.setInterval(() => {
       const { doc } = decompile(simulation.builder.build(), simulation.controls);
       const serialized = JSON.stringify(doc);
@@ -561,7 +580,17 @@ export default function Bench(props: BenchProps) {
       saveCircuit(boardId, doc);
     }, 500);
     return () => window.clearInterval(id);
-  }, [boardId, simulation]);
+  }, [boardId, simulation, pinned]);
+
+  /*
+   * Surface a corrupt-circuit notice from the seed resolution without calling
+   * setState during render.
+   */
+  useEffect(() => {
+    if (circuitSeedErrorRef.current) {
+      setShareError(circuitSeedErrorRef.current);
+    }
+  }, [simulation]);
 
   /*
    * Sim worker client (Task 8): attempted per simulation; null while the
