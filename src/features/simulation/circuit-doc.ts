@@ -152,11 +152,14 @@ export function compile(doc: unknown): { bench: Bench | null; snapshot: BenchSna
   const dynamicState = new DynamicState();
   if (d.state?.knobs) {
     for (const [key, value] of Object.entries(d.state.knobs)) {
-      const [partId, knobId] = key.split(':');
+      const idx = key.indexOf(':');
+      if (idx < 0) continue;
+      const partId = key.slice(0, idx);
+      const knobId = key.slice(idx + 1);
       const part = partById.get(partId);
-      if (!part) { errors.push(`knob references unknown part: ${partId}`); continue; }
+      if (!part) continue;
       const spec = part.definition.knobs?.find((k) => k.id === knobId);
-      if (!spec) { errors.push(`unknown knob: ${key}`); continue; }
+      if (!spec) continue;
       dynamicState.setKnob(partId, spec, value);
     }
   }
@@ -260,7 +263,11 @@ export function decompile(bench: Bench, dynamicState: DynamicState): { doc: Circ
   const entries = dynamicState.entries();
   const knobs: Record<string, number> = {};
   const knobKeys = [...entries.keys()]
-    .filter((key) => bench.parts.some((p) => p.id === key.split(':')[0]))
+    .filter((key) => {
+      const idx = key.indexOf(':');
+      const partId = idx < 0 ? key : key.slice(0, idx);
+      return bench.parts.some((p) => p.id === partId);
+    })
     .sort();
   for (const key of knobKeys) {
     knobs[key] = entries.get(key)!;

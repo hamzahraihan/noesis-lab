@@ -1453,7 +1453,7 @@ export class Simulation {
     (address, count) => this.engine.requestI2C(address, count),
   );
 
-  private rebuild(): void {
+  rebuild(): void {
     this.engine.rebuild(this.builder.build(), this.controls);
     this.engine.settle();
   }

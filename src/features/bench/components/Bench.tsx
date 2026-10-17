@@ -528,6 +528,7 @@ export default function Bench(props: BenchProps) {
         if (circuitSeed.snapshot) {
           created.builder.restore(circuitSeed.snapshot);
           if (circuitSeed.dynamicState) created.controls.copyValuesFrom(circuitSeed.dynamicState);
+          created.rebuild();
         } else {
           buildStartingBench(created, STARTER_WIRING[boardId]);
         }

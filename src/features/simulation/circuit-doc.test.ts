@@ -127,7 +127,8 @@ describe('compile', () => {
       state: { knobs: { 'ghost:turn': 0.5 } },
     };
     const result = compile(doc);
-    expect(result.errors.some((e) => e.includes('unknown part'))).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.bench).not.toBeNull();
   });
 
   it('compiles a wire between two pins', () => {
