@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DynamicState, partDefinitionById } from '@/features/parts';
+import { DynamicState, PART_CATALOGUE, partDefinitionById } from '@/features/parts';
 
 describe('partDefinitionById', () => {
   it('returns a definition whose id matches the requested id', () => {
@@ -10,6 +10,19 @@ describe('partDefinitionById', () => {
 
   it('returns undefined for an unknown id', () => {
     expect(partDefinitionById('no-such-part')).toBeUndefined();
+  });
+
+  /*
+   * The bench carries a part's *definition* id, and a circuit document names
+   * parts by it, so an entry whose id disagrees with the factory's leaves the
+   * part unresolvable when a saved document is loaded back. Every entry must
+   * therefore be named exactly what its factory produces.
+   */
+  it('names every entry after the definition its factory makes', () => {
+    for (const entry of PART_CATALOGUE) {
+      expect(partDefinitionById(entry.id)?.id, `${entry.id} resolves`).toBe(entry.id);
+      expect(entry.make().id, `${entry.id} factory`).toBe(entry.id);
+    }
   });
 });
 

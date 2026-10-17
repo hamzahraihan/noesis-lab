@@ -181,6 +181,31 @@ describe('decompile', () => {
     expect(out.wires).toEqual(doc.wires);
   });
 
+  /*
+   * Every bench carries the breadboard, and its own definition id differs from
+   * the catalogue's display name — the same is true of the character LCD and
+   * the I2C OLED. A document is decompiled from a real bench and loaded back
+   * through `compile`, so all three ids have to resolve, or a saved bench
+   * reopens as "could not be read" with its breadboard dropped.
+   */
+  it('round-trips a document that carries the breadboard and a character LCD', () => {
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [
+        { id: 'bb', type: 'breadboard-830', x: 230, y: 0, rotation: 0 },
+        { id: 'lcd', type: 'lcd-16x2', x: 100, y: 70, rotation: 0 },
+        { id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 },
+      ],
+      wires: [{ id: 'w', from: 'u:D12', to: 'lcd:RS', colour: '#a3e635', gaugeAwg: 26, bends: [] }],
+    };
+    const compiled = compile(doc);
+    expect(compiled.errors).toEqual([]);
+    const { doc: out, warnings } = decompile(compiled.bench!, compiled.dynamicState!);
+    expect(warnings).toEqual([]);
+    expect(out).toEqual(doc);
+    expect(compile(out).errors).toEqual([]);
+  });
+
   it('drops a loose-end wire with a warning', () => {
     const b = new BenchBuilder();
     const p = b.addPart(arduinoUnoR3(), 0, 0);

@@ -405,14 +405,14 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: hx711Definition,
   },
   {
-    id: 'lcd-1602',
+    id: 'lcd-16x2',
     name: 'LCD1602, 16x2',
     group: 'output',
     note: 'Six wires, not two: RS, RW, enable and D4-D7. The second row starts at address 0x40, which is why a display wired correctly and driven correctly can still show one line.',
     make: lcd1602Definition,
   },
   {
-    id: 'lcd-2004',
+    id: 'lcd-20x4',
     name: 'LCD2004, 20x4',
     group: 'output',
     note: 'The same glass twice as tall. Rows three and four live above the second row, not below it, so the driver moves the address pointer rather than counting on.',
@@ -426,7 +426,7 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: servoDefinition,
   },
   {
-    id: 'ssd1306-128x64',
+    id: 'ssd1306-128x64-3c',
     name: '128x64 OLED (SSD1306)',
     group: 'output',
     note: 'I2C, four wires. Address 0x3C unless the module says otherwise.',
@@ -454,7 +454,7 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: ili9341LargeDefinition,
   },
   {
-    id: 'breadboard',
+    id: 'breadboard-830',
     name: 'Breadboard (830 point)',
     group: 'breadboard',
     note: 'The prototyping surface. Strip holes run in columns of five.',
@@ -464,11 +464,11 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
 
 /** Parts too large to sit on a breadboard strip, dropped below the bench. */
 const LARGE_PARTS: Readonly<Record<string, true>> = {
-  breadboard: true,
+  'breadboard-830': true,
   'servo': true,
-  'lcd-1602': true,
-  'lcd-2004': true,
-  'ssd1306-128x64': true,
+  'lcd-16x2': true,
+  'lcd-20x4': true,
+  'ssd1306-128x64-3c': true,
   'ssd1306-128x64-spi': true,
   'ili9341-320x240': true,
   'ili9341-480x320': true,
