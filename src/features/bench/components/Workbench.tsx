@@ -609,7 +609,10 @@ export function Workbench({
 
   const onPointerMove = (event: React.PointerEvent) => {
     const world = toWorld(event.clientX, event.clientY);
-    setPointer(world);
+    // Snap the pointer to a hole when one is close, so the draft jumper
+    // previews the connection that a click would actually commit.
+    const hole = nearestHole(bench, world.x, world.y);
+    setPointer(hole ? { x: hole.x, y: hole.y } : world);
 
     const drag = dragRef.current;
     if (!drag) return;
@@ -695,14 +698,17 @@ export function Workbench({
        * and the same trade: a smooth bench that solves, rather than a cheap
        * one that lags behind the pointer.
        *
-       * Dropping on bare bench claims a loose contact at that spot, which is
-       * what a wire end hanging off the edge of a board actually looks like.
+       * Snap to a hole when the pointer is close enough, so a dragged end
+       * lands on a terminal instead of hovering between holes; otherwise claim
+       * a loose contact at that spot, which is what a wire end hanging off the
+       * edge of a board actually looks like.
        */
-      onMoveWireEnd(drag.wireId, drag.end, {
-        id: -1,
-        x: world.x,
-        y: world.y,
-      });
+      const hole = nearestHole(bench, world.x, world.y);
+      onMoveWireEnd(
+        drag.wireId,
+        drag.end,
+        hole !== null ? hole : { id: -1, x: world.x, y: world.y },
+      );
       return;
     }
 
@@ -801,7 +807,13 @@ export function Workbench({
       // Clicking the pin the wire started from abandons it rather than
       // routing a zero-length jumper back to itself.
       if (terminal.id !== wireAnchor.id) onRouteWire(wireAnchor, terminal, wireBends);
-      cancelDraft();
+      // Holding Alt chains the next connection from the same source, so a
+      // bus or a fan-out can be wired without re-selecting the origin.
+      if (event.altKey) {
+        startDraft(wireAnchor);
+      } else {
+        cancelDraft();
+      }
       return;
     }
 
@@ -1343,7 +1355,7 @@ export function Workbench({
           const isHovered = terminal.id === hovered?.id;
           if (isHovered) {
             // The socket itself, squared to fit one 2.54 mm socket: a small
-            // rounded square over the hole beneath it, green fill and frame.
+            // rounded-none square over the hole beneath it, green fill and frame.
             const side = 2.6;
             return (
               <rect

@@ -954,14 +954,33 @@ export default function Bench(props: BenchProps) {
   const onMovePart = useCallback(
     (partId: string, x: number, y: number) => {
       if (layoutLocked) return;
-      simulation.movePart(partId, Math.round(x), Math.round(y));
+      const part = bench.parts.find((candidate) => candidate.id === partId);
+      const nextX = Math.round(x);
+      const nextY = Math.round(y);
+      // Carry the waypoints of any jumper tied to this part along with it, so
+      // a moved part drags its wiring instead of leaving bends behind.
+      const dx = part ? nextX - part.x : 0;
+      const dy = part ? nextY - part.y : 0;
+      const partTerminals = part ? new Set(Object.values(part.terminals)) : new Set<number>();
+      const tiedWires =
+        part && (dx !== 0 || dy !== 0)
+          ? bench.wires.filter((wire) => partTerminals.has(wire.from) || partTerminals.has(wire.to))
+          : [];
+      simulation.movePart(partId, nextX, nextY);
+      for (const wire of tiedWires) {
+        if (wire.bends.length === 0) continue;
+        simulation.setWireBends(
+          wire.id,
+          wire.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy })),
+        );
+      }
       // Asked for explicitly, because the animation loop only re-renders while
       // the simulation is running. A stopped bench relied on that loop drawing
       // every frame for everything to update -- which is why dragging a part
       // moved it in the model and left it exactly where it was on screen.
       forceRender((n) => n + 1);
     },
-    [simulation, layoutLocked],
+    [simulation, layoutLocked, bench],
   );
 
   /**
@@ -1410,7 +1429,7 @@ export default function Bench(props: BenchProps) {
            */}
           {workerStatus !== null ? (
             <span
-              className="rounded-sm border border-emerald-800 bg-emerald-950 px-1.5 py-0.5 text-xs text-emerald-300"
+              className="rounded-none border border-emerald-800 bg-emerald-950 px-1.5 py-0.5 text-xs text-emerald-300"
               title="Stepping in the sim worker"
               role="status"
             >
@@ -1517,7 +1536,7 @@ export default function Bench(props: BenchProps) {
                   aria-pressed={selected}
                   aria-label={`Wire colour ${colour.label}`}
                   title={colour.label}
-                  className={`h-5 w-5 rounded-sm transition-transform ${
+                  className={`h-5 w-5 rounded-none transition-transform ${
                     selected ? 'scale-110 ring-2 ring-sky-400' : 'hover:scale-105'
                   }`}
                   style={{
@@ -1589,7 +1608,7 @@ export default function Bench(props: BenchProps) {
             onClick={() => setProjectBannerOpen(false)}
             aria-label="Dismiss the project banner"
             title="Dismiss"
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            className="flex size-6 shrink-0 items-center justify-center rounded-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
           >
             <Cross2Icon className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -1704,7 +1723,7 @@ export default function Bench(props: BenchProps) {
               <div
                 role="group"
                 aria-label="Colour of the picked jumper"
-                className="fixed z-20 flex items-center gap-0.5 rounded-md border border-slate-700 bg-slate-900/95 p-1 shadow-lg"
+                className="fixed z-20 flex items-center gap-0.5 rounded-none border border-slate-700 bg-slate-900/95 p-1 shadow-lg"
                 style={{
                   left: paletteFor.x,
                   top: paletteFor.y,
@@ -1728,7 +1747,7 @@ export default function Bench(props: BenchProps) {
                     }}
                     aria-label={`Wire colour ${colour.label}`}
                     title={colour.label}
-                    className="h-5 w-5 rounded-sm transition-transform hover:scale-110"
+                    className="h-5 w-5 rounded-none transition-transform hover:scale-110"
                     style={{
                       backgroundColor: colour.hex,
                       boxShadow: `inset 0 0 0 1px ${colour.border}`,
@@ -1740,7 +1759,7 @@ export default function Bench(props: BenchProps) {
                   onClick={() => closePalette()}
                   aria-label="Close the colour palette"
                   title="Close (Esc)"
-                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-none text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
                 >
                   <Cross2Icon className="h-3 w-3" aria-hidden="true" />
                 </button>
