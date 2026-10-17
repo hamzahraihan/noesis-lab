@@ -1,14 +1,12 @@
-import { BenchBuilder, type Bench, type BenchSnapshot, type PartInstance } from './bench';
-import { BUTTON_CAP_COLOURS } from './bench';
-import { DynamicState, rotateOffset } from '@/features/parts';
-import { partDefinitionById } from '@/features/parts';
+import { BenchBuilder, BUTTON_CAP_COLOURS, type Bench, type BenchSnapshot, type PartInstance } from './bench';
+import { DynamicState, partDefinitionById, rotateOffset } from '@/features/parts';
 
 export interface CircuitPart {
   readonly id: string;
   readonly type: string;
   readonly x: number;
   readonly y: number;
-  readonly rotation: 0 | 90 | 180 | 270;
+  readonly rotation?: 0 | 90 | 180 | 270;
   readonly name?: string;
   readonly capColour?: string;
   readonly initialRtc?: {
@@ -96,6 +94,27 @@ export function validateCircuit(doc: unknown): string[] {
   return errors;
 }
 
+/**
+ * Resolves a pin reference against a part's definition.
+ *
+ * Exact id matches win outright (ids are unique within a part). The suffix
+ * (text after the last underscore) and label fallbacks are deliberately
+ * lenient about short forms like `D13` or `A`, but they only resolve when
+ * *exactly one* pin matches — an ambiguous ref such as bare `GND` on a board
+ * that carries several grounds is treated as unknown rather than silently
+ * picking the first in array order.
+ */
+function findPin(part: PartInstance, ref: string) {
+  const pins = part.definition.pins;
+  const exact = pins.find((pin) => pin.id === ref);
+  if (exact) return exact;
+  const suffixMatches = pins.filter((pin) => pin.id.split('_').pop() === ref);
+  if (suffixMatches.length === 1) return suffixMatches[0];
+  const labelMatches = pins.filter((pin) => pin.label === ref);
+  if (labelMatches.length === 1) return labelMatches[0];
+  return undefined;
+}
+
 export function compile(doc: unknown): { bench: Bench | null; snapshot: BenchSnapshot | null; dynamicState: DynamicState | null; errors: string[] } {
   const errors = validateCircuit(doc);
   if (errors.length > 0) return { bench: null, snapshot: null, dynamicState: null, errors };
@@ -148,10 +167,6 @@ export function compile(doc: unknown): { bench: Bench | null; snapshot: BenchSna
     const fromPart = partById.get(fromMatch[1]);
     const toPart = partById.get(toMatch[1]);
     if (!fromPart || !toPart) { errors.push(`wire ${w.id} references unknown part`); continue; }
-    const findPin = (part: PartInstance, ref: string) =>
-      part.definition.pins.find((pin) => pin.id === ref) ??
-      part.definition.pins.find((pin) => pin.id.split('_').pop() === ref) ??
-      part.definition.pins.find((pin) => pin.label === ref);
     const fromPin = findPin(fromPart, fromMatch[2]);
     const toPin = findPin(toPart, toMatch[2]);
     if (!fromPin || !toPin) { errors.push(`wire ${w.id} references unknown pin`); continue; }
@@ -198,6 +213,10 @@ export function decompile(bench: Bench, dynamicState: DynamicState): { doc: Circ
       warnings.push(`wire ${wire.id} has a loose end; skipped`);
       continue;
     }
+    // Deterministic tie-break: when multiple parts share a terminal (e.g. a
+    // breadboard column), pick the first owner in insertion order. Owners are
+    // collected by iterating bench.parts in their stored order, so this is
+    // stable across decompile runs of the same bench.
     const from = fromOwners[0];
     const to = toOwners[0];
     if (from.partId === to.partId && from.pinId === to.pinId) {
