@@ -502,26 +502,34 @@ export default function Bench(props: BenchProps) {
          * whatever is on the bench, and anything placed before it would be
          * discarded anyway.
          */
-        created.loadCircuit(exercise.circuit);
+        const admitted = created.loadCircuit(exercise.circuit);
+        // A pinned circuit that will not load would otherwise leave an empty
+        // bench with nothing said about it; the panel is where the reason goes.
+        circuitSeedErrorRef.current = admitted.length > 0 ? admitted.join('; ') : null;
         // In the language the exercise is written in, not the board's default.
         // A Pi lesson hands over Python, and handing that to the C++ parser
         // reports "expected a type" on the first `from` and stops there.
         created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       } else if (projectBuild) {
-        created.loadCircuit(projectBuild.circuit);
+        const admitted = created.loadCircuit(projectBuild.circuit);
+        circuitSeedErrorRef.current = admitted.length > 0 ? admitted.join('; ') : null;
         created.loadFirmware(firmwareForBuild(projectBuild, boardOption(boardId).language));
       } else {
+        const boardDefinition = boardOption(boardId).make();
         const circuitSeed = resolveCircuitSeed({
+          boardDefinitionId: boardDefinition.id,
           pinned: false,
           sharedPayload: circuitSeedParam,
           saved: loadCircuit(boardId),
           hadUnreadableSave: hasCircuit(boardId),
           decode: decodeShareToCircuit,
         });
-        if (circuitSeed.snapshot) {
-          created.builder.restore(circuitSeed.snapshot);
-          if (circuitSeed.dynamicState) created.controls.copyValuesFrom(circuitSeed.dynamicState);
-          created.rebuild();
+        if (circuitSeed.circuit !== null) {
+          // One seeding primitive whichever way the circuit arrived: the
+          // document is compiled, checked against this board's pin model, put
+          // down whole and the operator state copied over.
+          const refused = created.loadCircuit(circuitSeed.circuit);
+          circuitSeedErrorRef.current = refused.length > 0 ? refused.join('; ') : circuitSeed.error;
         } else {
           /*
            * The starter bench is the one circuit that is not a document: it
@@ -531,11 +539,11 @@ export default function Bench(props: BenchProps) {
            * no part). Without them every wire quietly claims a loose contact of
            * its own and the circuit is drawn but electrically dead.
            */
-          created.addPart(boardOption(boardId).make(), 0, 0);
+          created.addPart(boardDefinition, 0, 0);
           created.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
           buildStartingBench(created, STARTER_WIRING[boardId]);
+          circuitSeedErrorRef.current = circuitSeed.error;
         }
-        circuitSeedErrorRef.current = circuitSeed.error ?? null;
         created.loadFirmware(
           boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
           boardOption(boardId).language,

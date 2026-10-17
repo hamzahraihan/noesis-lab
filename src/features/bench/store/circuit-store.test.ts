@@ -7,7 +7,7 @@ import {
   resolveCircuitSeed,
   saveCircuit,
 } from './circuit-store';
-import { compile, type CircuitDocument } from '@/features/simulation';
+import type { CircuitDocument } from '@/features/simulation';
 
 describe('circuit store', () => {
   it('round-trips through injected storage', () => {
@@ -96,6 +96,7 @@ describe('circuit store', () => {
 });
 
 describe('resolveCircuitSeed', () => {
+  const board = 'arduino-uno-r3';
   const shared: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] };
   const saved: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'arduino-uno-r3', x: 1, y: 1, rotation: 0 }], wires: [] };
   const decode = (payload: string): CircuitDocument | null =>
@@ -103,37 +104,38 @@ describe('resolveCircuitSeed', () => {
 
   it('prefers pinned over everything', () => {
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: true,
       sharedPayload: 'valid-payload',
       saved,
       hadUnreadableSave: false,
       decode,
     });
-    expect(seed).toEqual({ snapshot: null, dynamicState: null, error: null });
+    expect(seed).toEqual({ circuit: null, error: null });
   });
 
   it('prefers the share payload over the autosave', () => {
-    const compiled = compile(shared);
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: 'valid-payload',
       saved,
       hadUnreadableSave: false,
       decode,
     });
-    expect(seed).toEqual({ snapshot: compiled.snapshot, dynamicState: compiled.dynamicState, error: null });
+    expect(seed).toEqual({ circuit: shared, error: null });
   });
 
   it('falls back with a notice on a corrupt share link', () => {
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: 'bogus',
       saved,
       hadUnreadableSave: false,
       decode,
     });
-    expect(seed.snapshot).toBeNull();
-    expect(seed.dynamicState).toBeNull();
+    expect(seed.circuit).toBeNull();
     expect(seed.error).toMatch(/share link/);
   });
 
@@ -142,62 +144,99 @@ describe('resolveCircuitSeed', () => {
     const decodeBad = (payload: string): CircuitDocument | null =>
       payload === 'bad-payload' ? badDoc : null;
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: 'bad-payload',
       saved,
       hadUnreadableSave: false,
       decode: decodeBad,
     });
+    expect(seed.circuit).toBeNull();
     expect(seed.error).toMatch(/share link/);
   });
 
-  it('prefers the autosave over empty', () => {
-    const compiled = compile(saved);
+  /*
+   * A link carries whatever board its sender was on, and the recipient's bench
+   * runs its own pin model. Handing the document over would place a circuit
+   * that is drawn but wired to nothing, so it is refused and said in a
+   * sentence -- the notice the operator reads, not the compiler's version.
+   */
+  it('refuses a share payload wired for another board', () => {
+    const esp32Doc: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'esp32-devkit-v1', x: 0, y: 0, rotation: 0 }], wires: [] };
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
+      pinned: false,
+      sharedPayload: 'valid-payload',
+      saved,
+      hadUnreadableSave: false,
+      decode: () => esp32Doc,
+    });
+    expect(seed.circuit).toBeNull();
+    expect(seed.error).toMatch(/not wired for this board/);
+  });
+
+  it('refuses a document that names no board at all', () => {
+    const boardlessDoc: CircuitDocument = { version: 1, parts: [{ id: 'led', type: 'led-red', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
+      pinned: false,
+      sharedPayload: null,
+      saved: boardlessDoc,
+      hadUnreadableSave: false,
+      decode,
+    });
+    expect(seed.circuit).toBeNull();
+    expect(seed.error).toMatch(/not wired for this board/);
+  });
+
+  it('prefers the autosave over empty', () => {
+    const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: null,
       saved,
       hadUnreadableSave: false,
       decode,
     });
-    expect(seed).toEqual({ snapshot: compiled.snapshot, dynamicState: compiled.dynamicState, error: null });
+    expect(seed).toEqual({ circuit: saved, error: null });
   });
 
   it('falls back with a notice on an unreadable save', () => {
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: null,
       saved: null,
       hadUnreadableSave: true,
       decode,
     });
-    expect(seed.snapshot).toBeNull();
-    expect(seed.dynamicState).toBeNull();
+    expect(seed.circuit).toBeNull();
     expect(seed.error).toMatch(/saved project/);
   });
 
   it('falls back with a notice on a saved doc that fails to compile', () => {
     const badSaved: CircuitDocument = { version: 1, parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }], wires: [] };
-    // compiled.errors non-empty; resolve should treat as corrupt save
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: null,
       saved: badSaved,
       hadUnreadableSave: false,
       decode,
     });
-    expect(seed.snapshot).toBeNull();
+    expect(seed.circuit).toBeNull();
     expect(seed.error).toMatch(/saved project/);
   });
 
   it('opens empty quietly with nothing to load', () => {
     const seed = resolveCircuitSeed({
+      boardDefinitionId: board,
       pinned: false,
       sharedPayload: null,
       saved: null,
       hadUnreadableSave: false,
       decode,
     });
-    expect(seed).toEqual({ snapshot: null, dynamicState: null, error: null });
+    expect(seed).toEqual({ circuit: null, error: null });
   });
 });
