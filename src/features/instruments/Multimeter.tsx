@@ -64,7 +64,7 @@ export function MultimeterPanel({
           <MixerHorizontalIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Multimeter
         </CardTitle>
-        <div className="flex gap-0.5 rounded border border-slate-800 bg-slate-950 p-0.5">
+        <div className="flex gap-0.5 rounded-none border border-slate-800 bg-slate-950 p-0.5">
           {(Object.keys(MODE_LABELS) as MeterMode[]).map((candidate) => (
             <Button
               key={candidate}
@@ -92,7 +92,7 @@ export function MultimeterPanel({
        * goes amber when the reading is not to be trusted.
        */}
       <div
-        className={`rounded-md border bg-slate-950 px-3 py-2 text-center ${
+        className={`rounded-none border bg-slate-950 px-3 py-2 text-center ${
           reading.valid ? 'border-slate-800' : 'border-amber-900/60'
         }`}
       >

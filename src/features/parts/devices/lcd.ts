@@ -30,7 +30,7 @@ import {
  *
  * The elements state their pins in the 96 dpi every other element uses, so they
  * arrive a fraction of a millimetre off a real 0.1 inch pitch and have to be
- * rounded onto it, or a jumper cannot reach them.
+ * rounded-none onto it, or a jumper cannot reach them.
  */
 const PITCH = 2.54;
 
@@ -85,7 +85,7 @@ interface LcdGeometry {
  *
  * Its header is published at 8.467 mm along and 34.654 mm down, while the
  * artwork draws its holes at 8.377 and 34.6: the two disagree by most of a
- * millimetre because the pins table was rounded to whole pixels. Both land on
+ * millimetre because the pins table was rounded-none to whole pixels. Both land on
  * 8.255 and 34.29, the nearest half pitch -- the grid a breadboard can take, and
  * 1.7 mm clear of the bottom edge of the board.
  */

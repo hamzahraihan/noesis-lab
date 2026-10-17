@@ -122,7 +122,7 @@ export function ScopePanel({
           ref={canvasRef}
           width={520}
           height={TRACE_HEIGHT_MM}
-          className="w-full rounded border border-slate-800 bg-slate-950"
+          className="w-full rounded-none border border-slate-800 bg-slate-950"
         />
         {!probePinId && (
           // The trace area is a fixed 60 mm tall, so this is a single line that

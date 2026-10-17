@@ -42,7 +42,7 @@ export function Sidebar({
               return (
                 <li key={file.name}>
                   <div
-                    className={`flex items-center rounded-md font-mono text-xs ${
+                    className={`flex items-center rounded-none font-mono text-xs ${
                       selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
                     }`}
                   >
@@ -60,7 +60,7 @@ export function Sidebar({
                         }
                       }}
                       title={isEntry ? `${file.name} (entry)` : `${file.name} — double-click to rename`}
-                      className="flex-1 truncate rounded-md px-2 py-1.5 text-left transition-colors hover:text-slate-100"
+                      className="flex-1 truncate rounded-none px-2 py-1.5 text-left transition-colors hover:text-slate-100"
                     >
                       {file.name}
                     </button>
@@ -75,7 +75,7 @@ export function Sidebar({
                           }
                         }}
                         aria-label={`Remove ${file.name}`}
-                        className="rounded-md px-2 py-1 text-slate-500 transition-colors hover:text-red-300"
+                        className="rounded-none px-2 py-1 text-slate-500 transition-colors hover:text-red-300"
                       >
                         ×
                       </button>

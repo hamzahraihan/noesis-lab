@@ -103,7 +103,7 @@ export function ExerciseGuide({
         <DialogTitle className="sr-only">{exercise.title}</DialogTitle>
         {/* Header: what this is, and the way out. */}
         <div className="flex shrink-0 items-start gap-3 border-b border-slate-800 px-5 pt-4 pb-3">
-          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-400">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-none bg-sky-500/15 text-sky-400">
             <ReaderIcon className="icon" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
@@ -140,7 +140,7 @@ export function ExerciseGuide({
             </span>
           </div>
           <div
-            className="mt-1.5 h-1 overflow-hidden rounded-full bg-slate-800"
+            className="mt-1.5 h-1 overflow-hidden rounded-none bg-slate-800"
             role="progressbar"
             aria-valuenow={doneCount}
             aria-valuemin={0}
@@ -148,7 +148,7 @@ export function ExerciseGuide({
             aria-label="Build progress"
           >
             <div
-              className="h-full rounded-full bg-sky-500 transition-[width] duration-300 ease-out"
+              className="h-full rounded-none bg-sky-500 transition-[width] duration-300 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -162,7 +162,7 @@ export function ExerciseGuide({
             {exercise.concepts.map((concept) => (
               <span
                 key={concept}
-                className="rounded-md bg-slate-800 px-2 py-1 text-[11px] leading-tight text-slate-400"
+                className="rounded-none bg-slate-800 px-2 py-1 text-[11px] leading-tight text-slate-400"
               >
                 {concept}
               </span>
@@ -176,7 +176,7 @@ export function ExerciseGuide({
            * bench itself is where it runs.
            */}
           <figure>
-            <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+            <div className="overflow-hidden rounded-none border border-slate-800 bg-slate-950">
               <ExercisePreview exercise={exercise} fit="slice" className="h-32 w-full" />
             </div>
             <figcaption className="mt-1.5 text-xs leading-relaxed text-slate-500">
@@ -206,7 +206,7 @@ export function ExerciseGuide({
               <CheckIcon className="icon-sm" aria-hidden="true" />
               Build it
             </CardTitle>
-            <div className="mt-2.5 rounded-lg border border-slate-700/80 bg-slate-950/60 p-4">
+            <div className="mt-2.5 rounded-none border border-slate-700/80 bg-slate-950/60 p-4">
               <p className="text-sm leading-relaxed text-slate-200">{currentStep}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
@@ -251,7 +251,7 @@ export function ExerciseGuide({
                     aria-label={`Go to step ${index + 1}`}
                     aria-current={index === stepIndex ? 'step' : undefined}
                     title={`Step ${index + 1}`}
-                    className={`size-6 rounded-md font-mono text-[11px] transition-colors ${
+                    className={`size-6 rounded-none font-mono text-[11px] transition-colors ${
                       index === stepIndex
                         ? 'bg-sky-600 text-white'
                         : done.has(index)
@@ -310,7 +310,7 @@ export function ExerciseGuide({
           </section>
 
           {exercise.fault !== undefined && (
-            <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
+            <div className="rounded-none border border-amber-900/60 bg-amber-950/20 p-4">
               <p className="flex items-center gap-1.5 text-sm font-medium text-amber-200">
                 <InfoCircledIcon className="icon-sm shrink-0" aria-hidden="true" />
                 Break it on purpose
@@ -327,7 +327,7 @@ export function ExerciseGuide({
             </p>
             <div className="mt-2.5 space-y-2">
               {exercise.hints.slice(0, hintsRevealed).map((hint) => (
-                <div key={hint.when} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3.5">
+                <div key={hint.when} className="rounded-none border border-slate-800 bg-slate-950/60 p-3.5">
                   <p className="text-sm font-medium text-slate-200">{hint.when}</p>
                   <p className="mt-1 text-sm leading-relaxed text-slate-400">{hint.answer}</p>
                 </div>

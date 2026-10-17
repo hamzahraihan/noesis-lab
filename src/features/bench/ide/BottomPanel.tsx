@@ -67,7 +67,7 @@ export function BottomPanel({
           aria-expanded={open}
           aria-label={open ? 'Collapse bottom panel' : 'Expand bottom panel'}
           title="Toggle bottom panel (J)"
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          className="flex size-6 shrink-0 items-center justify-center rounded-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
         >
           <CaretRightIcon
             className={`icon-sm transition-transform ${open ? 'rotate-90' : ''}`}
@@ -83,7 +83,7 @@ export function BottomPanel({
             onClick={() => {
               onTab(id);
             }}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tracking-[0.08em] uppercase ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-[11px] font-semibold tracking-[0.08em] uppercase ${
               tab === id ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'
             }`}
           >

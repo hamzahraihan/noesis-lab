@@ -143,7 +143,7 @@ const I2C_MONITOR: Exercise = {
         terminal: 'a',
         why:
           'The clock line needs its own pull-up, separate from the data one, for the same open-drain ' +
-          'reason. Too large a value on SCL gives a slow rounded edge and a timing error long before it ' +
+          'reason. Too large a value on SCL gives a slow rounded-none edge and a timing error long before it ' +
           'gives a dead wire, which is why a marginal bus misbehaves intermittently rather than not at all.',
       },
       {
@@ -455,7 +455,7 @@ void loop() {
         'several devices share a wire without any of them having to agree who owns it, because a device ' +
         'that wants to transmit zero simply pulls the line down and everyone else stays quiet. It also ' +
         'puts the rise time in your hands: the pull-up is what charges the bus, so too large a resistor ' +
-        'gives a slow, rounded edge and a timing error long before it gives a dead wire.',
+        'gives a slow, rounded-none edge and a timing error long before it gives a dead wire.',
     },
     {
       term: 'Why one device answers and the other does not',

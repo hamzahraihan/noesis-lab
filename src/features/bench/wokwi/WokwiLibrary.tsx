@@ -67,13 +67,13 @@ function ElementCard({ element }: { element: LibraryElement }) {
 
   return (
     <figure
-      className={`flex h-full flex-col rounded-lg border p-2 ${
+      className={`flex h-full flex-col rounded-none border p-2 ${
         element.status === 'placed' ? 'border-slate-800 bg-slate-950' : 'border-slate-800/60 bg-slate-950/50'
       }`}
       title={element.note}
     >
       <div
-        className="flex h-24 items-center justify-center overflow-hidden rounded bg-slate-900/60"
+        className="flex h-24 items-center justify-center overflow-hidden rounded-none bg-slate-900/60"
         style={{ width: element.sizeMm.w * scale, maxWidth: '100%' }}
       >
         <div

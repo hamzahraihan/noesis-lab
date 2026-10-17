@@ -53,7 +53,7 @@ export function ProjectPage() {
       <p className="max-w-[65ch] text-[15px] leading-relaxed text-slate-300">{project.tagline}</p>
 
       <figure>
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60 p-6 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
+        <div className="overflow-hidden rounded-none border border-slate-800 bg-slate-950/60 p-6 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
           <BoardArt board={board} className="h-56 w-full" />
         </div>
         <figcaption className="mt-2 text-xs leading-relaxed text-slate-500">
@@ -124,7 +124,7 @@ export function ProjectPage() {
             {builds.map(({ entry, build }) => (
               <li
                 key={entry.id}
-                className="flex flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900"
+                className="flex flex-col overflow-hidden rounded-none border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900"
               >
                 <span className="block h-36 border-b border-slate-800 bg-slate-950">
                   <GalleryPreview
@@ -176,7 +176,7 @@ export function ProjectPage() {
             {next.map((example) => (
               <li
                 key={example.id}
-                className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"
+                className="rounded-none border border-slate-800 bg-slate-900/60 px-4 py-3"
               >
                 <p className="text-sm font-medium text-slate-200">{example.name}</p>
                 <p className="mt-1 text-sm leading-relaxed text-slate-400">{example.note}</p>

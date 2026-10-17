@@ -143,7 +143,7 @@ export function LogicAnalyser({
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={Math.max(LANE_PX, capturing.length * LANE_PX)}
-          className="w-full rounded border border-slate-800 bg-slate-950"
+          className="w-full rounded-none border border-slate-800 bg-slate-950"
           style={{ height: Math.max(LANE_PX, capturing.length * LANE_PX) }}
         />
         {capturing.length === 0 && (

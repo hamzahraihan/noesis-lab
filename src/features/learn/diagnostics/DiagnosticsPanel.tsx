@@ -141,7 +141,7 @@ export function DiagnosticsPanel() {
             </span>
           ) : null}
         </div>
-        <div className="mt-6 overflow-x-auto rounded-xl border border-slate-800">
+        <div className="mt-6 overflow-x-auto rounded-none border border-slate-800">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-xs text-slate-500">
@@ -221,7 +221,7 @@ export function DiagnosticsPanel() {
             onFocus={(event) => event.currentTarget.select()}
             rows={20}
             placeholder="No runs yet — Run all or Run a single build."
-            className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 font-mono text-xs leading-relaxed text-slate-300"
+            className="mt-2 w-full rounded-none border border-slate-800 bg-slate-900/60 px-4 py-3 font-mono text-xs leading-relaxed text-slate-300"
           />
         </div>
       </main>

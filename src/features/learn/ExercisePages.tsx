@@ -96,7 +96,7 @@ export function ExercisesPage() {
                 <li key={exercise.id}>
                   <Link
                     to={`/learn/${exercise.id}`}
-                    className="group block overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                    className="group block overflow-hidden rounded-none border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
                   >
                     {/*
                      * The destination, up front: the finished wiring each
@@ -118,13 +118,13 @@ export function ExercisesPage() {
                       {exercise.brief}
                     </p>
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium text-slate-300">
+                      <span className="rounded-none bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium text-slate-300">
                         {exercise.difficulty}
                       </span>
                       {exercise.concepts.slice(0, 2).map((concept) => (
                         <span
                           key={concept}
-                          className="rounded-md bg-slate-800/70 px-1.5 py-0.5 text-[11px] text-slate-500"
+                          className="rounded-none bg-slate-800/70 px-1.5 py-0.5 text-[11px] text-slate-500"
                         >
                           {concept}
                         </span>
@@ -262,7 +262,7 @@ function FinishedBuild({ exercise }: { exercise: Exercise }) {
   const working = exercise.solution?.working;
   return (
     <figure>
-      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
+      <div className="overflow-hidden rounded-none border border-slate-800 bg-slate-950 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
         <ExercisePreview exercise={exercise} className="h-64 w-full" />
       </div>
       <figcaption className="mt-2 text-xs leading-relaxed text-slate-500">
@@ -270,7 +270,7 @@ function FinishedBuild({ exercise }: { exercise: Exercise }) {
         Put it on the bench and press Run to see it live.
       </figcaption>
       {working !== undefined && working.length > 0 && (
-        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="mt-4 rounded-none border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
             <CheckIcon className="icon-sm text-emerald-500" aria-hidden="true" />
             When it is working
@@ -392,7 +392,7 @@ function SketchPanel({ exercise }: { exercise: Exercise }) {
         circuit above onto the bench, loads this sketch into the editor, and opens the guide
         that walks you through it. Then press Run.
       </p>
-      <pre className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900 p-4 text-xs leading-relaxed text-slate-300 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
+      <pre className="overflow-x-auto rounded-none border border-slate-800 bg-slate-900 p-4 text-xs leading-relaxed text-slate-300 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
         <code>{exercise.sketch}</code>
       </pre>
     </Section>
@@ -403,7 +403,7 @@ function FaultPanel({ exercise }: { exercise: Exercise }) {
   if (exercise.fault === undefined) return null;
   return (
     <Section title="Break it on purpose">
-      <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
+      <div className="rounded-none border border-amber-900/60 bg-amber-950/20 p-4">
         <p className="text-sm font-medium text-amber-200">{exercise.fault.break_}</p>
         <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{exercise.fault.teaches}</p>
       </div>
@@ -428,7 +428,7 @@ function Hints({
       </p>
       <div className="space-y-2">
         {exercise.hints.slice(0, revealed).map((hint) => (
-          <div key={hint.when} className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+          <div key={hint.when} className="rounded-none border border-slate-800 bg-slate-900/60 p-4">
             <p className="text-sm font-medium text-slate-200">{hint.when}</p>
             <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{hint.answer}</p>
           </div>

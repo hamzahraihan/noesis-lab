@@ -7,7 +7,7 @@
  * jumper routed across and down, with the corner eased off, looks like wire.
  *
  * So every jumper here is a polyline of horizontal and vertical runs with a
- * rounded corner at each turn. The routing itself is deliberately simple --
+ * rounded-none corner at each turn. The routing itself is deliberately simple --
  * one dogleg, on whichever axis the wire mostly travels -- because a bench has
  * tens of jumpers on it and a full obstacle-avoiding router produces a mess at
  * that density. What makes it readable is the lane offset: parallel wires are

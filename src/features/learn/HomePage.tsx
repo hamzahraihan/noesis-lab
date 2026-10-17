@@ -68,7 +68,7 @@ export function HomePage() {
          */}
         <Link
           to="/learn"
-          className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 transition-colors hover:border-slate-600 hover:bg-slate-900"
+          className="mt-6 flex items-center justify-between gap-4 rounded-none border border-slate-800 bg-slate-900/60 p-4 transition-colors hover:border-slate-600 hover:bg-slate-900"
         >
           <span>
             <span className="block font-medium text-slate-100">
@@ -99,7 +99,7 @@ export function HomePage() {
                  */}
                 <Link
                   to={`/projects/${board.id}`}
-                  className="group flex h-full w-full flex-col items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900"
+                  className="group flex h-full w-full flex-col items-start gap-3 rounded-none border border-slate-800 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900"
                 >
                   {/*
                    * The board, drawn by the bench's own renderer at its own
@@ -114,7 +114,7 @@ export function HomePage() {
                   <span className="flex w-full items-start justify-between gap-2">
                     <span className="font-medium text-slate-100">{board.name}</span>
                     {board.id === DEFAULT_BOARD_ID && (
-                      <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-400">
+                      <span className="shrink-0 rounded-none bg-slate-800 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-400">
                         Start here
                       </span>
                     )}

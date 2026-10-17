@@ -180,7 +180,7 @@ const ARDUINO_FUNCTIONS: ReadonlyArray<[signature: string, doc: string]> = [
   ['analogWrite(pin, value)', 'PWM a pin, 0 to 255. Frequency is set by the board.'],
   ['analogRead(pin)', 'Read a pin as 0 to 1023 on the Uno, 0 to 4095 on the ESP32.'],
   ['delay(ms)', 'Block for milliseconds. Nothing else runs while you wait.'],
-  ['delayMicroseconds(us)', 'Block for microseconds, rounded to what the simulator can show.'],
+  ['delayMicroseconds(us)', 'Block for microseconds, rounded-none to what the simulator can show.'],
   ['millis()', 'Milliseconds since the sketch started.'],
   ['micros()', 'Microseconds since the sketch started.'],
   ['random(max)', 'A random integer below max.'],

@@ -115,12 +115,12 @@ function CatalogueCard({
       onClick={() => onPlace(definition, entry)}
       disabled={locked}
       title={locked ? 'Pause the run to edit the bench' : undefined}
-      className="group flex flex-col rounded-lg border border-slate-800 bg-slate-950 p-2 text-left transition-colors hover:border-sky-600 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-800 disabled:hover:bg-slate-950"
+      className="group flex flex-col rounded-none border border-slate-800 bg-slate-950 p-2 text-left transition-colors hover:border-sky-600 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-800 disabled:hover:bg-slate-950"
     >
-      <div className="relative mb-1.5 flex h-16 items-center justify-center rounded bg-slate-900/60 p-1.5">
+      <div className="relative mb-1.5 flex h-16 items-center justify-center rounded-none bg-slate-900/60 p-1.5">
         <PartPreview definition={definition} className="h-full w-full" />
         <span
-          className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-slate-800 text-slate-400 transition-opacity group-hover:bg-sky-600 group-hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
+          className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-none bg-slate-800 text-slate-400 transition-opacity group-hover:bg-sky-600 group-hover:text-white sm:opacity-0 sm:group-hover:opacity-100"
           aria-hidden="true"
         >
           <PlusIcon className="icon-sm" />

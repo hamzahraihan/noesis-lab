@@ -1112,7 +1112,7 @@ function raspberryPiDefinition(): PartDefinition {
         /*
          * The BCM2711 drives 4 mA by default and 8 mA at its maximum, into 3.3 V.
          * That is the number that makes a jumper that works on an Uno fail
-         * here, so it is modelled rather than rounded away.
+         * here, so it is modelled rather than rounded-none away.
          */
         sourceOhms: 412,
         sinkOhms: 412,

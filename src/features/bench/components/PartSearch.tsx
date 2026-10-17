@@ -85,7 +85,7 @@ export function PartSearch({
               type="button"
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute top-1/2 right-1 -translate-y-1/2 rounded p-0.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              className="absolute top-1/2 right-1 -translate-y-1/2 rounded-none p-0.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
             >
               <Cross2Icon className="icon-sm" aria-hidden="true" />
             </button>
@@ -144,7 +144,7 @@ function SearchRow({
       type="button"
       onClick={() => onPlace(definition, entry)}
       title={entry.note}
-      className="mx-2 flex w-[calc(100%-1rem)] items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-slate-700"
+      className="mx-2 flex w-[calc(100%-1rem)] items-start gap-2 rounded-none px-2 py-1.5 text-left transition-colors hover:bg-slate-700"
     >
       <PartPreview definition={definition} className="mt-0.5 h-7 w-9 shrink-0" />
       <span className="min-w-0 flex-1">

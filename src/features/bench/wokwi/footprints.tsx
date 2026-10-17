@@ -278,7 +278,7 @@ const BreadboardBody = staticBody(function BreadboardBody({
 
   return (
     <g>
-      {/* Moulded ABS shell, lit from above and rounded at the corners. */}
+      {/* Moulded ABS shell, lit from above and rounded-none at the corners. */}
       <rect width={width} height={height} rx={2.4} fill="url(#nz-shell)" stroke="#b3afa6" strokeWidth={0.35} />
       <rect
         x={0.4}

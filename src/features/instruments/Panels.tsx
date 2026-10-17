@@ -229,7 +229,7 @@ export function Inspector({
                     aria-label={`Cap colour ${colour}`}
                     aria-pressed={active}
                     onClick={() => onSetCapColour(colour)}
-                    className="h-6 w-6 rounded-full border border-slate-700"
+                    className="h-6 w-6 rounded-none border border-slate-700"
                     style={{
                       backgroundColor: colour,
                       outline: active ? '2px solid #38bdf8' : 'none',
@@ -1200,7 +1200,7 @@ export function FirmwareEditor({
                   key={file.name}
                   role="tab"
                   aria-selected={selected}
-                  className={`flex shrink-0 items-center rounded-md font-mono text-xs ${
+                  className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
                     selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
                   }`}
                 >
@@ -1209,7 +1209,7 @@ export function FirmwareEditor({
                     onClick={() => selectFile(file.name)}
                     onDoubleClick={() => handleRenameFile(file.name)}
                     title={isEntry ? file.name : `${file.name} — double-click to rename`}
-                    className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                    className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
                   >
                     {file.name}
                   </button>
@@ -1219,7 +1219,7 @@ export function FirmwareEditor({
                       onClick={() => handleRemoveFile(file.name)}
                       aria-label={`Remove ${file.name}`}
                       title={`Remove ${file.name}`}
-                      className="rounded-md px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                      className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
                     >
                       ×
                     </button>
@@ -1281,7 +1281,7 @@ export function FirmwareEditor({
               ref={libsPopupRef}
               role="dialog"
               aria-label="Libraries"
-              className="absolute top-11 right-2 bottom-12 z-50 flex w-[min(94vw,38rem)] flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-xl"
+              className="absolute top-11 right-2 bottom-12 z-50 flex w-[min(94vw,38rem)] flex-col overflow-hidden rounded-none border border-slate-700 bg-slate-900 shadow-xl"
             >
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
                 <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase">
@@ -1296,7 +1296,7 @@ export function FirmwareEditor({
                   onClick={() => setLibsPopupOpen(false)}
                   aria-label="Close libraries"
                   title="Close (Esc)"
-                  className="flex size-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                  className="flex size-6 items-center justify-center rounded-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
                 >
                   <Cross2Icon className="icon-sm" aria-hidden="true" />
                 </button>
@@ -1379,7 +1379,7 @@ export function FirmwareEditor({
                             return (
                               <div
                                 key={lib.name}
-                                className={`flex shrink-0 items-center gap-2 rounded-md text-xs ${
+                                className={`flex shrink-0 items-center gap-2 rounded-none text-xs ${
                                   selected ? 'bg-slate-800 text-slate-100' : ''
                                 }`}
                               >
@@ -1390,7 +1390,7 @@ export function FirmwareEditor({
                                     setPinnedVersion(null);
                                   }}
                                   title={lib.sentence}
-                                  className="truncate rounded-md px-2 py-1 font-mono text-slate-200 transition-colors hover:text-slate-100"
+                                  className="truncate rounded-none px-2 py-1 font-mono text-slate-200 transition-colors hover:text-slate-100"
                                 >
                                   {lib.name}
                                 </button>
@@ -1406,7 +1406,7 @@ export function FirmwareEditor({
                       </>
                     )}
                     {selectedLib !== null && (
-                      <div className="rounded-md border border-slate-800 p-2">
+                      <div className="rounded-none border border-slate-800 p-2">
                         <div className="flex items-center gap-2 text-xs">
                           <span className="font-mono text-slate-100">{selectedLib.name}</span>
                           <span className="flex-1" />
@@ -1418,7 +1418,7 @@ export function FirmwareEditor({
                             }}
                             aria-label={`Close ${selectedLib.name} details`}
                             title="Close details"
-                            className="rounded-md px-1 py-0.5 text-slate-500 transition-colors hover:text-slate-100"
+                            className="rounded-none px-1 py-0.5 text-slate-500 transition-colors hover:text-slate-100"
                           >
                             ×
                           </button>
@@ -1516,7 +1516,7 @@ export function FirmwareEditor({
                             onClick={() => handleUndeclare(name)}
                             aria-label={`Remove ${name}`}
                             title={`Remove ${name}`}
-                            className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                            className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
                           >
                             Remove
                           </button>
@@ -1526,7 +1526,7 @@ export function FirmwareEditor({
                             onClick={() => handleAddProvided(name)}
                             aria-label={`Add ${name}`}
                             title={`Add ${name}`}
-                            className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                            className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
                           >
                             Add
                           </button>
@@ -1555,7 +1555,7 @@ export function FirmwareEditor({
                           onClick={() => handleUndeclare(entry.name)}
                           aria-label={`Remove ${entry.name}`}
                           title={`Remove ${entry.name}`}
-                          className="rounded-md px-1.5 py-0.5 text-[11px] transition-colors hover:text-red-300"
+                          className="rounded-none px-1.5 py-0.5 text-[11px] transition-colors hover:text-red-300"
                         >
                           Remove
                         </button>
@@ -1587,7 +1587,7 @@ export function FirmwareEditor({
                             onClick={() => handleUndeclare(entry.name)}
                             aria-label={`Remove ${entry.name}`}
                             title={`Remove ${entry.name}`}
-                            className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                            className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
                           >
                             Remove
                           </button>
@@ -1642,7 +1642,7 @@ export function FirmwareEditor({
                                 onClick={() => void handleInstallIndex(entry.name, version, true)}
                                 aria-label={`Rebuild ${entry.name}`}
                                 title={`Rebuild ${entry.name}@${version}`}
-                                className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                                className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
                               >
                                 Reinstall
                               </button>
@@ -1652,7 +1652,7 @@ export function FirmwareEditor({
                               onClick={() => handleUninstallIndex(entry.name)}
                               aria-label={`Remove ${entry.name}`}
                               title={`Remove ${entry.name}`}
-                              className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                              className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
                             >
                               Remove
                             </button>
@@ -1704,7 +1704,7 @@ export function FirmwareEditor({
                       return (
                         <div
                           key={slot.id}
-                          className={`flex shrink-0 items-center gap-2 rounded-md font-mono text-xs ${
+                          className={`flex shrink-0 items-center gap-2 rounded-none font-mono text-xs ${
                             selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
                           }`}
                         >
@@ -1712,7 +1712,7 @@ export function FirmwareEditor({
                             type="button"
                             onClick={() => selectSlotFile(slot.id, slot.files[0]?.path ?? null)}
                             title={`${slot.name} — ${slot.files.length} files`}
-                            className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                            className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
                           >
                             {slot.name}
                           </button>
@@ -1725,7 +1725,7 @@ export function FirmwareEditor({
                               onClick={() => handleDeclareSlot(slot.id)}
                               aria-label={`Declare ${slot.name}`}
                               title={`Declare ${slot.name}`}
-                              className="rounded-md px-1.5 py-0.5 font-sans text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                              className="rounded-none px-1.5 py-0.5 font-sans text-[11px] text-slate-400 transition-colors hover:text-slate-100"
                             >
                               Declare
                             </button>
@@ -1735,7 +1735,7 @@ export function FirmwareEditor({
                             onClick={() => handleRemoveSlot(slot.id)}
                             aria-label={`Remove ${slot.name}`}
                             title={`Remove ${slot.name}`}
-                            className="rounded-md px-1 py-1 font-sans text-slate-500 transition-colors hover:text-red-300"
+                            className="rounded-none px-1 py-1 font-sans text-slate-500 transition-colors hover:text-red-300"
                           >
                             ×
                           </button>
@@ -1762,7 +1762,7 @@ export function FirmwareEditor({
                             key={file.path}
                             role="tab"
                             aria-selected={selected}
-                            className={`flex shrink-0 items-center rounded-md font-mono text-xs ${
+                            className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
                               selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
                             }`}
                           >
@@ -1771,7 +1771,7 @@ export function FirmwareEditor({
                               onClick={() => selectSlotFile(selectedSlot.id, file.path)}
                               onDoubleClick={() => handleRenameSlotFile(selectedSlot.id, file.path)}
                               title={`${file.path} — double-click to rename`}
-                              className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                              className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
                             >
                               {file.path}
                             </button>
@@ -1780,7 +1780,7 @@ export function FirmwareEditor({
                               onClick={() => handleRemoveSlotFile(selectedSlot.id, file.path)}
                               aria-label={`Remove ${file.path}`}
                               title={`Remove ${file.path}`}
-                              className="rounded-md px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                              className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
                             >
                               ×
                             </button>
@@ -1867,10 +1867,10 @@ export function StatusBar({
          */}
         <span className="relative flex size-2">
           {running && (
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="absolute inline-flex size-full animate-ping rounded-none bg-emerald-400 opacity-60" />
           )}
           <span
-            className={`relative inline-block size-2 rounded-full ${running ? 'bg-emerald-400' : 'bg-slate-600'}`}
+            className={`relative inline-block size-2 rounded-none ${running ? 'bg-emerald-400' : 'bg-slate-600'}`}
           />
         </span>
         <span className={running ? 'text-slate-200' : ''}>{running ? 'Running' : 'Stopped'}</span>

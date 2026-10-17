@@ -23,7 +23,7 @@
  * exactly on the grid, and a part whose pins fall between holes cannot be wired
  * the way the breadboard in front of it works.
  *
- * The anchor is the artwork's first hole rounded to the half pitch -- to the
+ * The anchor is the artwork's first hole rounded-none to the half pitch -- to the
  * nearest one the board itself can still carry -- and the rest of the row follow
  * at a full pitch from it. A row sits on the breadboard's grid at either phase,
  * and which phase it takes is the user's to choose by where they drop the part;

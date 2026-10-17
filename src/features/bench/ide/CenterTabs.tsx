@@ -36,7 +36,7 @@ export function CenterTabs({
           aria-selected={circuitActive}
           onClick={() => onSelect('circuit')}
           title="Circuit canvas"
-          className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 font-mono text-xs ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 font-mono text-xs ${
             circuitActive ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-100'
           }`}
         >
@@ -51,7 +51,7 @@ export function CenterTabs({
               key={file.name}
               role="tab"
               aria-selected={selected}
-              className={`flex shrink-0 items-center rounded-md font-mono text-xs ${
+              className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
                 selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
               }`}
             >
@@ -62,7 +62,7 @@ export function CenterTabs({
                   if (!isEntry) onRenameFile(file.name);
                 }}
                 title={isEntry ? file.name : `${file.name} — double-click to rename`}
-                className="rounded-md px-2 py-1 transition-colors hover:text-slate-100"
+                className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
               >
                 {file.name}
               </button>
@@ -71,7 +71,7 @@ export function CenterTabs({
                   type="button"
                   onClick={() => onCloseFile(file.name)}
                   aria-label={`Remove ${file.name}`}
-                  className="rounded-md px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                  className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
                 >
                   ×
                 </button>
