@@ -503,7 +503,7 @@ class WorkerClientImpl implements WorkerClient {
   private bench: Bench | null = null;
   private live: SharedArrayBuffer | null = null;
   private loadedFirmware: FirmwareProject | null = null;
-  private execution: 'interpreter' | 'avr' = 'interpreter';
+  private execution: 'interpreter' | 'avr' | 'rp2040' = 'interpreter';
   private wasm = false;
   private faultText: string | null = null;
   private compileAbort: AbortController | null = null;
@@ -528,7 +528,7 @@ class WorkerClientImpl implements WorkerClient {
       port: SimWorkerPort;
       bench: Bench;
       firmware: FirmwareProject;
-      execution: 'interpreter' | 'avr';
+      execution: 'interpreter' | 'avr' | 'rp2040';
       wasm?: boolean;
       onFallback: (reason: string) => void;
     },
@@ -1013,7 +1013,7 @@ export function createWorkerClient(opts: {
   board: PartDefinition;
   bench?: Bench;
   firmware?: FirmwareProject;
-  execution?: 'interpreter' | 'avr';
+  execution?: 'interpreter' | 'avr' | 'rp2040';
   wasm?: boolean;
   onFallback: (reason: string) => void;
   forceNoWorker?: boolean;
