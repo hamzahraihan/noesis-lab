@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { arduinoUnoR3 } from '@/features/parts';
-import { decompile, type CircuitDocument } from '@/features/simulation';
+import { arduinoUnoR3, breadboardDefinition } from '@/features/parts';
+import { decompile, parseCircuit, type CircuitDocument } from '@/features/simulation';
 
 /*
  * A circuit the way a stored or shared one arrives: the board and the
@@ -103,6 +103,41 @@ describe('Simulation.loadCircuit', () => {
     });
     expect(simulation.bench.parts).toHaveLength(1);
     expect(simulation.bench.wires).toHaveLength(0);
+  });
+
+  it('keeps the meter on the pin it was clipped to when the circuit is replaced', () => {
+    const simulation = new Simulation(arduinoUnoR3());
+    simulation.addPart(arduinoUnoR3(), 0, 0);
+    simulation.addPart(breadboardDefinition(), 230, 0);
+    simulation.loadFirmware('void setup() { pinMode(8, OUTPUT); digitalWrite(8, HIGH); } void loop() { }');
+    simulation.start();
+    for (let i = 0; i < 5; i++) simulation.tick(1);
+
+    const d8 = simulation.mcu.pins().find((pin) => pin.label === '8')!;
+    const ground = simulation.mcu.pins().find((pin) => pin.role === 'ground')!;
+    simulation.setMeterProbes(d8.id, ground.id);
+    const clipped = simulation.meterReading().value;
+    expect(clipped, 'a high pin reads as the supply').toBeGreaterThan(4);
+
+    // A document that lists its parts in any order: this one puts the board
+    // last, so the nets are numbered differently afterwards than before.
+    simulation.loadCircuit(
+      parseCircuit(
+        {
+          version: 1,
+          parts: [
+            { id: 'led', type: 'led-red', x: 415, y: 70, rotation: 0 },
+            { id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 },
+          ],
+          wires: [{ id: 'w1', from: 'u:8', to: 'led:A', colour: '#ef4444', gaugeAwg: 26, bends: [] }],
+        },
+        'board-last',
+      ),
+    );
+
+    // The probe is still on D8 -- the pin the operator clipped, not the net
+    // index that meant D8 before the load.
+    expect(simulation.meterReading().value, 'still clipped to the high pin').toBeGreaterThan(4);
   });
 
   it('cannot be undone back into the circuit that was there before it', () => {

@@ -763,12 +763,35 @@ export class Simulation {
     return this.engine.probes.waveform(this.engine.netOfMcuPin(this.probedPinId))?.toArray() ?? [];
   }
 
-  /** Clips the multimeter onto two nets, or lifts it with nulls. */
-  setMeterProbes(redNet: number | null, blackNet: number | null): void {
-    this.meter.setProbes(redNet ?? GROUND, blackNet ?? GROUND);
-    this.engine.setMeter(this.meter);
+  /**
+   * Clips the multimeter onto two board pins, or lifts it with nulls.
+   *
+   * Pins rather than nets, because a net is an index into the circuit the last
+   * rebuild produced: replace the bench -- a document, a link, a file, an
+   * example -- and the numbering changes underneath, leaving a stored index
+   * meaning some unrelated net. The reading would look alive and be of
+   * something else. A pin keeps its meaning, so the probes are resolved from
+   * them on every rebuild.
+   */
+  setMeterProbes(redPinId: string | null, blackPinId: string | null): void {
+    this.meterPinIds = { red: redPinId, black: blackPinId };
+    this.resolveMeterProbes();
     this.engine.settle();
   }
+
+  /**
+   * Re-binds the meter's nets to the pins it is clipped to.
+   *
+   * Called on every rebuild, which is what keeps a reading honest across a
+   * rewiring: the nets it refers to are the ones the pins have now.
+   */
+  private resolveMeterProbes(): void {
+    const netOf = (pinId: string | null) => (pinId === null ? GROUND : this.engine.netOfMcuPin(pinId));
+    this.meter.setProbes(netOf(this.meterPinIds.red), netOf(this.meterPinIds.black));
+    this.engine.setMeter(this.meter);
+  }
+
+  private meterPinIds: { red: string | null; black: string | null } = { red: null, black: null };
 
   get meterMode(): MeterMode {
     return this.meter.mode;
@@ -1501,6 +1524,9 @@ export class Simulation {
     this.engine.rebuild(this.builder.build(), this.controls);
     this.engine.settle();
     this.deriveLcdBoardPins();
+    // The nets are numbered afresh, so the probes are re-resolved from their
+    // pins: whatever the meter was clipped to, it is clipped to now.
+    this.resolveMeterProbes();
     // The panel this driver is talking to may have just left the bench (a
     // replaced circuit); the next call binds to whatever is on it now.
     if (this.lcdDriverPartId !== null && !this.bench.parts.some((part) => part.id === this.lcdDriverPartId)) {

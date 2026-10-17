@@ -973,10 +973,7 @@ export default function Bench(props: BenchProps) {
   // defaults to bench ground, which is where it sits when unclipped.
 
   useEffect(() => {
-    simulation.setMeterProbes(
-      meterRedPin ? simulation.engine.netOfMcuPin(meterRedPin) : null,
-      meterBlackPin ? simulation.engine.netOfMcuPin(meterBlackPin) : null,
-    );
+    simulation.setMeterProbes(meterRedPin, meterBlackPin);
   }, [simulation, meterRedPin, meterBlackPin]);
 
   // The meter can be clipped anywhere, including the power rails -- measuring
