@@ -85,5 +85,13 @@ describe('the pocket-map lesson', () => {
       simulation.serial.join(''),
       'the sketch should name the waypoint it drew',
     ).toContain(marker);
-  });
+    /*
+     * The loop above is bounded in *simulated* time (40 frames of 50 ms), so
+     * what it asserts does not drift with machine speed -- but pushing a
+     * 320x240 frame through the interpreter costs seconds of wall clock
+     * (measured ~3 s alone, and over the 5 s default once the suite runs
+     * beside anything else). The budget is the wall clock, and it is generous
+     * on purpose: a slow machine should not report a wiring bug.
+     */
+  }, 30_000);
 });
