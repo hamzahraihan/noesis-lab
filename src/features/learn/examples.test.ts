@@ -218,6 +218,37 @@ describe('loading one example replaces the last', () => {
     expect(partNamed(simulation, 'Solderless Breadboard')).toBeDefined();
   });
 
+  it('binds the LCD host to the panel that is on the bench now', () => {
+    const simulation = bench();
+    /*
+     * A sketch that dims the backlight, because that is the one thing the host
+     * drives straight at its panel: a panel's backlight is *on* unless told
+     * otherwise, so a stale host dimming a part that has left the bench would
+     * leave the new one looking correct by default.
+     */
+    const dim = 'void setup() { lcd.begin(16, 2); lcd.noBacklight(); } void loop() { }';
+
+    simulation.replaceBench(LCD_EXAMPLE.wire);
+    const firstId = [...simulation.lcdModels().keys()][0];
+    expect(firstId, 'the example put a panel on the bench').toBeDefined();
+    simulation.loadFirmware(dim);
+    run(simulation, 1);
+    expect([...simulation.lcdModels().values()][0]!.backlightOn, 'the sketch can dim it').toBe(false);
+
+    // Loading the example again replaces that panel with an identical one: the
+    // part is new, so any host object wrapped around the old one is stale.
+    simulation.replaceBench(LCD_EXAMPLE.wire);
+    const secondId = [...simulation.lcdModels().keys()][0];
+    expect(secondId).not.toBe(firstId);
+
+    simulation.loadFirmware(dim);
+    run(simulation, 1);
+    expect(
+      [...simulation.lcdModels().values()][0]!.backlightOn,
+      'the panel on the bench is the one being driven',
+    ).toBe(false);
+  });
+
   it('leaves the bench holding only the example it last loaded', () => {
     const simulation = bench();
 

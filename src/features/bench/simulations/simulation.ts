@@ -1501,6 +1501,12 @@ export class Simulation {
     this.engine.rebuild(this.builder.build(), this.controls);
     this.engine.settle();
     this.deriveLcdBoardPins();
+    // The panel this driver is talking to may have just left the bench (a
+    // replaced circuit); the next call binds to whatever is on it now.
+    if (this.lcdDriverPartId !== null && !this.bench.parts.some((part) => part.id === this.lcdDriverPartId)) {
+      this.lcdDriver = null;
+      this.lcdDriverPartId = null;
+    }
   }
 
   /**
@@ -1550,18 +1556,27 @@ export class Simulation {
    *
    * There is only ever one on a bench: a second would need a second host
    * object, and the sketch language here has no way to name one.
+   *
+   * The driver wraps a *panel*, so it is re-bound rather than kept when that
+   * panel leaves the bench — replacing the circuit (an example, a link, a file)
+   * takes the panel away and puts a new one on, and a driver still holding the
+   * old one would drive the backlight of a part nobody can see.
    */
   private characterLcd(): LcdDriver | null {
     if (!this.lcdDriver) {
       for (const part of this.bench.parts) {
         const panel = this.engine.lcd(part.id);
-        if (panel) this.lcdDriver = new LcdDriver(panel);
+        if (panel) {
+          this.lcdDriver = new LcdDriver(panel);
+          this.lcdDriverPartId = part.id;
+        }
       }
     }
     return this.lcdDriver;
   }
 
   private lcdDriver: LcdDriver | null = null;
+  private lcdDriverPartId: string | null = null;
 
   /**
    * Puts one library operation on the wire, byte by byte.
