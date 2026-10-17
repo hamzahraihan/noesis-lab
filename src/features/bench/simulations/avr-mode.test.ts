@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
 import { toSingleFileProject } from '@/features/simulation';
 import { arduinoUnoR3 } from '@/features/parts';
-import { avrAvailableFor, resolveBackendSelection } from './avr-mode';
+import { avrAvailableFor, resolveBackendSelection, rp2040AvailableFor } from './avr-mode';
 
 describe('avr mode availability', () => {
   it('is available on the Uno', () => {
@@ -11,6 +11,16 @@ describe('avr mode availability', () => {
 
   it('is refused elsewhere with a reason', () => {
     expect(avrAvailableFor('mega')).toEqual({ ok: false, reason: expect.any(String) });
+  });
+});
+
+describe('rp2040 mode availability', () => {
+  it('is available on the Nano RP2040 Connect', () => {
+    expect(rp2040AvailableFor('rp2040')).toEqual({ ok: true });
+  });
+
+  it('is refused elsewhere with a reason', () => {
+    expect(rp2040AvailableFor('uno')).toEqual({ ok: false, reason: expect.any(String) });
   });
 });
 
