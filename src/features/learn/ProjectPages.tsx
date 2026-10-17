@@ -129,7 +129,7 @@ export function ProjectPage() {
                 <span className="block h-36 border-b border-slate-800 bg-slate-950">
                   <GalleryPreview
                     board={project.board}
-                    setup={build.setup}
+                    circuit={build.circuit}
                     cacheKey={`gallery:${project.board}:${entry.id}`}
                     title={entry.title}
                     fit="slice"

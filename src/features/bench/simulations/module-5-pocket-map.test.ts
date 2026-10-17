@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { breadboardDefinition } from '@/features/parts';
 import {
   boardOption,
   EXERCISES,
@@ -30,9 +29,7 @@ function lesson(): Exercise {
 function bench(): Simulation {
   const definition = boardOption('raspberry-pi').make();
   const simulation = new Simulation(definition);
-  simulation.addPart(definition, 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
-  lesson().setup(simulation);
+  simulation.loadCircuit(lesson().circuit);
   return simulation;
 }
 

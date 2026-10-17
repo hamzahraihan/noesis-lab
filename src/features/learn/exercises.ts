@@ -27,10 +27,10 @@
  * learner.
  */
 
-import type { FirmwareLanguage } from '@/features/simulation';
+import type { CircuitDocument, FirmwareLanguage } from '@/features/simulation';
 import { boardOption, type BoardId } from './boardRegistry';
-import type { Simulation } from '@/features/bench';
-import { EXERCISE_BOARD, PART_STEP, PART_X, PART_Y, part } from './exercises/shared';
+import { EXERCISE_BOARD } from './exercises/shared';
+import { CIRCUITS } from './circuits';
 import { MODULE_1 } from './exercises/module-1-gpio';
 import { MODULE_2 } from './exercises/module-2-analog';
 import { MODULE_5_MAPS } from './exercises/module-5-maps';
@@ -165,8 +165,8 @@ export interface Exercise {
   readonly references: readonly ExerciseReference[];
   /** The full write-up, for the learner who wants to read rather than do. */
   readonly writeUp: string;
-  /** Places the parts and runs the jumpers this exercise needs. */
-  readonly setup: (simulation: Simulation) => void;
+  /** The circuit this exercise needs, as a document (see `circuits/`). */
+  readonly circuit: CircuitDocument;
 }
 
 
@@ -426,40 +426,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-0-first-light.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    const channels = [
-      { led: 'Red LED', pin: 'D8' },
-      { led: 'Green LED', pin: 'D9' },
-      { led: 'Blue LED', pin: 'D10' },
-    ];
-
-    channels.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), PART_X, PART_Y + index * PART_STEP);
-      const resistor = simulation.addPart(
-        part('220 Resistor'),
-        PART_X + 62,
-        PART_Y + index * PART_STEP,
-      );
-      const board = simulation.boardTerminal(pin);
-      const anode = simulation.pinAt(led, 'anode');
-      const cathode = simulation.pinAt(led, 'cathode');
-      const legA = simulation.pinAt(resistor, 'a');
-      const legB = simulation.pinAt(resistor, 'b');
-      if (!board || !anode || !cathode || !legA || !legB) return;
-
-      // Anode to the supply, cathode through the resistor to the pin. The pin
-      // sinks the current, which is why the resistor can sit on either side and
-      // the circuit is the same -- see the references.
-      simulation.routeWire(supply, anode);
-      simulation.routeWire(cathode, legA);
-      simulation.routeWire(legB, board);
-    });
-  },
+  circuit: CIRCUITS['0.1'],
 };
 
 /**

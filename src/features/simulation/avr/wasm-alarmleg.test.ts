@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { Simulation } from '@/features/bench/simulations/simulation';
 
 describe('alarm leg', () => {
   it('reads live glass on the reference path', async () => {
@@ -13,7 +12,6 @@ describe('alarm leg', () => {
   it('matches attached runs glass-for-glass with live probe', async () => {
     const { Simulation } = await import('@/features/bench/simulations/simulation');
     const { boardOption } = await import('@/features/learn/boardRegistry');
-    const { breadboardDefinition } = await import('@/features/parts');
     const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
     const { liveProbe, convergeGlass } = await import('@/features/learn/diagnostics/probes');
     const { hexForSourcesHash, sourcesHashForProject, parseIntelHex } = await import('./hex');
@@ -26,9 +24,7 @@ describe('alarm leg', () => {
       const board = boardOption('uno').make();
       const sim = new Simulation(board);
       (sim as unknown as { execution: string }).execution = 'avr';
-      sim.addPart(board, 0, 0);
-      sim.addPart(breadboardDefinition(), 230, 0);
-      (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+      sim.loadCircuit(build.circuit);
       sim.loadFirmware(fw);
       return { sim, fw };
     }

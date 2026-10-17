@@ -15,8 +15,8 @@
  * The prose for both lives in `docs/exercises/module-3-bus-protocols.md`.
  */
 
+import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
-import { PART_STEP, PART_X, PART_Y, part } from './shared';
 
 
 /* ------------------------------------------------------------------ *
@@ -499,56 +499,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-3-bus-protocols.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    const sda = simulation.boardTerminal('A4');
-    const scl = simulation.boardTerminal('A5');
-    const data = simulation.boardTerminal('D2');
-    if (!supply || !ground || !sda || !scl || !data) return;
-
-    // The panel first: two wires to the bus, two to the rails. The bus reaches
-    // the display only through the nets A4 and A5 sit on, which is why a
-    // display wired anywhere else stays dark rather than working by accident.
-    const oled = simulation.addPart(part('128x64 OLED (SSD1306)'), PART_X, PART_Y);
-    const oledSda = simulation.pinAt(oled, 'SDA');
-    const oledScl = simulation.pinAt(oled, 'SCL');
-    const oledVcc = simulation.pinAt(oled, 'VCC');
-    const oledGnd = simulation.pinAt(oled, 'GND');
-    if (!oledSda || !oledScl || !oledVcc || !oledGnd) return;
-
-    simulation.routeWire(sda, oledSda);
-    simulation.routeWire(scl, oledScl);
-    simulation.routeWire(supply, oledVcc);
-    simulation.routeWire(ground, oledGnd);
-
-    // One pull-up per line, from the 5 V rail down to the bus. The catalogue
-    // has no 4.7 kΩ, so these are 10 kΩ: right shape, and the bench's bus is
-    // modelled at transaction level, so the Multimeter is the part of this
-    // exercise you cannot verify here.
-    ['a', 'b'].forEach((_, index) => {
-      const y = PART_Y + index * PART_STEP;
-      const pull = simulation.addPart(part('10k Resistor'), PART_X + 62, y);
-      const top = simulation.pinAt(pull, 'a');
-      const bottom = simulation.pinAt(pull, 'b');
-      if (!top || !bottom) return;
-      simulation.routeWire(supply, top);
-      simulation.routeWire(index === 0 ? sda : scl, bottom);
-    });
-
-    // The sensor is on a data wire of its own, not on the bus: three wires,
-    // and nothing here joins the two protocols together.
-    const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), PART_X, PART_Y + PART_STEP);
-    const sensorData = simulation.pinAt(sensor, 'SDA');
-    const sensorVcc = simulation.pinAt(sensor, 'VCC');
-    const sensorGnd = simulation.pinAt(sensor, 'GND');
-    if (!sensorData || !sensorVcc || !sensorGnd) return;
-
-    simulation.routeWire(data, sensorData);
-    simulation.routeWire(supply, sensorVcc);
-    simulation.routeWire(ground, sensorGnd);
-  },
+  circuit: CIRCUITS['3.1'],
 };
 
 
@@ -1065,44 +1016,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-3-bus-protocols.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    const clock = simulation.boardTerminal('D13');
-    const data = simulation.boardTerminal('D11');
-    const command = simulation.boardTerminal('D9');
-    if (!supply || !ground || !clock || !data || !command) return;
-
-    /*
-     * Three lines are shared by both panels and one is not, which is the whole
-     * shape of the exercise. The clock, the data line and the D/C pin go to
-     * both modules; each select goes to a pin of its own.
-     */
-    const shared = [
-      { name: '128x64 OLED (SSD1306 SPI)', y: PART_Y, select: 'D10' },
-      { name: '2.4" TFT (ILI9341)', y: PART_Y + PART_STEP, select: 'D8' },
-    ];
-
-    shared.forEach(({ name: partName, y, select }) => {
-      const display = simulation.addPart(part(partName), PART_X, y);
-      const board = simulation.boardTerminal(select);
-      const chipSelect = simulation.pinAt(display, 'CS');
-      const dataCommand = simulation.pinAt(display, 'DC');
-      const mosi = simulation.pinAt(display, 'MOSI');
-      const sck = simulation.pinAt(display, 'SCK');
-      const vcc = simulation.pinAt(display, 'VCC');
-      const gnd = simulation.pinAt(display, 'GND');
-      if (!board || !chipSelect || !dataCommand || !mosi || !sck || !vcc || !gnd) return;
-
-      simulation.routeWire(clock, sck);
-      simulation.routeWire(data, mosi);
-      simulation.routeWire(command, dataCommand);
-      simulation.routeWire(board, chipSelect);
-      simulation.routeWire(supply, vcc);
-      simulation.routeWire(ground, gnd);
-    });
-  },
+  circuit: CIRCUITS['3.2'],
 };
 
 

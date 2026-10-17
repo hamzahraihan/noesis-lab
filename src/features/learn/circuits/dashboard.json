@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p10",
+      "type": "resistor-220",
+      "x": 174,
+      "y": 144,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "servo",
+      "x": 100,
+      "y": 70,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "slide-potentiometer",
+      "x": 100,
+      "y": 108,
+      "rotation": 0
+    },
+    {
+      "id": "p5",
+      "type": "led-green",
+      "x": 100,
+      "y": 144,
+      "rotation": 0
+    },
+    {
+      "id": "p6",
+      "type": "resistor-220",
+      "x": 114,
+      "y": 144,
+      "rotation": 0
+    },
+    {
+      "id": "p7",
+      "type": "led-yellow",
+      "x": 130,
+      "y": 144,
+      "rotation": 0
+    },
+    {
+      "id": "p8",
+      "type": "resistor-220",
+      "x": 144,
+      "y": 144,
+      "rotation": 0
+    },
+    {
+      "id": "p9",
+      "type": "led-red",
+      "x": 160,
+      "y": 144,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p3:PWM",
+      "to": "p1:A5",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p7:K",
+      "to": "p8:a",
+      "colour": "#a3e635",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p8:b",
+      "to": "p1:D7",
+      "colour": "#06b6d4",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "p1:5V",
+      "to": "p9:A",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w13",
+      "from": "p9:K",
+      "to": "p10:a",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w14",
+      "from": "p10:b",
+      "to": "p1:D8",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p3:GND",
+      "to": "p1:J1_GND",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:5V",
+      "to": "p4:1",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p4:3",
+      "to": "p1:J1_GND",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p4:2",
+      "to": "p1:A0",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p1:5V",
+      "to": "p5:A",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p5:K",
+      "to": "p6:a",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p6:b",
+      "to": "p1:D6",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "p1:5V",
+      "to": "p7:A",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

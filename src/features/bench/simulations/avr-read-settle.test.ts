@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
 import { buildFor, firmwareForBuild, galleryById } from '@/features/learn/gallery';
-import { breadboardDefinition } from '@/features/parts';
 
 /**
  * AVR pin reads must observe the scheduled solve cadence (1-4ms via
@@ -15,9 +14,7 @@ describe('AVR pin reads settle on cadence', () => {
     const build = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
     const board = boardOption('uno').make();
     const simulation = new Simulation(board);
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    build.setup(simulation);
+    simulation.loadCircuit(build.circuit);
     simulation.execution = 'avr';
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     expect(simulation.firmwareError).toBeNull();

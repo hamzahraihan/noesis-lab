@@ -24,7 +24,7 @@ import { previewBench, previewFor, type ExercisePreviewData } from './exercise-p
 import { PartFootprint } from '@/features/bench';
 import { HardwareDefs } from '@/features/bench';
 import { partTransform } from '@/features/bench';
-import type { Simulation } from '@/features/bench';
+import type { CircuitDocument } from '@/features/simulation';
 
 /**
  * The SVG body every finished-build picture shares, whatever built the bench.
@@ -131,20 +131,20 @@ export function ExercisePreview({
  */
 export function GalleryPreview({
   board,
-  setup,
+  circuit,
   cacheKey,
   title,
   className,
   fit = 'meet',
 }: {
   board: BoardId;
-  setup: (simulation: Simulation) => void;
+  circuit: CircuitDocument;
   cacheKey: string;
   title: string;
   className?: string;
   fit?: 'meet' | 'slice';
 }) {
-  const preview = useMemo(() => previewBench(board, setup, cacheKey), [board, setup, cacheKey]);
+  const preview = useMemo(() => previewBench(board, circuit, cacheKey), [board, circuit, cacheKey]);
   return (
     <PreviewSvg preview={preview} label={`Finished wiring for ${title}`} className={className} fit={fit} />
   );

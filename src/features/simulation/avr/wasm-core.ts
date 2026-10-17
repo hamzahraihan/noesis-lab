@@ -1,5 +1,4 @@
 import { AvrBackend } from './core';
-import type { Simulation } from '@/features/bench/simulations/simulation';
 import { SREG_DATA_ADDR, pullWasmState } from './wasm/sync';
 
 // Re-exported from the cycle-free sync leaf so existing import sites keep
@@ -83,7 +82,6 @@ export async function millisParity(ms: number): Promise<{ js: number; wasm: numb
 export async function slice3Gate(): Promise<{ trapRate: number; glass: string }> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');
-  const { breadboardDefinition } = await import('@/features/parts');
   const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
   const proj = galleryById('alarm-clock')!;
   const build = buildFor(proj, 'uno', 'library')!;
@@ -91,9 +89,7 @@ export async function slice3Gate(): Promise<{ trapRate: number; glass: string }>
   const board = boardOption('uno').make();
   const sim = new Simulation(board);
   (sim as unknown as { execution: string }).execution = 'avr';
-  sim.addPart(board, 0, 0);
-  sim.addPart(breadboardDefinition(), 230, 0);
-  (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+  sim.loadCircuit(build.circuit);
   sim.loadFirmware(fw);
   sim.start();
   const t0 = performance.now();
@@ -125,7 +121,6 @@ export async function batch1Parity(): Promise<{ equal: boolean }> {
 export async function cpuGate(): Promise<{ trapRate: number; glass: string; wallMs: number; placeholder: true }> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');
-  const { breadboardDefinition } = await import('@/features/parts');
   const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
   const proj = galleryById('alarm-clock')!;
   const build = buildFor(proj, 'uno', 'library')!;
@@ -133,9 +128,7 @@ export async function cpuGate(): Promise<{ trapRate: number; glass: string; wall
   const board = boardOption('uno').make();
   const sim = new Simulation(board);
   (sim as unknown as { execution: string }).execution = 'avr';
-  sim.addPart(board, 0, 0);
-  sim.addPart(breadboardDefinition(), 230, 0);
-  (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+  sim.loadCircuit(build.circuit);
   sim.loadFirmware(fw);
   sim.start();
   const t0 = performance.now();
@@ -268,7 +261,6 @@ export async function cpuGateMeasured(): Promise<{
 }> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');
-  const { breadboardDefinition } = await import('@/features/parts');
   const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
   const { liveProbe, convergeGlass } = await import('@/features/learn/diagnostics/probes');
   const proj = galleryById('alarm-clock')!;
@@ -277,9 +269,7 @@ export async function cpuGateMeasured(): Promise<{
   const board = boardOption('uno').make();
   const sim = new Simulation(board);
   (sim as unknown as { execution: string }).execution = 'avr';
-  sim.addPart(board, 0, 0);
-  sim.addPart(breadboardDefinition(), 230, 0);
-  (build as unknown as { setup: (s: Simulation) => void }).setup(sim);
+  sim.loadCircuit(build.circuit);
   sim.loadFirmware(fw);
   sim.start();
   const serialBefore = sim.serialLines().join('').length;

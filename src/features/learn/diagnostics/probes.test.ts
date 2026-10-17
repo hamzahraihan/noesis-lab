@@ -3,7 +3,6 @@ import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe, type Probe
 import { boardOption } from '../boardRegistry';
 import { firmwareForBuild, galleryById } from '../gallery';
 import { Simulation } from '@/features/bench';
-import { breadboardDefinition } from '@/features/parts';
 import { pushWokwiState } from '@/features/bench/wokwi/wokwi';
 import type { FootprintState } from '@/features/bench/wokwi/footprints';
 
@@ -11,9 +10,7 @@ function tinyAlarmSim(): Simulation {
   const build = galleryById('alarm-clock')!.builds[0]!;
   const board = boardOption('uno').make();
   const simulation = new Simulation(board);
-  simulation.addPart(board, 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
-  build.setup(simulation);
+  simulation.loadCircuit(build.circuit);
   simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
   simulation.start();
   for (let frame = 0; frame < 5; frame++) simulation.tick(0.05);

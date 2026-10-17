@@ -10,8 +10,8 @@
  * The prose for both lives in `docs/exercises/module-1-gpio.md`.
  */
 
+import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
-import { PART_STEP, PART_X, PART_Y, part } from './shared';
 
 
 /* ------------------------------------------------------------------ *
@@ -322,40 +322,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-1-gpio.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // Anode at the supply, cathode through the resistor to the pin: the pin
-    // sinks the current, which is why the LED is lit by writing HIGH.
-    const led = simulation.addPart(part('Red LED'), PART_X, PART_Y);
-    const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y);
-    const board = simulation.boardTerminal('D7');
-    const anode = simulation.pinAt(led, 'anode');
-    const cathode = simulation.pinAt(led, 'cathode');
-    const legA = simulation.pinAt(resistor, 'a');
-    const legB = simulation.pinAt(resistor, 'b');
-    if (!board || !anode || !cathode || !legA || !legB) return;
-
-    simulation.routeWire(supply, anode);
-    simulation.routeWire(cathode, legA);
-    simulation.routeWire(legB, board);
-
-    // The button sits on its own row below the indicator, one leg to the pin
-    // and one to ground. There is no pull-up part because the sketch uses the
-    // internal one -- an external 10 kOhm to the 5 V rail is the real panel's
-    // answer, and the references say why.
-    const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + PART_STEP);
-    const buttonPin = simulation.boardTerminal('D2');
-    const buttonA = simulation.pinAt(button, 'a');
-    const buttonB = simulation.pinAt(button, 'b');
-    if (!buttonPin || !buttonA || !buttonB) return;
-
-    simulation.routeWire(buttonPin, buttonA);
-    simulation.routeWire(buttonB, ground);
-  },
+  circuit: CIRCUITS['1.1'],
 };
 
 
@@ -741,46 +708,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-1-gpio.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // Green, amber, red, top to bottom. Each is a sink arrangement: the anode
-    // sits at 5 V and the pin pulls the cathode down through the resistor.
-    const aspects = [
-      { led: 'Green LED', pin: 'D6' },
-      { led: 'Yellow LED', pin: 'D7' },
-      { led: 'Red LED', pin: 'D8' },
-    ];
-
-    aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), PART_X, PART_Y + index * PART_STEP);
-      const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + index * PART_STEP);
-      const board = simulation.boardTerminal(pin);
-      const anode = simulation.pinAt(led, 'anode');
-      const cathode = simulation.pinAt(led, 'cathode');
-      const legA = simulation.pinAt(resistor, 'a');
-      const legB = simulation.pinAt(resistor, 'b');
-      if (!board || !anode || !cathode || !legA || !legB) return;
-
-      simulation.routeWire(supply, anode);
-      simulation.routeWire(cathode, legA);
-      simulation.routeWire(legB, board);
-    });
-
-    // The call-forward button, on its own row below the aspects. The sketch
-    // uses INPUT_PULLUP, so nothing but the switch and ground is wanted here.
-    const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + 3 * PART_STEP);
-    const buttonPin = simulation.boardTerminal('D2');
-    const buttonA = simulation.pinAt(button, 'a');
-    const buttonB = simulation.pinAt(button, 'b');
-    if (!buttonPin || !buttonA || !buttonB) return;
-
-    simulation.routeWire(buttonPin, buttonA);
-    simulation.routeWire(buttonB, ground);
-  },
+  circuit: CIRCUITS['1.2'],
 };
 
 

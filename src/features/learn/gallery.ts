@@ -1,21 +1,20 @@
 /**
  * The project gallery: runnable builds, each with the bench it needs.
  *
- * Same vocabulary as the exercises (`setup` wires the circuit, `sketch` is
+ * Same vocabulary as the exercises (`circuit` names the wiring, `sketch` is
  * what runs on it) minus the curriculum fields — a project is a destination,
  * not a lesson, so it has no level, no hints, and no worked solution. The
  * validation tests hold every entry to the same bar as an exercise: the
- * sketch must parse, the setup must wire real contacts, the parts must
+ * sketch must parse, the circuit must wire real contacts, the parts must
  * exist in the catalogue.
  */
 
 import type { BoardId } from './boardRegistry';
-import { EXAMPLE_DEVICES, LCD_LINES } from './examples';
-import { part } from './exercises/shared';
-import type { Simulation } from '@/features/bench';
+import { CIRCUITS } from './circuits';
 import {
   ENTRY_BY_LANGUAGE,
   toSingleFileProject,
+  type CircuitDocument,
   type FirmwareLanguage,
   type FirmwareProject,
   type ProjectLibrary,
@@ -27,8 +26,8 @@ export interface GalleryBuild {
   readonly variant?: string;
   /** Backend this build needs; default `'interpreter'`. */
   readonly execution?: 'interpreter' | 'avr';
-  /** Places the parts and runs the jumpers on that board's headers. */
-  readonly setup: (simulation: Simulation) => void;
+  /** The circuit this build needs, as a document (see `circuits/`). */
+  readonly circuit: CircuitDocument;
   /** The entry file's source (`main.ino` on Arduino builds). */
   readonly sketch: string;
   /**
@@ -77,129 +76,6 @@ export interface GalleryProject {
 /* ------------------------------------------------------------------ *
  * Alarm Clock with RTC — DS1307 + 4-digit 7-segment + buttons + buzzer
  * ------------------------------------------------------------------ */
-
-function alarmClockSetup(simulation: Simulation) {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // One compact clock block, fully inside the initial viewport
-    // (x -12..416): RTC + display share a top row below the breadboard,
-    // three buttons form one control row beneath, buzzer closes the block.
-    const BLOCK_X = 100;
-    const BLOCK_Y = 70;
-    const rtc = simulation.placeExampleDevice('ds1307', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
-    // The bench story starts at 15:00 with the alarm armed for 15:10 (library
-    // NVRAM layout: enabled/hour/minute at 0x08-0x0A). Declarative, so every
-    // engine rebuild re-applies it.
-    rtc.initialRtc = {
-      hours: 15,
-      minutes: 0,
-      seconds: 0,
-      nvram: [
-        [0x08, 1],
-        [0x09, 15],
-        [0x0a, 10],
-      ],
-    };
-
-    // 4-digit 7-segment display on the pin table: digit commons DIG1-DIG4
-    // (device pins 14/11/10/6) on D2-D5, segments A-G (13/9/4/2/1/12/5) on
-    // D6-D12, colon CLN (pin 8) on D13, COM (pin 7) to 5V. RTC on A4/A5,
-    // buttons on A0-A2, buzzer on A3.
-    const seg = simulation.addPart(part('4-Digit 7-Segment Display'), BLOCK_X + 35, BLOCK_Y);
-    const segWires: Array<[string, string]> = [
-      ['DIG1', 'D2'],
-      ['DIG2', 'D3'],
-      ['DIG3', 'D4'],
-      ['DIG4', 'D5'],
-      ['A', 'D6'],
-      ['B', 'D7'],
-      ['C', 'D8'],
-      ['D', 'D9'],
-      ['E', 'D10'],
-      ['F', 'D11'],
-      ['G', 'D12'],
-      ['CLN', 'D13'],
-    ];
-    // Wokwi-style lane routing: the fan-out never crosses a part body.
-    // Top-edge pins hop just above the row; bottom-edge pins drop below
-    // it, cross in the clear lanes left of the RTC, and rise in the open
-    // corridor beside the board. Lane indices stagger shared runs so
-    // parallel jumpers do not lie on top of each other. Threshold 80
-    // splits the top pin row (~71) from the bottom row (~89).
-    let displayLane = 0;
-    for (const [segPin, boardPin] of segWires) {
-      const from = simulation.pinAt(seg, segPin);
-      const to = simulation.boardTerminal(boardPin);
-      if (!from || !to) return;
-      const k = displayLane++;
-      const bends =
-        from.y < 80
-          ? [{ x: from.x, y: 67 + (k % 2) }]
-          : [
-              { x: from.x, y: 94.5 + (k % 2) },
-              { x: 90 + (k % 3) * 2, y: 94.5 + (k % 2) },
-              { x: 90 + (k % 3) * 2, y: 61 + (k % 2) * 2 },
-            ];
-      simulation.routeWire(from, to, bends);
-    }
-    {
-      const com = simulation.pinAt(seg, 'COM');
-      if (!com || !supply) return;
-      // Same lane routing as the bottom-edge fan-out: drops below the row,
-      // crosses left of the RTC, and rises in the board-side corridor.
-      simulation.routeWire(com, supply, [
-        { x: com.x, y: 95 },
-        { x: 92, y: 95 },
-        { x: 92, y: 63 },
-      ]);
-    }
-
-    // Hours / Minutes / Alarm buttons: one leg to Ax, the other to ground.
-    // The sketch uses the internal pull-ups, so a held button reads LOW.
-    // One control row under the clock pair, 14mm pitch for 6mm bodies.
-    const buttons: Array<[string, string]> = [
-      ['Hours', 'A0'],
-      ['Minutes', 'A1'],
-      ['Alarm', 'A2'],
-    ];
-    buttons.forEach(([label, pin], index) => {
-      const button = simulation.addPart(part('Tactile Button'), BLOCK_X + index * 14, BLOCK_Y + 30);
-      const boardPin = simulation.boardTerminal(pin);
-      const legA = simulation.pinAt(button, 'a');
-      const legB = simulation.pinAt(button, 'b');
-      if (!boardPin || !legA || !legB) return;
-      // Lane routing like the display above: signals drop below the button
-      // row into the clear corridor and rise in the open lane left of the
-      // RTC, instead of stabbing up through the buttons and the module.
-      simulation.routeWire(boardPin, legA, [
-        { x: boardPin.x, y: 110 },
-        { x: legA.x, y: 110 },
-      ]);
-      simulation.routeWire(legB, ground, [
-        { x: legB.x, y: 110 },
-        { x: 95, y: 110 },
-      ]);
-      simulation.renamePart(button.id, label);
-      // Wokwi's alarm project: Hours and Minutes green, Alarm red.
-      simulation.setCapColour(button.id, label === 'Alarm' ? '#ef4444' : '#22c55e');
-    });
-
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 46);
-    const buzzPin = simulation.boardTerminal('A3');
-    const positive = simulation.pinAt(buzzer, 'positive');
-    const negative = simulation.pinAt(buzzer, 'negative');
-    if (!buzzPin || !positive || !negative) return;
-    simulation.routeWire(buzzPin, positive);
-    // Drops below the buzzer into open space, then rises in the same clear
-    // corridor the buttons use, instead of stabbing up through the module.
-    simulation.routeWire(negative, ground, [
-      { x: negative.x, y: 140 },
-      { x: 95, y: 140 },
-    ]);
-}
 
 const ALARM_CLOCK: GalleryProject = {
   id: 'alarm-clock',
@@ -775,7 +651,14 @@ void toneStop() {
         { name: 'SevSeg', source: 'provided' },
         { name: 'RTClib', source: 'provided' },
       ],
-  setup: alarmClockSetup,
+  /*
+   * The block is laid out for the initial viewport (x -12..416): RTC and
+   * display share the top row below the breadboard, three buttons form a
+   * control row under them, and the buzzer closes the block. The display's
+   * fan-out and the button/buzzer runs are routed through the clear corridor
+   * left of the RTC (see the `bends` in `circuits/alarm-clock.json`).
+   */
+  circuit: CIRCUITS['alarm-clock'],
   },
   {
       board: 'uno',
@@ -1430,7 +1313,8 @@ void AlarmTone::stop() {
         { name: 'SevSeg', source: 'provided' },
         { name: 'RTClib', source: 'provided' },
       ],
-  setup: alarmClockSetup,
+  // Same circuit as the first build; only the flavor of the sketch differs.
+  circuit: CIRCUITS['alarm-clock'],
   },
   ],
   working: [
@@ -1578,58 +1462,7 @@ void loop() {
   }
 }
 `,
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // One compact combination block: three code buttons in a row, the two
-    // indicator pairs beside each other under them, buzzer closing the block.
-    const BLOCK_X = 100;
-    const BLOCK_Y = 70;
-    const codePins = ['D2', 'D3', 'D4'];
-    codePins.forEach((pin, index) => {
-      const button = simulation.addPart(part('Tactile Button'), BLOCK_X + index * 14, BLOCK_Y);
-      const boardPin = simulation.boardTerminal(pin);
-      const legA = simulation.pinAt(button, 'a');
-      const legB = simulation.pinAt(button, 'b');
-      if (!boardPin || !legA || !legB) return;
-      simulation.routeWire(boardPin, legA);
-      simulation.routeWire(legB, ground);
-    });
-
-    // Locked/unlocked indicators, sink-wired like every exercise LED.
-    const aspects = [
-      { led: 'Red LED', pin: 'D7' },
-      { led: 'Green LED', pin: 'D8' },
-    ];
-    aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), BLOCK_X + index * 32, BLOCK_Y + 16);
-      const resistor = simulation.addPart(
-        part('220 Resistor'),
-        BLOCK_X + 14 + index * 32,
-        BLOCK_Y + 16,
-      );
-      const boardPin = simulation.boardTerminal(pin);
-      const anode = simulation.pinAt(led, 'anode');
-      const cathode = simulation.pinAt(led, 'cathode');
-      const legA = simulation.pinAt(resistor, 'a');
-      const legB = simulation.pinAt(resistor, 'b');
-      if (!boardPin || !anode || !cathode || !legA || !legB) return;
-      simulation.routeWire(supply, anode);
-      simulation.routeWire(cathode, legA);
-      simulation.routeWire(legB, boardPin);
-    });
-
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X, BLOCK_Y + 38);
-    const buzzPin = simulation.boardTerminal('D9');
-    const positive = simulation.pinAt(buzzer, 'positive');
-    const negative = simulation.pinAt(buzzer, 'negative');
-    if (!buzzPin || !positive || !negative) return;
-    simulation.routeWire(buzzPin, positive);
-    simulation.routeWire(negative, ground);
-    },
+  circuit: CIRCUITS['safe'],
   },
   ],
   working: [
@@ -1694,51 +1527,7 @@ void loop() {
   delay(200);
 }
 `,
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // One compact dash block: servo top, slide pot under it, the three
-    // indicator pairs in a row beneath.
-    const BLOCK_X = 100;
-    const BLOCK_Y = 70;
-    simulation.placeExampleDevice('servo', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
-
-    const pot = simulation.addPart(part('Slide Potentiometer'), BLOCK_X, BLOCK_Y + 38);
-    const knob = simulation.boardTerminal('A0');
-    const endA = simulation.pinAt(pot, 'endA');
-    const wiper = simulation.pinAt(pot, 'wiper');
-    const endB = simulation.pinAt(pot, 'endB');
-    if (!knob || !endA || !wiper || !endB) return;
-    simulation.routeWire(supply, endA);
-    simulation.routeWire(endB, ground);
-    simulation.routeWire(wiper, knob);
-
-    const aspects = [
-      { led: 'Green LED', pin: 'D6' },
-      { led: 'Yellow LED', pin: 'D7' },
-      { led: 'Red LED', pin: 'D8' },
-    ];
-    aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), BLOCK_X + index * 30, BLOCK_Y + 74);
-      const resistor = simulation.addPart(
-        part('220 Resistor'),
-        BLOCK_X + 14 + index * 30,
-        BLOCK_Y + 74,
-      );
-      const boardPin = simulation.boardTerminal(pin);
-      const anode = simulation.pinAt(led, 'anode');
-      const cathode = simulation.pinAt(led, 'cathode');
-      const legA = simulation.pinAt(resistor, 'a');
-      const legB = simulation.pinAt(resistor, 'b');
-      if (!boardPin || !anode || !cathode || !legA || !legB) return;
-      simulation.routeWire(supply, anode);
-      simulation.routeWire(cathode, legA);
-      simulation.routeWire(legB, boardPin);
-    });
-    },
+  circuit: CIRCUITS['dashboard'],
   },
   ],
   working: [
@@ -1817,60 +1606,7 @@ void loop() {
   }
 }
 `,
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // One compact ranger block: sonar and buzzer share the top row, the
-    // three distance LEDs sit in a row beneath.
-    const BLOCK_X = 100;
-    const BLOCK_Y = 70;
-    const sonar = simulation.addPart(part('Ultrasonic Sensor (HC-SR04)'), BLOCK_X, BLOCK_Y);
-    const sonarVcc = simulation.pinAt(sonar, 'VCC');
-    const sonarTrig = simulation.pinAt(sonar, 'TRIG');
-    const sonarEcho = simulation.pinAt(sonar, 'ECHO');
-    const sonarGnd = simulation.pinAt(sonar, 'GND');
-    const trig = simulation.boardTerminal('D6');
-    const echo = simulation.boardTerminal('D7');
-    if (!sonarVcc || !sonarTrig || !sonarEcho || !sonarGnd || !trig || !echo) return;
-    simulation.routeWire(supply, sonarVcc);
-    simulation.routeWire(ground, sonarGnd);
-    simulation.routeWire(trig, sonarTrig);
-    simulation.routeWire(echo, sonarEcho);
-
-    const buzzer = simulation.addPart(part('Piezo Buzzer'), BLOCK_X + 52, BLOCK_Y);
-    const buzzPin = simulation.boardTerminal('D9');
-    const positive = simulation.pinAt(buzzer, 'positive');
-    const negative = simulation.pinAt(buzzer, 'negative');
-    if (!buzzPin || !positive || !negative) return;
-    simulation.routeWire(buzzPin, positive);
-    simulation.routeWire(negative, ground);
-
-    const aspects = [
-      { led: 'Green LED', pin: 'D10' },
-      { led: 'Yellow LED', pin: 'D11' },
-      { led: 'Red LED', pin: 'D12' },
-    ];
-    aspects.forEach(({ led: ledName, pin }, index) => {
-      const led = simulation.addPart(part(ledName), BLOCK_X + index * 30, BLOCK_Y + 32);
-      const resistor = simulation.addPart(
-        part('220 Resistor'),
-        BLOCK_X + 14 + index * 30,
-        BLOCK_Y + 32,
-      );
-      const boardPin = simulation.boardTerminal(pin);
-      const anode = simulation.pinAt(led, 'anode');
-      const cathode = simulation.pinAt(led, 'cathode');
-      const legA = simulation.pinAt(resistor, 'a');
-      const legB = simulation.pinAt(resistor, 'b');
-      if (!boardPin || !anode || !cathode || !legA || !legB) return;
-      simulation.routeWire(supply, anode);
-      simulation.routeWire(cathode, legA);
-      simulation.routeWire(legB, boardPin);
-    });
-    },
+  circuit: CIRCUITS['parking'],
   },
   ],
   working: [
@@ -1934,27 +1670,7 @@ void loop() {
   delay(2000);
 }
 `,
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    // One compact station block: the LCD on top, the sensor tucked under it.
-    const BLOCK_X = 100;
-    const BLOCK_Y = 70;
-    simulation.placeExampleDevice('lcd1602', BLOCK_X, BLOCK_Y, EXAMPLE_DEVICES, LCD_LINES);
-
-    const sensor = simulation.addPart(part('DHT22 Temp/Humidity'), BLOCK_X, BLOCK_Y + 42);
-    const data = simulation.boardTerminal('D10');
-    const vcc = simulation.pinAt(sensor, 'VCC');
-    const sda = simulation.pinAt(sensor, 'SDA');
-    const gnd = simulation.pinAt(sensor, 'GND');
-    if (!data || !vcc || !sda || !gnd) return;
-    simulation.routeWire(supply, vcc);
-    simulation.routeWire(ground, gnd);
-    simulation.routeWire(data, sda);
-    },
+  circuit: CIRCUITS['weather'],
   },
   ],
   working: [
@@ -2045,35 +1761,7 @@ void loop() {
   }
 }
 `,
-      setup: (simulation) => {
-        simulation.clearExampleParts();
-        const supply = simulation.boardTerminal('5V');
-        const ground = simulation.boardTerminal('GND');
-        if (!supply || !ground) return;
-
-        // One compact timer block: button, LED and resistor side by side.
-        const BLOCK_X = 100;
-        const BLOCK_Y = 70;
-        const button = simulation.addPart(part('Tactile Button'), BLOCK_X, BLOCK_Y);
-        const boardPin = simulation.boardTerminal('D2');
-        const legA = simulation.pinAt(button, 'a');
-        const legB = simulation.pinAt(button, 'b');
-        if (!boardPin || !legA || !legB) return;
-        simulation.routeWire(boardPin, legA);
-        simulation.routeWire(legB, ground);
-
-        const led = simulation.addPart(part('Red LED'), BLOCK_X + 12, BLOCK_Y);
-        const resistor = simulation.addPart(part('220 Resistor'), BLOCK_X + 26, BLOCK_Y);
-        const ledPin = simulation.boardTerminal('D8');
-        const anode = simulation.pinAt(led, 'anode');
-        const cathode = simulation.pinAt(led, 'cathode');
-        const resA = simulation.pinAt(resistor, 'a');
-        const resB = simulation.pinAt(resistor, 'b');
-        if (!ledPin || !anode || !cathode || !resA || !resB) return;
-        simulation.routeWire(supply, anode);
-        simulation.routeWire(cathode, resA);
-        simulation.routeWire(resB, ledPin);
-      },
+      circuit: CIRCUITS['reaction'],
     },
   ],
   working: [

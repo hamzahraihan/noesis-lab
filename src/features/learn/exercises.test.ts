@@ -24,29 +24,26 @@ import { PART_CATALOGUE } from '@/features/parts';
  */
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
-import { breadboardDefinition } from '@/features/parts';
 
 /**
- * A bench with the board and breadboard already placed.
+ * The bench an exercise's circuit document builds.
  *
- * Not decoration: `new Simulation(board)` builds the MCU but does not put the
- * board on the bench. Without it, an exercise's `boardTerminal('D8')` resolves
- * to a coordinate nothing occupies, every wire claims a loose contact of its
- * own, and the circuit is drawn but electrically dead -- no LED lights and
- * every input reads zero. These tests have to run against a real bench or they
- * would have passed that for months.
+ * The document carries the board and the breadboard, so nothing is placed here:
+ * `loadCircuit` restores the whole circuit, and a part placed before it would
+ * be discarded by that restore. Loading is also where a broken document is
+ * caught -- it returns its errors instead of a half-wired bench -- so every
+ * test below can start from this and trust what is on the bench.
+ *
+ * On the board the exercise is written for. Most of the curriculum is Uno
+ * lessons and `exerciseBoard` says so for them; the one that is not gets its
+ * own board, because its document names that board, and loading it against an
+ * Uno is refused rather than wired against the wrong pin map.
  */
-function freshBench(exercise?: Exercise) {
-  /*
-   * On the board the exercise is written for. Most of the curriculum is Uno
-   * lessons and `exerciseBoard` says so for them; the one that is not gets its
-   * own board, because running its wiring against an Uno would resolve every
-   * `boardTerminal('GPIO11')` to nothing and leave the circuit drawn and dead.
-   */
-  const board = boardOption(exercise ? exerciseBoard(exercise) : 'uno').make();
+function benchFor(exercise: Exercise): Simulation {
+  const board = boardOption(exerciseBoard(exercise)).make();
   const simulation = new Simulation(board);
-  simulation.addPart(board, 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
+  const errors = simulation.loadCircuit(exercise.circuit);
+  if (errors.length > 0) throw new Error(`${exercise.id}: ${errors.join('; ')}`);
   return simulation;
 }
 
@@ -113,7 +110,7 @@ describe('the exercise curriculum', () => {
 
   it('loads every sketch through the real parser', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench(exercise);
+      const simulation = benchFor(exercise);
       simulation.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       // A sketch the interpreter cannot parse reports here rather than silently
       // doing nothing on the bench.
@@ -139,20 +136,22 @@ describe('the exercise curriculum', () => {
     }
   });
 
-  it('wires each exercise onto the bench without throwing', () => {
+  it('loads each exercise circuit onto a bench that carries its board', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench(exercise);
-      // The setup is the one thing in the curriculum that touches the model, and
-      // it is the only part that can go wrong at runtime: a pin name that does
-      // not resolve, or a terminal the catalogue renamed.
-      expect(() => exercise.setup(simulation), `${exercise.id} setup`).not.toThrow();
+      // `benchFor` throws on a document that will not compile, so a bench
+      // arriving here is one the operator would get; what this adds is that the
+      // board the circuit is written against is the one on the bench.
+      const simulation = benchFor(exercise);
+      expect(
+        simulation.bench.parts.some((part) => part.definition.id === simulation.mcu.definition.id),
+        `${exercise.id} board`,
+      ).toBe(true);
     }
   });
 
   it('puts the parts each exercise says it needs on the bench', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench(exercise);
-      exercise.setup(simulation);
+      const simulation = benchFor(exercise);
       const placed = new Map(simulation.bench.parts.map((p) => [p.definition.name, 0]));
       for (const p of simulation.bench.parts) {
         placed.set(p.definition.name, (placed.get(p.definition.name) ?? 0) + 1);
@@ -165,19 +164,19 @@ describe('the exercise curriculum', () => {
     }
   });
 
-  it('adds jumpers, because a circuit with no wires is not a circuit', () => {
+  it('gives every circuit jumpers, because a circuit with no wires is not a circuit', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench(exercise);
-      const before = simulation.bench.wires.length;
-      exercise.setup(simulation);
-      expect(simulation.bench.wires.length, `${exercise.id} wires`).toBeGreaterThan(before);
+      const simulation = benchFor(exercise);
+      // A document can be edited down to parts and no wiring; the preview and
+      // the bench would both draw an unconnected pile of components and say
+      // nothing about it.
+      expect(simulation.bench.wires.length, `${exercise.id} wires`).toBeGreaterThan(0);
     }
   });
 
   it('joins every jumper to a real part contact, not a loose one', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench(exercise);
-      exercise.setup(simulation);
+      const simulation = benchFor(exercise);
       const real = partTerminals(simulation);
       for (const wire of simulation.bench.wires) {
         /*
@@ -194,8 +193,7 @@ describe('the exercise curriculum', () => {
 
   it('connects every part of the circuit back to the board', () => {
     for (const exercise of EXERCISES) {
-      const simulation = freshBench(exercise);
-      exercise.setup(simulation);
+      const simulation = benchFor(exercise);
 
       /*
        * Two kinds of union, then one rule.

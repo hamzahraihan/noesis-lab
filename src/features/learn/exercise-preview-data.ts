@@ -6,22 +6,13 @@
  * plain model work with no JSX in it.
  */
 
-import type { Bench, PartInstance } from '@/features/simulation';
-import { breadboardDefinition } from '@/features/parts';
+import type { Bench, CircuitDocument, PartInstance } from '@/features/simulation';
 import { boardOption, type BoardId } from './boardRegistry';
 import { exerciseBoard, type Exercise } from './exercises';
 import type { FootprintState } from '@/features/bench';
 import { Simulation } from '@/features/bench';
 import { artworkBox } from '@/features/bench';
 import { routeWire, routeWireVia, wireLanes } from '@/features/bench';
-
-/**
- * Where the breadboard sits, clear of the board plugged in beside it.
- *
- * The same number Bench builds on and the curriculum tests assert against, so
- * the preview and the bench cannot disagree about where a hole is.
- */
-const BREADBOARD_ORIGIN_X = 230;
 
 /** Padding around the built circuit, in millimetres. */
 const FRAME_PAD_MM = 10;
@@ -37,7 +28,7 @@ export interface ExercisePreviewData {
 }
 
 /**
- * The finished bench for a board and a setup, built once and then kept.
+ * The finished bench for a circuit, built once and then kept.
  *
  * Simulations are cheap to hold but not free to build — each routed jumper
  * re-solves — and gallery and Learn pages show many builds at once. The
@@ -49,7 +40,7 @@ const previewCache = new Map<string, ExercisePreviewData>();
 
 export function previewBench(
   board: BoardId,
-  setup: (simulation: Simulation) => void,
+  circuit: CircuitDocument,
   cacheKey: string,
 ): ExercisePreviewData {
   const cached = previewCache.get(cacheKey);
@@ -57,9 +48,13 @@ export function previewBench(
 
   const definition = boardOption(board).make();
   const simulation = new Simulation(definition);
-  simulation.addPart(definition, 0, 0);
-  simulation.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-  setup(simulation);
+  const errors = simulation.loadCircuit(circuit);
+  if (errors.length > 0) {
+    // A shipped circuit that will not compile is a broken data file, not a
+    // build the preview can draw around; `parseCircuit` at import is the first
+    // gate and this is the one that would catch a document assembled wrongly.
+    throw new Error(`${cacheKey}: ${errors.join('; ')}`);
+  }
 
   const bench = simulation.bench;
   const parts = bench.parts.filter(
@@ -124,5 +119,5 @@ export function previewBench(
 }
 
 export function previewFor(exercise: Exercise): ExercisePreviewData {
-  return previewBench(exerciseBoard(exercise), exercise.setup, `exercise:${exercise.id}`);
+  return previewBench(exerciseBoard(exercise), exercise.circuit, `exercise:${exercise.id}`);
 }

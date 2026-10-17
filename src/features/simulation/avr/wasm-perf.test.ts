@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
-import { breadboardDefinition } from '@/features/parts';
 import { firmwareForBuild, galleryById, buildFor } from '@/features/learn/gallery';
 
 describe('wasm perf gate', () => {
@@ -13,9 +12,7 @@ describe('wasm perf gate', () => {
       const b = boardOption('uno').make();
       const s = new Simulation(b);
       s.execution = 'avr';
-      s.addPart(b, 0, 0);
-      s.addPart(breadboardDefinition(), 230, 0);
-      build.setup(s);
+      s.loadCircuit(build.circuit);
       s.loadFirmware(fw);
       s.start();
       return s;

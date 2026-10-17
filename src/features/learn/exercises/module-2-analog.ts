@@ -10,8 +10,8 @@
  * The prose for both lives in `docs/exercises/module-2-analog.md`.
  */
 
+import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
-import { PART_STEP, PART_X, PART_Y, part } from './shared';
 
 
 /* ------------------------------------------------------------------ *
@@ -382,36 +382,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-2-analog.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    const adc = simulation.boardTerminal('A0');
-    const pwm = simulation.boardTerminal('D3');
-    if (!supply || !ground || !adc || !pwm) return;
-
-    const pot = simulation.addPart(part('Slide Potentiometer'), PART_X, PART_Y);
-    const endA = simulation.pinAt(pot, 'endA');
-    const endB = simulation.pinAt(pot, 'endB');
-    const wiper = simulation.pinAt(pot, 'wiper');
-    if (!endA || !endB || !wiper) return;
-    simulation.routeWire(supply, endA);
-    simulation.routeWire(endB, ground);
-    simulation.routeWire(wiper, adc);
-
-    const led = simulation.addPart(part('Red LED'), PART_X, PART_Y + PART_STEP);
-    const anode = simulation.pinAt(led, 'anode');
-    const cathode = simulation.pinAt(led, 'cathode');
-    if (!anode || !cathode) return;
-    simulation.routeWire(cathode, ground);
-
-    const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, PART_Y + PART_STEP);
-    const legA = simulation.pinAt(resistor, 'a');
-    const legB = simulation.pinAt(resistor, 'b');
-    if (!legA || !legB) return;
-    simulation.routeWire(anode, legA);
-    simulation.routeWire(legB, pwm);
-  },
+  circuit: CIRCUITS['2.1'],
 };
 
 
@@ -809,41 +780,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-2-analog.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    const tempAdc = simulation.boardTerminal('A0');
-    const lightAdc = simulation.boardTerminal('A1');
-    if (!supply || !ground || !tempAdc || !lightAdc) return;
-
-    // Both modules already carry their own divider, so each one is three
-    // wires and nothing more. The thermistor sits above its fixed resistor
-    // and the photoresistor below its own, which is why the two channels run
-    // in opposite directions and both still read usefully.
-    const thermistor = simulation.addPart(part('Thermistor (NTC) Module'), PART_X, PART_Y);
-    const ntcVcc = simulation.pinAt(thermistor, 'VCC');
-    const ntcGnd = simulation.pinAt(thermistor, 'GND');
-    const ntcOut = simulation.pinAt(thermistor, 'OUT');
-    if (!ntcVcc || !ntcGnd || !ntcOut) return;
-    simulation.routeWire(supply, ntcVcc);
-    simulation.routeWire(ntcGnd, ground);
-    simulation.routeWire(ntcOut, tempAdc);
-
-    const photoresistor = simulation.addPart(
-      part('Photoresistor (LDR) Module'),
-      PART_X,
-      PART_Y + PART_STEP,
-    );
-    const ldrVcc = simulation.pinAt(photoresistor, 'VCC');
-    const ldrGnd = simulation.pinAt(photoresistor, 'GND');
-    const ldrAnalog = simulation.pinAt(photoresistor, 'AO');
-    if (!ldrVcc || !ldrGnd || !ldrAnalog) return;
-    simulation.routeWire(supply, ldrVcc);
-    simulation.routeWire(ldrGnd, ground);
-    // AO and not DO: DO is the on-board comparator's output, HIGH or LOW only.
-    simulation.routeWire(ldrAnalog, lightAdc);
-  },
+  circuit: CIRCUITS['2.2'],
 };
 
 /**

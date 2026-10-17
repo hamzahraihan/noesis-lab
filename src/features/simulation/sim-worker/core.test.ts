@@ -11,7 +11,7 @@ import {
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
 import { exerciseById } from '@/features/learn';
-import { breadboardDefinition, ili9341Definition, type Ili9341 } from '@/features/parts';
+import { ili9341Definition, type Ili9341 } from '@/features/parts';
 
 describe('sim core', () => {
   it('steps an interpreter blink without Worker globals', () => {
@@ -209,9 +209,7 @@ describe('map sketch parity', () => {
       installStubs(simUrls);
       const definition = boardOption('esp32').make();
       const sim = new Simulation(definition);
-      sim.addPart(definition, 0, 0);
-      sim.addPart(breadboardDefinition(), 230, 0);
-      exercise.setup(sim);
+      sim.loadCircuit(exercise.circuit);
       sim.loadFirmware(sketch);
       sim.start();
       for (let i = 0; i < 400; i++) {

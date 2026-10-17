@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { PART_CATALOGUE, SevenSegment, breadboardDefinition } from '@/features/parts';
-import { boardOption, type BoardId } from './boardRegistry';
-import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById } from './gallery';
+import { PART_CATALOGUE, SevenSegment } from '@/features/parts';
+import { boardOption } from './boardRegistry';
+import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById, type GalleryBuild } from './gallery';
 import { TIER2_MANIFEST } from '@/features/simulation';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulations/simulation';
@@ -14,11 +14,21 @@ import { FIVE_GLYPH, F_GLYPH, N_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liv
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 
-function freshBench(board: BoardId) {
-  const definition = boardOption(board).make();
+/**
+ * A bench for a build: the board the build runs on, with its circuit document
+ * loaded onto it.
+ *
+ * The document carries the board and the breadboard, so nothing is placed here
+ * -- `loadCircuit` restores the whole circuit, and a part placed before it
+ * would be discarded by that restore. Loading is also where a broken document
+ * surfaces: it returns its errors instead of a half-wired bench, and a test
+ * carrying on from one would be asserting against the wrong circuit.
+ */
+function benchFor(build: GalleryBuild): Simulation {
+  const definition = boardOption(build.board).make();
   const simulation = new Simulation(definition);
-  simulation.addPart(definition, 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
+  const errors = simulation.loadCircuit(build.circuit);
+  if (errors.length > 0) throw new Error(`${build.board}: ${errors.join('; ')}`);
   return simulation;
 }
 
@@ -85,8 +95,8 @@ describe('the project gallery', () => {
     expect(buildFor(alarm, 'uno', 'nope')).toBe(alarm.builds[0]!);
     // Unknown variant falls back to the default build (see plan Task 1 ruling).
     expect(buildFor(alarm, 'uno', 'library')).toBe(alarm.builds[1]!);
-    // Both builds share one setup: guards against wiring drift between them.
-    expect(alarm.builds[1]!.setup).toBe(alarm.builds[0]!.setup);
+    // Both builds share one circuit: guards against wiring drift between them.
+    expect(alarm.builds[1]!.circuit).toBe(alarm.builds[0]!.circuit);
   });
 
   it('names only parts the catalogue stocks and says what running shows', () => {
@@ -103,7 +113,7 @@ describe('the project gallery', () => {
   it('parses every build sketch in its board language', () => {
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
-        const simulation = freshBench(build.board);
+        const simulation = benchFor(build);
         simulation.loadFirmware(firmwareForBuild(build, boardOption(build.board).language));
         expect(simulation.firmwareError, `${entry.id}/${build.board}: ${simulation.firmwareError}`).toBeNull();
       }
@@ -118,8 +128,7 @@ describe('the project gallery', () => {
      * HEX — but the interpreter no longer rejects it, retiring the AVR-only
      * contract.
      */
-    const libSim = freshBench('uno');
-    lib.setup(libSim);
+    const libSim = benchFor(lib);
     libSim.loadFirmware(firmwareForBuild(lib, 'arduino-cpp'));
     expect(libSim.firmwareError, 'library build firmware').toBeNull();
     libSim.start();
@@ -283,16 +292,12 @@ describe('the project gallery', () => {
 
   it('runs the alarm library build on the interpreter', () => {
     const build = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
-    const board = boardOption('uno').make();
-    const simulation = new Simulation(board);
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    build.setup(simulation);
+    const simulation = benchFor(build);
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     expect(simulation.firmwareError, 'library build firmware').toBeNull();
   });
 
-  it('wires every build onto its board bench without throwing', () => {
+  it('loads every build circuit onto its board bench', () => {
     const wireFloors: Record<string, number> = {
       'alarm-clock': 25,
       safe: 14,
@@ -304,8 +309,13 @@ describe('the project gallery', () => {
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
         const key = `${entry.id}/${build.board}`;
-        const simulation = freshBench(build.board);
-        expect(() => build.setup(simulation), `${key} setup`).not.toThrow();
+        // `benchFor` throws on a document that will not compile, so a bench
+        // reaching the assertions below is one the operator would be given.
+        const simulation = benchFor(build);
+        expect(
+          simulation.bench.parts.some((part) => part.definition.id === simulation.mcu.definition.id),
+          `${key} board`,
+        ).toBe(true);
         expect(simulation.bench.wires.length, `${key} wires`).toBeGreaterThanOrEqual(
           wireFloors[entry.id] ?? 1,
         );
@@ -334,7 +344,7 @@ describe('the project gallery', () => {
   it('frames every project preview on real content', () => {
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
-        const preview = previewBench(build.board, build.setup, `gallery:${build.board}:${entry.id}`);
+        const preview = previewBench(build.board, build.circuit, `gallery:${build.board}:${entry.id}`);
         expect(preview.parts.length, `${entry.id} parts`).toBeGreaterThan(0);
         expect(preview.paths.length, `${entry.id} paths`).toBeGreaterThan(0);
       }
@@ -407,12 +417,8 @@ describe('the project gallery', () => {
       return;
     }
     const build = galleryById('alarm-clock')!.builds[0]!;
-    const board = boardOption('uno').make();
-    const simulation = new Simulation(board);
+    const simulation = benchFor(build);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    build.setup(simulation);
     const firmware = firmwareForBuild(build, 'arduino-cpp');
     expect(firmware.libraries, 'alarm build declares its libraries').toEqual([
       { name: 'SevSeg', source: 'provided' },
@@ -498,13 +504,9 @@ describe('the project gallery', () => {
       console.warn('SKIP Tier-2 fixture: Tier-2 fetch unreachable');
       return;
     }
-    const alarmSetup = galleryById('alarm-clock')!.builds[0]!.setup;
-    const board = boardOption('uno').make();
-    const simulation = new Simulation(board);
+    const alarmCircuit = galleryById('alarm-clock')!.builds[0]!.circuit;
+    const simulation = benchFor(galleryById('alarm-clock')!.builds[0]!);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    alarmSetup(simulation);
     const fixture = `#include <Arduino.h>
 #include <Wire.h>
 #include <SevSeg.h>
@@ -532,7 +534,7 @@ void loop() {
     const firmware = firmwareForBuild(
       {
         board: 'uno',
-        setup: alarmSetup,
+        circuit: alarmCircuit,
         sketch: fixture,
         libraries: [
           { name: 'SevSeg', source: 'provided' },
@@ -578,13 +580,9 @@ void loop() {
     for (const id of ['alarm-clock', 'weather'] as const) {
       const entry = galleryById(id)!;
       const build = entry.builds[0];
-      const board = boardOption('uno').make();
-      const simulation = new Simulation(board);
-      simulation.execution = execution;
       if (execution === 'avr' && !hexAvailable()) { console.warn('SKIP avr parity: no HEX'); continue; }
-      simulation.addPart(board, 0, 0);
-      simulation.addPart(breadboardDefinition(), 230, 0);
-      build.setup(simulation);
+      const simulation = benchFor(build);
+      simulation.execution = execution;
       simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
       expect(simulation.firmwareError, `${id} firmware`).toBeNull();
       simulation.start();
@@ -702,13 +700,9 @@ void loop() {
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
     const build = galleryById('alarm-clock')!.builds[0];
-    const board = boardOption('uno').make();
-    const simulation = new Simulation(board);
-    simulation.execution = execution;
     if (execution === 'avr' && !hexAvailable()) { console.warn('SKIP avr parity: no HEX'); continue; }
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    build.setup(simulation);
+    const simulation = benchFor(build);
+    simulation.execution = execution;
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     expect(simulation.firmwareError, 'alarm-clock firmware').toBeNull();
     simulation.start();
@@ -761,9 +755,7 @@ void loop() {
     const board = boardOption('uno').make();
     const simulation = new Simulation(board);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    build.setup(simulation);
+    simulation.loadCircuit(build.circuit);
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     // Execution `avr`: the committed HEX runs underneath while the
     // interpreter parses the same sources alongside. A fault would overwrite
@@ -858,9 +850,7 @@ void loop() {
     const board = boardOption('uno').make();
     const simulation = new Simulation(board);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    build.setup(simulation);
+    simulation.loadCircuit(build.circuit);
     simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
     expect(simulation.firmwareError, 'library build runs the HEX without fault').toBeNull();
     simulation.start();
@@ -982,12 +972,8 @@ void loop() {
       return;
     }
     const libBuild = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
-    const board = boardOption('uno').make();
-    const simulation = new Simulation(board);
+    const simulation = benchFor(libBuild);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    libBuild.setup(simulation);
     await simulation.compileAndRun(firmwareForBuild(libBuild, 'arduino-cpp'));
     expect(simulation.compileState, 'library build compiles').toBe('ready');
     expect(simulation.firmwareError, 'library build firmware').toBeNull();
@@ -1015,9 +1001,8 @@ describe('avr wasm opt-in', () => {
 
 describe('part names', () => {
   it('seeds the alarm buttons Hours/Minutes/Alarm and renames round-trip', () => {
-    const sim = freshBench('uno');
     const alarm = galleryById('alarm-clock')!;
-    alarm.builds[0]!.setup(sim);
+    const sim = benchFor(alarm.builds[0]!);
     const buttons = sim.bench.parts.filter((p) => p.definition.id === 'button-tactile');
     expect(buttons).toHaveLength(3);
     expect(buttons.map((b) => sim.partName(b.id)).sort()).toEqual(['Alarm', 'Hours', 'Minutes']);
@@ -1035,8 +1020,7 @@ describe('part names', () => {
 
 describe('alarm RTC preset', () => {
   it('seeds 15:00 with the alarm armed for 15:10', () => {
-    const sim = freshBench('uno');
-    galleryById('alarm-clock')!.builds[0]!.setup(sim);
+    const sim = benchFor(galleryById('alarm-clock')!.builds[0]!);
     const rtcId = sim.bench.parts.find((p) => p.definition.id === 'ds1307-rtc')!.id;
     const device = sim.engine.i2cDevice(rtcId) as unknown as {
       receive(byte: number, isControl: boolean): boolean;
@@ -1052,8 +1036,7 @@ describe('alarm RTC preset', () => {
 describe('alarm wiring paths', () => {
   it('routes no jumper through a part it does not terminate on', async () => {
     const { routeWireViaCorners } = await import('@/features/bench/wiring/wire-route');
-    const sim = freshBench('uno');
-    galleryById('alarm-clock')!.builds[0]!.setup(sim);
+    const sim = benchFor(galleryById('alarm-clock')!.builds[0]!);
     type Box = { x0: number; y0: number; x1: number; y1: number; id: string };
     const boxes: Box[] = sim.bench.parts.map((p) => {
       const def = p.definition as unknown as { widthMm: number; heightMm: number };

@@ -21,8 +21,8 @@
  * modules share.
  */
 
+import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
-import { PART_STEP, PART_X, PART_Y, part } from './shared';
 
 /** The module name both exercises carry, so the list page can group them. */
 const MODULE = 'Module 4 — Hardware Interrupts & Low-Level Control';
@@ -370,32 +370,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-4-interrupts.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    const clk = simulation.boardTerminal('D2');
-    const dt = simulation.boardTerminal('D3');
-    const sw = simulation.boardTerminal('D4');
-    if (!supply || !ground || !clk || !dt || !sw) return;
-
-    const encoder = simulation.addPart(part('Rotary Encoder (KY-040)'), PART_X, PART_Y);
-    const vcc = simulation.pinAt(encoder, 'VCC');
-    const gnd = simulation.pinAt(encoder, 'GND');
-    const clock = simulation.pinAt(encoder, 'CLK');
-    const data = simulation.pinAt(encoder, 'DT');
-    const press = simulation.pinAt(encoder, 'SW');
-    if (!vcc || !gnd || !clock || !data || !press) return;
-
-    // VCC first, and from the board's 5 V pin only: CLK, DT and SW are 10 kΩ
-    // pull-ups to it, and an unwired VCC leaves all three floating.
-    simulation.routeWire(vcc, supply);
-    simulation.routeWire(gnd, ground);
-    simulation.routeWire(clock, clk);
-    simulation.routeWire(data, dt);
-    simulation.routeWire(press, sw);
-  },
+  circuit: CIRCUITS['4.1'],
 };
 
 
@@ -862,76 +837,7 @@ void loop() {
     },
   ],
   writeUp: 'docs/exercises/module-4-interrupts.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-
-    const supply = simulation.boardTerminal('5V');
-    const ground = simulation.boardTerminal('GND');
-    if (!supply || !ground) return;
-
-    const sonar = simulation.addPart(part('Ultrasonic Sensor (HC-SR04)'), PART_X, PART_Y);
-    const echoPin = simulation.pinAt(sonar, 'ECHO');
-    const vcc = simulation.pinAt(sonar, 'VCC');
-    const gnd = simulation.pinAt(sonar, 'GND');
-    const trig = simulation.pinAt(sonar, 'TRIG');
-    const trigBoard = simulation.boardTerminal('D6');
-    const echoBoard = simulation.boardTerminal('D7');
-    if (!echoPin || !vcc || !gnd || !trig || !trigBoard || !echoBoard) return;
-
-    simulation.routeWire(vcc, supply);
-    simulation.routeWire(gnd, ground);
-    simulation.routeWire(trig, trigBoard);
-
-    // ECHO must never float. The model carries its own 10 kΩ pull-up, so this
-    // external one sits in parallel and changes nothing electrically -- it is
-    // fitted because the real breadboard needs it.
-    const pullUp = simulation.addPart(part('10k Resistor'), PART_X + 62, PART_Y + 6);
-    const pullUpA = simulation.pinAt(pullUp, 'a');
-    const pullUpB = simulation.pinAt(pullUp, 'b');
-    if (!pullUpA || !pullUpB) return;
-    simulation.routeWire(pullUpA, supply);
-    simulation.routeWire(echoPin, pullUpB);
-    simulation.routeWire(echoBoard, pullUpB);
-
-    // Five bands on D2, D3, D4, D5 and D8 -- D10–D13 stay free for SPI, and D9
-    // is left as the timer pin the buzzer wants. Anode to the rail, cathode to
-    // the pin, so the pin sinks.
-    const bands: ReadonlyArray<{ led: string; pin: string }> = [
-      { led: 'Green LED', pin: 'D2' },
-      { led: 'Green LED', pin: 'D3' },
-      { led: 'Yellow LED', pin: 'D4' },
-      { led: 'Yellow LED', pin: 'D5' },
-      { led: 'Red LED', pin: 'D8' },
-    ];
-
-    bands.forEach(({ led: ledName, pin }, index) => {
-      const row = PART_Y + (index + 1) * PART_STEP;
-      const led = simulation.addPart(part(ledName), PART_X, row);
-      const resistor = simulation.addPart(part('220 Resistor'), PART_X + 62, row);
-      const anode = simulation.pinAt(led, 'anode');
-      const cathode = simulation.pinAt(led, 'cathode');
-      const legA = simulation.pinAt(resistor, 'a');
-      const legB = simulation.pinAt(resistor, 'b');
-      const board = simulation.boardTerminal(pin);
-      if (!anode || !cathode || !legA || !legB || !board) return;
-
-      simulation.routeWire(anode, supply);
-      simulation.routeWire(cathode, legA);
-      simulation.routeWire(legB, board);
-    });
-
-    const buzzer = simulation.addPart(
-      part('Piezo Buzzer'),
-      PART_X,
-      PART_Y + (bands.length + 1) * PART_STEP,
-    );
-    const positive = simulation.pinAt(buzzer, 'positive');
-    const negative = simulation.pinAt(buzzer, 'negative');
-    const buzzerPin = simulation.boardTerminal('D9');
-    if (!positive || !negative || !buzzerPin) return;
-    simulation.routeWire(buzzerPin, positive);
-    simulation.routeWire(negative, ground);
-  },
+  circuit: CIRCUITS['4.2'],
 };
 
 /** Module 4's exercises, in curriculum order. */

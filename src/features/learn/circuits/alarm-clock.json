@@ -1,0 +1,464 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "ds1307-rtc",
+      "x": 100,
+      "y": 70,
+      "rotation": 0,
+      "initialRtc": {
+        "hours": 15,
+        "minutes": 0,
+        "seconds": 0,
+        "nvram": [
+          [
+            8,
+            1
+          ],
+          [
+            9,
+            15
+          ],
+          [
+            10,
+            10
+          ]
+        ]
+      }
+    },
+    {
+      "id": "p4",
+      "type": "7segment-4digit",
+      "x": 135,
+      "y": 70,
+      "rotation": 0
+    },
+    {
+      "id": "p5",
+      "type": "button-tactile",
+      "x": 100,
+      "y": 100,
+      "rotation": 0,
+      "name": "Hours",
+      "capColour": "#22c55e"
+    },
+    {
+      "id": "p6",
+      "type": "button-tactile",
+      "x": 114,
+      "y": 100,
+      "rotation": 0,
+      "name": "Minutes",
+      "capColour": "#22c55e"
+    },
+    {
+      "id": "p7",
+      "type": "button-tactile",
+      "x": 128,
+      "y": 100,
+      "rotation": 0,
+      "name": "Alarm",
+      "capColour": "#ef4444"
+    },
+    {
+      "id": "p8",
+      "type": "piezo-buzzer",
+      "x": 100,
+      "y": 116,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p3:SDA",
+      "to": "p1:A4",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p4:B",
+      "to": "p1:D7",
+      "colour": "#a3e635",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 165.18,
+          "y": 68
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "from": "p4:C",
+      "to": "p1:D8",
+      "colour": "#06b6d4",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 160.1,
+          "y": 94.5
+        },
+        {
+          "x": 90,
+          "y": 94.5
+        },
+        {
+          "x": 90,
+          "y": 61
+        }
+      ]
+    },
+    {
+      "id": "w12",
+      "from": "p4:D",
+      "to": "p1:D9",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 155.02,
+          "y": 95.5
+        },
+        {
+          "x": 92,
+          "y": 95.5
+        },
+        {
+          "x": 92,
+          "y": 63
+        }
+      ]
+    },
+    {
+      "id": "w13",
+      "from": "p4:E",
+      "to": "p1:D10",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 152.48,
+          "y": 94.5
+        },
+        {
+          "x": 94,
+          "y": 94.5
+        },
+        {
+          "x": 94,
+          "y": 61
+        }
+      ]
+    },
+    {
+      "id": "w14",
+      "from": "p4:F",
+      "to": "p1:D11",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 157.56,
+          "y": 68
+        }
+      ]
+    },
+    {
+      "id": "w15",
+      "from": "p4:G",
+      "to": "p1:D12",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 162.64,
+          "y": 94.5
+        },
+        {
+          "x": 92,
+          "y": 94.5
+        },
+        {
+          "x": 92,
+          "y": 61
+        }
+      ]
+    },
+    {
+      "id": "w16",
+      "from": "p4:CLN",
+      "to": "p1:D13",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 167.72,
+          "y": 68
+        }
+      ]
+    },
+    {
+      "id": "w17",
+      "from": "p4:COM",
+      "to": "p1:5V",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 167.72,
+          "y": 95
+        },
+        {
+          "x": 92,
+          "y": 95
+        },
+        {
+          "x": 92,
+          "y": 63
+        }
+      ]
+    },
+    {
+      "id": "w18",
+      "from": "p1:A0",
+      "to": "p5:a",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 55.03,
+          "y": 110
+        },
+        {
+          "x": 100,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "w19",
+      "from": "p5:b",
+      "to": "p1:J1_GND",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 105.08,
+          "y": 110
+        },
+        {
+          "x": 95,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "from": "p3:SCL",
+      "to": "p1:A5",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w20",
+      "from": "p1:A1",
+      "to": "p6:a",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 57.55,
+          "y": 110
+        },
+        {
+          "x": 114,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "w21",
+      "from": "p6:b",
+      "to": "p1:J1_GND",
+      "colour": "#a3e635",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 119.08,
+          "y": 110
+        },
+        {
+          "x": 95,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "w22",
+      "from": "p1:A2",
+      "to": "p7:a",
+      "colour": "#06b6d4",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 60.06,
+          "y": 110
+        },
+        {
+          "x": 128,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "w23",
+      "from": "p7:b",
+      "to": "p1:J1_GND",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 133.08,
+          "y": 110
+        },
+        {
+          "x": 95,
+          "y": 110
+        }
+      ]
+    },
+    {
+      "id": "w24",
+      "from": "p1:A3",
+      "to": "p8:+",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w25",
+      "from": "p8:-",
+      "to": "p1:J1_GND",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 108.89,
+          "y": 140
+        },
+        {
+          "x": 95,
+          "y": 140
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "from": "p3:GND",
+      "to": "p1:J1_GND",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p3:VCC",
+      "to": "p1:IOREF",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p4:D1",
+      "to": "p1:D2",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 152.48,
+          "y": 67
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "from": "p4:D2",
+      "to": "p1:D3",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 160.1,
+          "y": 68
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "from": "p4:D3",
+      "to": "p1:D4",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 162.64,
+          "y": 67
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "from": "p4:D4",
+      "to": "p1:D5",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 165.18,
+          "y": 95.5
+        },
+        {
+          "x": 90,
+          "y": 95.5
+        },
+        {
+          "x": 90,
+          "y": 63
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "from": "p4:A",
+      "to": "p1:D6",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": [
+        {
+          "x": 155.02,
+          "y": 67
+        }
+      ]
+    }
+  ]
+}

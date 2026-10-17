@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { breadboardDefinition } from '@/features/parts';
 import { boardOption } from '@/features/learn';
 import { EXERCISES, exerciseById } from '@/features/learn';
 import { TILE_SIZE, TileStore, tileForLatLon, pixelInTile } from '../utils/map-tiles';
@@ -20,9 +19,7 @@ const OSM_MAP = '5.1';
 function bench(): Simulation {
   const definition = boardOption('esp32').make();
   const simulation = new Simulation(definition);
-  simulation.addPart(definition, 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
-  exerciseById(OSM_MAP)!.setup(simulation);
+  simulation.loadCircuit(exerciseById(OSM_MAP)!.circuit);
   return simulation;
 }
 

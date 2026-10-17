@@ -47,18 +47,16 @@ describe('timer1 PWM acceptance', () => {
       return;
     }
     const sketch = `#include <Arduino.h>\nvoid setup() {}\nvoid loop() { analogWrite(9, 128); }\n`;
-    // Alarm wiring family: Uno + breadboard + the alarm project's setup, so
+    // Alarm wiring family: Uno + breadboard + the alarm project's circuit, so
     // the bench around the core matches the gallery legs.
-    const alarmSetup = galleryById('alarm-clock')!.builds[0]!.setup;
+    const alarmBuild = galleryById('alarm-clock')!.builds[0]!;
     const board = boardOption('uno').make();
     const simulation = new Simulation(board);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    alarmSetup(simulation);
+    simulation.loadCircuit(alarmBuild.circuit);
     // Compile via the worker project path with no extra libraries.
     await simulation.compileAndRun(
-      firmwareForBuild({ board: 'uno', setup: alarmSetup, sketch }, 'arduino-cpp'),
+      firmwareForBuild({ board: 'uno', circuit: alarmBuild.circuit, sketch }, 'arduino-cpp'),
     );
     expect(simulation.compileState, 'fade sketch compiles').toBe('ready');
     expect(simulation.firmwareError, 'fade sketch firmware').toBeNull();
@@ -143,9 +141,9 @@ describe('timer1 input-capture loopback', () => {
       '',
     ].join('\n');
     // Bare Uno + breadboard (no alarm wiring, so D7/D8 are free), with D7
-    // wired straight to D8. The project setup token mirrors the fade test;
+    // wired straight to D8. The project circuit token mirrors the fade test;
     // it plays no part in the worker compile.
-    const alarmSetup = galleryById('alarm-clock')!.builds[0]!.setup;
+    const alarmBuild = galleryById('alarm-clock')!.builds[0]!;
     const board = boardOption('uno').make();
     const simulation = new Simulation(board);
     simulation.execution = 'avr';
@@ -158,7 +156,7 @@ describe('timer1 input-capture loopback', () => {
     simulation.routeWire(d7!, d8!);
     // Compile via the worker project path with no extra libraries.
     await simulation.compileAndRun(
-      firmwareForBuild({ board: 'uno', setup: alarmSetup, sketch }, 'arduino-cpp'),
+      firmwareForBuild({ board: 'uno', circuit: alarmBuild.circuit, sketch }, 'arduino-cpp'),
     );
     expect(simulation.compileState, 'loopback sketch compiles').toBe('ready');
     expect(simulation.firmwareError, 'loopback sketch firmware').toBeNull();
@@ -226,20 +224,18 @@ describe('dashboard servo HEX acceptance', () => {
       '',
     ].join('\n');
     // Dashboard wiring family: Uno + breadboard + the dashboard project's
-    // setup (servo on gpio 19, slide pot, three sink-wired LEDs on D6/D7/D8).
-    const dashboardSetup = galleryById('dashboard')!.builds[0]!.setup;
+    // circuit (servo on gpio 19, slide pot, three sink-wired LEDs on D6/D7/D8).
+    const dashboardBuild = galleryById('dashboard')!.builds[0]!;
     const board = boardOption('uno').make();
     const simulation = new Simulation(board);
     simulation.execution = 'avr';
-    simulation.addPart(board, 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    dashboardSetup(simulation);
+    simulation.loadCircuit(dashboardBuild.circuit);
     // Compile via the worker project path with the Servo library declared.
     await simulation.compileAndRun(
       firmwareForBuild(
         {
           board: 'uno',
-          setup: dashboardSetup,
+          circuit: dashboardBuild.circuit,
           sketch,
           libraries: [{ name: 'Servo', source: 'provided' }],
         },

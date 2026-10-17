@@ -13,7 +13,6 @@
  */
 
 import { Simulation } from '@/features/bench';
-import { breadboardDefinition } from '@/features/parts';
 // Boundary-explicit: learn → simulation value edges are outside the gate's forbidden set (bench|instruments → learn, parts → simulation, shared → features); verified by `node scripts/check-boundaries.mjs`.
 import { hexForSourcesHash, sourcesHashForProject, type FirmwareProject } from '@/features/simulation';
 import { boardOption } from '../boardRegistry';
@@ -78,9 +77,7 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
     const board = boardOption(build.board).make();
     const sim = new Simulation(board);
     sim.execution = build.execution ?? 'interpreter';
-    sim.addPart(board, 0, 0);
-    sim.addPart(breadboardDefinition(), 230, 0);
-    build.setup(sim);
+    sim.loadCircuit(build.circuit);
     sim.loadFirmware(project);
     sim.start();
     let total = 0;

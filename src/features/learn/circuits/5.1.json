@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "esp32-devkit-v1",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "ili9341-480x320",
+      "x": 415,
+      "y": 70,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "button-tactile",
+      "x": 415,
+      "y": 112,
+      "rotation": 0
+    },
+    {
+      "id": "p5",
+      "type": "button-tactile",
+      "x": 415,
+      "y": 154,
+      "rotation": 0
+    },
+    {
+      "id": "p6",
+      "type": "button-tactile",
+      "x": 415,
+      "y": 196,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:D23",
+      "to": "p3:DIN",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p5:b",
+      "to": "p1:L_GND",
+      "colour": "#a3e635",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p1:GPIO27",
+      "to": "p6:a",
+      "colour": "#06b6d4",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "p6:b",
+      "to": "p1:L_GND",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:D18",
+      "to": "p3:CLK",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:D5",
+      "to": "p3:CS",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:D15",
+      "to": "p3:D/C",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p1:3V3",
+      "to": "p3:VCC",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p1:L_GND",
+      "to": "p3:GND",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p1:D4",
+      "to": "p4:a",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p4:b",
+      "to": "p1:L_GND",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "p1:D13",
+      "to": "p5:a",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

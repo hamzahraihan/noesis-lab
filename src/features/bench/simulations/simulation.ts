@@ -133,7 +133,6 @@ const EDIT_COALESCE_MS = 700;
 interface BenchHistoryEntry {
   readonly bench: BenchSnapshot;
   readonly examplePartIds: string[];
-  readonly lcdPins: [string, number][];
 }
 
 /**
@@ -354,7 +353,6 @@ export class Simulation {
     return {
       bench: this.builder.snapshot(),
       examplePartIds: [...this.examplePartIds],
-      lcdPins: [...this.lcdBoardPins],
     };
   }
 
@@ -362,8 +360,6 @@ export class Simulation {
   private applyHistory(entry: BenchHistoryEntry): void {
     this.builder.restore(entry.bench);
     this.examplePartIds = entry.examplePartIds;
-    this.lcdBoardPins.clear();
-    for (const [line, pin] of entry.lcdPins) this.lcdBoardPins.set(line, pin);
     // The next edit starts a fresh run: coalescing into whatever was undone
     // would swallow the edit into a history entry that no longer describes it.
     this.editRun = null;
@@ -1094,7 +1090,8 @@ export class Simulation {
         lcdLines.forEach((line, index) => {
           const boardPin = spare[index];
           if (!boardPin) return;
-          this.lcdBoardPins.set(line, boardPin.gpio ?? -1);
+          // The line-to-pin map is not written here: `rebuild` derives it from
+          // the wiring this call is about to make.
           wire(line, boardPin.id);
         });
         wire('VSS', ground);
@@ -1121,8 +1118,6 @@ export class Simulation {
     this.checkpoint();
     for (const id of this.examplePartIds) this.builder.removePart(id);
     this.examplePartIds = [];
-    // The LCD's line-to-pin map describes wiring that is no longer on the bench.
-    this.lcdBoardPins.clear();
     this.rebuild();
   }
 
@@ -1490,8 +1485,50 @@ export class Simulation {
   rebuild(): void {
     this.engine.rebuild(this.builder.build(), this.controls);
     this.engine.settle();
+    this.deriveLcdBoardPins();
   }
 
+  /**
+   * The board pins the character LCD's lines reach, read back off the wiring.
+   *
+   * Derived on every rebuild rather than recorded when a part is placed,
+   * because the wiring is the fact. A map written at placement time goes stale
+   * the moment a jumper is moved, and it is empty altogether for a bench that
+   * arrived as a document -- where nothing was placed by the example path, and
+   * the panel would sit on correctly wired lines reading nothing.
+   *
+   * A line the panel is not wired to, or that reaches no pin firmware can name,
+   * simply has no entry: that is how a display on the wrong header stays dark.
+   */
+  private deriveLcdBoardPins(): void {
+    this.lcdBoardPins.clear();
+    const gpioByNet = new Map<number, number>();
+    for (const pin of this.mcu.pins()) {
+      if (pin.gpio === undefined) continue;
+      const net = this.engine.netOfMcuPin(pin.id);
+      if (net === GROUND) continue;
+      gpioByNet.set(net, pin.gpio);
+    }
+    const netlist = this.engine.currentNetlist;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'lcd') continue;
+      for (const spec of part.definition.pins) {
+        // The supply pins are joined inside the module rather than driven by a
+        // board pin, so they are not lines the host writes to.
+        if (spec.net !== undefined) continue;
+        const net = netlist.pinNode.get(`${part.id}:${spec.id}`);
+        const gpio = net === undefined ? undefined : gpioByNet.get(net);
+        if (gpio !== undefined) this.lcdBoardPins.set(spec.id, gpio);
+      }
+    }
+  }
+
+  /**
+   * The board pin each of the panel's lines reaches, derived on every rebuild
+   * from the wiring (see `deriveLcdBoardPins`). A line the panel is not wired
+   * to has no entry, and every write to it is skipped.
+   */
+  private readonly lcdBoardPins = new Map<string, number>();
 
   /**
    * The character LCD on the bench, and the board pins its header sits on.
@@ -1499,9 +1536,6 @@ export class Simulation {
    * There is only ever one on a bench: a second would need a second host
    * object, and the sketch language here has no way to name one.
    */
-  /** The board pin each of the panel's control lines was wired to. */
-  private readonly lcdBoardPins = new Map<string, number>();
-
   private characterLcd(): LcdDriver | null {
     if (!this.lcdDriver) {
       for (const part of this.bench.parts) {

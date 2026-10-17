@@ -8,7 +8,7 @@
  * one is a different program from one that never does.
  */
 
-import { PART_STEP, PART_X, PART_Y, part } from './shared';
+import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
 
 /**
@@ -633,69 +633,7 @@ const OSM_MAP: Exercise = {
     },
   ],
   writeUp: 'docs/exercises/module-5-maps.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const ground = simulation.boardTerminal('GND');
-    const supply = simulation.boardTerminal('3V3');
-    const mosi = simulation.boardTerminal('GPIO23');
-    const sck = simulation.boardTerminal('GPIO18');
-    const chipSelect = simulation.boardTerminal('GPIO5');
-    const dataCommand = simulation.boardTerminal('GPIO15');
-    const west = simulation.boardTerminal('GPIO4');
-    const east = simulation.boardTerminal('GPIO13');
-    const rotate = simulation.boardTerminal('GPIO27');
-    if (
-      !ground || !supply || !mosi || !sck || !chipSelect || !dataCommand ||
-      !west || !east || !rotate
-    ) {
-      return;
-    }
-
-    const display = simulation.addPart(part('3.2" TFT (ILI9341)'), PART_X, PART_Y);
-    const panelMosi = simulation.pinAt(display, 'MOSI');
-    const panelSck = simulation.pinAt(display, 'SCK');
-    const panelCs = simulation.pinAt(display, 'CS');
-    const panelDc = simulation.pinAt(display, 'DC');
-    const panelVcc = simulation.pinAt(display, 'VCC');
-    const panelGnd = simulation.pinAt(display, 'GND');
-    if (!panelMosi || !panelSck || !panelCs || !panelDc || !panelVcc || !panelGnd) return;
-
-    simulation.routeWire(mosi, panelMosi);
-    simulation.routeWire(sck, panelSck);
-    simulation.routeWire(chipSelect, panelCs);
-    simulation.routeWire(dataCommand, panelDc);
-    simulation.routeWire(supply, panelVcc);
-    simulation.routeWire(ground, panelGnd);
-
-    /*
-     * Three buttons, one leg to a pin and one to ground, and nothing else. The
-     * pull-ups come from INPUT_PULLUP in the sketch, which is why there is no
-     * resistor anywhere on this board.
-     */
-    const westButton = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + PART_STEP);
-    const eastButton = simulation.addPart(
-      part('Tactile Button'),
-      PART_X,
-      PART_Y + PART_STEP * 2,
-    );
-    const rotateButton = simulation.addPart(
-      part('Tactile Button'),
-      PART_X,
-      PART_Y + PART_STEP * 3,
-    );
-
-    for (const [pin, button] of [
-      [west, westButton],
-      [east, eastButton],
-      [rotate, rotateButton],
-    ] as const) {
-      const a = simulation.pinAt(button, 'a');
-      const b = simulation.pinAt(button, 'b');
-      if (!a || !b) return;
-      simulation.routeWire(pin, a);
-      simulation.routeWire(b, ground);
-    }
-  },
+  circuit: CIRCUITS['5.1'],
 };
 
 export const MODULE_5_MAPS: readonly Exercise[] = [OSM_MAP];

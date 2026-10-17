@@ -495,27 +495,20 @@ export default function Bench(props: BenchProps) {
       circuitSeedErrorRef.current = null;
       const created = new Simulation(boardOption(boardId).make());
 
-      /*
-       * The board and breadboard go down first, whatever else happens.
-       *
-       * An exercise's setup routes jumpers to `boardTerminal('D8')` and the
-       * like, and those are coordinates. On a bench with no board on it they
-       * land on nothing, so every wire quietly claims a loose contact of its
-       * own and the circuit looks drawn while being electrically dead: no LED
-       * lights, and every input reads zero. `new Simulation(board)` builds the
-       * MCU but does not place the board part.
-       */
-      created.addPart(boardOption(boardId).make(), 0, 0);
-      created.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-
       if (exercise) {
-        exercise.setup(created);
+        /*
+         * A pinned build IS a circuit document. The document carries the board
+         * and the breadboard, so nothing is placed first: restoring it replaces
+         * whatever is on the bench, and anything placed before it would be
+         * discarded anyway.
+         */
+        created.loadCircuit(exercise.circuit);
         // In the language the exercise is written in, not the board's default.
         // A Pi lesson hands over Python, and handing that to the C++ parser
         // reports "expected a type" on the first `from` and stops there.
         created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       } else if (projectBuild) {
-        projectBuild.setup(created);
+        created.loadCircuit(projectBuild.circuit);
         created.loadFirmware(firmwareForBuild(projectBuild, boardOption(boardId).language));
       } else {
         const circuitSeed = resolveCircuitSeed({
@@ -530,6 +523,16 @@ export default function Bench(props: BenchProps) {
           if (circuitSeed.dynamicState) created.controls.copyValuesFrom(circuitSeed.dynamicState);
           created.rebuild();
         } else {
+          /*
+           * The starter bench is the one circuit that is not a document: it
+           * routes wires to the board's own pin ids and to breadboard hole
+           * coordinates, so the board and the breadboard have to be down
+           * before it does (`new Simulation(board)` builds the MCU but places
+           * no part). Without them every wire quietly claims a loose contact of
+           * its own and the circuit is drawn but electrically dead.
+           */
+          created.addPart(boardOption(boardId).make(), 0, 0);
+          created.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
           buildStartingBench(created, STARTER_WIRING[boardId]);
         }
         circuitSeedErrorRef.current = circuitSeed.error ?? null;

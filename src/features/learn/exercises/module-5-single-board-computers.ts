@@ -9,7 +9,7 @@
  * which is what this module is for.
  */
 
-import { PART_STEP, PART_X, PART_Y, part } from './shared';
+import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
 
 /**
@@ -561,47 +561,7 @@ const POCKET_MAP: Exercise = {
     },
   ],
   writeUp: 'docs/exercises/module-5-single-board-computers.md',
-  setup: (simulation) => {
-    simulation.clearExampleParts();
-    const ground = simulation.boardTerminal('GND');
-    const supply = simulation.boardTerminal('3V3');
-    const clock = simulation.boardTerminal('GPIO11');
-    const data = simulation.boardTerminal('GPIO10');
-    const select = simulation.boardTerminal('GPIO8');
-    const dataCommand = simulation.boardTerminal('GPIO24');
-    const move = simulation.boardTerminal('GPIO4');
-    if (!ground || !supply || !clock || !data || !select || !dataCommand || !move) return;
-
-    const display = simulation.addPart(part('2.4" TFT (ILI9341)'), PART_X, PART_Y);
-    const sck = simulation.pinAt(display, 'SCK');
-    const mosi = simulation.pinAt(display, 'MOSI');
-    const cs = simulation.pinAt(display, 'CS');
-    const dc = simulation.pinAt(display, 'DC');
-    const vcc = simulation.pinAt(display, 'VCC');
-    const gnd = simulation.pinAt(display, 'GND');
-    if (!sck || !mosi || !cs || !dc || !vcc || !gnd) return;
-
-    simulation.routeWire(clock, sck);
-    simulation.routeWire(data, mosi);
-    simulation.routeWire(dataCommand, dc);
-    simulation.routeWire(select, cs);
-    simulation.routeWire(supply, vcc);
-    simulation.routeWire(ground, gnd);
-
-    /*
-     * The button's second leg goes to ground and nothing else does. There is no
-     * resistor here for the same reason there is none in Module 1: gpiozero
-     * turns the pin's pull-up on when the Button is constructed, and a button on
-     * a pulled-up line reads high until something grounds it.
-     */
-    const button = simulation.addPart(part('Tactile Button'), PART_X, PART_Y + PART_STEP);
-    const buttonA = simulation.pinAt(button, 'a');
-    const buttonB = simulation.pinAt(button, 'b');
-    if (!buttonA || !buttonB) return;
-
-    simulation.routeWire(move, buttonA);
-    simulation.routeWire(buttonB, ground);
-  },
+  circuit: CIRCUITS['5.2'],
 };
 
 export const MODULE_5_SBC: readonly Exercise[] = [POCKET_MAP];
