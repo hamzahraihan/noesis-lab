@@ -45,7 +45,7 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import { ENTRY_BY_LANGUAGE, removeFile, renameFile, toSingleFileProject } from '@/features/simulation';
+import { ENTRY_BY_LANGUAGE, removeFile, renameFile, toSingleFileProject, decompile } from '@/features/simulation';
 import {
   FirmwareEditor,
   Inspector,
@@ -75,6 +75,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
 import { decodeShareToProject, encodeProjectToShare, isShareable } from '../utils/share-codec';
 import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
+import { resolveCircuitSeed, loadCircuit, hasCircuit, saveCircuit } from '../store/circuit-store';
+import { decodeShareToCircuit, isCircuitShareable, encodeCircuitToShare } from '../utils/circuit-codec';
 import { avrAvailableFor, resolveBackendSelection } from '../simulations/avr-mode';
 import { canResumeRun, type RunSession } from '../simulations/run-session';
 
@@ -479,6 +481,7 @@ export default function Bench(props: BenchProps) {
 
   // Rebuilt on board change only: a sketch's pin numbers mean something
   // different on each board, so carrying one across would silently misfire.
+  const circuitSeedParam = search.get('circuit');
   const simulation = useMemo(
     () => {
       const created = new Simulation(boardOption(boardId).make());
@@ -506,7 +509,20 @@ export default function Bench(props: BenchProps) {
         projectBuild.setup(created);
         created.loadFirmware(firmwareForBuild(projectBuild, boardOption(boardId).language));
       } else {
-        buildStartingBench(created, STARTER_WIRING[boardId]);
+        const circuitSeed = resolveCircuitSeed({
+          pinned: false,
+          sharedPayload: circuitSeedParam,
+          saved: loadCircuit(boardId),
+          hadUnreadableSave: hasCircuit(boardId),
+          decode: decodeShareToCircuit,
+        });
+        if (circuitSeed.snapshot) {
+          created.builder.restore(circuitSeed.snapshot);
+          if (circuitSeed.dynamicState) created.controls.copyValuesFrom(circuitSeed.dynamicState);
+        } else {
+          buildStartingBench(created, STARTER_WIRING[boardId]);
+        }
+        if (circuitSeed.error) setShareError(circuitSeed.error);
         created.loadFirmware(
           boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
           boardOption(boardId).language,
@@ -528,8 +544,24 @@ export default function Bench(props: BenchProps) {
       created.clearHistory();
       return created;
     },
-    [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild],
+    [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild, circuitSeedParam],
   );
+
+  /*
+   * Autosave: every 500 ms decompile the live bench and persist the circuit
+   * document when it changed, so a reload reopens the same parts and wiring.
+   */
+  const lastSavedCircuitRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const { doc } = decompile(simulation.builder.build(), simulation.controls);
+      const serialized = JSON.stringify(doc);
+      if (serialized === lastSavedCircuitRef.current) return;
+      lastSavedCircuitRef.current = serialized;
+      saveCircuit(boardId, doc);
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [boardId, simulation]);
 
   /*
    * Sim worker client (Task 8): attempted per simulation; null while the
@@ -1272,12 +1304,20 @@ export default function Bench(props: BenchProps) {
    * encoded at click time, so the check and the link cannot disagree.
    */
   const shareTooLarge = !isShareable(project);
+  const currentCircuitDoc = decompile(simulation.builder.build(), simulation.controls).doc;
+  const circuitShareable = isCircuitShareable(currentCircuitDoc);
   const copyShareLink = () => {
     const base = window.location.href.split('#')[0];
     const url = `${base}#/bench/${boardId}?files=${encodeProjectToShare(project)}`;
     void navigator.clipboard.writeText(url).catch(() => {
       /* Clipboard unavailable: the button stays, the project stays local. */
     });
+  };
+  const copyCircuitLink = () => {
+    const encoded = encodeCircuitToShare(currentCircuitDoc);
+    const url = new URL(window.location.href);
+    url.searchParams.set('circuit', encoded);
+    void navigator.clipboard.writeText(url.toString());
   };
 
   /*
@@ -1562,6 +1602,21 @@ export default function Bench(props: BenchProps) {
           >
             <Link2Icon className="icon" aria-hidden="true" />
             Copy link
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!circuitShareable}
+            onClick={copyCircuitLink}
+            title={
+              circuitShareable
+                ? 'Copy a link carrying this circuit'
+                : 'Too large to share by link — circuit stays local'
+            }
+          >
+            Copy circuit link
           </Button>
 
           <Button
