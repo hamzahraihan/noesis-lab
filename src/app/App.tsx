@@ -17,6 +17,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router';
 import BenchRoute from '@/routes/BenchRoute';
 import { HomeRoute } from '@/routes/HomeRoute';
+import { BoardsPage } from '@/features/learn';
 import {
   ExercisePage,
   ExercisesPage,
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/learn/:id" element={<ExercisePage />} />
         <Route path="/projects/:boardId" element={<ProjectsRoute />} />
         <Route path="/" element={<HomeRoute />} />
+<Route path="/boards" element={<BoardsPage />} />
         {/*
          * The bare `/bench` redirect exists so a hand-typed or stale link lands
          * on a working bench rather than an empty one. `replace` keeps it out of
