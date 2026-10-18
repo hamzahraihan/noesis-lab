@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { CheckIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { Link, useParams } from 'react-router';
-import { Button } from '@/components';
+import { Button, Navbar } from '@/components';
 import {
   EXERCISES,
   EXERCISE_BOARD,
@@ -51,22 +51,15 @@ export function ExercisesPage() {
   const levels = [...new Set(EXERCISES.map((exercise) => exercise.level))].sort();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <header className="border-b border-slate-800">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <Button asChild variant="secondary" size="sm">
-            <Link to="/">Noesis Lab</Link>
-          </Button>
-          <span className="text-slate-600">/</span>
-          <h1 className="text-sm font-medium text-slate-300">Learn</h1>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+      <Navbar />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <h2 className="text-2xl font-semibold tracking-tight text-balance text-slate-100">
+        <h2 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
           Embedded systems, from a pin you can switch
         </h2>
-        <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-slate-400">
+        <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
           Nine exercises in five levels, written for the Arduino Uno R3. Each one is a circuit
           you build and a program you write; every circuit also runs in the simulator, so you
           can do the whole track without hardware on the desk. Start at level 1 unless you
@@ -84,9 +77,9 @@ export function ExercisesPage() {
 
         {levels.map((level) => (
           <section key={level} className="mt-12">
-            <div className="flex items-baseline gap-3 border-b border-slate-800 pb-2.5">
-              <h3 className="text-sm font-semibold tracking-tight text-slate-100">Level {level}</h3>
-              <span className="text-xs text-slate-400">
+            <div className="flex items-baseline gap-3 border-b border-[var(--hd-border)] pb-2.5">
+              <h3 className="text-sm font-semibold tracking-tight text-[var(--hd-text)]">Level {level}</h3>
+              <span className="text-xs text-[var(--hd-muted)]">
                 {level === STARTING_LEVEL ? 'start here' : `needs level ${level - 1}`}
               </span>
             </div>
@@ -96,35 +89,35 @@ export function ExercisesPage() {
                 <li key={exercise.id}>
                   <Link
                     to={`/learn/${exercise.id}`}
-                    className="group block overflow-hidden rounded-none border border-slate-800 bg-slate-900/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-slate-900 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                    className="group block overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-[var(--hd-surface)] hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
                   >
                     {/*
                      * The destination, up front: the finished wiring each
                      * exercise builds toward, drawn by the bench's own
                      * renderer rather than described.
                      */}
-                    <span className="block h-28 border-b border-slate-800 bg-slate-950">
+                    <span className="block h-28 border-b border-[var(--hd-border)] bg-[var(--hd-bg)]">
                       <ExercisePreview exercise={exercise} fit="slice" className="h-full w-full" />
                     </span>
                     <span className="block px-4 py-3.5">
                     <div className="flex items-baseline gap-3">
-                      <span className="num font-mono text-xs text-sky-400/90">{exercise.id}</span>
-                      <span className="font-medium tracking-tight text-slate-100">{exercise.title}</span>
-                      <span className="num ml-auto shrink-0 text-xs text-slate-500">
+                      <span className="num font-mono text-xs text-[var(--hd-accent)]/90">{exercise.id}</span>
+                      <span className="font-medium tracking-tight text-[var(--hd-text)]">{exercise.title}</span>
+                      <span className="num ml-auto shrink-0 text-xs text-[var(--hd-faint)]">
                         {exercise.minutes}
                       </span>
                     </div>
-                    <p className="mt-1.5 line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-slate-400">
+                    <p className="mt-1.5 line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
                       {exercise.brief}
                     </p>
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      <span className="rounded-none bg-slate-800 px-1.5 py-0.5 text-[11px] font-medium text-slate-300">
+                      <span className="rounded-none bg-[var(--hd-border)] px-1.5 py-0.5 text-xs font-medium text-[var(--hd-text)]">
                         {exercise.difficulty}
                       </span>
                       {exercise.concepts.slice(0, 2).map((concept) => (
                         <span
                           key={concept}
-                          className="rounded-none bg-slate-800/70 px-1.5 py-0.5 text-[11px] text-slate-500"
+                          className="rounded-none bg-[var(--hd-border)]/70 px-1.5 py-0.5 text-xs text-[var(--hd-faint)]"
                         >
                           {concept}
                         </span>
@@ -158,8 +151,8 @@ export function ExercisePage() {
   if (exercise === null) {
     return (
       <ExerciseShell title="No such exercise">
-        <p className="text-sm text-slate-400">
-          There is no exercise {id}. <Link to="/learn" className="text-sky-400 underline">Back to the list</Link>.
+        <p className="text-sm text-[var(--hd-muted)]">
+          There is no exercise {id}. <Link to="/learn" className="text-[var(--hd-accent)] underline">Back to the list</Link>.
         </p>
       </ExerciseShell>
     );
@@ -167,10 +160,10 @@ export function ExercisePage() {
 
   return (
     <ExerciseShell title={exercise.title} crumb={exercise.id}>
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-[var(--hd-muted)]">
         {exercise.module} · {exercise.difficulty} · {exercise.minutes}
       </p>
-      <p className="mt-3 max-w-[65ch] text-[15px] leading-relaxed text-slate-300">{exercise.brief}</p>
+      <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-text)]">{exercise.brief}</p>
 
       <FinishedBuild exercise={exercise} />
 
@@ -184,11 +177,11 @@ export function ExercisePage() {
       <SolutionPanel exercise={exercise} />
       <References exercise={exercise} />
 
-      <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-6">
+      <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-[var(--hd-border)] pt-6">
         <Button asChild size="sm">
           <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`}>Put it on the bench</Link>
         </Button>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-[var(--hd-faint)]">
           Opens the bench with wiring + code, and the guide walks you through it.
         </span>
         <span className="flex-1" />
@@ -210,26 +203,20 @@ function ExerciseShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <header className="border-b border-slate-800">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
-          <Button asChild variant="secondary" size="sm">
-            <Link to="/">Noesis Lab</Link>
-          </Button>
-          <span className="text-slate-600">/</span>
-          <Link to="/learn" className="text-sm text-slate-400 hover:text-slate-200">
-            Learn
-          </Link>
-          {crumb !== undefined && (
-            <>
-              <span className="text-slate-600">/</span>
-              <span className="font-mono text-xs text-slate-500">{crumb}</span>
-            </>
-          )}
-        </div>
-      </header>
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+      <Navbar />
+      <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
+        <Link to="/learn" className="transition-colors hover:text-[var(--hd-muted)]">Learn</Link>
+        {crumb !== undefined && (
+          <>
+            <span className="mx-2">/</span>
+            <span className="font-mono">{crumb}</span>
+          </>
+        )}
+      </div>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance text-slate-100">{title}</h1>
+        <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">{title}</h1>
         <div className="mt-8 space-y-10">{children}</div>
       </main>
     </div>
@@ -246,7 +233,7 @@ function Section({
 }) {
   return (
     <section>
-      <h2 className="border-b border-slate-800 pb-2.5 text-sm font-semibold tracking-tight text-slate-100">{title}</h2>
+      <h2 className="border-b border-[var(--hd-border)] pb-2.5 text-sm font-semibold tracking-tight text-[var(--hd-text)]">{title}</h2>
       <div className="mt-3.5">{children}</div>
     </section>
   );
@@ -262,23 +249,23 @@ function FinishedBuild({ exercise }: { exercise: Exercise }) {
   const working = exercise.solution?.working;
   return (
     <figure>
-      <div className="overflow-hidden rounded-none border border-slate-800 bg-slate-950 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
+      <div className="overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg)] shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
         <ExercisePreview exercise={exercise} className="h-64 w-full" />
       </div>
-      <figcaption className="mt-2 text-xs leading-relaxed text-slate-500">
+      <figcaption className="mt-2 text-xs leading-relaxed text-[var(--hd-faint)]">
         The finished wiring, exactly as the bench loads it — unpowered here, so nothing is lit.
         Put it on the bench and press Run to see it live.
       </figcaption>
       {working !== undefined && working.length > 0 && (
-        <div className="mt-4 rounded-none border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
-            <CheckIcon className="icon-sm text-emerald-500" aria-hidden="true" />
+        <div className="mt-4 rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 p-4">
+          <h3 className="flex items-center gap-1.5 text-sm font-medium text-[var(--hd-text)]">
+            <CheckIcon className="icon-sm text-[var(--hd-success)]" aria-hidden="true" />
             When it is working
           </h3>
           <ul className="mt-2 space-y-1.5">
             {working.map((sign) => (
-              <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-slate-400">
-                <CheckIcon className="icon-sm mt-0.5 shrink-0 text-emerald-500" aria-hidden="true" />
+              <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-[var(--hd-muted)]">
+                <CheckIcon className="icon-sm mt-0.5 shrink-0 text-[var(--hd-success)]" aria-hidden="true" />
                 <span>{sign}</span>
               </li>
             ))}
@@ -294,8 +281,8 @@ function Concepts({ exercise }: { exercise: Exercise }) {
     <Section title="What this is the first time you meet">
       <ul className="space-y-1.5">
         {exercise.concepts.map((concept) => (
-          <li key={concept} className="flex gap-2 text-sm leading-relaxed text-slate-400">
-            <span className="text-sky-500">·</span>
+          <li key={concept} className="flex gap-2 text-sm leading-relaxed text-[var(--hd-muted)]">
+            <span className="text-[var(--hd-accent)]">·</span>
             {concept}
           </li>
         ))}
@@ -310,15 +297,15 @@ function PartsTable({ exercise }: { exercise: Exercise }) {
       <table className="w-full text-sm">
         <tbody>
           {exercise.parts.map((entry) => (
-            <tr key={entry.name} className="border-b border-slate-800/60 last:border-0">
-              <td className="w-8 py-1.5 text-right font-mono text-xs text-slate-500">{entry.qty}×</td>
-              <td className="w-48 py-1.5 pr-4 text-slate-200">{entry.name}</td>
-              <td className="py-1.5 text-slate-400">{entry.why}</td>
+            <tr key={entry.name} className="border-b border-[var(--hd-border)]/60 last:border-0">
+              <td className="w-8 py-1.5 text-right font-mono text-xs text-[var(--hd-faint)]">{entry.qty}×</td>
+              <td className="w-48 py-1.5 pr-4 text-[var(--hd-text)]">{entry.name}</td>
+              <td className="py-1.5 text-[var(--hd-muted)]">{entry.why}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-[var(--hd-faint)]">
         Part names are the simulator's own, so what you read here is exactly what you will find in
         the Components list. A 10 kΩ resistor is listed as <code>10k Resistor</code>.
       </p>
@@ -331,7 +318,7 @@ function WiringTable({ exercise }: { exercise: Exercise }) {
     <Section title="Wiring">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
+          <tr className="text-left text-xs uppercase tracking-wider text-[var(--hd-faint)]">
             <th className="py-1.5 pr-4 font-normal">Board pin</th>
             <th className="py-1.5 pr-4 font-normal">Part</th>
             <th className="py-1.5 pr-4 font-normal">Terminal</th>
@@ -348,17 +335,17 @@ function WiringTable({ exercise }: { exercise: Exercise }) {
            * from three different buttons.
            */}
           {exercise.wiring.map((row, index) => (
-            <tr key={`${row.pin}-${row.part}-${row.terminal}-${index}`} className="border-t border-slate-800/60">
+            <tr key={`${row.pin}-${row.part}-${row.terminal}-${index}`} className="border-t border-[var(--hd-border)]/60">
               <td
                 className={`py-1.5 pr-4 font-mono text-xs ${
-                  isBoardPin(row.pin) ? 'text-sky-400' : 'text-slate-500'
+                  isBoardPin(row.pin) ? 'text-[var(--hd-accent)]' : 'text-[var(--hd-faint)]'
                 }`}
               >
                 {row.pin}
               </td>
-              <td className="py-1.5 pr-4 text-slate-200">{row.part}</td>
-              <td className="py-1.5 pr-4 font-mono text-xs text-slate-400">{row.terminal}</td>
-              <td className="py-1.5 text-slate-400">{row.goesTo}</td>
+              <td className="py-1.5 pr-4 text-[var(--hd-text)]">{row.part}</td>
+              <td className="py-1.5 pr-4 font-mono text-xs text-[var(--hd-muted)]">{row.terminal}</td>
+              <td className="py-1.5 text-[var(--hd-muted)]">{row.goesTo}</td>
             </tr>
           ))}
         </tbody>
@@ -372,8 +359,8 @@ function Steps({ exercise }: { exercise: Exercise }) {
     <Section title="Build order">
       <ol className="space-y-2">
         {exercise.steps.map((step, index) => (
-          <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-400">
-            <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-slate-600">
+          <li key={step} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
+            <span className="mt-0.5 w-5 shrink-0 font-mono text-xs text-[var(--hd-faint)]">
               {index + 1}.
             </span>
             {step}
@@ -387,12 +374,12 @@ function Steps({ exercise }: { exercise: Exercise }) {
 function SketchPanel({ exercise }: { exercise: Exercise }) {
   return (
     <Section title="The program">
-      <p className="mb-3 max-w-[65ch] text-sm leading-relaxed text-slate-400">
-        Press <span className="font-medium text-slate-200">Put it on the bench</span> below: it wires the
+      <p className="mb-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
+        Press <span className="font-medium text-[var(--hd-text)]">Put it on the bench</span> below: it wires the
         circuit above onto the bench, loads this sketch into the editor, and opens the guide
         that walks you through it. Then press Run.
       </p>
-      <pre className="overflow-x-auto rounded-none border border-slate-800 bg-slate-900 p-4 text-xs leading-relaxed text-slate-300 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
+      <pre className="overflow-x-auto rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)] p-4 text-xs leading-relaxed text-[var(--hd-text)] shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
         <code>{exercise.sketch}</code>
       </pre>
     </Section>
@@ -403,9 +390,9 @@ function FaultPanel({ exercise }: { exercise: Exercise }) {
   if (exercise.fault === undefined) return null;
   return (
     <Section title="Break it on purpose">
-      <div className="rounded-none border border-amber-900/60 bg-amber-950/20 p-4">
-        <p className="text-sm font-medium text-amber-200">{exercise.fault.break_}</p>
-        <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{exercise.fault.teaches}</p>
+      <div className="rounded-none border border-[var(--hd-warn)]/30 bg-[var(--hd-warn)]/10 p-4">
+        <p className="text-sm font-medium text-[var(--hd-warn)]">{exercise.fault.break_}</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-[var(--hd-muted)]">{exercise.fault.teaches}</p>
       </div>
     </Section>
   );
@@ -423,14 +410,14 @@ function Hints({
   const available = exercise.hints.length;
   return (
     <Section title="Need a nudge?">
-      <p className="mb-3 text-sm leading-relaxed text-slate-400">
+      <p className="mb-3 text-sm leading-relaxed text-[var(--hd-muted)]">
         Try it yourself first — the guessing is the skill. If you are stuck, take the next one.
       </p>
       <div className="space-y-2">
         {exercise.hints.slice(0, revealed).map((hint) => (
-          <div key={hint.when} className="rounded-none border border-slate-800 bg-slate-900/60 p-4">
-            <p className="text-sm font-medium text-slate-200">{hint.when}</p>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{hint.answer}</p>
+          <div key={hint.when} className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 p-4">
+            <p className="text-sm font-medium text-[var(--hd-text)]">{hint.when}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-[var(--hd-muted)]">{hint.answer}</p>
           </div>
         ))}
       </div>
@@ -472,7 +459,7 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
     <Section title="How it goes together">
       {!open ? (
         <>
-          <p className="mb-3 text-sm leading-relaxed text-slate-400">
+          <p className="mb-3 text-sm leading-relaxed text-[var(--hd-muted)]">
             The reasoning behind the wiring — why each pin is where it is, and what a finished
             circuit should be doing. Worth reading after you have tried it and read the hints.
           </p>
@@ -483,11 +470,11 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
       ) : (
         <div className="space-y-5">
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">Where to start</h3>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">Where to start</h3>
             <ol className="space-y-2">
               {solution.approach.map((step, index) => (
-                <li key={step} className="flex gap-3 text-sm leading-relaxed text-slate-400">
-                  <span className="num shrink-0 text-slate-600">{index + 1}.</span>
+                <li key={step} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
+                  <span className="num shrink-0 text-[var(--hd-faint)]">{index + 1}.</span>
                   <span>{step}</span>
                 </li>
               ))}
@@ -495,7 +482,7 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">Why each wire is where it is</h3>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">Why each wire is where it is</h3>
             <dl className="space-y-3">
               {/*
                * Keyed by position for the same reason as the wiring table: the
@@ -504,21 +491,21 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
                */}
               {solution.wiring.map((wire, index) => (
                 <div key={`${wire.pin}:${wire.terminal}:${index}`}>
-                  <dt className="num text-xs text-slate-300">
+                  <dt className="num text-xs text-[var(--hd-text)]">
                     {wire.pin} → {wire.terminal}
                   </dt>
-                  <dd className="mt-0.5 text-sm leading-relaxed text-slate-400">{wire.why}</dd>
+                  <dd className="mt-0.5 text-sm leading-relaxed text-[var(--hd-muted)]">{wire.why}</dd>
                 </div>
               ))}
             </dl>
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">When it is working</h3>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">When it is working</h3>
             <ul className="space-y-2">
               {solution.working.map((sign) => (
-                <li key={sign} className="flex gap-3 text-sm leading-relaxed text-slate-400">
-                  <CheckIcon className="icon-sm mt-0.5 shrink-0 text-emerald-500" aria-hidden="true" />
+                <li key={sign} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
+                  <CheckIcon className="icon-sm mt-0.5 shrink-0 text-[var(--hd-success)]" aria-hidden="true" />
                   <span>{sign}</span>
                 </li>
               ))}
@@ -526,10 +513,10 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-200">What usually goes wrong</h3>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">What usually goes wrong</h3>
             <ul className="space-y-2">
               {solution.traps.map((trap) => (
-                <li key={trap} className="flex gap-3 text-sm leading-relaxed text-slate-400">
+                <li key={trap} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
                   <Cross2Icon className="icon-sm mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />
                   <span>{trap}</span>
                 </li>
@@ -552,15 +539,15 @@ function References({ exercise }: { exercise: Exercise }) {
       <dl className="space-y-4">
         {exercise.references.map((reference) => (
           <div key={reference.term}>
-            <dt className="text-sm font-medium text-slate-200">{reference.term}</dt>
-            <dd className="mt-1 text-sm leading-relaxed text-slate-400">
+            <dt className="text-sm font-medium text-[var(--hd-text)]">{reference.term}</dt>
+            <dd className="mt-1 text-sm leading-relaxed text-[var(--hd-muted)]">
               {reference.what}{' '}
               {reference.readMore !== undefined && (
                 <a
                   href={reference.readMore}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sky-400 underline underline-offset-2"
+                  className="text-[var(--hd-accent)] underline underline-offset-2"
                 >
                   Arduino reference
                 </a>
@@ -569,9 +556,9 @@ function References({ exercise }: { exercise: Exercise }) {
           </div>
         ))}
       </dl>
-      <p className="mt-4 text-xs text-slate-500">
+      <p className="mt-4 text-xs text-[var(--hd-faint)]">
         Full write-up: <code>{exercise.writeUp}</code> in the repository. More vocabulary on the{' '}
-        <Link to="/learn/references" className="text-sky-400 underline underline-offset-2">
+        <Link to="/learn/references" className="text-[var(--hd-accent)] underline underline-offset-2">
           reference page
         </Link>
         .
@@ -591,7 +578,7 @@ function References({ exercise }: { exercise: Exercise }) {
 export function ReferencesPage() {
   return (
     <ExerciseShell title="Reference & glossary">
-      <p className="text-sm leading-relaxed text-slate-400">
+      <p className="text-sm leading-relaxed text-[var(--hd-muted)]">
         The words and numbers an embedded course assumes you already know. Nothing here is specific to
         any one exercise — it is the vocabulary the exercises are written in.
       </p>
@@ -682,14 +669,14 @@ export function ReferencesPage() {
                 href={href}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sky-400 underline underline-offset-2"
+                className="text-[var(--hd-accent)] underline underline-offset-2"
               >
                 {label}
               </a>
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+        <p className="mt-3 text-xs leading-relaxed text-[var(--hd-faint)]">
           Datasheets are where the real answers live, and they are free. The two worth having on hand
           are the <strong>ATmega328P</strong> datasheet (every pin, register and electrical limit of
           the Uno) and the datasheet for whichever sensor module you are using.
@@ -710,15 +697,15 @@ function Term({
 }) {
   return (
     <div>
-      <dt className="text-sm font-medium text-slate-200">{term}</dt>
-      <dd className="mt-1 text-sm leading-relaxed text-slate-400">
+      <dt className="text-sm font-medium text-[var(--hd-text)]">{term}</dt>
+      <dd className="mt-1 text-sm leading-relaxed text-[var(--hd-muted)]">
         {what}{' '}
         {readMore !== undefined && (
           <a
             href={readMore}
             target="_blank"
             rel="noreferrer"
-            className="text-sky-400 underline underline-offset-2"
+            className="text-[var(--hd-accent)] underline underline-offset-2"
           >
             Read more
           </a>
