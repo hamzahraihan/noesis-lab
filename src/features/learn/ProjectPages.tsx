@@ -9,7 +9,7 @@
 
 import { Link, useParams } from 'react-router';
 import { ArrowRightIcon } from '@radix-ui/react-icons';
-import { Badge, Button, Navbar } from '@/components';
+import { Badge, Button, Navbar, SkipLink } from '@/components';
 import { boardOption, boardSpecs, DEFAULT_BOARD_ID, isBoardId } from './boardRegistry';
 import { EXAMPLES } from './examples';
 import { GALLERY, buildFor } from './gallery';
@@ -205,18 +205,21 @@ function ProjectShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+      <SkipLink />
+      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
       <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
       <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
         <Link to="/boards" className="transition-colors hover:text-[var(--hd-muted)]">Boards</Link>
         <span className="mx-2">/</span>
         <span>Featured project</span>
       </div>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
         <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">{title}</h1>
         <div className="mt-8 space-y-10">{children}</div>
       </main>
+      </div>
     </div>
   );
 }

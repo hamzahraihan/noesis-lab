@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import { CheckIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { Link, useParams } from 'react-router';
-import { Button, Navbar } from '@/components';
+import { Button, Navbar, SkipLink } from '@/components';
 import { DEFAULT_BOARD_ID } from './boardRegistry';
 import {
   EXERCISES,
@@ -52,11 +52,13 @@ export function ExercisesPage() {
   const levels = [...new Set(EXERCISES.map((exercise) => exercise.level))].sort();
 
   return (
-    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+      <SkipLink />
+      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
       <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
         <h2 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
           Embedded systems, from a pin you can switch
         </h2>
@@ -132,6 +134,7 @@ export function ExercisesPage() {
           </section>
         ))}
       </main>
+      </div>
     </div>
   );
 }
@@ -204,8 +207,10 @@ function ExerciseShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+      <SkipLink />
+      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
       <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
       <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
         <Link to="/learn" className="transition-colors hover:text-[var(--hd-muted)]">Learn</Link>
@@ -216,10 +221,11 @@ function ExerciseShell({
           </>
         )}
       </div>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
         <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">{title}</h1>
         <div className="mt-8 space-y-10">{children}</div>
       </main>
+      </div>
     </div>
   );
 }

@@ -59,3 +59,4 @@ export {
 export { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 export { Navbar } from '@/components/Navbar';
 export { AnnouncementStrip } from '@/components/AnnouncementStrip';
+export { SkipLink } from '@/components/SkipLink';

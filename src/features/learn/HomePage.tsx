@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Navbar, AnnouncementStrip } from '@/components';
+import { Navbar, AnnouncementStrip, SkipLink } from '@/components';
 
 import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardRegistry';
 import { PartPreview } from '@/features/bench';
@@ -46,15 +46,13 @@ export function HomePage() {
         href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap"
       />
 
-      <a href="#main" className="skip-link">
-        Skip to content
-      </a>
+      <SkipLink />
 
       <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
         <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
         <AnnouncementStrip />
 
-        <main id="main">
+        <main id="main" tabIndex={-1}>
           {/* Hero */}
       <header className="relative mx-auto max-w-6xl overflow-hidden px-6 pt-10 pb-12">
         <svg
