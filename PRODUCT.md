@@ -42,7 +42,8 @@ A neighboring product could not truthfully copy these together:
 Confirmed capabilities:
 - Resistive-network circuit solver per frame; pin-level voltage/current readout.
 - Firmware interpreter for a deliberately small C++ subset (void/int/float/double/bool/char/byte/long/short/unsigned/signed, arrays, #define; no struct/enum/pointers/classes/String/uint8_t).
-- Arduino APIs the interpreter implements: pinMode, digitalWrite, analogWrite, Serial, Wire (including requestFrom/read), SPI, delay, millis, and board-specific interrupts; character LCD (HD44780) and servos.
+- Arduino APIs the interpreter implements: pinMode, digitalWrite, analogWrite, Serial, Wire (including requestFrom/read), SPI, delay, millis, and board-specific interrupts; character LCD (HD44780), servos, and a `tft` convenience layer.
+- A bench-local network: `WiFi.begin`/`status`/`localIP` with Arduino's `WL_*` codes, and a poll-based `net` port — `get`/`read` for HTTP and `subscribe`/`available`/`message` for a sensor that publishes. It is simulated, so it is deterministic and needs no internet; the answer arrives on simulated time, which is why a sketch polls for it.
 - Guided exercise ladder: 11 exercises (0.1 first circuit; 1.1–1.2 GPIO; 2.1–2.2 analog; 3.1–3.2 bus protocols; 4.1–4.2 interrupts; 5.1 maps; 5.2 single-board computers).
 - Project gallery per board; glossary; references page; diagnostics harness.
 - Real 1:1 scale parts on 2.54 mm pitch; pin coordinates in millimetres.
