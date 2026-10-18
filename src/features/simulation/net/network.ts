@@ -308,9 +308,26 @@ export class VirtualNetwork {
            * time only as well as it can count milliseconds, so the honest way
            * to know the time is to ask someone who has it.
            */
-          '/time': () => new Date(NET_EPOCH_MS + this.nowMs()).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+          '/time': () => this.clockBody(),
+        },
+      },
+      /*
+       * A second name for the same clock. Two hosts rather than one because
+       * that is what a network is: a name resolves or it does not, and a
+       * sketch that could only ever talk to one server would never meet the
+       * failure a wrong name is.
+       */
+      'time.noesis': {
+        address: '192.168.4.2',
+        routes: {
+          '/time': () => this.clockBody(),
         },
       },
     };
+  }
+
+  /** The bench clock as a request body: ISO-8601 UTC, on simulated time. */
+  private clockBody(): string {
+    return new Date(NET_EPOCH_MS + this.nowMs()).toISOString().replace(/\.\d{3}Z$/, 'Z');
   }
 }

@@ -51,6 +51,9 @@ export * from './map/map-fetcher';
 // (in-page `Simulation` and the sim worker) wire the same port, and the worker
 // core must reach it without a cross-feature edge.
 export * from './net/network';
+// The bench's colour panel, exported for the same reason: both backends drive
+// one port, and the gate that makes it obey the wires lives in the port.
+export * from './display/tft';
 // Rollout seam (Stages 2-3): bench threads the wasm default through this
 // barrel (bare `@/features/simulation` — the boundary gate forbids bench-deep
 // imports). Named re-export only, so the harness-only helpers in wasm-core

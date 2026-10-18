@@ -281,8 +281,9 @@ the other starves the request.
 **What this twin verifies faithfully:** the two-job loop — the temperature
 arriving while the clock request is out — the poll-and-flag shape, the failure
 state, and the panel updating. The network itself is the bench's: `noesis-bench`
-with the password `benchwifi`, `api.noesis` serving `/time` and `/hello`, and
-the sensor publishing `readings/temp` once a second (retained, so the first
+with the password `benchwifi`, `api.noesis` serving `/time` and `/hello`,
+`time.noesis` answering the same clock under a second name, and the sensor
+publishing `readings/temp` once a second (retained, so the first
 reading is waiting on the subscribe). Every answer arrives on *simulated* time,
 so the same sketch behaves identically on every machine.
 
@@ -291,10 +292,13 @@ no signal strength, no association timeout, no packet loss — so the join eithe
 lands or is refused and never anything in between. There is no real internet:
 a name the bench does not know fails immediately, and the CORS and TLS
 constraints of a real browser do not exist here. The panel is driven through
-the bench's `tft` layer rather than by your own SPI writes, so the six jumpers
-are the bus a real panel would use but unwiring them does not blind the twin
-(5.1 writes SPI itself and does notice). Timing is simulated, so a slow network
-is a number in the simulator, not weather.
+the bench's `tft` layer rather than by your own SPI writes: the six jumpers are
+the bus that layer needs, so pulling `CS`, `D/C`, `CLK` or `DIN` blinds the twin
+exactly as it would blind a real panel — the glass keeps its last picture and
+hears nothing new (5.1 writes SPI itself and notices the same four). What the
+layer still does not charge you for is the bytes: its commands are on the bus
+but are not timed the way 5.1's own writes are. Timing is simulated, so a slow
+network is a number in the simulator, not weather.
 
 **A note on this sketch's dialect:** no `String`, no `struct`, no pointers, no
 file-scope `const` (use `#define`), one declarator per declaration, and integer

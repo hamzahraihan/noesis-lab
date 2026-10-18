@@ -116,6 +116,36 @@ function tftOf(simulation: Simulation): Ili9341 {
   return simulation.engine.displayController(part.id) as Ili9341;
 }
 
+const LIBRARY_SKETCH = `
+void setup() {
+  tft.begin();
+  tft.fillRect(0, 0, 8, 8, 0xF800);
+  Serial.print("size ");
+  Serial.print(tft.width());
+  Serial.print("x");
+  Serial.println(tft.height());
+}
+
+void loop() {}
+`;
+
+/** The jumper that feeds the panel's chip-select pin. */
+function csJumperId(simulation: Simulation): string {
+  const panel = simulation.bench.parts.find(
+    (part) => part.definition.component.kind === 'display',
+  )!;
+  const pin = panel.definition.pins.find((candidate) => candidate.id === 'CS')!;
+  const x = panel.x + pin.x;
+  const y = panel.y + pin.y;
+  const wire = simulation.bench.wires.find((candidate) =>
+    [candidate.from, candidate.to].some((terminal) => {
+      const at = simulation.bench.terminals[terminal];
+      return at !== undefined && Math.abs(at.x - x) < 0.5 && Math.abs(at.y - y) < 0.5;
+    }),
+  )!;
+  return wire.id;
+}
+
 describe('TFT on the bench', () => {
   it('is reachable when all four SPI signals are wired', () => {
     const simulation = tftBench();
@@ -163,5 +193,56 @@ describe('TFT on the bench', () => {
     run(simulation, SKETCH, 10);
     // Even the short setup transfers cost measurable time on the wire.
     expect(simulation.engine.timeMs).toBeGreaterThan(0);
+  });
+});
+
+/*
+ * The library layer draws by part, so its fidelity is the part it can reach:
+ * the same four signals the byte path above needs. A command needs the bus, a
+ * query does not -- a library knows its own size with or without a jumper.
+ */
+describe('the tft library on the bench', () => {
+  it('reaches the panel when all four signals are wired', () => {
+    const simulation = tftBench();
+    run(simulation, LIBRARY_SKETCH, 200);
+    const tft = tftOf(simulation);
+    expect(tft.isOn()).toBe(true);
+    expect(tft.pixelAt(0, 0)).toBe(0xf800);
+    expect(tft.pixelAt(8, 0)).toBe(0);
+    expect(simulation.serialLines().join('')).toContain('size 320x240');
+  });
+
+  it.each(['CS', 'DC', 'SCK', 'MOSI'])(
+    'hears nothing with %s left unwired',
+    (signal) => {
+      const simulation = tftBench({ omitSignal: signal });
+      run(simulation, LIBRARY_SKETCH, 200);
+      const tft = tftOf(simulation);
+      expect(tft.pixelAt(0, 0)).toBe(0);
+      expect(tft.isOn()).toBe(false);
+    },
+  );
+
+  it('still answers its size when the panel is not wired', () => {
+    const simulation = tftBench({ omitSignal: 'CS' });
+    run(simulation, LIBRARY_SKETCH, 200);
+    expect(simulation.serialLines().join('')).toContain('size 320x240');
+  });
+
+  it('freezes when its chip-select jumper is pulled mid-run', () => {
+    const simulation = tftBench();
+    run(simulation, LIBRARY_SKETCH, 200);
+    expect(tftOf(simulation).pixelAt(0, 0)).toBe(0xf800);
+
+    simulation.removeWire(csJumperId(simulation));
+    run(simulation, 'void setup() { tft.fillRect(16, 0, 8, 8, 0x07E0); }\nvoid loop() {}\n', 200);
+
+    // The glass keeps the picture it has: the fill never arrived, and the
+    // panel is still on, because being on is a state a missing jumper cannot
+    // take away -- only a command that reaches it can.
+    const tft = tftOf(simulation);
+    expect(tft.pixelAt(16, 0)).toBe(0);
+    expect(tft.pixelAt(0, 0)).toBe(0xf800);
+    expect(tft.isOn()).toBe(true);
   });
 });

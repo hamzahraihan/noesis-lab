@@ -11,6 +11,7 @@ import {
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
 import { exerciseById } from '@/features/learn';
+import { CIRCUITS } from '@/features/learn/circuits';
 import { esp32DevKitV1, ili9341Definition, type Ili9341 } from '@/features/parts';
 
 describe('sim core', () => {
@@ -98,20 +99,29 @@ describe('tft snapshot transport', () => {
     return { layout: null, pinVolts: new Map(), values: new Map(), colon: new Map(), serial: [] };
   }
 
+  /** The shipped ESP32 panel circuit, where the panel is on the SPI bus. */
+  function wiredTftBench() {
+    const simulation = new Simulation(esp32DevKitV1());
+    expect(simulation.loadCircuit(CIRCUITS['esp32-tft'])).toEqual([]);
+    return simulation.bench;
+  }
+
   it('round-trips painted panel pixels through writeTft, readFrame, and mirror decode', () => {
-    const core = createSimCore(boardOption('uno').make());
-    core.rebuild(tftBench(), paintSketch, 'interpreter');
+    const core = createSimCore(boardOption('esp32').make());
+    core.rebuild(wiredTftBench(), paintSketch, 'interpreter');
     expect(core.fault).toBeNull();
     core.step(16);
     core.step(16);
 
     const frame = tftView(core.snapshot()).readFrame();
-    expect(frame.width).toBe(320);
-    expect(frame.height).toBe(240);
-    expect(frame.rgb565).toHaveLength(320 * 240 * 2);
+    // The document's panel is the 3.2" one: 480x320 of visible glass.
+    expect(frame.width).toBe(480);
+    expect(frame.height).toBe(320);
+    expect(frame.rgb565).toHaveLength(480 * 320 * 2);
 
     const at = (x: number, y: number): number =>
-      ((frame.rgb565[(y * 320 + x) * 2] ?? 0) << 8) | (frame.rgb565[(y * 320 + x) * 2 + 1] ?? 0);
+      ((frame.rgb565[(y * frame.width + x) * 2] ?? 0) << 8) |
+      (frame.rgb565[(y * frame.width + x) * 2 + 1] ?? 0);
     // Inside the painted rect, away from any text; and untouched black.
     expect(at(15, 25)).toBe(0xf800);
     expect(at(200, 200)).toBe(0);
@@ -123,11 +133,22 @@ describe('tft snapshot transport', () => {
 
     // RGBA decode spot-checks the same two pixels.
     const rgba = tftRgbaFromFrame(frame.width, frame.height, frame.rgb565);
-    expect(rgba).toHaveLength(320 * 240 * 4);
+    expect(rgba).toHaveLength(480 * 320 * 4);
     const px = (x: number, y: number): number[] =>
-      Array.from(rgba.slice((y * 320 + x) * 4, (y * 320 + x) * 4 + 4));
+      Array.from(rgba.slice((y * frame.width + x) * 4, (y * frame.width + x) * 4 + 4));
     expect(px(15, 25)).toEqual([255, 0, 0, 255]);
     expect(px(200, 200)).toEqual([0, 0, 0, 255]);
+  });
+
+  it('paints nothing when the panel is not wired to the bus', () => {
+    const core = createSimCore(boardOption('uno').make());
+    core.rebuild(tftBench(), paintSketch, 'interpreter');
+    core.step(16);
+    core.step(16);
+    const frame = tftView(core.snapshot()).readFrame();
+    expect(frame.width).toBe(320);
+    expect(frame.height).toBe(240);
+    expect(frame.rgb565.some((byte) => byte !== 0)).toBe(false);
   });
 
   it('reports an empty frame, with no mirror copy, when no TFT is on the bench', () => {

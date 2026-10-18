@@ -51,11 +51,12 @@ import { HUMIDITY_KNOB } from '@/features/parts';
 import { pixelCount, type PixelColor } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
-import { Ili9341, type PanelRotation } from '@/features/parts';
+import { Ili9341 } from '@/features/parts';
 import { TileFetcher } from '../utils/map-fetcher';
 import { TILE_SIZE, TileStore } from '../utils/map-tiles';
 import { VirtualNetwork, createNetPort } from '@/features/simulation';
-import type { MapPort, TftPort } from '@/features/simulation';
+import type { MapPort } from '@/features/simulation';
+import { createTftPort, panelOnBus } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
 import { BusLog, type BusEntry } from '@/features/simulation';
@@ -1849,7 +1850,7 @@ export class Simulation {
     },
     blit: (z, x, y, destX, destY) => {
       const pixels = this.tiles.get(z, x, y);
-      const panel = this.tft();
+      const panel = panelOnBus(this.engine, this.displayControllers());
       if (!pixels || !panel) return false;
       panel.blit(destX, destY, pixels.length === 1 ? 1 : TILE_SIZE, TILE_SIZE, pixels);
       return true;
@@ -1858,58 +1859,11 @@ export class Simulation {
     reset: () => this.tiles.clearWanted(),
   };
 
-  /** The colour TFT on the bench, which is where a map goes. */
-  private tft(): Ili9341 | undefined {
-    for (const controller of this.displayControllers().values()) {
-      if (controller instanceof Ili9341) return controller;
-    }
-    return undefined;
-  }
-
-  /**
-   * The colour panel as a sketch talks to it.
-   *
-   * The calls here are the library's convenience layer, not a second way to
-   * draw: pixels still go out over SPI exactly as the register writes do. What
-   * this adds is the one question SPI cannot answer -- how big the panel is
-   * right now -- which changes when it is turned, so a sketch that assumed
-   * 320x240 would be quietly wrong on a rotated one.
-   */
-  private readonly tftPort: TftPort = {
-    begin: () => {
-      this.tft()?.setDisplayOn(true);
-      return 0;
-    },
-    setRotation: (rotation) => {
-      const panel = this.tft();
-      if (!panel) return 0;
-      // The hardware clamps rather than refusing: an orientation outside 0..3
-      // is folded to a real one, and saying which is the useful part.
-      const target = Math.max(0, Math.min(3, Math.round(rotation))) as PanelRotation;
-      panel.setRotation(target);
-      return panel.rotation;
-    },
-    width: () => this.tft()?.width ?? 0,
-    height: () => this.tft()?.height ?? 0,
-    clear: () => {
-      this.tft()?.clear();
-      return 0;
-    },
-    fillRect: (x, y, width, height, colour) => {
-      this.tft()?.fill(x, y, width, height, colour);
-      return 0;
-    },
-    print: (text, x, y, colour) => {
-      this.tft()?.print(text, x, y, colour);
-      return 0;
-    },
-    textWidth: (text) => this.tft()?.textWidth(text) ?? 0,
-    textHeight: () => this.tft()?.textHeight() ?? 0,
-  };
-
   private services(): FirmwareServices {
     return {
-      tft: this.tftPort,
+      // Built here rather than as a field: `this.engine` is assigned in the
+      // constructor body, and a field initializer would run before it.
+      tft: createTftPort(this.engine, () => this.displayControllers()),
       map: this.map,
     net: createNetPort(this.net),
       nowMs: () => this.engine.timeMs,

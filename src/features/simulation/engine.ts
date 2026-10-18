@@ -821,8 +821,15 @@ export class Engine {
     }
   }
 
-  /** True when a display's CS, D/C, MOSI and SCK all land on the SPI nets. */
-  private isOnSpiBus(partId: string): boolean {
+  /**
+   * True when a display's CS, D/C, MOSI and SCK all land on the SPI nets.
+   *
+   * The gate the raw-byte path applies to every transaction, and the one the
+   * `tft` convenience layer asks before handing a command to a panel: a
+   * library reaches its panel over the same four signals, so a panel with one
+   * of them unwired hears nothing.
+   */
+  isOnSpiBus(partId: string): boolean {
     const netlist = this.currentNetlist;
     for (const pin of ['CS', 'DC', 'MOSI', 'SCK']) {
       const net = netlist.pinNode.get(`${partId}:${pin}`);

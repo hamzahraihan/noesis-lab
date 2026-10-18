@@ -108,6 +108,24 @@ describe('asking the network for something', () => {
     expect(network.read()).toMatch(/^2026-10-17T12:00:01Z$/);
   });
 
+  it('serves the clock on a second host as well', () => {
+    const { network, advance } = joined();
+    network.get('http://time.noesis/time');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://time.noesis/time')).toBe(1);
+    expect(network.failed()).toBe(0);
+    expect(network.read()).toMatch(/^2026-10-17T12:00:00Z$/);
+  });
+
+  it('answers a host only for the paths it serves', () => {
+    const { network, advance } = joined();
+    network.get('http://time.noesis/hello');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://time.noesis/hello')).toBe(1);
+    expect(network.failed()).toBe(1);
+    expect(network.read()).toBe('');
+  });
+
   it('reports a name it does not know as a failure, not as a wait', () => {
     const { network, advance } = joined();
     network.get('http://somewhere.else/hello');

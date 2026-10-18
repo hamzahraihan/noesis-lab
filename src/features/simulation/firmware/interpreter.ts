@@ -210,12 +210,12 @@ export interface FirmwareServices {
   map?: MapPort;
   servo?: ServoPort;
   /**
-   * A colour TFT, for the calls that are about the panel rather than its
-   * protocol: turning it, and asking how big it currently is.
+   * A colour TFT: turning it, drawing on it, and asking how big it is.
    *
-   * Optional for the same reason as every other port here. The sketch still
-   * talks to the panel over SPI for anything to do with pixels -- this is the
-   * library's convenience layer, not a second way to draw.
+   * Optional for the same reason as every other port here. The layer is the
+   * library, so it reaches the panel over the same four signals the raw path
+   * needs: with a jumper missing the panel hears nothing and keeps its last
+   * picture, and only the queries (size, text metrics) still answer.
    */
   tft?: TftPort;
   /**

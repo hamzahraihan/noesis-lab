@@ -84,7 +84,6 @@ import {
   DISTANCE_KNOB,
   DynamicState,
   HUMIDITY_KNOB,
-  Ili9341,
   LcdDriver,
   SevenSegment,
   TEMPERATURE_KNOB,
@@ -95,10 +94,10 @@ import type {
   DisplayController,
   KnobSpec,
   LcdCommand,
-  PanelRotation,
   PartDefinition,
   Servo,
 } from '@/features/parts';
+import { colorPanel, createTftPort, panelOnBus } from '../display/tft';
 import type { Bench, PartInstance } from '../bench';
 import type { FirmwareProject } from '../firmware/project';
 
@@ -502,7 +501,10 @@ class SimCore implements CoreHandle {
    * panel" from "a panel showing black".
    */
   private writeTft(view: TftView): void {
-    const panel = this.tft();
+    // Ungated on purpose: the mirror shows the panel that is on the bench,
+    // even one whose jumpers are pulled, because that is what the operator is
+    // looking at. The gate lives in the port, not in the glass.
+    const panel = colorPanel(this.displayControllers())?.panel;
     if (!panel) {
       view.writeFrame(0, 0, new Uint8Array(0));
       return;
@@ -894,14 +896,6 @@ class SimCore implements CoreHandle {
     this.engine.settle();
   }
 
-  /** The colour TFT on the bench, which is where a map goes. */
-  private tft(): Ili9341 | undefined {
-    for (const controller of this.displayControllers().values()) {
-      if (controller instanceof Ili9341) return controller;
-    }
-    return undefined;
-  }
-
   /** Live controller models for every display part. */
   private displayControllers(): Map<string, DisplayController> {
     const controllers = new Map<string, DisplayController>();
@@ -914,35 +908,7 @@ class SimCore implements CoreHandle {
 
   private services(): FirmwareServices {
     return {
-      tft: {
-        begin: () => {
-          this.tft()?.setDisplayOn(true);
-          return 0;
-        },
-        setRotation: (rotation) => {
-          const panel = this.tft();
-          if (!panel) return 0;
-          const target = Math.max(0, Math.min(3, Math.round(rotation))) as PanelRotation;
-          panel.setRotation(target);
-          return panel.rotation;
-        },
-        width: () => this.tft()?.width ?? 0,
-        height: () => this.tft()?.height ?? 0,
-        clear: () => {
-          this.tft()?.clear();
-          return 0;
-        },
-        fillRect: (x, y, width, height, colour) => {
-          this.tft()?.fill(x, y, width, height, colour);
-          return 0;
-        },
-        print: (text, x, y, colour) => {
-          this.tft()?.print(text, x, y, colour);
-          return 0;
-        },
-        textWidth: (text) => this.tft()?.textWidth(text) ?? 0,
-        textHeight: () => this.tft()?.textHeight() ?? 0,
-      },
+      tft: createTftPort(this.engine, () => this.displayControllers()),
       // No tile store here anymore: it lives in `../map/` in-feature, so the
       // map port below is the real one, wired exactly like `Simulation`'s.
       map: {
@@ -965,7 +931,7 @@ class SimCore implements CoreHandle {
         },
         blit: (z, x, y, destX, destY) => {
           const pixels = this.tiles.get(z, x, y);
-          const panel = this.tft();
+          const panel = panelOnBus(this.engine, this.displayControllers());
           if (!pixels || !panel) return false;
           panel.blit(destX, destY, pixels.length === 1 ? 1 : TILE_SIZE, TILE_SIZE, pixels);
           return true;

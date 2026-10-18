@@ -82,6 +82,31 @@ describe('a sketch on the bench network', () => {
     expect(serial).toMatch(/time 2026-10-17T12:00:0\dZ/);
   });
 
+  /*
+   * A name is not a special case in the sketch: the network has two, and the
+   * second one answers the same clock, which is what a sketch asking a
+   * different host has to be able to do.
+   */
+  it('reaches a second host by its own name', () => {
+    const simulation = run(
+      `
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) { delay(20); }
+  while (net.get("http://time.noesis/time") == 0) { delay(20); }
+  Serial.print("clock ");
+  Serial.println(net.read());
+}
+
+void loop() { delay(500); }
+`,
+      (serial) => serial.includes('clock '),
+    );
+    expect(simulation.firmwareError).toBeNull();
+    expect(simulation.serialLines().join('')).toMatch(/clock 2026-10-17T12:00:0\dZ/);
+  });
+
   it('takes the network a latency to answer, so the sketch waits', () => {
     const simulation = new Simulation(esp32DevKitV1());
     simulation.loadFirmware(CLOCK_SKETCH);
