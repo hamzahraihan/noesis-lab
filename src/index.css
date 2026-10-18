@@ -223,3 +223,36 @@
     animation: none;
   }
 }
+
+/* Herdr-styled surfaces: ink (default) and paper themes. */
+:root {
+  --hd-bg: #17171a;
+  --hd-surface: #1e1e2e;
+  --hd-border: #313244;
+  --hd-bg-deep: #11111b;
+  --hd-surface-alt: #181825;
+  --hd-border-strong: #45475a;
+  --hd-text: #cdd6f4;
+  --hd-muted: #9399b2;
+  --hd-faint: #6c7086;
+  --hd-accent: #38bdf8;
+  --hd-accent-hover: #7dd3fc;
+  --hd-success: #34d399;
+  --hd-warn: #f9e2af;
+}
+
+[data-theme="paper"] {
+  --hd-bg: #efece5;
+  --hd-surface: #e6e2d8;
+  --hd-border: #c9c4b8;
+  --hd-bg-deep: #e6e2d8;
+  --hd-surface-alt: #e6e2d8;
+  --hd-border-strong: #a8a39a;
+  --hd-text: #000000;
+  --hd-muted: #1a1a1a;
+  --hd-faint: #444444;
+  --hd-accent: #268bd2;
+  --hd-accent-hover: #1e6fa8;
+  --hd-success: #3a7d0a;
+  --hd-warn: #8a6a00;
+}
