@@ -7,6 +7,14 @@
     <title>noesis-lab</title>
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('noesis-theme');
+          if (t === 'paper') document.documentElement.setAttribute('data-theme', 'paper');
+        } catch (e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
