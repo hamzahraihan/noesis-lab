@@ -3,6 +3,7 @@
 export * from './engine';
 export * from './circuit';
 export * from './circuit-doc';
+export * from './circuit-edit';
 export * from './netlist';
 export * from './mcu';
 export * from './bench';

@@ -59,6 +59,16 @@ export interface WorkbenchProps {
   /** Re-clips one end of a placed jumper, the way Wokwi lets a wire be dragged. */
   onMoveWireEnd(wireId: string, end: WireEnd, to: Terminal): void;
   /**
+   * Opens and closes a continuous edit.
+   *
+   * A drag mutates the bench in place, because it holds the terminal objects it
+   * started with and a recompile would renumber them. The shell writes what the
+   * drag did to the circuit document as one operation when the gesture ends, so
+   * one drag is one undo step and no frame pays for a compile.
+   */
+  onGestureBegin(kind: 'part-move' | 'wire-bends' | 'wire-end', id: string, end?: WireEnd): void;
+  onGestureEnd(): void;
+  /**
    * Notifies the shell that a wire was picked, so the palette it opens can
    * recolour that wire.
    */
@@ -313,6 +323,8 @@ export function Workbench({
   netOfTerminal,
   selectedId,
   onMoveWireEnd,
+  onGestureBegin,
+  onGestureEnd,
   onSelectWire,
   selectedWireId,
   onSelect,
@@ -486,6 +498,7 @@ export function Workbench({
       const index = Number(grab.closest('[data-bend-index]')?.getAttribute('data-bend-index'));
       if (wireId !== null && wireId !== undefined && Number.isInteger(index)) {
         dragRef.current = { kind: 'bend', wireId, index };
+        onGestureBegin('wire-bends', wireId);
         onSelectWire(wireId);
         (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
         return;
@@ -494,6 +507,7 @@ export function Workbench({
       const end = grab.closest('[data-wire-end]')?.getAttribute('data-wire-end');
       if (wireId !== null && wireId !== undefined && (end === 'from' || end === 'to')) {
         dragRef.current = { kind: 'wire-end', wireId, end };
+        onGestureBegin('wire-end', wireId, end);
         onSelectWire(wireId);
         (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
         return;
@@ -549,6 +563,7 @@ export function Workbench({
          */
         if (wireId !== null && wireId !== undefined) {
           dragRef.current = { kind: 'bend-new', wireId };
+          onGestureBegin('wire-bends', wireId);
           (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
           return;
         }
@@ -612,6 +627,7 @@ export function Workbench({
       grabDx: world.x - part.x,
       grabDy: world.y - part.y,
     };
+    onGestureBegin('part-move', partId);
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
   };
 
@@ -734,6 +750,7 @@ export function Workbench({
         grabDy: drag.grabDy,
       };
       dragRef.current = moved;
+      onGestureBegin('part-move', moved.partId);
       onMovePart(moved.partId, world.x - moved.grabDx, world.y - moved.grabDy);
       return;
     }
@@ -743,6 +760,7 @@ export function Workbench({
 
   const endDrag = (event: React.PointerEvent) => {
     if (dragRef.current?.kind === 'press') onTogglePressed(dragRef.current.partId, false);
+    onGestureEnd();
     dragRef.current = null;
     pressRef.current = null;
     const target = event.currentTarget as Element;

@@ -20,13 +20,16 @@ import { breadboardDefinition } from '@/features/parts';
  */
 function benchWithBentWire() {
   const simulation = new Simulation(esp32DevKitV1());
-  simulation.addPart(esp32DevKitV1(), 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
-  simulation.routeWire({ x: 10, y: 10 } as never, { x: 90, y: 60 } as never, [
+  const board = simulation.addPart(esp32DevKitV1(), 0, 0);
+  const breadboard = simulation.addPart(breadboardDefinition(), 230, 0);
+  // A wire ends on a pin: the document cannot name a bare coordinate, so the
+  // fixture clips both ends to real terminals (the same rule the UI obeys).
+  const hole = breadboard.definition.pins.find((pin) => pin.id.startsWith('s'))!.id;
+  simulation.routeWire(simulation.pinAt(board, 'R_D2')!, simulation.pinAt(breadboard, hole)!, [
     { x: 45, y: 10 },
     { x: 45, y: 45 },
   ]);
-  const wire = simulation.bench.wires[0];
+  const wire = simulation.bench.wires[0]!;
   const from = simulation.bench.terminals[wire.from];
   const to = simulation.bench.terminals[wire.to];
   return {

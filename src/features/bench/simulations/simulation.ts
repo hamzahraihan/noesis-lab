@@ -8,8 +8,8 @@
 
 import {
   BenchBuilder,
+  SNAP_DISTANCE_MM,
   type Bench,
-  type BenchSnapshot,
   type BendPoint,
   type PartInstance,
   type Terminal,
@@ -18,7 +18,24 @@ import {
 import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { compile } from '@/features/simulation';
+import { decompile } from '@/features/simulation';
+import { pinRefFor } from '@/features/simulation';
 import type { CircuitDocument } from '@/features/simulation';
+import {
+  addPart as addPartToDoc,
+  addWire as addWireToDoc,
+  movePart as movePartInDoc,
+  moveWireEnd as moveWireEndInDoc,
+  removePart as removePartFromDoc,
+  removeWire as removeWireFromDoc,
+  rotatePart as rotatePartInDoc,
+  setCapColour as setCapColourInDoc,
+  setKnob as setKnobInDoc,
+  setPartName as setPartNameInDoc,
+  setWireBends as setWireBendsInDoc,
+  setWireColour as setWireColourInDoc,
+  type EditResult,
+} from '@/features/simulation';
 import {
   AvrBackend,
   hexForSourcesHash,
@@ -110,24 +127,13 @@ const DEFAULT_TIME_SCALE = 1;
 
 
 /**
- * How many bench states are kept. Beyond this the oldest falls off the end.
+ * How many circuit states are kept. Beyond this the oldest falls off the end.
  *
  * Sixty is a lot of steps for a wiring bench and still only a few thousand
  * small records; the cap is there so an afternoon of nudging parts cannot grow
  * the history without bound.
  */
 const HISTORY_LIMIT = 60;
-
-/**
- * How long a run of the same continuous edit collapses into one undo step.
- *
- * Drags call into the model on every animation frame, so a single nudge of a
- * part across the bench is sixty calls. Without coalescing, one Ctrl+Z would
- * step back through the drag a frame at a time and look like undo was broken.
- * The window slides, so a drag lasting longer than this still collapses to one
- * step rather than starting a second one halfway through.
- */
-const EDIT_COALESCE_MS = 700;
 
 /**
  * Where the breadboard sits on a fresh bench: clear of the board plugged in
@@ -137,21 +143,18 @@ const EDIT_COALESCE_MS = 700;
 export const BREADBOARD_ORIGIN_X = 230;
 
 /**
- * One undoable step: the bench, frozen.
+ * A continuous edit in progress: a drag.
  *
- * A snapshot rather than inverse operations. Every mutation would otherwise
- * need a matching undo, including the ones that renumber contacts when a wire
- * leaves a hole, and the tenth one added later would silently be the one nobody
- * can undo. A state cannot drift out of step with the model because it *is* the
- * model, frozen.
- *
- * Everything else the model holds is derived from this now: the LCD's
- * line-to-board-pin map is read back off the wiring on every rebuild, so
- * restoring the bench restores it too.
+ * The document is authoritative between gestures. During one, the bench is
+ * mutated in place and nothing is compiled -- a drag holds the terminal objects
+ * it started with, and a recompile renumbers them -- and the gesture's final
+ * state is written to the document as one operation on release, which is also
+ * why one drag is one undo step.
  */
-interface BenchHistoryEntry {
-  readonly bench: BenchSnapshot;
-}
+type Gesture =
+  | { readonly kind: 'part-move'; readonly id: string }
+  | { readonly kind: 'wire-bends'; readonly id: string }
+  | { readonly kind: 'wire-end'; readonly id: string; readonly end: WireEnd };
 
 /**
  * Insulation colour for a wire an example places, by the signal it carries.
@@ -322,79 +325,195 @@ export class Simulation {
     return this.builder.build();
   }
 
-  /*
-   * Undo history, as whole bench states.
-   *
-   * Snapshots rather than inverse operations. Every mutation would otherwise
-   * need a matching undo, including the ones that renumber contacts when a
-   * wire leaves a hole, and the tenth one added later would silently be the one
-   * nobody can undo. A state cannot drift out of step with the model because it
-   * *is* the model, frozen.
-   *
-   * The rest of the bench's bookkeeping travels with it. `examplePartIds` says
-   * which parts an example owns, and `lcdBoardPins` maps an LCD's lines to
-   * board pins; both are written and cleared by the same operations that place
-   * parts and wires, so restoring the bench without them would leave the bench
-   * claiming ownership of parts that are gone and an LCD wired to pins that no
-   * longer lead anywhere.
-   */
-  private undoStack: BenchHistoryEntry[] = [];
-  private redoStack: BenchHistoryEntry[] = [];
-  /** The continuous edit currently being coalesced, and when it started. */
-  private editRun: { kind: string; at: number } | null = null;
-  /** True while a compound edit is running, so its parts share one entry. */
-  private compoundEdit = false;
+  private doc: CircuitDocument = { version: 1, parts: [], wires: [] };
+  /** The drag in progress, if any: the bench is authoritative until it ends. */
+  private gesture: Gesture | null = null;
+  /** The document a gesture started from, which its undo entry restores. */
+  private gestureStart: CircuitDocument | null = null;
 
-  /** Records the bench as it is, before the caller changes it. */
-  private checkpoint(kind?: string): void {
-    // Inside a compound edit (`replaceBench`), the whole thing is one step:
-    // the caller has already recorded the state undo should return to, and an
-    // entry per part would make one Ctrl+Z undo one wire.
-    if (this.compoundEdit) return;
-    const now = performance.now();
-    if (
-      kind !== undefined &&
-      this.editRun !== null &&
-      this.editRun.kind === kind &&
-      now - this.editRun.at < EDIT_COALESCE_MS
-    ) {
-      // Still the same drag: the first frame already recorded the state this
-      // run started from, and that is the state undo should return to.
-      this.editRun.at = now;
+  /**
+   * The circuit's structure, which is the source of truth.
+   *
+   * Edits are operations over this value; the bench above is compiled from it
+   * after every one. It is immutable by convention -- `circuit-edit` returns a
+   * new document rather than changing one -- so a history entry is just a
+   * reference to a previous value, and nothing can edit the projection into a
+   * state the document could not represent.
+   */
+  get document(): CircuitDocument {
+    return this.doc;
+  }
+
+  /**
+   * Makes `doc` the live structure and recompiles the bench from it.
+   *
+   * A refusal is a bug in the edit layer, not operator input: the previous
+   * projection is kept and the reason goes to the console, because a
+   * half-built bench would be worse than the one the operator is looking at.
+   */
+  private applyDocument(doc: CircuitDocument): boolean {
+    const { bench, snapshot, errors } = compile(doc);
+    if (errors.length > 0 || bench === null || snapshot === null) {
+      console.warn(`circuit edit refused: ${errors.join('; ')}`);
+      return false;
+    }
+    this.doc = doc;
+    this.builder.restore(snapshot);
+    this.rebuild();
+    return true;
+  }
+
+  /** Applies one document operation, as one undoable step. */
+  private edit(operation: (doc: CircuitDocument) => EditResult): void {
+    const result = operation(this.doc);
+    if (result.error !== undefined) {
+      console.warn(`circuit edit refused: ${result.error}`);
       return;
     }
+    const before = this.doc;
+    if (!this.applyDocument(result.doc)) return;
+    this.pushUndo(before);
+  }
 
-    this.undoStack.push(this.historyEntry());
+  private pushUndo(before: CircuitDocument): void {
+    this.undoStack.push(before);
     if (this.undoStack.length > HISTORY_LIMIT) this.undoStack.shift();
     // Anything that was undone can no longer be redone: the future it pointed
     // at has just been edited away.
     this.redoStack.length = 0;
-    this.editRun = kind === undefined ? null : { kind, at: now };
   }
 
-  /** The whole of the bench's restorable state, frozen. */
-  private historyEntry(): BenchHistoryEntry {
-    return { bench: this.builder.snapshot() };
+  /*
+   * Undo history, as circuit states.
+   *
+   * Documents rather than bench snapshots: the document is the state, so an
+   * entry is a reference to a previous value. The old snapshot model travelled
+   * with the bench's id counters; ids now live in the document, so an undo that
+   * re-places a part still hands out the same serial for it.
+   */
+  private undoStack: CircuitDocument[] = [];
+  private redoStack: CircuitDocument[] = [];
+
+  /**
+   * Opens a drag. The bench is mutated in place until `endGesture`, so the
+   * terminals the gesture holds stay valid and no compile runs per frame.
+   */
+  beginGesture(kind: Gesture['kind'], id: string, end?: WireEnd): void {
+    if (this.gesture !== null) return;
+    this.gestureStart = this.doc;
+    this.gesture =
+      kind === 'wire-end'
+        ? { kind, id, end: end ?? 'to' }
+        : kind === 'part-move'
+          ? { kind, id }
+          : { kind: 'wire-bends', id };
   }
 
-  /** Puts a history entry back into the live model. */
-  private applyHistory(entry: BenchHistoryEntry): void {
-    this.builder.restore(entry.bench);
-    // The next edit starts a fresh run: coalescing into whatever was undone
-    // would swallow the edit into a history entry that no longer describes it.
-    this.editRun = null;
-    this.rebuild();
+  /**
+   * Closes the drag and writes what it did as one document operation.
+   *
+   * A drag that ends on a loose contact -- a wire end between pins -- cannot be
+   * expressed by a document, so it springs back to the pin it was last on: the
+   * bench is recomputed from the unchanged document.
+   */
+  endGesture(): void {
+    const gesture = this.gesture;
+    const before = this.gestureStart;
+    this.gesture = null;
+    this.gestureStart = null;
+    if (gesture === null || before === null) return;
+
+    const operation = (doc: CircuitDocument): EditResult | null => {
+      if (gesture.kind === 'part-move') {
+        const part = this.bench.parts.find((candidate) => candidate.id === gesture.id);
+        const current = doc.parts.find((candidate) => candidate.id === gesture.id);
+        if (!part || !current) return null;
+        if (current.x === part.x && current.y === part.y) return null;
+        return movePartInDoc(doc, part.id, part.x, part.y);
+      }
+      if (gesture.kind === 'wire-bends') {
+        const wire = this.bench.wires.find((candidate) => candidate.id === gesture.id);
+        const current = doc.wires.find((candidate) => candidate.id === gesture.id);
+        if (!wire || !current) return null;
+        const same =
+          wire.bends.length === current.bends.length &&
+          wire.bends.every(
+            (bend, index) =>
+              bend.x === current.bends[index]?.x && bend.y === current.bends[index]?.y,
+          );
+        if (same) return null;
+        return setWireBendsInDoc(doc, wire.id, wire.bends);
+      }
+      const wire = this.bench.wires.find((candidate) => candidate.id === gesture.id);
+      if (!wire) return null;
+      const endTerminal = this.bench.terminals[gesture.end === 'from' ? wire.from : wire.to];
+      const ref = endTerminal ? this.pinRefAt(endTerminal) : null;
+      if (ref === null) return null;
+      const current = doc.wires.find((candidate) => candidate.id === gesture.id);
+      if (!current || (gesture.end === 'from' ? current.from : current.to) === ref) return null;
+      return moveWireEndInDoc(doc, wire.id, gesture.end, ref);
+    };
+
+    const next = operation(before);
+    if (next === null) {
+      // Nothing changed, or the end cannot be represented: recompute from the
+      // document either way, so a loose end springs back to its last pin.
+      this.applyDocument(before);
+      return;
+    }
+    if (next.error !== undefined) {
+      console.warn(`circuit edit refused: ${next.error}`);
+      this.applyDocument(before);
+      return;
+    }
+    if (!this.applyDocument(next.doc)) return;
+    this.pushUndo(before);
+  }
+
+  /**
+   * The `partId:pin` reference a terminal belongs to, or null for a loose
+   * contact.
+   *
+   * A terminal with an owner answers directly; anything else is snapped to the
+   * nearest terminal within `SNAP_DISTANCE_MM`, which is the same rule the
+   * builder applies when it decides which contact a wire lands on -- a
+   * coordinate-only endpoint (a pointer between holes, a test's synthetic
+   * terminal) resolves exactly as the drawn wire would.
+   *
+   * The first owner in part order decides when several parts share a contact,
+   * which is the rule the decompiler uses: a breadboard hole under a lead has
+   * one answer and it is the same answer on every pass.
+   */
+  private pinRefAt(terminal: Terminal): string | null {
+    const direct = this.ownerOf(terminal.id);
+    if (direct !== null) return direct;
+    let nearest: { id: number; distance: number } | null = null;
+    for (const candidate of this.bench.terminals) {
+      const distance = Math.hypot(candidate.x - terminal.x, candidate.y - terminal.y);
+      if (distance > SNAP_DISTANCE_MM) continue;
+      if (nearest === null || distance < nearest.distance) {
+        nearest = { id: candidate.id, distance };
+      }
+    }
+    return nearest === null ? null : this.ownerOf(nearest.id);
+  }
+
+  /** The pin that owns a terminal, if any part claims it. */
+  private ownerOf(terminalId: number): string | null {
+    for (const part of this.bench.parts) {
+      for (const [pinId, candidate] of Object.entries(part.terminals)) {
+        if (candidate === terminalId) return `${part.id}:${pinRefFor(part.definition, pinId)}`;
+      }
+    }
+    return null;
   }
 
   /**
    * Forgets the history.
    *
-   * A bench that has just been seeded -- a project's parts and jumpers going
+   * A circuit that has just been seeded -- a project's parts and jumpers going
    * down, a circuit arriving from a link or a file -- is a starting point, not a
-   * list of edits, and it must not be undone wire by wire. The seed goes through
-   * the same methods the operator uses, so it pushes history like any other
-   * mutation; without this the very first Ctrl+Z on a freshly loaded project
-   * dismantles the project instead of undoing something the operator did.
+   * list of edits, and it must not be undone wire by wire.
    *
    * An example is the exception, deliberately: it replaces the bench *and*
    * records one entry (`replaceBench`), because the operator may well want the
@@ -403,7 +522,8 @@ export class Simulation {
   clearHistory(): void {
     this.undoStack.length = 0;
     this.redoStack.length = 0;
-    this.editRun = null;
+    this.gesture = null;
+    this.gestureStart = null;
   }
 
   canUndo(): boolean {
@@ -414,21 +534,29 @@ export class Simulation {
     return this.redoStack.length > 0;
   }
 
-  /** Steps the bench back one edit. Returns whether there was one to step to. */
+  /** Steps the circuit back one edit. Returns whether there was one to step to. */
   undo(): boolean {
     const previous = this.undoStack.pop();
-    if (!previous) return false;
-    this.redoStack.push(this.historyEntry());
-    this.applyHistory(previous);
+    if (previous === undefined) return false;
+    const current = this.doc;
+    if (!this.applyDocument(previous)) {
+      this.undoStack.push(previous);
+      return false;
+    }
+    this.redoStack.push(current);
     return true;
   }
 
-  /** Steps the bench forward again. Returns whether there was one to step to. */
+  /** Steps the circuit forward again. Returns whether there was one to step to. */
   redo(): boolean {
     const next = this.redoStack.pop();
-    if (!next) return false;
-    this.undoStack.push(this.historyEntry());
-    this.applyHistory(next);
+    if (next === undefined) return false;
+    const current = this.doc;
+    if (!this.applyDocument(next)) {
+      this.redoStack.push(next);
+      return false;
+    }
+    this.undoStack.push(current);
     return true;
   }
 
@@ -883,10 +1011,14 @@ export class Simulation {
   }
 
   movePart(partId: string, x: number, y: number): void {
-    // One undo step per drag, not per frame: see `EDIT_COALESCE_MS`.
-    this.checkpoint('movePart');
-    this.builder.movePart(partId, x, y);
-    this.rebuild();
+    if (this.gesture?.kind === 'part-move') {
+      // Mid-drag: the bench is authoritative and nothing may renumber the
+      // terminals the gesture holds. `endGesture` writes this as one step.
+      this.builder.movePart(partId, x, y);
+      this.rebuild();
+      return;
+    }
+    this.edit((doc) => movePartInDoc(doc, partId, x, y));
   }
 
   /**
@@ -895,14 +1027,25 @@ export class Simulation {
    * The chosen colour is passed in rather than read from here, so the picker in
    * the header and the wire it places cannot disagree about what colour "next"
    * means.
+   *
+   * Both ends have to be pins: a dangling end cannot be expressed by a
+   * document (saving used to drop it with a warning) and is refused here
+   * instead of being drawn and then lost.
    */
   routeWire(from: Terminal, to: Terminal, bends: readonly BendPoint[] = [], colour?: string): void {
-    this.checkpoint();
-    this.builder.addWire(from.x, from.y, to.x, to.y, {
-      colour: colour ?? nextAutomaticWireColour(this.bench.wires.length),
-      bends,
-    });
-    this.rebuild();
+    const start = this.pinRefAt(from);
+    const end = this.pinRefAt(to);
+    if (start === null || end === null) {
+      console.warn('a wire ends on a pin; a loose contact cannot be saved');
+      return;
+    }
+    this.edit((doc) =>
+      addWireToDoc(doc, start, end, {
+        colour: colour ?? nextAutomaticWireColour(this.bench.wires.length),
+        gaugeAwg: 26,
+        bends,
+      }),
+    );
   }
 
   /**
@@ -912,10 +1055,20 @@ export class Simulation {
    * its two ends are, so every net it touched before may be different.
    */
   moveWireEnd(wireId: string, end: WireEnd, to: Terminal): void {
-    // One undo step per drag, not per frame: see `EDIT_COALESCE_MS`.
-    this.checkpoint('moveWireEnd');
-    this.builder.moveWireEnd(wireId, end, to.x, to.y);
-    this.rebuild();
+    if (this.gesture?.kind === 'wire-end') {
+      // Mid-drag: the wire follows the pointer in the projection, and
+      // `endGesture` commits wherever it ended up -- or springs it back if
+      // that is not a pin.
+      this.builder.moveWireEnd(wireId, end, to.x, to.y);
+      this.rebuild();
+      return;
+    }
+    const ref = this.pinRefAt(to);
+    if (ref === null) {
+      console.warn('a wire ends on a pin; a loose contact cannot be saved');
+      return;
+    }
+    this.edit((doc) => moveWireEndInDoc(doc, wireId, end, ref));
   }
 
   /**
@@ -926,9 +1079,7 @@ export class Simulation {
    * two things.
    */
   removeWire(wireId: string): void {
-    this.checkpoint();
-    this.builder.removeWire(wireId);
-    this.rebuild();
+    this.edit((doc) => removeWireFromDoc(doc, wireId));
   }
 
   /**
@@ -939,28 +1090,50 @@ export class Simulation {
    * circuit pass to produce the same answer.
    */
   setWireColour(wireId: string, colour: string): void {
-    this.checkpoint();
+    const result = setWireColourInDoc(this.doc, wireId, colour);
+    if (result.error !== undefined) {
+      console.warn(`circuit edit refused: ${result.error}`);
+      return;
+    }
+    const before = this.doc;
+    this.doc = result.doc;
     this.builder.setWireColour(wireId, colour);
+    this.pushUndo(before);
   }
 
   /** Reshapes a placed jumper, re-measuring and re-solving it. */
   setWireBends(wireId: string, bends: readonly BendPoint[]): void {
-    // One undo step per drag, not per frame: see `EDIT_COALESCE_MS`.
-    this.checkpoint('setWireBends');
-    this.builder.setWireBends(wireId, bends);
-    this.rebuild();
+    if (this.gesture?.kind === 'wire-bends') {
+      this.builder.setWireBends(wireId, bends);
+      this.rebuild();
+      return;
+    }
+    this.edit((doc) => setWireBendsInDoc(doc, wireId, bends));
   }
 
   removeWireBend(wireId: string, index: number): void {
-    this.checkpoint();
-    this.builder.removeWireBend(wireId, index);
-    this.rebuild();
+    if (this.gesture?.kind === 'wire-bends') {
+      this.builder.removeWireBend(wireId, index);
+      this.rebuild();
+      return;
+    }
+    const wire = this.doc.wires.find((candidate) => candidate.id === wireId);
+    if (!wire) return;
+    const bends = wire.bends.filter((_, at) => at !== index);
+    this.edit((doc) => setWireBendsInDoc(doc, wireId, bends));
   }
 
   insertWireBend(wireId: string, index: number, bend: BendPoint): void {
-    this.checkpoint();
-    this.builder.insertWireBend(wireId, index, bend);
-    this.rebuild();
+    if (this.gesture?.kind === 'wire-bends') {
+      this.builder.insertWireBend(wireId, index, bend);
+      this.rebuild();
+      return;
+    }
+    const wire = this.doc.wires.find((candidate) => candidate.id === wireId);
+    if (!wire) return;
+    const bends = [...wire.bends];
+    bends.splice(index, 0, bend);
+    this.edit((doc) => setWireBendsInDoc(doc, wireId, bends));
   }
 
   /**
@@ -1001,11 +1174,27 @@ export class Simulation {
     return Math.min(best, wire.bends.length);
   }
 
+  /**
+   * Places a part and returns it.
+   *
+   * The definition's id has to be a catalogue id -- a document names types,
+   * not definitions -- which every catalogue factory satisfies. A definition
+   * from somewhere else cannot be saved, so this refuses instead of placing
+   * something the document cannot describe.
+   */
   addPart(definition: PartDefinition, x: number, y: number): PartInstance {
-    this.checkpoint();
-    const part = this.builder.addPart(definition, x, y);
-    this.rebuild();
-    return part;
+    const result = addPartToDoc(this.doc, definition.id, x, y);
+    if (result.error !== undefined || result.partId === undefined) {
+      throw new Error(result.error ?? 'part placement did not allocate an id');
+    }
+    const before = this.doc;
+    if (!this.applyDocument(result.doc)) {
+      throw new Error('part placement produced an unloadable circuit');
+    }
+    this.pushUndo(before);
+    const placed = this.bench.parts.find((candidate) => candidate.id === result.partId);
+    if (!placed) throw new Error(`part ${result.partId} was not placed`);
+    return placed;
   }
 
   /**
@@ -1035,6 +1224,9 @@ export class Simulation {
       return [`circuit is for ${board.definition.id}, this bench is ${this.mcu.definition.id}`];
     }
     this.clearHistory();
+    // The document is the live state from here: the bench below is its first
+    // projection, and every later edit is an operation over this value.
+    this.doc = structuredClone(doc);
     this.builder.restore(snapshot);
     this.controls.copyValuesFrom(dynamicState);
     this.rebuild();
@@ -1068,10 +1260,8 @@ export class Simulation {
     devices: Readonly<Record<ExampleDevice, () => PartDefinition>>,
     lcdLines: readonly string[],
   ): PartInstance {
-    // One checkpoint for the whole device: the part and every wire it brings
-    // are a single action, and undoing half of an example would leave a module
-    // on the bench wired to nothing.
-    this.checkpoint();
+    // No history entry here: an example is imported inside `replaceBench`,
+    // which records the whole replacement as one step.
     const definition = devices[what]();
     const part = this.builder.addPart(definition, x, y);
     const bench = this.builder.build();
@@ -1170,17 +1360,23 @@ export class Simulation {
    * `checkpoint` stands down while it runs.
    */
   replaceBench(seed: (simulation: Simulation) => void): void {
-    this.checkpoint();
+    const before = this.doc;
     for (const part of [...this.builder.build().parts]) this.builder.removePart(part.id);
     this.builder.addPart(this.mcu.definition, 0, 0);
     this.builder.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-    this.compoundEdit = true;
-    try {
-      seed(this);
-    } finally {
-      this.compoundEdit = false;
-    }
+    seed(this);
     this.rebuild();
+
+    /*
+     * The seed built a bench through the builder, because examples are still
+     * authored as wiring functions. This is the one place a bench is imported
+     * into the document world: decompile it once, adopt the result, and let the
+     * recompile prove the two representations agree. From here on every edit is
+     * a document operation.
+     */
+    const { doc } = decompile(this.builder.build(), this.controls);
+    if (!this.applyDocument(structuredClone(doc))) return;
+    this.pushUndo(before);
   }
 
   /** World position of a board pin by id, for wiring a part to the board. */
@@ -1231,9 +1427,7 @@ export class Simulation {
   }
 
   removePart(id: string): void {
-    this.checkpoint();
-    this.builder.removePart(id);
-    this.rebuild();
+    this.edit((doc) => removePartFromDoc(doc, id));
   }
 
   /** Holds a momentary contact down or lets it spring back. */
@@ -1244,8 +1438,26 @@ export class Simulation {
 
   /** Moves one of a part's controls and re-solves around it. */
   setKnob(partId: string, spec: KnobSpec, value: number): void {
-    this.controls.setKnob(partId, spec, value);
+    this.recordKnob(partId, spec, value);
     this.rebuild();
+  }
+
+  /**
+   * Records a knob position without re-solving.
+   *
+   * A knob is operator state rather than wiring: the document keeps it because
+   * that is what the next load starts from, but turning one must not recompile
+   * the bench -- and in the worker path the worker owns stepping, so the main
+   * thread only has to keep the record straight.
+   */
+  recordKnob(partId: string, spec: KnobSpec, value: number): void {
+    this.controls.setKnob(partId, spec, value);
+    const result = setKnobInDoc(this.doc, `${partId}:${spec.id}`, value);
+    if (result.error !== undefined) {
+      console.warn(`circuit edit refused: ${result.error}`);
+      return;
+    }
+    this.doc = result.doc;
   }
 
   /**
@@ -1305,15 +1517,13 @@ export class Simulation {
     const part = this.bench.parts.find((candidate) => candidate.id === partId);
     if (!part) return;
     /*
-     * A turn is a bench edit like any other, so it goes in the history. Without
+     * A turn is an edit like any other, so it goes in the history. Without
      * this the undo an operator reaches for after an accidental turn steps back
      * over whatever came before it instead -- and on a freshly loaded project
      * that "whatever" is the project's own last wire, so the recovery gesture
      * quietly breaks the circuit it was meant to protect.
      */
-    this.checkpoint();
-    this.builder.rotatePart(partId, (part.rotation + 90) as Rotation);
-    this.rebuild();
+    this.edit((doc) => rotatePartInDoc(doc, partId, ((part.rotation + 90) % 360) as Rotation));
   }
 
   /** Which way up a part is, for the readout in the inspector. */
@@ -1327,8 +1537,11 @@ export class Simulation {
    * default. Display-only: identity and nets keep keying on the part id.
    */
   renamePart(partId: string, name: string): void {
-    this.builder.renamePart(partId, name);
-    this.rebuild();
+    // Blank clears back to the definition default, and surrounding space is not
+    // part of a name: the document stores what the inspector would show. A
+    // rename is now an edit like any other, so it lands in the history too.
+    const trimmed = name.trim();
+    this.edit((doc) => setPartNameInDoc(doc, partId, trimmed === '' ? null : trimmed));
   }
 
   /** Operator-given name, or null when the part shows its definition name. */
@@ -1341,8 +1554,7 @@ export class Simulation {
    * Paints a button cap from the fixed palette. Display-only like renaming.
    */
   setCapColour(partId: string, colour: string): void {
-    this.builder.setCapColour(partId, colour);
-    this.rebuild();
+    this.edit((doc) => setCapColourInDoc(doc, partId, colour));
   }
 
   /** Servo models, so the artwork can draw each horn where it was told to. */

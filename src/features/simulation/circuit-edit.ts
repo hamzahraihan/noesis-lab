@@ -202,6 +202,19 @@ export function removeWire(doc: CircuitDocument, wireId: string): EditResult {
   return { doc: { ...doc, wires: doc.wires.filter((wire) => wire.id !== wireId) } };
 }
 
+/** Recolours a jumper; insulation carries no electrical meaning. */
+export function setWireColour(doc: CircuitDocument, wireId: string, colour: string): EditResult {
+  const wire = doc.wires.find((candidate) => candidate.id === wireId);
+  if (!wire) return refused(doc, `unknown wire: ${wireId}`);
+  const next: CircuitWire = { ...wire, colour };
+  return {
+    doc: {
+      ...doc,
+      wires: doc.wires.map((candidate) => (candidate.id === wireId ? next : candidate)),
+    },
+  };
+}
+
 /** Re-clips one end of a jumper to another pin. */
 export function moveWireEnd(
   doc: CircuitDocument,

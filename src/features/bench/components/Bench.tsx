@@ -58,7 +58,6 @@ import {
   removeFile,
   renameFile,
   toSingleFileProject,
-  decompile,
 } from '@/features/simulation';
 import { FirmwareEditor, Inspector, SerialMonitor, StatusBar } from '@/features/instruments';
 import { WIRE_COLOURS } from '../wiring/wire-colours';
@@ -649,8 +648,9 @@ export default function Bench(props: BenchProps) {
   }, [simulation]);
 
   /*
-   * Autosave: every 500 ms decompile the live bench and persist the circuit
-   * document when it changed, so a reload reopens the same parts and wiring.
+   * Autosave: every 500 ms persist the live circuit document when it changed,
+   * so a reload reopens the same parts and wiring. The document is the state,
+   * so this is a serialise rather than a derivation from the bench.
    *
    * Pinned benches (exercise / gallery build) never autosave their wiring: it
    * belongs to the lesson/build, not to this board's circuit slot. Gating here
@@ -665,7 +665,9 @@ export default function Bench(props: BenchProps) {
   useEffect(() => {
     if (pinned) return;
     const id = window.setInterval(() => {
-      const { doc } = decompile(simulation.builder.build(), simulation.controls);
+      // The document is the state, so saving is serialising it -- no bench to
+      // walk and no derivation to lose a loose end in.
+      const doc = simulation.document;
       const serialized = JSON.stringify(doc);
       if (serialized === lastSavedCircuitRef.current) return;
       lastSavedCircuitRef.current = serialized;
@@ -1439,7 +1441,12 @@ export default function Bench(props: BenchProps) {
    * encoded at click time, so the check and the link cannot disagree.
    */
   const shareTooLarge = !isShareable(project);
-  const currentCircuitDoc = decompile(simulation.builder.build(), simulation.controls).doc;
+  /*
+   * Whether the circuit fits in a shareable link, from the live document
+   * rather than a decompilation of the bench: the document is the state now,
+   * and deriving it per render was a full bench walk for a boolean.
+   */
+  const currentCircuitDoc = simulation.document;
   const circuitShareable = isCircuitShareable(currentCircuitDoc);
   const copyShareLink = () => {
     const base = window.location.href.split('#')[0];
@@ -1987,6 +1994,8 @@ export default function Bench(props: BenchProps) {
                   onRemoveWireBend={onRemoveWireBend}
                   onInsertWireBend={onInsertWireBend}
                   bendIndexNear={bendIndexNear}
+                  onGestureBegin={(kind, id, end) => simulation.beginGesture(kind, id, end)}
+                  onGestureEnd={() => simulation.endGesture()}
                 />
 
                 {/*
@@ -2207,6 +2216,13 @@ export default function Bench(props: BenchProps) {
               }}
               onSetKnob={(spec, value) => {
                 if (!selected) return;
+                /*
+                 * The document records the knob either way: the worker owns
+                 * stepping while it is live, and the main thread's record is
+                 * what a reload starts from. `recordKnob` is the no-re-solve
+                 * half, because the engine on this side is not the one running.
+                 */
+                simulation.recordKnob(selected.id, spec, value);
                 if (workerClient !== null && workerLive)
                   workerClient.setKnob(selected.id, spec, value);
                 else simulation.setKnob(selected.id, spec, value);

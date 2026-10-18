@@ -160,11 +160,15 @@ describe('dragging a wire end to another hole', () => {
 
   it('re-solves the circuit, because what the wire joins changed', () => {
     const simulation = new Simulation(esp32DevKitV1());
-    simulation.addPart(esp32DevKitV1(), 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    const from = pinAt(simulation.builder, 'p1', 'R_D2');
-    simulation.routeWire({ id: -1, ...from }, { id: -1, x: 300, y: 80 });
-    const wireId = simulation.bench.wires[0].id;
+    const board = simulation.addPart(esp32DevKitV1(), 0, 0);
+    const breadboard = simulation.addPart(breadboardDefinition(), 230, 0);
+    // Both ends are pins: a wire cannot end on a bare coordinate, and the two
+    // holes are far enough apart to be different nets.
+    const holes = breadboard.definition.pins.filter((pin) => pin.id.startsWith('s'));
+    const near = simulation.pinAt(breadboard, holes[0]!.id)!;
+    const far = simulation.pinAt(breadboard, holes[holes.length - 1]!.id)!;
+    simulation.routeWire(simulation.pinAt(board, 'R_D2')!, near);
+    const wireId = simulation.bench.wires[0]!.id;
     const netlist = () => simulation.engine.currentNetlist;
 
     const before = netlist();
@@ -172,8 +176,7 @@ describe('dragging a wire end to another hole', () => {
 
     // Dropped onto a breadboard hole the wire was not touching, so the board pin
     // it comes from is now on a net with a different partner.
-    const hole = { x: 230 + 5.08, y: 12.7 };
-    simulation.moveWireEnd(wireId, 'to', { id: -1, ...hole });
+    simulation.moveWireEnd(wireId, 'to', far);
     const after = netlist();
 
     // The re-solve is the whole point: the net under the board pin is rebuilt,
@@ -215,17 +218,17 @@ describe('changing a wire colour', () => {
 
   it('does not re-solve the circuit', () => {
     const simulation = new Simulation(esp32DevKitV1());
-    simulation.addPart(esp32DevKitV1(), 0, 0);
-    simulation.addPart(breadboardDefinition(), 230, 0);
-    const from = pinAt(simulation.builder, 'p1', 'R_D2');
-    simulation.routeWire({ id: -1, ...from }, { id: -1, x: 300, y: 80 });
+    const board = simulation.addPart(esp32DevKitV1(), 0, 0);
+    const breadboard = simulation.addPart(breadboardDefinition(), 230, 0);
+    const hole = breadboard.definition.pins.find((pin) => pin.id.startsWith('s'))!.id;
+    simulation.routeWire(simulation.pinAt(board, 'R_D2')!, simulation.pinAt(breadboard, hole)!);
     const before = simulation.engine.currentNetlist.nodeCount;
 
-    simulation.setWireColour(simulation.bench.wires[0].id, '#22c55e');
+    simulation.setWireColour(simulation.bench.wires[0]!.id, '#22c55e');
 
     // A full solve here would cost a circuit pass to produce the same answer.
     expect(simulation.engine.currentNetlist.nodeCount).toBe(before);
-    expect(simulation.bench.wires[0].colour).toBe('#22c55e');
+    expect(simulation.bench.wires[0]!.colour).toBe('#22c55e');
   });
 });
 

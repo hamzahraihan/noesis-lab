@@ -13,6 +13,7 @@ import {
   setKnob,
   setPartName,
   setWireBends,
+  setWireColour,
   type EditResult,
   type PartRotation,
 } from './circuit-edit';
@@ -149,6 +150,12 @@ describe('routing', () => {
   it('removes a wire by id', () => {
     expect(removeWire(BASE, 'w1').doc.wires).toEqual([]);
     expect(removeWire(BASE, 'w9').error).toMatch(/unknown wire/);
+  });
+
+  it('recolours a wire without touching its route', () => {
+    const result = setWireColour(BASE, 'w1', '#22c55e');
+    expect(result.doc.wires[0]).toEqual({ ...BASE.wires[0], colour: '#22c55e' });
+    expect(setWireColour(BASE, 'w9', '#22c55e').error).toMatch(/unknown wire/);
   });
 });
 
