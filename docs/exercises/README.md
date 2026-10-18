@@ -1,6 +1,6 @@
 # Embedded Systems Exercise Curriculum
 
-Eleven hands-on exercises, arranged as a **five-level ladder**, that take a learner
+Twelve hands-on exercises, arranged as a **five-level ladder**, that take a learner
 from "I have never wired anything" to "it counts interrupts". Every exercise is
 built twice: once on a real bench, once as a **digital twin** in this repository's
 simulator, so the concepts survive without hardware on the desk.
@@ -34,10 +34,11 @@ That choice is deliberate, not default. The Uno's limits are the lesson:
 - **2 KB of SRAM** — an SSD1306 frame buffer is 1024 bytes. Half the RAM, gone. That
   constraint is the whole point of Exercise 3.1.
 
-Module 5 is where the track leaves the Uno behind: 5.1 runs on an ESP32 DevKit V1 and
-5.2 on a Raspberry Pi 4 — 3.3 V logic on both, BCM pin numbers on the Pi, no analogue
-input on the Pi at all, and a 5 V line that ends either board. Same breadboard, same
-jumpers, different rules about what a pin is.
+Module 5 is where the track leaves the Uno behind: 5.1 and 5.3 run on an ESP32 DevKit
+V1 and 5.2 on a Raspberry Pi 4 — 3.3 V logic on both, BCM pin numbers on the Pi, no
+analogue input on the Pi at all, and a 5 V line that ends either board. Same
+breadboard, same jumpers, different rules about what a pin is. 5.1 fetches without
+naming the network; 5.3 names it, asks it, and listens.
 
 **Digital twin:** every exercise has a **Noesis Lab twin** section mapping the circuit
 onto parts this repo already models — `Tactile Button`, `10k Potentiometer`,
@@ -122,7 +123,7 @@ descriptions, entry tests and exit checks are in [`LEVELS.md`](LEVELS.md).
 | **2** | Reading the world | `digitalRead` · pull-ups and active-LOW · non-blocking time | [1.1](module-1-gpio.md) · [1.2](module-1-gpio.md) |
 | **3** | Signals that are not on or off | ADC resolution · PWM duty · voltage dividers | [2.1](module-2-analog.md) · [2.2](module-2-analog.md) |
 | **4** | Talking to other chips | open-drain and addressing · chip-select framing · the RAM budget | [3.1](module-3-bus-protocols.md) · [3.2](module-3-bus-protocols.md) |
-| **5** | Faster than the loop | interrupts and `volatile` · atomic reads · microsecond timing | [4.1](module-4-interrupts.md) · [4.2](module-4-interrupts.md) · [5.1](module-5-maps.md) · [5.2](module-5-single-board-computers.md) |
+| **5** | Faster than the loop | interrupts and `volatile` · atomic reads · microsecond timing | [4.1](module-4-interrupts.md) · [4.2](module-4-interrupts.md) · [5.1](module-5-maps.md) · [5.2](module-5-single-board-computers.md) · [5.3](module-5-networks.md) |
 
 ---
 
@@ -162,6 +163,7 @@ each level, plus the pre-submission checklist.
 | [4.2](module-4-interrupts.md) | 5 | Distance Radar with Ultrasonic Sensor (HC-SR04) | Advanced | 60–75 mins | `micros()`, round-trip propagation, timing window | `Ultrasonic Sensor (HC-SR04)`, `pulseIn`, Scope |
 | [5.1](module-5-maps.md) | 5 | A map on a TFT, from OpenStreetMap | Intermediate | 60–75 mins | Slippy tiles, Mercator, async fetching, MADCTL rotation | `3.2" TFT (ILI9341)`, `Tactile Button` ×3, Bus Monitor |
 | [5.2](module-5-single-board-computers.md) | 5 | A pocket map on a TFT | Intermediate | 45–60 mins | SPI on a Pi, the address window, RGB565, no analogue input | `2.4" TFT (ILI9341)`, `Tactile Button` |
+| [5.3](module-5-networks.md) | 5 | A network desk: ask, listen, never wait | Intermediate | 60–75 mins | Asynchronous requests, polling with a flag, names that fail, subscriptions | `3.2" TFT (ILI9341)` |
 
 ---
 
@@ -172,7 +174,7 @@ Buy once, use across the track.
 | Part | Value | Exercises | Note |
 | --- | --- | --- | --- |
 | Arduino Uno R3 | — | 0.1–4.2 | ATmega328P |
-| ESP32 DevKit V1 | — | 5.1 | 3.3 V logic; the map tiles arrive over its Wi-Fi |
+| ESP32 DevKit V1 | — | 5.1, 5.3 | 3.3 V logic; the map tiles and both network answers arrive over its Wi-Fi |
 | Raspberry Pi 4 | — | 5.2 | Runs Linux; GPIO is 3.3 V and there is no ADC |
 | Breadboard | full-size, 830 tie points | all | Split the rails, and note the centre channel break |
 | Resistors | 220 Ω | 1.1, 1.2, 2.1, 3.2, 4.2 | LED current limit |
@@ -194,7 +196,7 @@ Buy once, use across the track.
 | Rotary encoder | KY-040 | 4.1 | 20 detents/rev, on-board pull-ups |
 | Ultrasonic | HC-SR04 | 4.2 | 5 V module, 2–400 cm |
 | IR reflective sensor | TCRT5000 + slotted disc | 4.1 | For the optical tachometer |
-| TFT | 3.2" ILI9341, SPI | 5.1 | 480×320, 3.3 V, 8-pin SPI breakout |
+| TFT | 3.2" ILI9341, SPI | 5.1, 5.3 | 480×320, 3.3 V, 8-pin SPI breakout |
 | TFT | 2.4" ILI9341, SPI | 5.2 | 320×240, 3.3 V, 8-pin SPI breakout |
 
 ---
@@ -206,7 +208,7 @@ Buy once, use across the track.
 2. **[Module 2 — Analog Interfaces & Signals](module-2-analog.md)** *(Level 3)*: 2.1 Precision Light Dimmer & Potentiometer Sampling · 2.2 Analog Sensor Calibration & Voltage Dividers
 3. **[Module 3 — Serial Protocols & Hardware Bus Communication](module-3-bus-protocols.md)** *(Level 4)*: 3.1 $I^2C$ Environmental Monitor with OLED & Sensor · 3.2 SPI High-Speed Display Control
 4. **[Module 4 — Hardware Interrupts & Low-Level Control](module-4-interrupts.md)** *(Level 5)*: 4.1 High-Speed Rotary Encoder & Optical Tachometer · 4.2 Distance Radar with Ultrasonic Sensor (HC-SR04)
-5. **[Module 5 — Maps on a Screen](module-5-maps.md)** *(Level 5)*: 5.1 A map on a TFT, from OpenStreetMap · **[Module 5 — Single-Board Computers](module-5-single-board-computers.md)**: 5.2 A pocket map on a TFT
+5. **[Module 5 — Maps on a Screen](module-5-maps.md)** *(Level 5)*: 5.1 A map on a TFT, from OpenStreetMap · **[Module 5 — Single-Board Computers](module-5-single-board-computers.md)**: 5.2 A pocket map on a TFT · **[Module 5 — Networks](module-5-networks.md)**: 5.3 A network desk: ask, listen, never wait
 
 Also: **[LEVELS.md](LEVELS.md)** — the ladder, placement test and exit checks ·
 **[TEMPLATE.md](TEMPLATE.md)** — how to write a new exercise at any level.

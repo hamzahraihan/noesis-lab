@@ -35,6 +35,7 @@ import { MODULE_1 } from './exercises/module-1-gpio';
 import { MODULE_2 } from './exercises/module-2-analog';
 import { MODULE_5_MAPS } from './exercises/module-5-maps';
 import { MODULE_5_SBC } from './exercises/module-5-single-board-computers';
+import { MODULE_5_NETWORKS } from './exercises/module-5-networks';
 import { MODULE_3 } from './exercises/module-3-bus-protocols';
 import { MODULE_4 } from './exercises/module-4-interrupts';
 
@@ -444,6 +445,7 @@ export const EXERCISES: readonly Exercise[] = [
   ...MODULE_4,
   ...MODULE_5_MAPS,
   ...MODULE_5_SBC,
+  ...MODULE_5_NETWORKS,
 ];
 
 /** The level a new reader starts at, and the one the page offers first. */

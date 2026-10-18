@@ -272,7 +272,7 @@ describe('the exercise curriculum', () => {
     const moduleFive = EXERCISES.filter((exercise) => exercise.id.startsWith('5.')).map(
       (exercise) => exercise.id,
     );
-    expect(moduleFive).toEqual(['5.1', '5.2']);
+    expect(moduleFive).toEqual(['5.1', '5.2', '5.3']);
   });
 
   it('points every lesson at a write-up that exists', () => {
