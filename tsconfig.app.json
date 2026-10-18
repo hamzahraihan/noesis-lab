@@ -2,7 +2,10 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023", "DOM"],
+    /* ES2024 for the type of `Promise.withResolvers`, which every target
+       runtime already has: the app is a modern browser and the suite runs on
+       Node 22+/Bun. `target` stays es2023: nothing is downlevelled differently. */
+    "lib": ["ES2024", "DOM"],
     "module": "esnext",
     "types": ["vite/client", "node"],
     "allowArbitraryExtensions": true,

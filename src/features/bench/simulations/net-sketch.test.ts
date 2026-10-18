@@ -3,6 +3,7 @@ import { Simulation } from './simulation';
 import { esp32DevKitV1, type Ili9341 } from '@/features/parts';
 import { NET_LATENCY_MS, NET_LOCAL_IP } from '@/features/simulation';
 import { buildFor, galleryById } from '@/features/learn';
+import type { NetFetcher } from '@/features/simulation';
 
 /**
  * The bench network, driven by a real sketch.
@@ -231,5 +232,87 @@ void loop() {
       }
     }
     expect(drawn, 'the fetched time was drawn').toBe(true);
+  });
+});
+
+/**
+ * The bridge's own poll, from a real sketch.
+ *
+ * The unit tests beside the network pin the state machine; these pin that the
+ * shipped live project works end to end against a *stubbed* host -- the suite
+ * never touches the real network -- and that the sketch cannot tell a live host
+ * from a bench one except by what it answers.
+ */
+describe('a sketch on the live network', () => {
+  /** Lets the bridge's promise callbacks run: microtasks, not wall clock. */
+  async function flush(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  /** The shipped live project, as its build data describes it. */
+  function liveBuild() {
+    const build = buildFor(galleryById('live-weather')!, 'esp32');
+    expect(build, 'the live project has an ESP32 build').not.toBeNull();
+    return build!;
+  }
+
+  it('asks the real host the path the sketch named, and prints the answer', async () => {
+    const build = liveBuild();
+    const calls: string[] = [];
+    const fetcher: NetFetcher = (url) => {
+      calls.push(url);
+      return Promise.resolve({ ok: true, body: '{"current":{"temperature_2m":13.4}}' });
+    };
+    const simulation = new Simulation(esp32DevKitV1(), { liveNetwork: true, liveFetcher: fetcher });
+    expect(simulation.loadCircuit(build.circuit)).toEqual([]);
+    simulation.loadFirmware(build.sketch);
+    simulation.start();
+    for (let frame = 0; frame < 400; frame++) {
+      simulation.tick(0.05);
+      await flush();
+      if (simulation.serialLines().join('').includes('temperature_2m')) break;
+    }
+    expect(simulation.firmwareError).toBeNull();
+    expect(simulation.serialLines().join('')).toContain('{"current":{"temperature_2m":13.4}}');
+    // The name in the sketch, the endpoint behind it: only the path travelled.
+    expect(calls).toEqual([
+      'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m',
+    ]);
+  });
+
+  it('reports a real host that could not answer', async () => {
+    const build = liveBuild();
+    const fetcher: NetFetcher = () => Promise.resolve({ ok: false, body: '' });
+    const simulation = new Simulation(esp32DevKitV1(), { liveNetwork: true, liveFetcher: fetcher });
+    expect(simulation.loadCircuit(build.circuit)).toEqual([]);
+    simulation.loadFirmware(build.sketch);
+    simulation.start();
+    for (let frame = 0; frame < 400; frame++) {
+      simulation.tick(0.05);
+      await flush();
+      if (simulation.serialLines().join('').includes('live network failed')) break;
+    }
+    expect(simulation.serialLines().join('')).toContain('live network failed');
+  });
+
+  /*
+   * And the offline case: a bench that did not opt in answers the same name the
+   * way it answers any host it does not know. The sketch's own message is
+   * identical, which is the design's point -- the only difference is what the
+   * bench says about it (the chip and the notice in the UI).
+   */
+  it('is an unknown host on a bench that did not opt in', async () => {
+    const build = liveBuild();
+    const simulation = new Simulation(esp32DevKitV1());
+    expect(simulation.loadCircuit(build.circuit)).toEqual([]);
+    simulation.loadFirmware(build.sketch);
+    simulation.start();
+    for (let frame = 0; frame < 400; frame++) {
+      simulation.tick(0.05);
+      await flush();
+      if (simulation.serialLines().join('').includes('live network failed')) break;
+    }
+    expect(simulation.serialLines().join('')).toContain('live network failed');
   });
 });

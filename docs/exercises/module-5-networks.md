@@ -291,7 +291,13 @@ so the same sketch behaves identically on every machine.
 no signal strength, no association timeout, no packet loss — so the join either
 lands or is refused and never anything in between. There is no real internet:
 a name the bench does not know fails immediately, and the CORS and TLS
-constraints of a real browser do not exist here. The panel is driven through
+constraints of a real browser do not exist here. One project is the exception.
+**Live Weather** asks a real host — `api.open-meteo.com`, keyless and
+CORS-clean — because that build opted into the live network: the request is a
+plain GET, it carries no credentials, it goes to one endpoint this repository
+chose, and it leaves your machine. If the server or your connection is not
+there, it fails exactly like a name the bench does not know, which is the point
+of it being a *bridge* and not a second network. The panel is driven through
 the bench's `tft` layer rather than by your own SPI writes: the six jumpers are
 the bus that layer needs, so pulling `CS`, `D/C`, `CLK` or `DIN` blinds the twin
 exactly as it would blind a real panel — the glass keeps its last picture and

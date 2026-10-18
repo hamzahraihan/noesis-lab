@@ -633,4 +633,32 @@ describe('worker port protocol', () => {
     expect(client.status().ratio).toBeCloseTo(2, 10);
     client.dispose();
   });
+
+  /*
+   * The worker owns its own network, so the flag that lets it bridge to real
+   * hosts has to travel in `init` -- and has to default to false, because the
+   * worker cannot see a build's data and must never bridge on a guess.
+   */
+  it('carries the live-network opt-in in init, false by default', () => {
+    const port = fakePort();
+    createWorkerClient({
+      board: { id: 'uno' } as never,
+      bench: benchWith([]),
+      firmware: plainProject(),
+      liveNetwork: true,
+      onFallback: vi.fn(),
+      createPort: () => port,
+    });
+    expect((port.sent[0] as { liveNetwork?: boolean }).liveNetwork).toBe(true);
+
+    const plainPort = fakePort();
+    createWorkerClient({
+      board: { id: 'uno' } as never,
+      bench: benchWith([]),
+      firmware: plainProject(),
+      onFallback: vi.fn(),
+      createPort: () => plainPort,
+    });
+    expect((plainPort.sent[0] as { liveNetwork?: boolean }).liveNetwork).toBe(false);
+  });
 });

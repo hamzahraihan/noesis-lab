@@ -25,7 +25,12 @@ describe('registry', () => {
    * coverage test cannot see the difference.
    */
   it('passes its live checks for the network projects', async () => {
-    for (const id of ['net-clock', 'sensor-feed'] as const) {
+    /*
+     * live-weather's checks are the offline half of that project on purpose:
+     * the harness builds a bench with no live bridge, so they pin the join and
+     * the reported failure rather than a third party's answer.
+     */
+    for (const id of ['net-clock', 'sensor-feed', 'live-weather'] as const) {
       const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
       const report = await runHarness(entry.checks, entry.makeSim);
       const failed = report.results.filter((result) => result.status === 'fail');

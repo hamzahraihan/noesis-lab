@@ -52,6 +52,11 @@ export * from './map/map-fetcher';
 // (in-page `Simulation` and the sim worker) wire the same port, and the worker
 // core must reach it without a cross-feature edge.
 export * from './net/network';
+// The bridge to real hosts: the table the bench names them by, and the one
+// fetcher every bridge goes through. The bench installs it (build data decides),
+// the notice names the hosts, and nothing else may reach `fetch`.
+export * from './net/live-hosts';
+export * from './net/bridge';
 // The bench's colour panel, exported for the same reason: both backends drive
 // one port, and the gate that makes it obey the wires lives in the port.
 export * from './display/tft';

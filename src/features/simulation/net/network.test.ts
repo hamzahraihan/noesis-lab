@@ -15,7 +15,10 @@ import {
   WL_NO_SSID_AVAIL,
   createNetPort,
   netReadingPayload,
+  sketchHostName,
 } from './network';
+import type { NetAnswer } from './network';
+import type { NetFetcher } from './bridge';
 
 /** A network on a clock the test owns, in simulated milliseconds. */
 function bench(): { network: VirtualNetwork; advance: (ms: number) => void } {
@@ -333,5 +336,158 @@ describe('sending a message to the sensor', () => {
     expect(network.publish(NET_COMMAND_TOPIC, '999')).toBe(1);
     advance(60_000);
     expect(network.available(), 'a minute is the slowest').toBe(1);
+  });
+});
+
+/**
+ * A network joined to the bench, with a bridge to a host the test owns.
+ *
+ * The fetcher is the test's: it records what was asked and hands back a
+ * resolver, so "pending", "answered" and "replaced mid-flight" are all things
+ * the test decides rather than waits for.
+ */
+function bridgedBench(join = true): {
+  network: VirtualNetwork;
+  advance: (ms: number) => void;
+  calls: string[];
+  answer: (result: NetAnswer) => void;
+} {
+  let now = 0;
+  const calls: string[] = [];
+  const waiters: ((answer: NetAnswer) => void)[] = [];
+  const fetcher: NetFetcher = (url) => {
+    calls.push(url);
+    const { promise, resolve } = Promise.withResolvers<NetAnswer>();
+    waiters.push(resolve);
+    return promise;
+  };
+  const network = new VirtualNetwork(() => now, {
+    fetch: fetcher,
+    liveHosts: { 'test.noesis': { base: 'https://example.test', note: 'the test host' } },
+  });
+  if (join) {
+    network.begin(NET_SSID, NET_PASSWORD);
+    now += NET_LATENCY_MS;
+  }
+  return {
+    network,
+    advance: (ms) => {
+      now += ms;
+    },
+    calls,
+    answer: (result) => waiters.shift()?.(result),
+  };
+}
+
+/** Lets the bridge's `then` chain run: microtask turns, no wall clock. */
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+describe('bridging to a real host', () => {
+  it('leaves for the real host, and stays pending until it answers', async () => {
+    const { network, calls, advance, answer } = bridgedBench();
+    const url = 'http://test.noesis/v1/forecast?x=1';
+    expect(network.get(url)).toBe(0);
+    expect(calls).toEqual(['https://example.test/v1/forecast?x=1']);
+    expect(network.read()).toBe('');
+    expect(network.failed()).toBe(0);
+
+    // The bench's own latency does not settle a real request: there is none to
+    // invent, and a sketch's poll is what waits.
+    advance(NET_LATENCY_MS * 100);
+    expect(network.get(url)).toBe(0);
+
+    answer({ ok: true, body: '21.5' });
+    await flush();
+    expect(network.get(url)).toBe(1);
+    expect(network.read()).toBe('21.5');
+    expect(network.failed()).toBe(0);
+    // Re-readable, like every other answer.
+    expect(network.get(url)).toBe(1);
+    expect(network.read()).toBe('21.5');
+  });
+
+  it('reports a real host that could not answer as a failure', async () => {
+    const { network, answer } = bridgedBench();
+    const url = 'http://test.noesis/whatever';
+    network.get(url);
+    answer({ ok: false, body: '' });
+    await flush();
+    expect(network.get(url)).toBe(1);
+    expect(network.read()).toBe('');
+    expect(network.failed()).toBe(1);
+  });
+
+  it('replaces a bridged request, and drops the answer nobody waits for', async () => {
+    const { network, calls, answer } = bridgedBench();
+    const first = 'http://test.noesis/a';
+    const second = 'http://test.noesis/b';
+    network.get(first);
+    network.get(second);
+    expect(calls).toEqual(['https://example.test/a', 'https://example.test/b']);
+
+    // The replaced request's answer lands after the fact: one radio, and an
+    // answer nobody is waiting for is not news.
+    answer({ ok: true, body: 'stale' });
+    await flush();
+    expect(network.get(second)).toBe(0);
+    expect(network.read()).toBe('');
+
+    answer({ ok: true, body: 'fresh' });
+    await flush();
+    expect(network.get(second)).toBe(1);
+    expect(network.read()).toBe('fresh');
+  });
+
+  it('does not bridge a request made without a connection', () => {
+    const { network, calls, advance } = bridgedBench(false);
+    const url = 'http://test.noesis/a';
+    expect(network.get(url)).toBe(0);
+    expect(calls).toEqual([]);
+    advance(NET_LATENCY_MS);
+    expect(network.get(url)).toBe(1);
+    expect(network.failed()).toBe(1);
+  });
+
+  it('still answers its own hosts when a bridge is installed', () => {
+    const { network, calls, advance } = bridgedBench();
+    const url = 'http://time.noesis/time';
+    expect(network.get(url)).toBe(0);
+    expect(calls).toEqual([]);
+    advance(NET_LATENCY_MS);
+    expect(network.get(url)).toBe(1);
+    expect(network.read()).toMatch(/^2026-10-17T12:00:0\dZ$/);
+  });
+
+  /*
+   * The offline case, which is the shipped default: the name is real, the bench
+   * has no bridge, and the sketch gets exactly what an unknown host gives it --
+   * after the bench's own latency.
+   */
+  it('answers a live name as an unknown host on a bench with no bridge', () => {
+    const { network, advance } = bench();
+    network.begin(NET_SSID, NET_PASSWORD);
+    advance(NET_LATENCY_MS);
+    const url = 'http://weather.noesis/v1/forecast';
+    expect(network.get(url)).toBe(0);
+    advance(NET_LATENCY_MS);
+    expect(network.get(url)).toBe(1);
+    expect(network.failed()).toBe(1);
+    expect(network.read()).toBe('');
+  });
+});
+
+describe('reading a sketch url', () => {
+  it('names the host, and nothing else', () => {
+    expect(sketchHostName('http://api.noesis/time')).toBe('api.noesis');
+    expect(sketchHostName('http://api.noesis')).toBe('api.noesis');
+    expect(sketchHostName('http://api.noesis/a/b?c=1')).toBe('api.noesis');
+    // A port is part of the name, which is why it names no host in the table.
+    expect(sketchHostName('http://api.noesis:80/time')).toBe('api.noesis:80');
+    expect(sketchHostName('https://api.noesis/time')).toBeNull();
+    expect(sketchHostName('api.noesis/time')).toBeNull();
+    expect(sketchHostName('')).toBeNull();
   });
 });

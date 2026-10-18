@@ -25,6 +25,8 @@ type Incoming =
       firmware: FirmwareProject;
       execution: 'interpreter' | 'avr' | 'rp2040';
       wasm?: boolean;
+      /** Whether this bench's network may bridge to real hosts. */
+      liveNetwork?: boolean;
     }
   | { id: number; type: 'start' }
   | { id: number; type: 'stop' }
@@ -63,7 +65,7 @@ function handle(port: Port, msg: Incoming): void {
         break;
       }
       try {
-        core = createSimCore(board);
+        core = createSimCore(board, undefined, { liveNetwork: msg.liveNetwork ?? false });
         firmware = msg.firmware;
         execution = msg.execution;
         wasm = msg.wasm ?? false;

@@ -13,9 +13,18 @@
  * engine time has passed, which makes a sketch poll the way it would on a real
  * board while keeping every test a matter of ticking a clock rather than
  * awaiting the real one. Nothing in this file is asynchronous.
+ *
+ * One exception, and it is opt-in per build: a name in `LIVE_HOSTS` on a bench
+ * given a `NetFetcher` leaves for the real host (`bridge.ts`). The bench still
+ * owns the *shape* of the request -- pending until the answer is there, read
+ * once ready, a failure if it never comes -- so a sketch cannot tell a bridged
+ * host from a bench one except by what it answers. The fake latency stays for
+ * bench hosts; a real request takes as long as it takes.
  */
 
 import type { NetPort } from '../firmware/interpreter';
+import { LIVE_HOSTS, type LiveHost } from './live-hosts';
+import type { NetFetcher } from './bridge';
 
 /** The network a bench is joined to. Its credentials are the lesson's first fact. */
 export const NET_SSID = 'noesis-bench';
@@ -104,6 +113,18 @@ export function createNetPort(network: VirtualNetwork): NetPort {
   };
 }
 
+/**
+ * The host name in a sketch url, or null when it is not one this can name.
+ *
+ * A sketch writes `http://name/path` and nothing else: no ports, no other
+ * scheme, no credentials. One regex for the whole file, so what the bench
+ * answers, what it bridges, and what the bench's notice names agree.
+ */
+export function sketchHostName(url: string): string | null {
+  const match = /^http:\/\/([^/]+)(\/.*)?$/.exec(url);
+  return match ? match[1]! : null;
+}
+
 /** One name the network answers for, and the paths it serves. */
 interface NetHost {
   readonly address: string;
@@ -117,7 +138,20 @@ type JoinState =
 type RequestState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'pending'; readonly url: string; readonly readyAt: number }
-  | { readonly kind: 'answered'; readonly url: string; readonly answer: NetAnswer };
+  | { readonly kind: 'answered'; readonly url: string; readonly answer: NetAnswer }
+  /*
+   * A request the bench sent instead of answering. `answer` is null until the
+   * real host has spoken, which is what keeps the poll honest: the sketch asks
+   * again every loop, exactly as it does for a bench host.
+   */
+  | { readonly kind: 'bridged'; readonly url: string; answer: NetAnswer | null };
+
+/** What a bench's network was given: no fetcher means bench hosts only. */
+export interface NetOptions {
+  readonly fetch?: NetFetcher;
+  /** The bridge table. Injected so a test can name its own host. */
+  readonly liveHosts?: Readonly<Record<string, LiveHost>>;
+}
 
 export class VirtualNetwork {
   private joinState: JoinState = { kind: 'idle' };
@@ -142,8 +176,15 @@ export class VirtualNetwork {
 
   private readonly nowMs: () => number;
 
-  constructor(nowMs: () => number) {
+  /** The bridge to real hosts, or null: a bench host answers every request. */
+  private readonly fetch: NetFetcher | null;
+
+  private readonly live: Readonly<Record<string, LiveHost>>;
+
+  constructor(nowMs: () => number, options: NetOptions = {}) {
     this.nowMs = nowMs;
+    this.fetch = options.fetch ?? null;
+    this.live = options.liveHosts ?? LIVE_HOSTS;
   }
 
   /**
@@ -186,6 +227,13 @@ export class VirtualNetwork {
   get(url: string): number {
     if (this.request.kind === 'answered' && this.request.url === url) return 1;
 
+    // A bridged request is ready once the real host has answered; until then
+    // the sketch polls, which is what a board does while a request is in
+    // flight.
+    if (this.request.kind === 'bridged' && this.request.url === url) {
+      return this.request.answer === null ? 0 : 1;
+    }
+
     if (this.request.kind === 'pending' && this.request.url === url) {
       if (this.nowMs() < this.request.readyAt) return 0;
       this.request = { kind: 'answered', url, answer: this.resolve(url) };
@@ -194,18 +242,60 @@ export class VirtualNetwork {
 
     // Anything else -- nothing asked yet, a different url, an old answer -- is a
     // new request, and a new request is never ready on the turn it starts.
+    const bridged = this.bridge(url);
+    if (bridged !== null) {
+      const started: RequestState = { kind: 'bridged', url, answer: null };
+      this.request = started;
+      // The result is dropped when another url has replaced this one: one
+      // radio, one request, and an answer nobody is waiting for is not news.
+      void bridged.then(
+        (answer) => {
+          if (this.request === started) this.request = { kind: 'bridged', url, answer };
+        },
+        () => {
+          if (this.request === started)
+            this.request = { kind: 'bridged', url, answer: { ok: false, body: '' } };
+        },
+      );
+      return 0;
+    }
     this.request = { kind: 'pending', url, readyAt: this.nowMs() + NET_LATENCY_MS };
     return 0;
   }
 
+  /**
+   * The real-host request this url asks for, or null when the bench answers it.
+   *
+   * Only the path and query travel: the name is looked up in the bridge table,
+   * so a sketch cannot name a host the build did not opt into. A request made
+   * without a connection is the bench's business, not the bridge's.
+   */
+  private bridge(url: string): Promise<NetAnswer> | null {
+    if (this.fetch === null || this.status() !== WL_CONNECTED) return null;
+    const name = sketchHostName(url);
+    if (name === null) return null;
+    const host = this.live[name];
+    if (!host) return null;
+    const path = url.slice(url.indexOf(name) + name.length);
+    return this.fetch(`${host.base}${path === '' ? '/' : path}`);
+  }
+
   /** The body of the ready answer, or "" when there is none or it failed. */
   read(): string {
-    return this.request.kind === 'answered' ? this.request.answer.body : '';
+    return this.ready()?.body ?? '';
   }
 
   /** 1 when the ready answer is a failure. */
   failed(): number {
-    return this.request.kind === 'answered' && !this.request.answer.ok ? 1 : 0;
+    const answer = this.ready();
+    return answer !== null && !answer.ok ? 1 : 0;
+  }
+
+  /** The answer a sketch can read, from whichever side produced it. */
+  private ready(): NetAnswer | null {
+    if (this.request.kind === 'answered') return this.request.answer;
+    if (this.request.kind === 'bridged') return this.request.answer;
+    return null;
   }
 
   reset(): void {
@@ -288,13 +378,14 @@ export class VirtualNetwork {
 
     // A url is `http://name/path`; anything else is not something this network
     // can be asked for.
-    const match = /^http:\/\/([^/]+)(\/.*)?$/.exec(url);
-    if (!match) return { ok: false, body: '' };
+    const name = sketchHostName(url);
+    if (name === null) return { ok: false, body: '' };
 
-    const host = this.hosts()[match[1]];
+    const host = this.hosts()[name];
     if (!host) return { ok: false, body: '' };
 
-    const route = host.routes[match[2] ?? '/'];
+    const path = url.slice(url.indexOf(name) + name.length);
+    const route = host.routes[path === '' ? '/' : path];
     if (!route) return { ok: false, body: '' };
 
     return { ok: true, body: route() };

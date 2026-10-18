@@ -75,7 +75,12 @@ import { TileFetcher } from '../utils/map-fetcher';
 import { TILE_SIZE, TileStore } from '../utils/map-tiles';
 import { VirtualNetwork, createNetPort } from '@/features/simulation';
 import type { MapPort } from '@/features/simulation';
-import { createTftPort, panelOnBus } from '@/features/simulation';
+import {
+  createLiveFetcher,
+  createTftPort,
+  panelOnBus,
+  type NetFetcher,
+} from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
 import { BusLog, type BusEntry } from '@/features/simulation';
@@ -215,6 +220,16 @@ export interface SimulationDeps {
   readonly indexInstalled?: ProjectLibraryContext['indexInstalled'];
   /** Installed-index object builds; absent uses the production index build. */
   readonly indexBuild?: ProjectLibraryContext['index'];
+  /**
+   * Whether the bench's network may bridge to real hosts (`net/bridge.ts`).
+   *
+   * Set from the build's data (`GalleryBuild.network === 'live'`) and never
+   * from a link: a fetch is a decision about the machine the bench runs on, and
+   * a pasted circuit is someone else's text.
+   */
+  readonly liveNetwork?: boolean;
+  /** Test seam: the fetcher a bridge uses instead of the browser's own. */
+  readonly liveFetcher?: NetFetcher;
 }
 
 export class Simulation {
@@ -284,6 +299,14 @@ export class Simulation {
       bench: this.builder.build(),
       mcu: this.mcu,
       dynamicState: this.controls,
+    });
+    /*
+     * Assigned after the engine because the clock is read from it. A bridge is
+     * installed only when the build asked for one, so the default bench cannot
+     * reach a real host by accident.
+     */
+    this.net = new VirtualNetwork(() => this.engine.timeMs, {
+      fetch: deps?.liveFetcher ?? (deps?.liveNetwork ? createLiveFetcher() : undefined),
     });
     this.avrCompile = deps?.avrCompile ?? builtinCompileInWorker;
     this.avrProjectCompile = deps?.avrProjectCompile ?? builtinCompileProjectWithLibraries;
@@ -1902,7 +1925,7 @@ export class Simulation {
    * the worker run the same network rather than two that have to be kept in
    * step by hand.
    */
-  private readonly net = new VirtualNetwork(() => this.engine.timeMs);
+  private readonly net: VirtualNetwork;
 
   private readonly map: MapPort = {
     request: (z, x, y) => {

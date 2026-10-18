@@ -1168,4 +1168,30 @@ describe('alarm wiring paths', () => {
       }
     }
   });
+
+  /*
+   * The one build that reaches a real host, and the only one allowed to.
+   *
+   * Bridging is opt-in per build because a fetch leaves the machine: this leg is
+   * what keeps that a deliberate decision rather than something a later build
+   * picks up by accident.
+   */
+  describe('the live project', () => {
+    it('is the only build that opted into the live network', () => {
+      const live = GALLERY.filter((project) =>
+        project.builds.some((build) => build.network === 'live'),
+      );
+      expect(live.map((project) => project.id)).toEqual(['live-weather']);
+    });
+
+    it('names a real host in its sketch, on a board its document carries', () => {
+      const build = buildFor(galleryById('live-weather')!, 'esp32');
+      expect(build).not.toBeNull();
+      expect(build!.network).toBe('live');
+      expect(build!.sketch).toContain('weather.noesis');
+      expect(build!.circuit.parts.some((part) => part.type === 'esp32-devkit-v1')).toBe(true);
+      // A document names one board, so the project is offered where it runs.
+      expect(buildFor(galleryById('live-weather')!, 'uno')).toBeNull();
+    });
+  });
 });

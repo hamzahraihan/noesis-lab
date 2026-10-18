@@ -526,6 +526,10 @@ class WorkerClientImpl implements WorkerClient {
   private loadedFirmware: FirmwareProject | null = null;
   private execution: 'interpreter' | 'avr' | 'rp2040' = 'interpreter';
   private wasm = false;
+  /* Whether this bench's network may bridge to real hosts. Build data, set
+   * once: a worker is recreated when the board or bench changes, and the flag
+   * travels in `init` because the worker owns its own network. */
+  private liveNetwork = false;
   private faultText: string | null = null;
   private compileAbort: AbortController | null = null;
   private stagedHex: Uint16Array | null = null;
@@ -551,6 +555,7 @@ class WorkerClientImpl implements WorkerClient {
       firmware: FirmwareProject;
       execution: 'interpreter' | 'avr' | 'rp2040';
       wasm?: boolean;
+      liveNetwork?: boolean;
       onFallback: (reason: string) => void;
     },
   ) {
@@ -565,6 +570,7 @@ class WorkerClientImpl implements WorkerClient {
       this.loadedFirmware = portInit.firmware;
       this.execution = portInit.execution;
       this.wasm = portInit.wasm ?? false;
+      this.liveNetwork = portInit.liveNetwork ?? false;
       this.onPortFallback = portInit.onFallback;
       this.port.onmessage = (event) => this.handleReply(event.data);
       this.sendInit();
@@ -847,6 +853,7 @@ class WorkerClientImpl implements WorkerClient {
         firmware,
         execution: this.execution,
         wasm: this.wasm,
+        liveNetwork: this.liveNetwork,
       });
     } catch {
       this.demote('sim worker post failed');
@@ -1058,6 +1065,8 @@ export function createWorkerClient(opts: {
   firmware?: FirmwareProject;
   execution?: 'interpreter' | 'avr' | 'rp2040';
   wasm?: boolean;
+  /** Whether this bench's network may bridge to real hosts (build data). */
+  liveNetwork?: boolean;
   onFallback: (reason: string) => void;
   forceNoWorker?: boolean;
   createPort?: () => SimWorkerPort;
@@ -1100,6 +1109,7 @@ export function createWorkerClient(opts: {
     firmware: opts.firmware ?? minimalFirmware(),
     execution: opts.execution ?? 'interpreter',
     wasm: resolveWasmFlag(opts.wasm),
+    liveNetwork: opts.liveNetwork ?? false,
     onFallback,
   });
 }

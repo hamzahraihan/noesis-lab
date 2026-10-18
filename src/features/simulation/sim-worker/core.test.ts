@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createSimCore } from './core';
 import { serialRing, tftView } from './protocol';
 import {
@@ -13,6 +13,7 @@ import { boardOption } from '@/features/learn/boardRegistry';
 import { exerciseById } from '@/features/learn';
 import { CIRCUITS } from '@/features/learn/circuits';
 import { esp32DevKitV1, ili9341Definition, type Ili9341 } from '@/features/parts';
+import type { NetAnswer, NetFetcher } from '@/features/simulation';
 
 describe('sim core', () => {
   it('steps an interpreter blink without Worker globals', () => {
@@ -231,7 +232,16 @@ describe('map sketch parity', () => {
     };
   }
 
-  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  /*
+   * Lets a promise callback run: microtask turns, no wall clock. The bridge and
+   * the map both settle in microtasks, and inside one `tick`/`step` call a
+   * sketch's poll loop cannot see an answer -- the collection is the next
+   * frame's, which is what awaiting here stands in for.
+   */
+  const flush = async (): Promise<void> => {
+    await Promise.resolve();
+    await Promise.resolve();
+  };
 
   it('worker core draws the same map as in-page Simulation', async () => {
     const g = globalThis as unknown as Record<string, unknown>;
@@ -365,5 +375,125 @@ void loop() { delay(500); }
     expect(simSerial).toContain('ip 192.168.4.10');
     expect(simSerial).toContain('failed');
     expect(coreSerial).toBe(simSerial);
+  });
+
+  /*
+   * The bridge runs in whichever side owns the sketch too, and the fetcher is
+   * the injected one there as well -- which is what makes this leg possible
+   * without touching the real network: both sides are given the same stub and
+   * have to ask it the same question.
+   */
+  it('bridges a live name identically in-page and in the worker', async () => {
+    const decoder = new TextDecoder();
+    const calls: string[] = [];
+    const fetcher: NetFetcher = (url) => {
+      calls.push(url);
+      const answer: NetAnswer = { ok: true, body: '{"id":1,"title":"delectus aut autem"}' };
+      return Promise.resolve(answer);
+    };
+    const sketch = `
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) { delay(20); }
+  while (net.get("http://data.noesis/todos/1") == 0) { delay(20); }
+  Serial.print("body ");
+  Serial.println(net.read());
+}
+
+void loop() { delay(500); }
+`;
+    // Side A: in-page.
+    const sim = new Simulation(esp32DevKitV1(), { liveNetwork: true, liveFetcher: fetcher });
+    sim.loadFirmware(sketch);
+    sim.start();
+    for (let i = 0; i < 200; i++) {
+      sim.tick(0.05);
+      await flush();
+      if (sim.serialLines().join('').includes('body')) break;
+    }
+    const simSerial = sim.serialLines().join('');
+
+    // Side B: worker core, same sketch, same stub.
+    const core = createSimCore(esp32DevKitV1(), undefined, {
+      liveNetwork: true,
+      liveFetcher: fetcher,
+    });
+    core.rebuild(
+      sim.bench,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [{ name: 'main.ino', content: sketch }],
+      } as never,
+      'interpreter',
+    );
+    expect(core.fault).toBeNull();
+    let coreSerial = '';
+    for (let i = 0; i < 200; i++) {
+      core.step(40);
+      await flush();
+      const drained = serialRing(core.snapshot()).drain();
+      if (drained.length > 0) coreSerial += decoder.decode(new Uint8Array(drained));
+      if (coreSerial.includes('body')) break;
+    }
+
+    expect(simSerial).toContain('body {"id":1,"title":"delectus aut autem"}');
+    expect(coreSerial).toBe(simSerial);
+    // Only the path and query travelled, and only to the mapped endpoint.
+    expect(calls).toEqual([
+      'https://jsonplaceholder.typicode.com/todos/1',
+      'https://jsonplaceholder.typicode.com/todos/1',
+    ]);
+  });
+
+  /*
+   * The shipped default: a core built without the flag has no bridge at all, so
+   * a live name is an unknown host. The stub is installed globally and must go
+   * untouched -- that is the containment rule, asserted rather than assumed.
+   */
+  it('never reaches fetch when the bench did not opt in', () => {
+    const spy = vi.fn(() =>
+      Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('nope') }),
+    );
+    vi.stubGlobal('fetch', spy as unknown as typeof fetch);
+    try {
+      const core = createSimCore(esp32DevKitV1());
+      core.rebuild(
+        new Simulation(esp32DevKitV1()).bench,
+        {
+          language: 'arduino-cpp',
+          activeName: 'main.ino',
+          files: [
+            {
+              name: 'main.ino',
+              content: `
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) { delay(20); }
+  while (net.get("http://weather.noesis/v1/forecast") == 0) { delay(20); }
+  if (net.failed()) { Serial.println("offline"); }
+}
+
+void loop() { delay(500); }
+`,
+            },
+          ],
+        } as never,
+        'interpreter',
+      );
+      let serial = '';
+      for (let i = 0; i < 200; i++) {
+        core.step(40);
+        const drained = serialRing(core.snapshot()).drain();
+        if (drained.length > 0) serial += new TextDecoder().decode(new Uint8Array(drained));
+        if (serial.includes('offline')) break;
+      }
+      expect(serial).toContain('offline');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -98,6 +98,7 @@ import type {
   Servo,
 } from '@/features/parts';
 import { colorPanel, createTftPort, panelOnBus } from '../display/tft';
+import { createLiveFetcher, type NetFetcher } from '../net/bridge';
 import type { Bench, PartInstance } from '../bench';
 import type { FirmwareProject } from '../firmware/project';
 
@@ -147,11 +148,20 @@ export interface CoreHandle {
   readonly rp2040Attached: boolean;
 }
 
+/** What a core is built with beyond its board: the bench's live bridge. */
+export interface CoreOptions {
+  /** Whether this bench's network may bridge to real hosts (build data). */
+  readonly liveNetwork?: boolean;
+  /** Test seam: the fetcher a bridge uses instead of the browser's own. */
+  readonly liveFetcher?: NetFetcher;
+}
+
 export function createSimCore(
   board: PartDefinition,
   onNeedsRealloc?: (nodeCount: number, terminalCount: number) => void,
+  options: CoreOptions = {},
 ): CoreHandle {
-  return new SimCore(board, onNeedsRealloc);
+  return new SimCore(board, onNeedsRealloc, options);
 }
 
 /** Display bytes a bench needs, with the same per-kind sizes `writeDisplay` uses. */
@@ -227,17 +237,27 @@ class SimCore implements CoreHandle {
    * port that drifts, which is why the type and the adapter both live in
    * `../net/`.
    */
-  private readonly net = new VirtualNetwork(() => this.engine.timeMs);
+  private readonly net: VirtualNetwork;
+
+  /** The fetcher this core's bridge uses, if any (a test's, or the browser's). */
+  readonly liveFetcher: NetFetcher | null;
 
   constructor(
     board: PartDefinition,
     onNeedsRealloc?: (nodeCount: number, terminalCount: number) => void,
+    options: CoreOptions = {},
   ) {
     this.controls = new DynamicState();
     this.mcu = new McuRuntime(board);
     this.bench = { parts: [], wires: [], terminals: [], revision: 0 };
     this.engine = new Engine({ bench: this.bench, mcu: this.mcu, dynamicState: this.controls });
     this.onNeedsRealloc = onNeedsRealloc;
+    // Same rule as the in-page bench: a bridge exists only when the build said
+    // so, and the fetcher is the worker's own `fetch` on this origin.
+    this.liveFetcher = options.liveFetcher ?? null;
+    this.net = new VirtualNetwork(() => this.engine.timeMs, {
+      fetch: options.liveFetcher ?? (options.liveNetwork ? createLiveFetcher() : undefined),
+    });
     this.spi = new SpiBus((byte, dataSelect, chipSelected) => {
       this.engine.deliverSpi(byte, dataSelect, chipSelected);
       return true;

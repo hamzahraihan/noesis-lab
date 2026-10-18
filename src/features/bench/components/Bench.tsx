@@ -19,7 +19,7 @@ import { CatalogueGrid } from '../ide/CatalogueGrid';
 import { columnX, stripRowY } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import { Servo, type DisplayController, type Lcd1602 } from '@/features/parts';
-import type { BendPoint, Terminal } from '@/features/simulation';
+import { liveHostIn, type BendPoint, type Terminal } from '@/features/simulation';
 import { Workbench } from './Workbench';
 import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
@@ -255,6 +255,17 @@ export default function Bench(props: BenchProps) {
   const pinned = exercise !== null || projectBuild !== null;
 
   /*
+   * Whether this bench may reach real hosts.
+   *
+   * The build's data decides, never a link: `?project=` picks a build this
+   * repository published, while a pasted `?circuit=` is someone else's text,
+   * and a fetch is a decision about the machine the bench is running on. Every
+   * other bench -- lessons included -- stays on the bench network, which is
+   * what makes "the bench works with no network" true by default.
+   */
+  const liveNetwork = projectBuild?.network === 'live';
+
+  /*
    * The firmware project: every tab, the language they are written in, and
    * which tab is open.
    *
@@ -300,6 +311,21 @@ export default function Bench(props: BenchProps) {
     });
   });
   const [project, setProject] = useState<FirmwareProject>(seed.project);
+
+  /*
+   * A sketch that asks a live host on a bench that cannot reach one.
+   *
+   * Said out loud because the sketch's own answer is only "that host does not
+   * exist" -- true, and not the whole reason. Read off the project's text
+   * rather than the network's live state so the notice is the same in both
+   * backends: the worker owns the network when it is stepping, and its
+   * refusals would stay in the worker.
+   */
+  const offlineLiveHost = useMemo(
+    () => (liveNetwork ? null : liveHostIn(project.files.map((file) => file.content).join('\n'))),
+    [liveNetwork, project],
+  );
+
   /*
    * The corrupt-share notice: shown in the error bar until the next Run, when
    * real firmware errors take over. Editing does not clear it -- the bench
@@ -449,7 +475,7 @@ export default function Bench(props: BenchProps) {
   const circuitSeedErrorRef = useRef<string | null>(null);
   const simulation = useMemo(() => {
     circuitSeedErrorRef.current = null;
-    const created = new Simulation(boardOption(boardId).make());
+    const created = new Simulation(boardOption(boardId).make(), { liveNetwork });
 
     if (exercise) {
       /*
@@ -522,6 +548,7 @@ export default function Bench(props: BenchProps) {
     exerciseLanguage,
     firmwareForBuild,
     circuitSeedParam,
+    liveNetwork,
   ]);
 
   /*
@@ -598,6 +625,7 @@ export default function Bench(props: BenchProps) {
       board: simulation.mcu.definition,
       bench: simulation.bench,
       wasm: projectBuild?.execution === 'avr',
+      liveNetwork,
       onFallback: (reason) => {
         setWorkerFallback(reason);
         setWorkerClient(null);
@@ -617,7 +645,7 @@ export default function Bench(props: BenchProps) {
      * told to interpret. Re-attaching costs one worker start, which is what
      * the flip costs anyway.
      */
-  }, [simulation, projectBuild?.execution]);
+  }, [simulation, projectBuild?.execution, liveNetwork]);
 
   /*
    * The speed multiplier belongs to the run, not to either backend: push it
@@ -1616,6 +1644,31 @@ export default function Bench(props: BenchProps) {
           ) : (
             <span className="text-xs text-slate-500" title={workerFallback ?? 'In-page simulation'}>
               in-page
+            </span>
+          )}
+
+          {/*
+           * Real hosts, in the same dressing as the worker badge: a chip and
+           * not a toggle, because the build's data decides whether a fetch may
+           * happen at all -- a link must not be able to turn one on -- and a
+           * request that leaves this machine is never invisible.
+           */}
+          {liveNetwork && (
+            <span
+              className="rounded-none border border-sky-800 bg-sky-950 px-1.5 py-0.5 text-xs text-sky-300"
+              title="This build bridges to real hosts: a net.get() on a live name is a real GET with no credentials"
+              role="status"
+            >
+              live network
+            </span>
+          )}
+          {offlineLiveHost !== null && (
+            <span
+              className="text-xs text-amber-400"
+              title="That name is a live host, which only a build that opted into the live network can reach. This bench answers it the way it answers any unknown host."
+              role="status"
+            >
+              {`${offlineLiveHost} is offline here`}
             </span>
           )}
 

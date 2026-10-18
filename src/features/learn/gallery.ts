@@ -26,6 +26,14 @@ export interface GalleryBuild {
   readonly variant?: string;
   /** Backend this build needs; default `'interpreter'`. */
   readonly execution?: 'interpreter' | 'avr' | 'rp2040';
+  /**
+   * `'live'` when this build's sketch talks to a real host (`net/live-hosts`).
+   *
+   * Opt-in per build on purpose: a fetch leaves the machine, so it is a
+   * decision this repository makes when it publishes a build -- never something
+   * a link or a sketch can switch on.
+   */
+  readonly network?: 'live';
   /** The circuit this build needs, as a document (see `circuits/`). */
   readonly circuit: CircuitDocument;
   /** The entry file's source (`main.ino` on Arduino builds). */
@@ -1978,6 +1986,93 @@ const SENSOR_FEED: GalleryProject = {
   ],
 };
 
+/* ------------------------------------------------------------------ *
+ * Live Weather — the one build that reaches a real host
+ * ------------------------------------------------------------------ */
+
+/*
+ * The network slice's exception, and what `simulation/net/live-hosts.ts` is for.
+ *
+ * Every other project here talks to the bench's own network: names the bench
+ * knows, answers on simulated time, the same on every machine. This one asks a
+ * *real* host -- open-meteo, keyless and CORS-clean -- and the bench bridges the
+ * request because this build says so (`network: 'live'`). The sketch itself is
+ * unchanged in shape, which is the point: `net.get` on a bridged name is still a
+ * poll, still reports failures through `net.failed()`, and would not know the
+ * difference except by what came back.
+ *
+ * What a reader has to know, and the panel and the serial both say: the request
+ * leaves this machine. It is a GET, it carries no credentials and no headers,
+ * and it goes to one endpoint this repository chose. Weather is the honest
+ * lesson for it -- a value nobody can know without asking someone who does.
+ */
+
+const LIVE_WEATHER_SKETCH = `
+void setup() {
+  Serial.begin(115200);
+  tft.begin();
+  tft.setRotation(1);
+
+  /*
+   * Joining is not instant, and it is not guaranteed. The bench network takes
+   * the same simulated latency it always does; the real request after this is
+   * the part that takes as long as it takes.
+   */
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(50);
+  }
+
+  Serial.print("joined ");
+  Serial.println(WiFi.localIP());
+  tft.print("live weather, Berlin", 20, 40, WHITE);
+  tft.print("real request: api.open-meteo.com", 20, 60, SKY);
+}
+
+void loop() {
+  /*
+   * The same poll the bench hosts get. A real request is pending until the
+   * host answers, and a host that never answers is reported the same way an
+   * unknown name is -- which is the lesson this project exists to show.
+   */
+  while (net.get("http://weather.noesis/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m") == 0) {
+    delay(20);
+  }
+
+  tft.fillRect(20, 90, 440, 40, BLACK);
+  if (net.failed()) {
+    Serial.println("live network failed");
+    tft.print("no answer: check your connection", 20, 90, 0xF800);
+  } else {
+    Serial.println(net.read());
+    tft.print(net.read(), 20, 90, GREEN);
+  }
+  /* Two seconds between requests: a real host is somebody else's server. */
+  delay(2000);
+}
+`;
+
+const LIVE_WEATHER: GalleryProject = {
+  id: 'live-weather',
+  title: 'Live Weather',
+  blurb:
+    'The same poll loop, pointed at a real host: open-meteo, keyless and CORS-clean, reached because this build opted into the live network. The request leaves your machine — a GET, no credentials — and it fails like any other host when the network or the server is not there.',
+  parts: [{ name: '3.2" TFT (ILI9341)', qty: 1 }],
+  builds: [
+    {
+      board: 'esp32',
+      circuit: CIRCUITS['esp32-tft'],
+      sketch: LIVE_WEATHER_SKETCH,
+      network: 'live',
+    },
+  ],
+  working: [
+    'The panel names the endpoint before the first request: this one leaves the machine.',
+    'The serial prints the JSON open-meteo answered, and the panel draws it — a temperature nobody could know without asking.',
+    'Pull the network cable, and the loop reports "no answer" instead of freezing: a real host fails like a bench host.',
+  ],
+};
+
 export const GALLERY: readonly GalleryProject[] = [
   ALARM_CLOCK,
   SAFE,
@@ -1987,6 +2082,7 @@ export const GALLERY: readonly GalleryProject[] = [
   REACTION,
   NET_CLOCK,
   SENSOR_FEED,
+  LIVE_WEATHER,
 ];
 
 export function galleryById(id: string): GalleryProject | null {
