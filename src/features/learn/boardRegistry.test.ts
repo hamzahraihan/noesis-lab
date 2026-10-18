@@ -5,16 +5,14 @@ import {
   boardSpecs,
   DEFAULT_BOARD_ID,
   isBoardId,
-  STARTER_WIRING,
   type BoardId,
 } from './boardRegistry';
 
 import { Simulation } from '@/features/bench/simulations/simulation';
-import { BLINK_SKETCH } from './examples';
-import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
-import { ledDefinition, resistorDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/parts';
-import type { PartInstance, Terminal } from '@/features/simulation';
+import { BLINK_SKETCH, starterSketchFor } from './examples';
+import { STARTER_CIRCUITS } from './benches';
+import type { PartInstance } from '@/features/simulation';
+import type { BoardPin } from '@/features/parts';
 
 /**
  * The board registry.
@@ -37,51 +35,42 @@ import type { PartInstance, Terminal } from '@/features/simulation';
  * the only one that worked.
  */
 
-/** A terminal-shaped placeholder, matching how the app routes a starter wire. */
-function at(x: number, y: number): Terminal {
-  return { id: -1, x, y };
+/**
+ * Compiles a board's starter document and finds the pin that feeds its LED.
+ *
+ * The document is the wiring's authority now, so the test asks it rather than a
+ * table beside it: the LED's chain reaches exactly one board pin, and that pin
+ * is the one the board's own sketch must name.
+ */
+function starterDrivePin(boardId: BoardId): {
+  simulation: Simulation;
+  led: PartInstance;
+  pin: BoardPin;
+} {
+  const simulation = new Simulation(boardOption(boardId).make());
+  expect(simulation.loadCircuit(STARTER_CIRCUITS[boardId])).toEqual([]);
+  const parts = simulation.bench.parts;
+  const led = parts.find((part) => part.definition.component.kind === 'led');
+  const resistor = parts.find((part) => part.definition.component.kind === 'resistor');
+  if (!led) throw new Error(`${boardId}: the starter has no LED`);
+  if (!resistor) throw new Error(`${boardId}: the starter has no resistor`);
+  const netlist = simulation.engine.currentNetlist;
+  const boardPart = parts.find((part) => part.definition.component.kind === 'mcu')!;
+  const leadNet = netlist.pinNode.get(`${resistor.id}:a`);
+  const pin = boardPart.definition.boardPins?.find(
+    (candidate) => netlist.pinNode.get(`${boardPart.id}:${candidate.id}`) === leadNet,
+  );
+  if (!pin) throw new Error(`${boardId}: no board pin feeds the starter LED`);
+  return { simulation, led, pin };
 }
 
-/**
- * The starter bench's LED, wired exactly as the app builds it.
- *
- * This is the only way to catch the fault the pin assertions cannot: that the
- * hole is named right, that it answers to the pin the sketch drives, and that
- * current actually flows. Any one of the three can hold while the LED stays
- * dark -- a pull-up that never reaches it, or a ground that is not ground.
- */
-function starterLedBench(boardId: BoardId): { simulation: Simulation; led: PartInstance } {
-  const wiring = STARTER_WIRING[boardId];
-  const simulation = new Simulation(boardOption(boardId).make());
-  const board = simulation.addPart(boardOption(boardId).make(), 0, 0);
-  simulation.addPart(breadboardDefinition(), 230, 0);
-
-  const pinAt = (id: string) => {
-    const pin = board.definition.pins.find((candidate) => candidate.id === id);
-    if (!pin) throw new Error(`${board.definition.name} has no pin ${id}`);
-    return pin;
-  };
-  const holeX = (column: number) => 230 + columnX(column);
-  const holeY = (row: number) => stripRowY(row);
-  const railY = railRowY(2);
-
-  const ledPin = pinAt(wiring.led);
-  simulation.routeWire(at(ledPin.x, ledPin.y), at(holeX(20), holeY(8)));
-  simulation.addPart(resistorDefinition(330), holeX(20), holeY(8) - 2.54);
-  // Anode-anchored: the long leg lands on its hole, cathode one column along.
-  const starterLedDef = ledDefinition(DIODE_PROFILES.red, 'Red');
-  const starterAnode = starterLedDef.pins.find((pin) => pin.id === 'anode')!;
-  const led = simulation.addPart(
-    starterLedDef,
-    holeX(24) - starterAnode.x,
-    holeY(8) - starterAnode.y,
-  );
-  // The cathode sits one column back from the anode; return it to ground.
-  simulation.routeWire(at(holeX(23), holeY(8)), at(holeX(23), railY));
-  const ground = pinAt(wiring.ground);
-  simulation.routeWire(at(ground.x, ground.y), at(holeX(10), railY));
-
-  return { simulation, led };
+/** The pin number the board's own starter sketch drives. */
+function sketchPin(boardId: BoardId): number {
+  const sketch = starterSketchFor(boardId);
+  const match = /LED_PIN (\d+)|LED\((\d+)\)|Pin\((\d+)/.exec(sketch);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (value === undefined) throw new Error(`${boardId}: the starter sketch names no pin`);
+  return Number(value);
 }
 
 describe('board registry', () => {
@@ -171,99 +160,35 @@ describe('board registry', () => {
     });
   });
 
-  describe('starter wiring points at real holes', () => {
-    /** The eight pins the starter bench routes, named for the failure message. */
-    function routedPins(boardId: BoardId): ReadonlyArray<readonly [string, string]> {
-      const wiring = STARTER_WIRING[boardId];
-      return [
-        ['led', wiring.led],
-        ['ground', wiring.ground],
-        ['sda', wiring.i2c[0]],
-        ['scl', wiring.i2c[1]],
-        ['cs', wiring.spi[0]],
-        ['dc', wiring.spi[1]],
-        ['sck', wiring.spi[2]],
-        ['mosi', wiring.spi[3]],
-      ];
-    }
-
-    it('names pins that exist on the board it is keyed to', () => {
-      for (const board of BOARDS) {
-        const definition = boardOption(board.id).make();
-        for (const [label, pinId] of routedPins(board.id)) {
-          const exists = definition.pins.some((pin) => pin.id === pinId);
-          expect(exists, `${board.name} has no ${label} pin ${pinId}`).toBe(true);
-        }
-      }
-    });
-
-    it('wires a ground pin that really is ground', () => {
-      // A mislabelled ground gives a bench that solves but never lights, which
-      // reads to a learner as a broken LED rather than a wrong pin id.
-      for (const board of BOARDS) {
-        const definition = boardOption(board.id).make();
-        const pin = definition.pins.find(
-          (candidate) => candidate.id === STARTER_WIRING[board.id].ground,
-        );
-        expect(pin?.net, `${board.name} ground`).toBe('GND');
-      }
-    });
-
-    it('lands the starter LED on the pin that board’s own sketch drives', () => {
+  describe('the starter documents', () => {
+    it('wire the LED to the pin the board’s own starter sketch drives', () => {
       /*
        * Every microcontroller here names `#define LED_PIN 2` in the sketch that
-       * ships, so the starter wiring has to put the LED on the hole that
-       * answers to pin 2 -- not on the pin a board's silkscreen would suggest.
-       * Wiring it to pin 13 instead gives a bench whose LED never lights, which
-       * looks exactly like a broken simulator and was true on five of the six
-       * boards that shipped before this check.
-       *
-       * The number lives on the wiring rather than here because it is no longer
-       * the same on every board: a single-board computer's GPIO2 is its I2C data
-       * line, so its sketch names a different pin and the wiring follows it.
+       * ships; a single-board computer's GPIO2 is its I2C data line, so its
+       * sketch names a different pin. The document is where the two must agree
+       * now -- the wiring table that used to hold the number is gone.
        */
       for (const board of BOARDS) {
-        const definition = boardOption(board.id).make();
-        const pin = definition.boardPins?.find(
-          (candidate) => candidate.id === STARTER_WIRING[board.id].led,
-        );
-        expect(pin?.gpio, `${board.name} starter LED pin`).toBe(STARTER_WIRING[board.id].ledPin);
+        const { pin } = starterDrivePin(board.id);
+        expect(pin.gpio, `${board.name} starter LED pin is a GPIO`).toBe(sketchPin(board.id));
         // A pin with no output driver cannot light anything, however it is wired.
-        expect(pin?.canDrive, `${board.name} starter LED pin`).not.toBe(false);
+        expect(pin.canDrive, `${board.name} starter LED pin`).not.toBe(false);
       }
     });
-  });
 
-  describe('the starter bench actually blinks', () => {
-    /*
-     * Everything above checks the wiring on paper. This runs it: the sketch
-     * loaded, the firmware stepped, the net solved, and the LED's anode watched
-     * for both a lit and a dark state.
-     *
-     * It is the only assertion here that would have caught the pin-13 fault on
-     * its own, because a correctly named hole wired to the wrong pin still
-     * passes every other check -- the hole exists, it is a GPIO, it can drive.
-     * It also guards the wiring itself, which is duplicated here rather than
-     * imported: importing it would make this test pass exactly when the app
-     * breaks.
-     */
-    for (const board of BOARDS) {
-      it(`lights and darkens the LED on the ${board.name}`, () => {
-        const { simulation, led } = starterLedBench(board.id);
-        // Each board is given the sketch it would actually be handed when its
-        // bench opens, in its own language. Loading the C++ one onto a
-        // single-board computer would fail before it reached a pin, which says
-        // nothing about whether the wiring is right.
+    it('blink it when the firmware runs', () => {
+      /*
+       * The paper checks cannot see a pull-up that never reaches the LED or a
+       * ground that is not ground. This runs the board's starter document with
+       * the sketch its own language uses, and watches the anode for both a lit
+       * and a dark state.
+       */
+      for (const board of BOARDS) {
+        const { simulation, led, pin } = starterDrivePin(board.id);
         const language = boardOption(board.id).language;
-        /*
-         * The probe is written from the wiring table rather than borrowed from
-         * a board's starter: the two must agree on the pin, and a starter in
-         * another idiom (MicroPython's `machine` on the Nano RP2040) would not
-         * run on the interpreter at all. gpiozero drives any GPIO number.
-         */
         const probe =
           language === 'python'
-            ? `from gpiozero import LED\nimport time\nled = LED(${STARTER_WIRING[board.id].ledPin})\nwhile True:\n    led.on()\n    time.sleep(0.5)\n    led.off()\n    time.sleep(0.5)\n`
+            ? `from gpiozero import LED\nimport time\nled = LED(${pin.gpio})\nwhile True:\n    led.on()\n    time.sleep(0.5)\n    led.off()\n    time.sleep(0.5)\n`
             : BLINK_SKETCH;
         simulation.loadFirmware(probe, language);
         simulation.start();
@@ -277,7 +202,7 @@ describe('board registry', () => {
 
         expect(Math.max(...levels), `${board.name} LED never lit`).toBeGreaterThan(1.5);
         expect(Math.min(...levels), `${board.name} LED never went dark`).toBeLessThan(0.5);
-      });
-    }
+      }
+    });
   });
 });

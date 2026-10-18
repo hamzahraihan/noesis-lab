@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "esp32-devkit-v1",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "lcd-16x2",
+      "x": 415,
+      "y": 70,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "ds1307-rtc",
+      "x": 415,
+      "y": 110,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p3:RS",
+      "to": "p1:GPIO25",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p4:SDA",
+      "to": "p1:D21",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p4:SCL",
+      "to": "p1:D22",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "p4:GND",
+      "to": "p1:L_GND",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w13",
+      "from": "p4:VCC",
+      "to": "p1:VIN",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p3:RW",
+      "to": "p1:GPIO26",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p3:E",
+      "to": "p1:D14",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p3:D0",
+      "to": "p1:D12",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p3:D4",
+      "to": "p1:D13",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p3:D5",
+      "to": "p1:TX0",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p3:D6",
+      "to": "p1:RX0",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p3:D7",
+      "to": "p1:D19",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "p3:VSS",
+      "to": "p1:L_GND",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

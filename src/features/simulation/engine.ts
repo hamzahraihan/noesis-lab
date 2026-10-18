@@ -391,6 +391,13 @@ export class Engine {
      */
     const previousDisplays = new Map(this.displays);
     const previousDevices = new Map(this.devices);
+    /*
+     * Character panels carry too, for the same reason: their DDRAM is what the
+     * sketch has written and a re-solve must not blank the glass. They are not
+     * in `displays` because the library drives them through their own port, so
+     * they need their own carried map.
+     */
+    const previousLcds = new Map(this.lcds);
     this.displays.clear();
     this.devices.clear();
     this.servos.clear();
@@ -440,7 +447,7 @@ export class Engine {
       }
       if (device) this.devices.set(part.id, device);
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
-      const lcd = createLcd(part.definition);
+      const lcd = previousLcds.get(part.id) ?? createLcd(part.definition);
       if (lcd) this.lcds.set(part.id, lcd);
       if (
         part.definition.component.kind === 'neopixel' ||

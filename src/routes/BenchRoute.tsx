@@ -23,7 +23,8 @@ import {
   isBoardId,
   isGuideDismissed,
   starterSketchFor,
-  STARTER_WIRING,
+  starterCircuitFor,
+  exampleCircuitFor,
 } from '@/features/learn';
 
 export default function BenchRoute() {
@@ -35,7 +36,8 @@ export default function BenchRoute() {
       boardOption={boardOption}
       DEFAULT_BOARD_ID={DEFAULT_BOARD_ID}
       isBoardId={isBoardId}
-      STARTER_WIRING={STARTER_WIRING}
+      starterCircuitFor={starterCircuitFor}
+      exampleCircuitFor={exampleCircuitFor}
       exerciseBoard={exerciseBoard}
       exerciseById={exerciseById}
       exerciseLanguage={exerciseLanguage}

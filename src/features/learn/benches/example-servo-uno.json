@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "servo",
+      "x": 415,
+      "y": 70,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p3:PWM",
+      "to": "p1:A5",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p3:GND",
+      "to": "p1:J1_GND",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "resistor-330",
+      "x": 285.88,
+      "y": 38.099999999999994,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "led-red",
+      "x": 289.43,
+      "y": 29.529999999999994,
+      "rotation": 0
+    },
+    {
+      "id": "p5",
+      "type": "ssd1306-128x64-3c",
+      "x": 270,
+      "y": 86,
+      "rotation": 0
+    },
+    {
+      "id": "p6",
+      "type": "ili9341-320x240",
+      "x": 285,
+      "y": 150,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:D2",
+      "to": "p2:s20i",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p1:D10",
+      "to": "p2:s33i",
+      "colour": "#a3e635",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p2:s33i",
+      "to": "p6:CS",
+      "colour": "#06b6d4",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "p1:D9",
+      "to": "p2:s35i",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w13",
+      "from": "p2:s35i",
+      "to": "p6:D/C",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w14",
+      "from": "p1:D13",
+      "to": "p2:s37i",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w15",
+      "from": "p2:s37i",
+      "to": "p6:CLK",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w16",
+      "from": "p1:D11",
+      "to": "p2:s39i",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w17",
+      "from": "p2:s39i",
+      "to": "p6:DIN",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w18",
+      "from": "p2:s33e",
+      "to": "p6:VCC",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w19",
+      "from": "p2:s35e",
+      "to": "p6:GND",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p2:s23i",
+      "to": "p2:r2_23",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:J1_GND",
+      "to": "p2:r2_10",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p2:s27i",
+      "to": "p5:SDA",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p2:s29i",
+      "to": "p5:SCL",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p2:r2_27",
+      "to": "p5:VCC",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p2:r2_29",
+      "to": "p5:GND",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p1:A4",
+      "to": "p2:s27i",
+      "colour": "#92400e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "p1:A5",
+      "to": "p2:s29i",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

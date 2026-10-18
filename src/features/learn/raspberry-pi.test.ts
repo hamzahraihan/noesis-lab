@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { raspberryPi4 } from '@/features/parts';
-import { boardOption, boardSpecs, STARTER_WIRING } from './boardRegistry';
+import { boardOption, boardSpecs } from './boardRegistry';
+import { STARTER_CIRCUITS } from './benches';
+import { Simulation } from '@/features/bench/simulations/simulation';
 
 /**
  * The Raspberry Pi 4.
@@ -127,25 +129,47 @@ describe('the starter wiring', () => {
      * the shipped sketch names. A Pi's GPIO 2 is the I2C data line and the
      * starter bench has a display on that bus, so the LED moves to GPIO 17.
      */
-    const wiring = STARTER_WIRING['raspberry-pi'];
-    expect(wiring.ledPin).toBe(17);
-    expect(wiring.led).not.toBe(wiring.i2c[0]);
-    expect(wiring.led).not.toBe(wiring.i2c[1]);
+    const simulation = new Simulation(raspberryPi4());
+    expect(simulation.loadCircuit(STARTER_CIRCUITS['raspberry-pi'])).toEqual([]);
+    const resistor = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'resistor',
+    )!;
+    const drive = gpioOn(simulation, resistor.id, 'a');
+    const oled = simulation.bench.parts.find((part) => part.definition.id.startsWith('ssd1306'))!;
+    expect(drive).toBe(17);
+    expect(drive).not.toBe(gpioOn(simulation, oled.id, 'SDA'));
+    expect(drive).not.toBe(gpioOn(simulation, oled.id, 'SCL'));
   });
 
   it('wires the buses to the pins the Pi actually has them on', () => {
-    const wiring = STARTER_WIRING['raspberry-pi'];
-    const gpioOf = (id: string): number | undefined =>
-      pi().boardPins?.find((pin) => pin.id === id)?.gpio;
+    const simulation = new Simulation(raspberryPi4());
+    expect(simulation.loadCircuit(STARTER_CIRCUITS['raspberry-pi'])).toEqual([]);
+    const oled = simulation.bench.parts.find((part) => part.definition.id.startsWith('ssd1306'))!;
+    const tft = simulation.bench.parts.find((part) => part.definition.id.startsWith('ili9341'))!;
 
     // SDA1 then SCL1, and SPI0 with its chip select on CE0.
-    expect([gpioOf(wiring.i2c[0]), gpioOf(wiring.i2c[1])]).toEqual([2, 3]);
-    expect([gpioOf(wiring.spi[0]), gpioOf(wiring.spi[2]), gpioOf(wiring.spi[3])]).toEqual([
-      8, 11, 10,
+    expect([gpioOn(simulation, oled.id, 'SDA'), gpioOn(simulation, oled.id, 'SCL')]).toEqual([
+      2, 3,
     ]);
+    expect([
+      gpioOn(simulation, tft.id, 'CS'),
+      gpioOn(simulation, tft.id, 'SCK'),
+      gpioOn(simulation, tft.id, 'MOSI'),
+    ]).toEqual([8, 11, 10]);
   });
 
   it('opens its bench in Python, because the board runs Linux', () => {
     expect(boardOption('raspberry-pi').language).toBe('python');
   });
 });
+
+/** The GPIO number of the board pin sharing a part pin's net. */
+function gpioOn(simulation: Simulation, partId: string, pinId: string): number | undefined {
+  const netlist = simulation.engine.currentNetlist;
+  const net = netlist.pinNode.get(`${partId}:${pinId}`);
+  const board = simulation.bench.parts.find((part) => part.definition.component.kind === 'mcu')!;
+  const pin = board.definition.boardPins?.find(
+    (candidate) => netlist.pinNode.get(`${board.id}:${candidate.id}`) === net,
+  );
+  return pin?.gpio;
+}

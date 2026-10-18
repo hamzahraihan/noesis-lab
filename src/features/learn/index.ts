@@ -13,16 +13,20 @@ export { buildFor, firmwareForBuild, galleryById } from './gallery';
 export type { GalleryBuild, GalleryProject } from './gallery';
 export {
   BLINK_EXAMPLE,
-  EXAMPLE_DEVICES,
   EXAMPLES,
-  LCD_LINES,
   PICO_BLINK_SKETCH,
   PI_BLINK_SKETCH,
   starterSketchFor,
 } from './examples';
-export type { Example, ExampleDevice } from './examples';
-export { BOARDS, boardOption, DEFAULT_BOARD_ID, isBoardId, STARTER_WIRING } from './boardRegistry';
-export type { BoardId, BoardOption, StarterWiring } from './boardRegistry';
+export type { Example } from './examples';
+export {
+  EXAMPLE_CIRCUITS,
+  STARTER_CIRCUITS,
+  exampleCircuitFor,
+  starterCircuitFor,
+} from './benches';
+export { BOARDS, boardOption, DEFAULT_BOARD_ID, isBoardId } from './boardRegistry';
+export type { BoardId, BoardOption } from './boardRegistry';
 export { isGuideDismissed, setGuideDismissed } from './guide-dismissal';
 export { DiagnosticsPanel } from './diagnostics/DiagnosticsPanel';
 export { buildRegistry } from './diagnostics/registry';

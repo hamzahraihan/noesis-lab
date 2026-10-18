@@ -11,29 +11,8 @@
  * the board hides the holes the rest of the circuit uses.
  */
 
-import type { PartDefinition } from '@/features/parts';
-import { ds1307Definition } from '@/features/parts';
-import { lcd1602Definition } from '@/features/parts';
-import { servoDefinition } from '@/features/parts';
 import { boardOption, type BoardId } from './boardRegistry';
 import type { FirmwareLanguage } from '@/features/simulation';
-import type { Simulation } from '@/features/bench';
-
-/** The parts an example can put on the bench for itself. */
-export type ExampleDevice = 'ds1307' | 'lcd1602' | 'servo';
-
-/**
- * Which definition each of those is.
- *
- * Keyed here rather than in the simulation so that adding an example's part is
- * one line in one file: the simulation wires it, the example asks for it by
- * name, and neither knows about the other's tables.
- */
-export const EXAMPLE_DEVICES: Readonly<Record<ExampleDevice, () => PartDefinition>> = {
-  ds1307: ds1307Definition,
-  lcd1602: lcd1602Definition,
-  servo: servoDefinition,
-};
 
 export interface Example {
   readonly id: string;
@@ -41,29 +20,7 @@ export interface Example {
   /** What it demonstrates, in the voice the catalogue uses. */
   readonly note: string;
   readonly sketch: string;
-  /** Adds whatever the sketch talks to, on top of the board and breadboard. */
-  readonly wire: (simulation: Simulation) => void;
 }
-
-/**
- * The eight lines a character LCD drives over its own header.
- *
- * Listed here because the panel and the host have to agree on them, and a
- * library that names its own lines in two places names them differently once.
- * A real HD44780 in four-bit mode leaves D0-D3 unconnected and reads D4-D7, but
- * the bench's panel reads the assembled byte, so it is wired all the way.
- */
-export const LCD_LINES = ['RS', 'RW', 'E', 'D0', 'D4', 'D5', 'D6', 'D7'] as const;
-
-/**
- * Where the examples stand.
- *
- * The breadboard runs from x = 230, so 415 is the first clear column to its
- * right, and the modules are stacked down from there rather than across.
- */
-const BENCH_X = 415;
-const BENCH_Y = 70;
-const BENCH_STEP = 40;
 
 export const BLINK_SKETCH = `#include <Arduino.h>
 #include <Wire.h>
@@ -303,7 +260,6 @@ export const BLINK_EXAMPLE: Example = {
   name: 'Blink, OLED and TFT',
   note: 'A blinking LED and a bar on each display, with every bus driven by hand.',
   sketch: BLINK_SKETCH,
-  wire: () => {},
 };
 
 export const I2C_CLOCK_EXAMPLE: Example = {
@@ -311,9 +267,6 @@ export const I2C_CLOCK_EXAMPLE: Example = {
   name: 'I2C read',
   note: 'Reads a real-time clock register by register, the way the datasheet says to.',
   sketch: I2C_CLOCK_SKETCH,
-  wire: (simulation) => {
-    simulation.placeExampleDevice('ds1307', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
-  },
 };
 
 export const LCD_EXAMPLE: Example = {
@@ -321,16 +274,6 @@ export const LCD_EXAMPLE: Example = {
   name: 'Character LCD',
   note: 'A clock on a character display. Six wires, not two, and the glass only lights if all six land.',
   sketch: LCD_SKETCH,
-  wire: (simulation) => {
-    simulation.placeExampleDevice('lcd1602', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
-    simulation.placeExampleDevice(
-      'ds1307',
-      BENCH_X,
-      BENCH_Y + BENCH_STEP,
-      EXAMPLE_DEVICES,
-      LCD_LINES,
-    );
-  },
 };
 
 export const SERVO_EXAMPLE: Example = {
@@ -338,9 +281,6 @@ export const SERVO_EXAMPLE: Example = {
   name: 'Servo sweep',
   note: 'Sweeps a horn between its end stops, which is not the same as 0 and 180.',
   sketch: SERVO_SKETCH,
-  wire: (simulation) => {
-    simulation.placeExampleDevice('servo', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
-  },
 };
 
 export const EXAMPLES: readonly Example[] = [

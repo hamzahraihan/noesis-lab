@@ -16,18 +16,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType }
 import { isLargePart, type CatalogueEntry } from '@/features/parts';
 import { Sidebar } from '../ide/Sidebar';
 import { CatalogueGrid } from '../ide/CatalogueGrid';
-import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
-import { ledDefinition, resistorDefinition } from '@/features/parts';
-import { DIODE_PROFILES } from '@/features/parts';
+import { columnX, stripRowY } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import { Servo, type DisplayController, type Lcd1602 } from '@/features/parts';
-import type { BendPoint, PartInstance, Terminal } from '@/features/simulation';
-import { ili9341Definition, ssd1306Definition } from '@/features/parts';
+import type { BendPoint, Terminal } from '@/features/simulation';
 import { Workbench } from './Workbench';
 import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
 import type { FootprintState } from '../wokwi/footprints';
 import { BREADBOARD_ORIGIN_X, Simulation } from '../simulations/simulation';
+import { offsetOfFirstPin } from '../wiring/pin-offset';
 import {
   createWorkerClient,
   lcdFromSnapshot,
@@ -50,9 +48,8 @@ import type {
   Exercise,
   GalleryBuild,
   GalleryProject,
-  StarterWiring,
 } from '@/features/learn';
-import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
+import type { CircuitDocument, FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import {
   ENTRY_BY_LANGUAGE,
   removeFile,
@@ -122,106 +119,11 @@ const PALETTE_FLIP_X = 200;
 /** Above this the palette opens downwards, for the same reason. */
 const PALETTE_FLIP_Y = 60;
 
-/** Column the starter LED circuit is wired onto. */
-const SIGNAL_COLUMN = 20;
-
 /**
  * Shown on every control the running bench refuses to act on, so a dead
  * button says why it is dead and what revives it.
  */
 const LAYOUT_LOCK_HINT = 'Pause the run to edit the bench';
-
-/** A terminal-shaped placeholder, for routing wires before a hole exists. */
-function at(x: number, y: number): Terminal {
-  return { id: -1, x, y };
-}
-
-/**
- * Builds the bench the app opens with: a blinking LED, an OLED on I2C and a
- * TFT on SPI.
- *
- * Both displays are wired through to the controller pins their buses actually
- * run on. Pull a wire and that screen goes dark while the other carries on,
- * which is the whole reason they are both here.
- *
- * Assumes the board and breadboard are already down: the caller places those
- * once for every bench, because an exercise needs them too and placing them
- * here would mean two boards on any bench that arrives through this path.
- */
-function buildStartingBench(simulation: Simulation, wiring: StarterWiring): void {
-  const board = simulation.bench.parts[0];
-
-  const pinAt = (id: string) => {
-    const pin = board.definition.pins.find((candidate) => candidate.id === id);
-    if (!pin) throw new Error(`${board.definition.name} has no pin ${id}`);
-    return pin;
-  };
-  const holeX = (column: number) => BREADBOARD_ORIGIN_X + columnX(column);
-  const holeY = (row: number) => stripRowY(row);
-  const groundRailY = railRowY(2);
-
-  // --- LED on the bench ---------------------------------------------------
-  const ledPin = pinAt(wiring.led);
-  simulation.routeWire(at(ledPin.x, ledPin.y), at(holeX(SIGNAL_COLUMN), holeY(8)));
-  // Landed by its own leads rather than by a remembered number: the resistor's
-  // pins sit 2.54 mm down inside its footprint, which is a whole breadboard
-  // row. Hardcoding that offset is what put a part half a row out when the pin
-  // moved, and the wire then reached the pin instead of the visible lead.
-  const [resistorDx, resistorDy] = offsetOfFirstPin(resistorDefinition(330));
-  simulation.addPart(
-    resistorDefinition(330),
-    holeX(SIGNAL_COLUMN) - resistorDx,
-    holeY(8) - resistorDy,
-  );
-  // Anchored by the anode, so the long leg lands on its hole and the cathode
-  // steps one column along; the cathode sits 0.1 mm off pitch, inside snap.
-  const ledDef = ledDefinition(DIODE_PROFILES.red, 'Red');
-  const ledAnode = ledDef.pins.find((pin) => pin.id === 'anode')!;
-  simulation.addPart(ledDef, holeX(SIGNAL_COLUMN + 4) - ledAnode.x, holeY(8) - ledAnode.y);
-  simulation.routeWire(
-    at(holeX(SIGNAL_COLUMN + 3), holeY(8)),
-    at(holeX(SIGNAL_COLUMN + 3), groundRailY),
-  );
-  const ground = pinAt(wiring.ground);
-  simulation.routeWire(at(ground.x, ground.y), at(holeX(10), groundRailY));
-
-  /** Wires a display pin to a breadboard column, and the board pin to it too. */
-  const connect = (display: PartInstance, pin: string, column: number, row: number) => {
-    const spec = display.definition.pins.find((candidate) => candidate.id === pin);
-    if (!spec) throw new Error(`${display.definition.name} has no pin ${pin}`);
-    simulation.routeWire(at(holeX(column), holeY(row)), at(display.x + spec.x, display.y + spec.y));
-  };
-
-  // --- 128x64 OLED, on I2C ------------------------------------------------
-  const oled = simulation.addPart(ssd1306Definition(), BREADBOARD_ORIGIN_X + 40, 86);
-  const oledColumn = SIGNAL_COLUMN + 7;
-  connect(oled, 'SDA', oledColumn, 8);
-  connect(oled, 'SCL', oledColumn + 2, 8);
-  simulation.routeWire(
-    at(holeX(oledColumn), groundRailY),
-    at(oled.x + oled.definition.pins[1].x, oled.y + oled.definition.pins[1].y),
-  );
-  simulation.routeWire(
-    at(holeX(oledColumn + 2), groundRailY),
-    at(oled.x + oled.definition.pins[0].x, oled.y + oled.definition.pins[0].y),
-  );
-  [wiring.i2c[0], wiring.i2c[1]].forEach((boardPin, index) => {
-    const pin = pinAt(boardPin);
-    simulation.routeWire(at(pin.x, pin.y), at(holeX(oledColumn + index * 2), holeY(8)));
-  });
-
-  // --- 2.4" TFT, on SPI ---------------------------------------------------
-  const tft = simulation.addPart(ili9341Definition(), BREADBOARD_ORIGIN_X + 55, 150);
-  const spiColumn = SIGNAL_COLUMN + 13;
-  ['CS', 'DC', 'SCK', 'MOSI'].forEach((signal, index) => {
-    const column = spiColumn + index * 2;
-    const pin = pinAt(wiring.spi[index]);
-    simulation.routeWire(at(pin.x, pin.y), at(holeX(column), holeY(8)));
-    connect(tft, signal, column, 8);
-  });
-  connect(tft, 'VCC', spiColumn, 4);
-  connect(tft, 'GND', spiColumn + 2, 4);
-}
 
 /**
  * Where dropped parts land.
@@ -235,24 +137,6 @@ let nextBenchSlot = 0;
 
 const BENCH_SLOTS_X = [230, 240, 250, 260, 270, 280];
 const BENCH_SLOTS_Y = [70, 78, 86];
-
-/**
- * Offset of a part's first pin inside its own footprint.
- *
- * Dropping a part means landing its leads in holes, and where the leads sit
- * inside the footprint differs per part: a resistor's are 1.6 mm down, an
- * LED's are 3 mm and a potentiometer's 4.5 mm. Dropping the origin on the
- * strip row instead is what left half the palette floating above the board.
- */
-function offsetOfFirstPin(definition: PartDefinition): [x: number, y: number] {
-  let x = Infinity;
-  let y = Infinity;
-  for (const pin of definition.pins) {
-    if (pin.x < x) x = pin.x;
-    if (pin.y < y) y = pin.y;
-  }
-  return [x, y];
-}
 
 /**
  * Learn content the bench renders against, injected by the composition layer
@@ -276,7 +160,10 @@ export interface BenchProps {
   readonly boardOption: (boardId: BoardId) => BoardOption;
   readonly DEFAULT_BOARD_ID: BoardId;
   readonly isBoardId: (value: string | undefined) => value is BoardId;
-  readonly STARTER_WIRING: Readonly<Record<BoardId, StarterWiring>>;
+  /** The bench a board opens with, as the document it is. */
+  readonly starterCircuitFor: (boardId: BoardId) => CircuitDocument;
+  /** The bench an example needs on a board, or null where it has none. */
+  readonly exampleCircuitFor: (exampleId: string, boardId: BoardId) => CircuitDocument | null;
   readonly exerciseBoard: (exercise: Exercise) => BoardId;
   readonly exerciseById: (id: string) => Exercise | null;
   readonly exerciseLanguage: (exercise: Exercise) => FirmwareLanguage;
@@ -303,7 +190,8 @@ export default function Bench(props: BenchProps) {
     boardOption,
     DEFAULT_BOARD_ID,
     isBoardId,
-    STARTER_WIRING,
+    starterCircuitFor,
+    exampleCircuitFor,
     exerciseBoard,
     exerciseById,
     exerciseLanguage,
@@ -600,17 +488,12 @@ export default function Bench(props: BenchProps) {
         circuitSeedErrorRef.current = refused.length > 0 ? refused.join('; ') : circuitSeed.error;
       } else {
         /*
-         * The starter bench is the one circuit that is not a document: it
-         * routes wires to the board's own pin ids and to breadboard hole
-         * coordinates, so the board and the breadboard have to be down
-         * before it does (`new Simulation(board)` builds the MCU but places
-         * no part). Without them every wire quietly claims a loose contact of
-         * its own and the circuit is drawn but electrically dead.
+         * The starter bench is a document too, now. It arrives whole -- board,
+         * breadboard, both displays and their wires -- so nothing is placed
+         * ahead of it and there is no second representation to drift.
          */
-        created.addPart(boardDefinition, 0, 0);
-        created.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-        buildStartingBench(created, STARTER_WIRING[boardId]);
-        circuitSeedErrorRef.current = circuitSeed.error;
+        const refused = created.loadCircuit(starterCircuitFor(boardId));
+        circuitSeedErrorRef.current = refused.length > 0 ? refused.join('; ') : circuitSeed.error;
       }
       created.loadFirmware(starterSketchFor(boardId), boardOption(boardId).language);
     }
@@ -634,7 +517,7 @@ export default function Bench(props: BenchProps) {
     exercise,
     projectBuild,
     boardOption,
-    STARTER_WIRING,
+    starterCircuitFor,
     starterSketchFor,
     exerciseLanguage,
     firmwareForBuild,
@@ -1256,6 +1139,16 @@ export default function Bench(props: BenchProps) {
 
   const clearBusLog = useCallback(() => simulation.clearBusLog(), [simulation]);
 
+  /*
+   * The examples whose circuit exists for this board. Their sketches are
+   * Arduino C++, so a Python board is offered none rather than a C++ program
+   * in a `.py` tab.
+   */
+  const examplesForBoard = useMemo(
+    () => EXAMPLES.filter((example) => exampleCircuitFor(example.id, boardId) !== null),
+    [EXAMPLES, exampleCircuitFor, boardId],
+  );
+
   /**
    * Loads an example: the sketch, and the bench it expects to find.
    *
@@ -1269,7 +1162,7 @@ export default function Bench(props: BenchProps) {
    * one teaches the wrong thing twice — once when the sketch ignores it, and
    * again when the reader assumes the example put it there. What makes replacing
    * safe to offer is that the operator's bench comes back with a single Ctrl+Z:
-   * `replaceBench` records the whole load as one undoable step. The sketch is
+   * `replaceCircuit` records the whole load as one undoable step. The sketch is
    * not part of that step, so undo restores the circuit they had under the
    * example's code.
    */
@@ -1277,7 +1170,9 @@ export default function Bench(props: BenchProps) {
     (id: string) => {
       const example = EXAMPLES.find((candidate) => candidate.id === id);
       if (!example) return;
-      simulation.replaceBench((bench) => example.wire(bench));
+      const circuit = exampleCircuitFor(id, boardId);
+      if (circuit === null) return;
+      simulation.replaceCircuit(circuit);
       // An example is a fresh bench, so it gets framed like any other load.
       useWorkbenchStore.getState().fitTo(benchBounds(simulation.bench));
       const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
@@ -1287,7 +1182,7 @@ export default function Bench(props: BenchProps) {
       else simulation.loadFirmware(next);
       forceRender((n) => n + 1);
     },
-    [simulation, workerClient, workerLive, EXAMPLES, boardOption, boardId],
+    [simulation, workerClient, workerLive, EXAMPLES, boardOption, boardId, exampleCircuitFor],
   );
 
   /*
@@ -2123,7 +2018,7 @@ export default function Bench(props: BenchProps) {
                   forceRender((n) => n + 1);
                 }}
                 running={isRunning}
-                examples={EXAMPLES}
+                examples={examplesForBoard}
                 activeExampleId={exampleId}
                 onLoadExample={loadExample}
               />

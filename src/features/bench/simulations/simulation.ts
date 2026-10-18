@@ -18,7 +18,6 @@ import {
 import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { compile } from '@/features/simulation';
-import { decompile } from '@/features/simulation';
 import { pinRefFor } from '@/features/simulation';
 import type { CircuitDocument } from '@/features/simulation';
 import {
@@ -62,10 +61,8 @@ import {
 } from '@/features/simulation';
 import { FirmwareSyntaxError } from '@/features/simulation';
 import { validateLibraries, libraryDeclarations, projectSlots } from '@/features/simulation';
-import type { BoardPin, KnobSpec, PartDefinition, Rotation } from '@/features/parts';
-import { breadboardDefinition } from '@/features/parts';
-import type { ExampleDevice } from '@/features/learn';
-import { nextAutomaticWireColour, WIRE_COLOURS } from '../wiring/wire-colours';
+import type { KnobSpec, PartDefinition, Rotation } from '@/features/parts';
+import { nextAutomaticWireColour } from '../wiring/wire-colours';
 
 import { GROUND } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds } from '@/features/parts';
@@ -155,34 +152,6 @@ type Gesture =
   | { readonly kind: 'part-move'; readonly id: string }
   | { readonly kind: 'wire-bends'; readonly id: string }
   | { readonly kind: 'wire-end'; readonly id: string; readonly end: WireEnd };
-
-/**
- * Insulation colour for a wire an example places, by the signal it carries.
- *
- * A real bench has a drawer of coloured Dupont wires: power is red, ground is
- * black, the I2C pair reads yellow/green at a glance, and signal lines cycle
- * the automatic palette so consecutive jumpers differ. Colour carries no
- * electrical meaning -- this is purely so a bench stops being a wall of red.
- */
-function deviceWireColour(pin: string, wireCount: number): string {
-  const byLabel = (label: string): string =>
-    WIRE_COLOURS.find((colour) => colour.label === label)?.hex ?? '#d94f4f';
-  switch (pin) {
-    case 'VCC':
-    case 'VDD':
-    case 'V+':
-      return byLabel('1');
-    case 'GND':
-    case 'VSS':
-      return byLabel('0');
-    case 'SDA':
-      return byLabel('3');
-    case 'SCL':
-      return byLabel('4');
-    default:
-      return nextAutomaticWireColour(wireCount);
-  }
-}
 
 /**
  * Reason text out of a worker rejection: an `Error`'s message, a
@@ -516,7 +485,7 @@ export class Simulation {
    * list of edits, and it must not be undone wire by wire.
    *
    * An example is the exception, deliberately: it replaces the bench *and*
-   * records one entry (`replaceBench`), because the operator may well want the
+   * records one entry (`replaceCircuit`), because the operator may well want the
    * circuit they had back.
    */
   clearHistory(): void {
@@ -1211,6 +1180,28 @@ export class Simulation {
    * purpose, because the restore discards it.
    */
   loadCircuit(doc: CircuitDocument): string[] {
+    const errors = this.adoptCircuit(doc);
+    // A seed is a starting point, not a list of edits: nothing to step back to.
+    if (errors.length === 0) this.clearHistory();
+    return errors;
+  }
+
+  /**
+   * Puts a document on the bench as one undoable step.
+   *
+   * The document is the circuit, so this is `loadCircuit` plus history: an
+   * example replaces the bench, and the operator may well want theirs back with
+   * one Ctrl+Z. A seed uses `loadCircuit` instead, which forgets history.
+   */
+  replaceCircuit(doc: CircuitDocument): string[] {
+    const before = this.doc;
+    const errors = this.adoptCircuit(doc);
+    if (errors.length === 0) this.pushUndo(before);
+    return errors;
+  }
+
+  /** Validates a document against this bench and adopts it; returns refusals. */
+  private adoptCircuit(doc: CircuitDocument): string[] {
     const { bench, snapshot, dynamicState, errors } = compile(doc);
     if (errors.length > 0 || bench === null || snapshot === null || dynamicState === null)
       return errors;
@@ -1223,7 +1214,6 @@ export class Simulation {
     if (board.definition.id !== this.mcu.definition.id) {
       return [`circuit is for ${board.definition.id}, this bench is ${this.mcu.definition.id}`];
     }
-    this.clearHistory();
     // The document is the live state from here: the bench below is its first
     // projection, and every later edit is an operation over this value.
     this.doc = structuredClone(doc);
@@ -1231,158 +1221,6 @@ export class Simulation {
     this.controls.copyValuesFrom(dynamicState);
     this.rebuild();
     return [];
-  }
-
-  /**
-   * Places one of an example's parts and wires it the way its sketch expects.
-   *
-   * The wiring is per part rather than per board because it is the part that
-   * decides: an I2C module needs four wires to whatever the board calls its bus
-   * pins, and a servo needs one signal plus its ground. Which pins those are is
-   * the board's business, so they are asked for by pin number here.
-   *
-   * An example whose parts are not wired would be worse than no example: the
-   * sketch would run and quietly read nothing, which is indistinguishable from
-   * the API being broken.
-   */
-  /**
-   * Insulation colour for a wire an example places, by the signal it carries.
-   *
-   * A real bench has a drawer of coloured Dupont wires: power is red, ground is
-   * black, the I2C pair reads yellow/green at a glance, and signal lines cycle
-   * the automatic palette so consecutive jumpers differ. Colour carries no
-   * electrical meaning -- this is purely so a bench stops being a wall of red.
-   */
-  placeExampleDevice(
-    what: ExampleDevice,
-    x: number,
-    y: number,
-    devices: Readonly<Record<ExampleDevice, () => PartDefinition>>,
-    lcdLines: readonly string[],
-  ): PartInstance {
-    // No history entry here: an example is imported inside `replaceBench`,
-    // which records the whole replacement as one step.
-    const definition = devices[what]();
-    const part = this.builder.addPart(definition, x, y);
-    const bench = this.builder.build();
-    const terminal = (pin: string): Terminal | undefined => {
-      const id = part.terminals[pin];
-      return id === undefined ? undefined : bench.terminals[id];
-    };
-
-    const wire = (pin: string, boardPin: string) => {
-      if (!boardPin) return;
-      const from = terminal(pin);
-      if (!from) return;
-      const to = this.boardPin(boardPin);
-      if (!to) return;
-      this.builder.addWire(from.x, from.y, to.x, to.y, {
-        colour: deviceWireColour(pin, this.bench.wires.length),
-      });
-    };
-
-    /*
-     * Pins are asked for by the number firmware would name them with, not by the
-     * silkscreen. The ESP32 calls its bus pins GPIO21 and GPIO22 where an Uno
-     * calls the same wires SDA and SCL, and an example that worked on one board
-     * and silently stopped on the other would be a bug the reader spends an
-     * afternoon on.
-     */
-    const byNumber = (gpio: number): string => this.firstGpio((pin) => pin.gpio === gpio);
-    const ground = this.firstGpio((pin) => pin.role === 'ground');
-
-    if (what === 'servo') {
-      // The signal, and the ground it references. The supply is left alone: a
-      // servo wants its own 4.8 V, and joining it here would be deciding that
-      // on the operator's behalf.
-      // Pin 19 is a general-purpose pin on every board here, chosen because it
-      // is on neither bus -- a signal line that shared a net with a display's
-      // chip-select would drive both.
-      wire('PWM', byNumber(19));
-      wire('GND', ground);
-    } else {
-      const [sda, scl] = this.mcu.i2cPins;
-      wire('SDA', byNumber(sda));
-      wire('SCL', byNumber(scl));
-      wire('GND', ground);
-      wire(
-        'VCC',
-        this.firstGpio((pin) => pin.role === 'power'),
-      );
-
-      /*
-       * A character LCD also needs its six control lines, or the glass stays
-       * dark however correctly the clock behind it is wired. They go to whatever
-       * general-purpose pins the board has going spare, in order, so the wiring
-       * is the same on every board even though the pins differ.
-       */
-      if (what === 'lcd1602') {
-        /*
-         * The panel's lines to spare board pins, chosen by number and
-         * remembered: its job is to find the same pin again, and a net is not a
-         * pin -- two holes can share one, so resolving a line by the net it
-         * landed on finds whichever of them the board happens to list first.
-         */
-        const taken = new Set([...this.mcu.i2cPins, ...this.mcu.spiPins]);
-        // A pin firmware cannot name is no use here: the library addresses its
-        // own lines by number, so a hole with none is not one it can hold.
-        const spare = this.mcu
-          .pins()
-          .filter((pin) => pin.role === 'gpio' && pin.gpio !== undefined && !taken.has(pin.gpio));
-        lcdLines.forEach((line, index) => {
-          const boardPin = spare[index];
-          if (!boardPin) return;
-          // The line-to-pin map is not written here: `rebuild` derives it from
-          // the wiring this call is about to make.
-          wire(line, boardPin.id);
-        });
-        wire('VSS', ground);
-      }
-    }
-
-    this.rebuild();
-    return part;
-  }
-
-  /**
-   * Empties the bench and builds a new one: the board, the breadboard, and
-   * whatever `seed` wires onto them — as a single undoable step.
-   *
-   * This is how an example is loaded. The bench before it is *replaced*, not
-   * added to: an example is a circuit with a sketch that assumes it, and a
-   * leftover part from the operator's own circuit sitting in the middle of it
-   * teaches the wrong thing twice, the same way a missing part does. What
-   * makes that safe to offer is the one entry this records: a single Ctrl+Z
-   * puts the operator's bench back, so replacing it is a step they can take
-   * back rather than a thing they lose.
-   *
-   * Every edit the seed makes runs inside this one entry, which is why
-   * `checkpoint` stands down while it runs.
-   */
-  replaceBench(seed: (simulation: Simulation) => void): void {
-    const before = this.doc;
-    for (const part of [...this.builder.build().parts]) this.builder.removePart(part.id);
-    this.builder.addPart(this.mcu.definition, 0, 0);
-    this.builder.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-    seed(this);
-    this.rebuild();
-
-    /*
-     * The seed built a bench through the builder, because examples are still
-     * authored as wiring functions. This is the one place a bench is imported
-     * into the document world: decompile it once, adopt the result, and let the
-     * recompile prove the two representations agree. From here on every edit is
-     * a document operation.
-     */
-    const { doc } = decompile(this.builder.build(), this.controls);
-    if (!this.applyDocument(structuredClone(doc))) return;
-    this.pushUndo(before);
-  }
-
-  /** World position of a board pin by id, for wiring a part to the board. */
-  private boardPin(pinId: string): Terminal | null {
-    const pin = this.mcu.definition.pins.find((candidate) => candidate.id === pinId);
-    return pin ? { id: -1, x: pin.x, y: pin.y } : null;
   }
 
   /**
@@ -1419,11 +1257,6 @@ export class Simulation {
   pinAt(part: PartInstance, pinId: string): Terminal | null {
     const id = part.terminals[pinId];
     return id === undefined ? null : (this.bench.terminals[id] ?? null);
-  }
-
-  /** The first board pin matching a predicate, which is how a board is asked. */
-  private firstGpio(match: (pin: BoardPin) => boolean): string {
-    return this.mcu.pins().find(match)?.id ?? '';
   }
 
   removePart(id: string): void {

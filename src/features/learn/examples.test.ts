@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '@/features/bench/simulations/simulation';
-import { EXAMPLES, I2C_CLOCK_EXAMPLE, LCD_EXAMPLE, SERVO_EXAMPLE } from './examples';
-import { esp32DevKitV1 } from '@/features/parts';
+import { EXAMPLES } from './examples';
+import { exampleCircuitFor } from './benches';
+import { esp32DevKitV1, resistorDefinition } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';
 import type { PartInstance } from '@/features/simulation';
 
@@ -10,22 +11,19 @@ import type { PartInstance } from '@/features/simulation';
  *
  * An example is a sketch *and* the wiring it needs, so the only thing worth
  * asserting is that the two go together: that a sketch talks to parts that are
- * actually on the bench and actually connected to the board's pins. An example
- * that reads nothing is indistinguishable from a broken API, which is the whole
- * failure these tests exist to catch.
+ * actually on the bench and actually connected to the board's pins. The wiring
+ * is a document now (`benches/`), so each test starts by loading the one its
+ * board and id name rather than by calling a builder.
  */
-/**
- * A bench with a board and a breadboard on it.
- *
- * The `Simulation` constructor takes the board's *definition* for its pin model
- * but does not place it, because an example has to be able to add to a bench
- * the app already built rather than replace it. So the parts go down here.
- */
-function bench() {
-  const created = new Simulation(esp32DevKitV1());
-  created.addPart(esp32DevKitV1(), 0, 0);
-  created.addPart(breadboardDefinition(), 230, 0);
-  return created;
+const BOARD = 'esp32';
+
+/** A fresh bench with the example's circuit already loaded. */
+function exampleBench(exampleId: string): Simulation {
+  const simulation = new Simulation(esp32DevKitV1());
+  const doc = exampleCircuitFor(exampleId, BOARD);
+  expect(doc, `${exampleId} on ${BOARD}`).not.toBeNull();
+  expect(simulation.loadCircuit(doc!)).toEqual([]);
+  return simulation;
 }
 
 function partNamed(simulation: Simulation, needle: string): PartInstance | undefined {
@@ -49,10 +47,8 @@ describe('the examples', () => {
   it.each(EXAMPLES.map((example) => [example.id, example] as const))(
     '%s parses as a sketch',
     (_id, example) => {
-      const simulation = bench();
-      example.wire(simulation);
+      const simulation = new Simulation(esp32DevKitV1());
       simulation.loadFirmware(example.sketch);
-
       // A syntax error is reported rather than thrown, so this is the check
       // that an example the VM cannot read never ships.
       expect(simulation.firmwareError).toBeNull();
@@ -60,9 +56,8 @@ describe('the examples', () => {
   );
 
   it('wires a clock onto the board I2C pins', () => {
-    const simulation = bench();
-    I2C_CLOCK_EXAMPLE.wire(simulation);
-    simulation.loadFirmware(I2C_CLOCK_EXAMPLE.sketch);
+    const simulation = exampleBench('i2c-clock');
+    simulation.loadFirmware(EXAMPLES.find((example) => example.id === 'i2c-clock')!.sketch);
     run(simulation);
 
     const clock = partNamed(simulation, 'DS1307');
@@ -80,9 +75,8 @@ describe('the examples', () => {
    * means this test runs the sketch briefly rather than for a screenful.
    */
   it('wires every control line a character LCD needs', () => {
-    const simulation = bench();
-    LCD_EXAMPLE.wire(simulation);
-    simulation.loadFirmware(LCD_EXAMPLE.sketch);
+    const simulation = exampleBench('character-lcd');
+    simulation.loadFirmware(EXAMPLES.find((example) => example.id === 'character-lcd')!.sketch);
 
     const lcd = partNamed(simulation, 'LCD 16x2');
     const panel = simulation.engine.lcd(lcd!.id);
@@ -114,9 +108,8 @@ describe('the examples', () => {
   }, 30_000);
 
   it('turns a servo between its end stops', () => {
-    const simulation = bench();
-    SERVO_EXAMPLE.wire(simulation);
-    simulation.loadFirmware(SERVO_EXAMPLE.sketch);
+    const simulation = exampleBench('servo');
+    simulation.loadFirmware(EXAMPLES.find((example) => example.id === 'servo')!.sketch);
 
     const horn = partNamed(simulation, 'Servo');
     expect(horn).toBeDefined();
@@ -149,8 +142,7 @@ describe('the examples', () => {
      * lines cycle — the Wokwi convention, so a bench wired entirely in red is
      * a thing the suite catches instead of a learner squinting at.
      */
-    const simulation = bench();
-    LCD_EXAMPLE.wire(simulation);
+    const simulation = exampleBench('character-lcd');
     const owner = new Map<number, string>();
     for (const part of simulation.bench.parts) {
       for (const [pin, id] of Object.entries(part.terminals)) {
@@ -176,13 +168,15 @@ describe('loading one example replaces the last', () => {
    * replaces the bench rather than adding to it: a part left over from the
    * operator's own circuit, or from the previous example, sitting in the middle
    * of one teaches the wrong thing twice. What makes that safe is the single
-   * undo entry `replaceBench` records -- both halves are pinned below.
+   * undo entry `replaceCircuit` records -- both halves are pinned below.
    */
+  const lcdDoc = () => exampleCircuitFor('character-lcd', BOARD)!;
+
   it('leaves one of each module however often it is loaded', () => {
-    const simulation = bench();
+    const simulation = exampleBench('character-lcd');
 
     for (let round = 0; round < 3; round++) {
-      simulation.replaceBench(LCD_EXAMPLE.wire);
+      expect(simulation.replaceCircuit(lcdDoc())).toEqual([]);
     }
 
     const countOf = (needle: string) =>
@@ -193,61 +187,58 @@ describe('loading one example replaces the last', () => {
   });
 
   it('keeps the wire count stable across repeated loads', () => {
-    const simulation = bench();
-
-    simulation.replaceBench(LCD_EXAMPLE.wire);
+    const simulation = exampleBench('character-lcd');
     const first = simulation.bench.wires.length;
     expect(first).toBeGreaterThan(0);
 
     for (let round = 0; round < 3; round++) {
-      simulation.replaceBench(LCD_EXAMPLE.wire);
+      simulation.replaceCircuit(lcdDoc());
       expect(simulation.bench.wires.length).toBe(first);
     }
   });
 
   it('discards anything placed by hand, and one undo brings it back', () => {
-    const simulation = bench();
-    const mine = simulation.addPart(esp32DevKitV1(), 300, 300);
+    const simulation = exampleBench('blink');
+    // A resistor: the example's document has none, so its presence is the
+    // question, not a part id the next document might reuse.
+    simulation.addPart(resistorDefinition(220), 300, 300);
+    const hasResistor = () =>
+      simulation.bench.parts.some((part) => part.definition.component.kind === 'resistor');
 
-    simulation.replaceBench(LCD_EXAMPLE.wire);
+    expect(simulation.replaceCircuit(lcdDoc())).toEqual([]);
 
-    expect(simulation.bench.parts.map((part) => part.id)).not.toContain(mine.id);
+    expect(hasResistor()).toBe(false);
     expect(partNamed(simulation, 'LCD 16x2')).toBeDefined();
 
     // One step, not one per part or per wire: the whole load is recorded once.
     expect(simulation.undo()).toBe(true);
-    expect(simulation.bench.parts.map((part) => part.id)).toContain(mine.id);
+    expect(hasResistor()).toBe(true);
     expect(partNamed(simulation, 'LCD 16x2')).toBeUndefined();
-    expect(partNamed(simulation, 'Solderless Breadboard')).toBeDefined();
   });
 
-  it('binds the LCD host to the panel that is on the bench now', () => {
-    const simulation = bench();
+  it('keeps the LCD host driving the panel across a reload', () => {
+    const simulation = exampleBench('character-lcd');
     /*
      * A sketch that dims the backlight, because that is the one thing the host
      * drives straight at its panel: a panel's backlight is *on* unless told
-     * otherwise, so a stale host dimming a part that has left the bench would
-     * leave the new one looking correct by default.
+     * otherwise, so a host left pointing at a part that has left the bench
+     * would leave the new one looking correct by default.
      */
     const dim = 'void setup() { lcd.begin(16, 2); lcd.noBacklight(); } void loop() { }';
 
-    simulation.replaceBench(LCD_EXAMPLE.wire);
-    const firstId = [...simulation.lcdModels().keys()][0];
-    expect(firstId, 'the example put a panel on the bench').toBeDefined();
+    // One frame is enough: the dim happens in setup, and a character-panel
+    // bench solves twice per nibble, so a simulated second costs seconds.
     simulation.loadFirmware(dim);
-    run(simulation, 1);
+    run(simulation, 0.05);
     expect([...simulation.lcdModels().values()][0]!.backlightOn, 'the sketch can dim it').toBe(
       false,
     );
 
-    // Loading the example again replaces that panel with an identical one: the
-    // part is new, so any host object wrapped around the old one is stale.
-    simulation.replaceBench(LCD_EXAMPLE.wire);
-    const secondId = [...simulation.lcdModels().keys()][0];
-    expect(secondId).not.toBe(firstId);
-
+    // The same document again: the part id is stable, so the engine carries the
+    // panel and its controller forward -- the host must still reach it.
+    expect(simulation.replaceCircuit(lcdDoc())).toEqual([]);
     simulation.loadFirmware(dim);
-    run(simulation, 1);
+    run(simulation, 0.05);
     expect(
       [...simulation.lcdModels().values()][0]!.backlightOn,
       'the panel on the bench is the one being driven',
@@ -255,11 +246,11 @@ describe('loading one example replaces the last', () => {
   });
 
   it('leaves the bench holding only the example it last loaded', () => {
-    const simulation = bench();
+    const simulation = exampleBench('blink');
 
     // What each example is expected to have on the bench once loaded. Blink
     // places nothing of its own -- it drives the LED and both displays the
-    // app already built -- so it expects the board and breadboard alone.
+    // starter bench already has -- so its document is the board and breadboard.
     const expected: ReadonlyArray<readonly [string, readonly string[]]> = [
       ['blink', []],
       ['i2c-clock', ['DS1307']],
@@ -275,10 +266,7 @@ describe('loading one example replaces the last', () => {
     // Twice round, so a leftover from the first pass would show up in the second.
     for (const pass of [1, 2]) {
       for (const [id, modules] of expected) {
-        const example = EXAMPLES.find((candidate) => candidate.id === id);
-        if (!example) throw new Error(`no example ${id}`);
-
-        simulation.replaceBench(example.wire);
+        expect(simulation.replaceCircuit(exampleCircuitFor(id, BOARD)!), id).toEqual([]);
 
         // Exactly the modules this example places: a survivor from an earlier
         // load would make this list longer than it should ever be.
