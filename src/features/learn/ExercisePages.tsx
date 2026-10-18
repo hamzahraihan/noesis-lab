@@ -52,10 +52,10 @@ export function ExercisesPage() {
   const levels = [...new Set(EXERCISES.map((exercise) => exercise.level))].sort();
 
   return (
-    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@400;500;600;700&display=swap" />
       <SkipLink />
-      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
+      <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
       <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
 
       <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
@@ -207,10 +207,10 @@ function ExerciseShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@400;500;600;700&display=swap" />
       <SkipLink />
-      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
+      <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
       <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
       <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
         <Link to="/learn" className="transition-colors hover:text-[var(--hd-muted)]">Learn</Link>
