@@ -13,9 +13,36 @@ import {
 } from './index';
 
 const fixture: IndexLibrary[] = [
-  { name: 'Servo', versions: [{ version: '1.2.2', url: 'u1', checksum: 'SHA-256:aa', size: 1 }, { version: 'beta-x', url: 'u0', checksum: 'SHA-256:bb', size: 1 }], author: 'A', sentence: 'motors', category: 'Device Control', architectures: ['*'], providesIncludes: ['Servo.h'] },
-  { name: 'Nope', versions: [{ version: '0.0.1', url: 'u2', checksum: 'SHA-256:cc', size: 1 }], author: 'B', sentence: 'nothing', category: 'Other', architectures: ['avr'], providesIncludes: [] },
-  { name: 'MyServo', versions: [{ version: '1.0.0', url: 'u3', checksum: 'SHA-256:dd', size: 1 }], author: 'C', sentence: 'servo helper', category: 'Device Control', architectures: ['*'], providesIncludes: [] },
+  {
+    name: 'Servo',
+    versions: [
+      { version: '1.2.2', url: 'u1', checksum: 'SHA-256:aa', size: 1 },
+      { version: 'beta-x', url: 'u0', checksum: 'SHA-256:bb', size: 1 },
+    ],
+    author: 'A',
+    sentence: 'motors',
+    category: 'Device Control',
+    architectures: ['*'],
+    providesIncludes: ['Servo.h'],
+  },
+  {
+    name: 'Nope',
+    versions: [{ version: '0.0.1', url: 'u2', checksum: 'SHA-256:cc', size: 1 }],
+    author: 'B',
+    sentence: 'nothing',
+    category: 'Other',
+    architectures: ['avr'],
+    providesIncludes: [],
+  },
+  {
+    name: 'MyServo',
+    versions: [{ version: '1.0.0', url: 'u3', checksum: 'SHA-256:dd', size: 1 }],
+    author: 'C',
+    sentence: 'servo helper',
+    category: 'Device Control',
+    architectures: ['*'],
+    providesIncludes: [],
+  },
 ];
 
 describe('library index search', () => {
@@ -29,7 +56,9 @@ describe('library index search', () => {
   });
 
   it('filters by category when asked', () => {
-    expect(searchIndex(fixture, '', { category: 'Other' }).map((lib) => lib.name)).toEqual(['Nope']);
+    expect(searchIndex(fixture, '', { category: 'Other' }).map((lib) => lib.name)).toEqual([
+      'Nope',
+    ]);
   });
 });
 
@@ -89,7 +118,8 @@ describe('library index cache', () => {
   it('fetches, gunzips, groups rows newest-first, and stores under date keys', async () => {
     const store = createStore();
     const fetchStub = vi.fn<typeof fetch>(
-      async () => new Response(gz({ libraries: [servoRow('1.0.0'), servoRow('1.2.2')] }), { status: 200 }),
+      async () =>
+        new Response(gz({ libraries: [servoRow('1.0.0'), servoRow('1.2.2')] }), { status: 200 }),
     );
     const libs = await fetchIndex(testDeps(store, fetchStub));
     expect(fetchStub).toHaveBeenCalledTimes(1);
@@ -107,7 +137,9 @@ describe('library index cache', () => {
   it('serves a fresh cache with zero fetches', async () => {
     const iso = new Date(NOW).toISOString();
     const store = createStore(checkedKey(iso));
-    const fetchStub = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([0]), { status: 200 }));
+    const fetchStub = vi.fn<typeof fetch>(
+      async () => new Response(new Uint8Array([0]), { status: 200 }),
+    );
     const libs = await fetchIndex(testDeps(store, fetchStub));
     expect(libs.map((lib) => lib.name)).toEqual(['Servo']);
     expect(fetchStub).toHaveBeenCalledTimes(0);
@@ -169,8 +201,12 @@ describe('library index cache', () => {
       'arduino-index/lastChecked': new TextEncoder().encode(iso),
       [`arduino-index/${iso}`]: new Uint8Array([7, 7, 7]),
     });
-    const fetchStub = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([9, 9]), { status: 200 }));
-    await expect(fetchIndex(testDeps(store, fetchStub))).rejects.toThrow(/library index unreadable/);
+    const fetchStub = vi.fn<typeof fetch>(
+      async () => new Response(new Uint8Array([9, 9]), { status: 200 }),
+    );
+    await expect(fetchIndex(testDeps(store, fetchStub))).rejects.toThrow(
+      /library index unreadable/,
+    );
   });
 
   it('caps results at 50 rows', () => {

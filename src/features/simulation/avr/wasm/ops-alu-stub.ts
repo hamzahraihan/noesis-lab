@@ -5,9 +5,9 @@ export function alu_add(a: number, b: number, carryIn: number): number {
   const r = aa + bb + cc;
   const result = r & 0xff;
   // Mirror of the avr8js-parity H in ops-alu.ts (carry into bit 1).
-  const h = (((aa & 1) & (bb & 1)) | (cc & ((aa ^ bb) & 1))) !== 0;
+  const h = ((aa & 1 & (bb & 1)) | (cc & ((aa ^ bb) & 1))) !== 0;
   const c = r > 0xff;
-  const v = (((~(aa ^ bb)) & (aa ^ result)) & 0x80) !== 0;
+  const v = (~(aa ^ bb) & (aa ^ result) & 0x80) !== 0;
   const n = (result & 0x80) !== 0;
   const z = result === 0;
   const s = n !== v;
@@ -27,9 +27,9 @@ export function alu_sub(a: number, b: number, carryIn: number): number {
   const cc = carryIn & 0x01;
   const r = aa - bb - cc;
   const result = r & 0xff;
-  const h = (aa & 0x0f) < ((bb & 0x0f) + cc);
+  const h = (aa & 0x0f) < (bb & 0x0f) + cc;
   const c = aa < bb + cc;
-  const v = (((aa ^ bb) & (aa ^ result)) & 0x80) !== 0;
+  const v = ((aa ^ bb) & (aa ^ result) & 0x80) !== 0;
   const n = (result & 0x80) !== 0;
   const z = result === 0;
   const s = n !== v;
@@ -44,7 +44,7 @@ export function alu_sub(a: number, b: number, carryIn: number): number {
 }
 
 export function alu_and(a: number, b: number): number {
-  const result = (a & b) & 0xff;
+  const result = a & b & 0xff;
   const v = false;
   const n = (result & 0x80) !== 0;
   const z = result === 0;

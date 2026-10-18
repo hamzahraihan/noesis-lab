@@ -26,7 +26,9 @@ describe('rp2040 mode availability', () => {
 
 describe('backend selection', () => {
   it('pins an AVR-only build to AVR with interpreter disabled', () => {
-    expect(resolveBackendSelection({ execution: 'avr', avr: { ok: true }, avrMode: false })).toEqual({
+    expect(
+      resolveBackendSelection({ execution: 'avr', avr: { ok: true }, avrMode: false }),
+    ).toEqual({
       value: 'avr',
       interpreterDisabled: true,
       interpreterTitle: 'This build runs on AVR only',

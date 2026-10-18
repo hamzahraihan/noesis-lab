@@ -193,7 +193,9 @@ function PinLevelTags({
 }) {
   if (definition.component.kind !== 'mcu') return null;
   const logicVolts = definition.component.board.logicVolts;
-  const roleOf = new Map((definition.boardPins ?? []).map((entry) => [entry.id, entry.role] as const));
+  const roleOf = new Map(
+    (definition.boardPins ?? []).map((entry) => [entry.id, entry.role] as const),
+  );
   return (
     <g fontFamily={SILKSCREEN_FONT} fontSize={1.4} opacity={0.9}>
       {runs.flatMap((pins) =>
@@ -222,7 +224,8 @@ function PinLevelTags({
   );
 }
 
-function PinMark({  pin,
+function PinMark({
+  pin,
   part,
   state,
 }: {
@@ -234,13 +237,7 @@ function PinMark({  pin,
   const energised = Math.abs(volts) > 0.5;
   return (
     <g>
-      <circle
-        cx={pin.x}
-        cy={pin.y}
-        r={PIN_RADIUS_MM + 0.5}
-        fill="#0f1115"
-        opacity={0.5}
-      />
+      <circle cx={pin.x} cy={pin.y} r={PIN_RADIUS_MM + 0.5} fill="#0f1115" opacity={0.5} />
       <circle
         cx={pin.x}
         cy={pin.y}
@@ -269,7 +266,9 @@ const BreadboardBody = staticBody(function BreadboardBody({
   // identical; the DOM is two nodes.
   const socketPath = (holes: readonly PinSpec[], half: number) =>
     holes
-      .map((pin) => `M ${pin.x - half} ${pin.y - half} h ${half * 2} v ${half * 2} h ${-half * 2} Z`)
+      .map(
+        (pin) => `M ${pin.x - half} ${pin.y - half} h ${half * 2} v ${half * 2} h ${-half * 2} Z`,
+      )
       .join(' ');
 
   const width = definition.widthMm;
@@ -279,7 +278,14 @@ const BreadboardBody = staticBody(function BreadboardBody({
   return (
     <g>
       {/* Moulded ABS shell, lit from above and rounded-none at the corners. */}
-      <rect width={width} height={height} rx={2.4} fill="url(#nz-shell)" stroke="#b3afa6" strokeWidth={0.35} />
+      <rect
+        width={width}
+        height={height}
+        rx={2.4}
+        fill="url(#nz-shell)"
+        stroke="#b3afa6"
+        strokeWidth={0.35}
+      />
       <rect
         x={0.4}
         y={0.4}
@@ -300,8 +306,24 @@ const BreadboardBody = staticBody(function BreadboardBody({
         { y: 48.26, colour: '#d94f4f' },
       ].map((rail) => (
         <g key={rail.y}>
-          <line x1={1.4} y1={rail.y} x2={split - 1.4} y2={rail.y} stroke={rail.colour} strokeWidth={0.5} opacity={0.6} />
-          <line x1={split + 1.4} y1={rail.y} x2={width - 1.4} y2={rail.y} stroke={rail.colour} strokeWidth={0.5} opacity={0.6} />
+          <line
+            x1={1.4}
+            y1={rail.y}
+            x2={split - 1.4}
+            y2={rail.y}
+            stroke={rail.colour}
+            strokeWidth={0.5}
+            opacity={0.6}
+          />
+          <line
+            x1={split + 1.4}
+            y1={rail.y}
+            x2={width - 1.4}
+            y2={rail.y}
+            stroke={rail.colour}
+            strokeWidth={0.5}
+            opacity={0.6}
+          />
         </g>
       ))}
       {[
@@ -325,7 +347,15 @@ const BreadboardBody = staticBody(function BreadboardBody({
       ))}
 
       {/* The channel a straddling chip sits across. */}
-      <rect x={1.6} y={26.2} width={width - 3.2} height={6.6} fill="#e2dfd8" stroke="#c6c2b9" strokeWidth={0.25} />
+      <rect
+        x={1.6}
+        y={26.2}
+        width={width - 3.2}
+        height={6.6}
+        fill="#e2dfd8"
+        stroke="#c6c2b9"
+        strokeWidth={0.25}
+      />
       <line x1={1.6} y1={26.7} x2={width - 1.6} y2={26.7} stroke="#c6c2b9" strokeWidth={0.2} />
       <line x1={1.6} y1={32.3} x2={width - 1.6} y2={32.3} stroke="#c6c2b9" strokeWidth={0.2} />
 
@@ -387,7 +417,11 @@ const BreadboardSilkscreen = staticBody(function BreadboardSilkscreen({
           <text x={2.6} y={15.24 + (row < 5 ? row : row - 0.5) * 2.54 + 0.7}>
             {letter}
           </text>
-          <text x={width - 2.6} y={15.24 + (row < 5 ? row : row - 0.5) * 2.54 + 0.7} textAnchor="end">
+          <text
+            x={width - 2.6}
+            y={15.24 + (row < 5 ? row : row - 0.5) * 2.54 + 0.7}
+            textAnchor="end"
+          >
             {letter}
           </text>
         </g>
@@ -524,7 +558,14 @@ const BoardBody = staticBody(function BoardBody({
   return (
     <g>
       {/* Solder mask over the FR4, with the board's own colour underneath. */}
-      <rect width={width} height={height} rx={2.6} fill={definition.bodyColour} stroke="#05070a" strokeWidth={0.3} />
+      <rect
+        width={width}
+        height={height}
+        rx={2.6}
+        fill={definition.bodyColour}
+        stroke="#05070a"
+        strokeWidth={0.3}
+      />
       <rect width={width} height={height} rx={2.6} fill="url(#nz-mask)" />
 
       <BoardCopper definition={definition} />
@@ -582,11 +623,21 @@ const BoardBody = staticBody(function BoardBody({
       ))}
 
       {dressing?.buttons.map((button) => (
-        <BoardButton key={button.label} x={button.x} y={button.y} label={button.label} labelColour={silk} />
+        <BoardButton
+          key={button.label}
+          x={button.x}
+          y={button.y}
+          label={button.label}
+          labelColour={silk}
+        />
       ))}
 
       {headerRuns.map((pins) => (
-        <PinHeader key={pins[0] ? `${pins[0].x}:${pins[0].y}` : 'empty'} pins={pins} labelColour={silk} />
+        <PinHeader
+          key={pins[0] ? `${pins[0].x}:${pins[0].y}` : 'empty'}
+          pins={pins}
+          labelColour={silk}
+        />
       ))}
 
       {definition.component.kind === 'mcu' && (
@@ -632,14 +683,49 @@ const BoardBody = staticBody(function BoardBody({
 });
 
 /** The ESP32-WROOM module: a metal-shielded can strapped to the board. */
-function RadioModule({ x, y, width, height, label }: { x: number; y: number; width: number; height: number; label: string }) {
+function RadioModule({
+  x,
+  y,
+  width,
+  height,
+  label,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+}) {
   return (
     <g>
-      <rect x={x - 0.5} y={y + height - 2} width={width + 1} height={3.2} fill="url(#nz-metal)" opacity={0.75} />
-      <rect x={x} y={y} width={width} height={height} rx={1.2} fill="url(#nz-metal)" stroke="#5d6572" strokeWidth={0.2} />
+      <rect
+        x={x - 0.5}
+        y={y + height - 2}
+        width={width + 1}
+        height={3.2}
+        fill="url(#nz-metal)"
+        opacity={0.75}
+      />
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        rx={1.2}
+        fill="url(#nz-metal)"
+        stroke="#5d6572"
+        strokeWidth={0.2}
+      />
       <rect x={x} y={y} width={width} height={height * 0.45} fill="#ffffff" opacity={0.16} />
       {/* The PCB antenna is etched into the carrier under the can's overhang. */}
-      <rect x={x - 1.4} y={y + height - 4.2} width={width + 2.8} height={4} fill="#1c1f24" opacity={0.9} />
+      <rect
+        x={x - 1.4}
+        y={y + height - 4.2}
+        width={width + 2.8}
+        height={4}
+        fill="#1c1f24"
+        opacity={0.9}
+      />
       <text
         x={x + width / 2}
         y={y + height * 0.62}
@@ -656,15 +742,29 @@ function RadioModule({ x, y, width, height, label }: { x: number; y: number; wid
 }
 
 /** Copper traces and vias, faintly visible through the mask. */
-const BoardCopper = staticBody(function BoardCopper({ definition }: { definition: PartDefinition }) {
+const BoardCopper = staticBody(function BoardCopper({
+  definition,
+}: {
+  definition: PartDefinition;
+}) {
   const { widthMm: width, heightMm: height } = definition;
   return (
     <g>
       {Array.from({ length: Math.floor(width / 6) }, (_, index) => 3 + index * 6).map((x) => (
-        <CopperTrace key={`v${x}`} points={`M ${x} 4 L ${x} ${height - 4}`} width={0.28} opacity={0.07} />
+        <CopperTrace
+          key={`v${x}`}
+          points={`M ${x} 4 L ${x} ${height - 4}`}
+          width={0.28}
+          opacity={0.07}
+        />
       ))}
       {Array.from({ length: Math.floor(height / 6) }, (_, index) => 3 + index * 6).map((y) => (
-        <CopperTrace key={`h${y}`} points={`M 4 ${y} L ${width - 4} ${y}`} width={0.28} opacity={0.07} />
+        <CopperTrace
+          key={`h${y}`}
+          points={`M 4 ${y} L ${width - 4} ${y}`}
+          width={0.28}
+          opacity={0.07}
+        />
       ))}
     </g>
   );
@@ -712,8 +812,16 @@ const HeaderSilkscreen = staticBody(function HeaderSilkscreen({
 
 /** Resistor colour bands, decoded from the actual resistance value. */
 const BAND_COLOURS = [
-  '#0b0b0b', '#8a4b16', '#c62828', '#ef6c00', '#f9a825',
-  '#2e7d32', '#0277bd', '#6a1b9a', '#9e9e9e', '#f5f5f5',
+  '#0b0b0b',
+  '#8a4b16',
+  '#c62828',
+  '#ef6c00',
+  '#f9a825',
+  '#2e7d32',
+  '#0277bd',
+  '#6a1b9a',
+  '#9e9e9e',
+  '#f5f5f5',
 ];
 
 const MULTIPLIER_COLOURS = ['#d4af37', '#c62828', '#2e7d32', '#ef6c00'];
@@ -771,11 +879,44 @@ const ResistorBody = staticBody(function ResistorBody({
        */}
       <AxialLeads left={0} right={10.16} y={leadY} bendLeft={0} bendRight={10.16} />
       {/* Cermilm body: a cylinder lit along its top edge. */}
-      <rect x={1.4} y={bodyY} width={7.36} height={bodyH} rx={1.1} fill={definition.bodyColour} stroke="#8d7f5c" strokeWidth={0.18} />
-      <rect x={1.4} y={bodyY} width={7.36} height={bodyH * 0.5} rx={1.1} fill="#ffffff" opacity={0.28} />
-      <rect x={1.4} y={bodyY + bodyH * 0.72} width={7.36} height={bodyH * 0.28} rx={1.1} fill="#000000" opacity={0.16} />
+      <rect
+        x={1.4}
+        y={bodyY}
+        width={7.36}
+        height={bodyH}
+        rx={1.1}
+        fill={definition.bodyColour}
+        stroke="#8d7f5c"
+        strokeWidth={0.18}
+      />
+      <rect
+        x={1.4}
+        y={bodyY}
+        width={7.36}
+        height={bodyH * 0.5}
+        rx={1.1}
+        fill="#ffffff"
+        opacity={0.28}
+      />
+      <rect
+        x={1.4}
+        y={bodyY + bodyH * 0.72}
+        width={7.36}
+        height={bodyH * 0.28}
+        rx={1.1}
+        fill="#000000"
+        opacity={0.16}
+      />
       {bands.map((colour, index) => (
-        <rect key={index} x={2.2 + index * 1.32} y={bodyY + 0.08} width={0.66} height={bodyH - 0.16} fill={colour} opacity={0.92} />
+        <rect
+          key={index}
+          x={2.2 + index * 1.32}
+          y={bodyY + 0.08}
+          width={0.66}
+          height={bodyH - 0.16}
+          fill={colour}
+          opacity={0.92}
+        />
       ))}
     </g>
   );
@@ -799,11 +940,15 @@ function LedBody({
   const drive = Math.max(0, Math.min(1, (anode - cathode - 1.4) / 1.1));
 
   const colour =
-    profile === DIODE_PROFILES.blue ? '#2b4fd6'
-    : profile === DIODE_PROFILES.white ? '#e8e8e2'
-    : profile === DIODE_PROFILES.green ? '#2fa84f'
-    : profile === DIODE_PROFILES.yellow ? '#e0b422'
-    : '#d63b3b';
+    profile === DIODE_PROFILES.blue
+      ? '#2b4fd6'
+      : profile === DIODE_PROFILES.white
+        ? '#e8e8e2'
+        : profile === DIODE_PROFILES.green
+          ? '#2fa84f'
+          : profile === DIODE_PROFILES.yellow
+            ? '#e0b422'
+            : '#d63b3b';
 
   const body = colour;
   const lit = drive > 0.02;
@@ -816,7 +961,17 @@ function LedBody({
        * swallows the dome, and the flat cathode side is the whole reason an
        * LED is recognisable at a glance.
        */}
-      {lit && <ellipse cx={1.5} cy={2.8} rx={3.4} ry={3.2} fill={body} opacity={drive * 0.34} filter="url(#nz-bloom)" />}
+      {lit && (
+        <ellipse
+          cx={1.5}
+          cy={2.8}
+          rx={3.4}
+          ry={3.2}
+          fill={body}
+          opacity={drive * 0.34}
+          filter="url(#nz-bloom)"
+        />
+      )}
       {/* Epoxy dome. The cathode side is a flat chord, as on a real 5 mm LED. */}
       <path
         d="M 0.35 0.55 A 2.35 2.35 0 0 1 0.35 5.05 Z"
@@ -829,9 +984,23 @@ function LedBody({
       <ellipse cx={2.35} cy={2.8} rx={2.35} ry={2.5} fill={body} opacity={0.62 + drive * 0.3} />
       {/* The reflector cup and bond wire, visible through the clear epoxy. */}
       <path d="M 0.9 1.9 L 1.75 2.25 L 0.9 2.6 Z" fill="#d8dde5" opacity={0.75} />
-      <path d="M 1.75 2.25 L 2.2 4.9" stroke="#cfd6e0" strokeWidth={0.1} opacity={0.6} fill="none" />
+      <path
+        d="M 1.75 2.25 L 2.2 4.9"
+        stroke="#cfd6e0"
+        strokeWidth={0.1}
+        opacity={0.6}
+        fill="none"
+      />
       <ellipse cx={1.3} cy={2.6} rx={2.3} ry={2.45} fill="url(#nz-dome)" />
-      <ellipse cx={0.95} cy={1.35} rx={0.72} ry={0.5} fill="#ffffff" opacity={0.75 + drive * 0.25} transform="rotate(-28 0.95 1.35)" />
+      <ellipse
+        cx={0.95}
+        cy={1.35}
+        rx={0.72}
+        ry={0.5}
+        fill="#ffffff"
+        opacity={0.75 + drive * 0.25}
+        transform="rotate(-28 0.95 1.35)"
+      />
       {lit && <ellipse cx={1.3} cy={2.6} rx={2.3} ry={2.45} fill={body} opacity={drive * 0.28} />}
     </g>
   );
@@ -846,7 +1015,16 @@ const CapacitorBody = staticBody(function CapacitorBody({
     <g filter="url(#nz-lift)">
       <RadialLeads left={0} right={2.54} y={4} bendLeft={0.7} bendRight={1.84} />
       {/* The aluminium can, standing on end and lit down its curve. */}
-      <rect x={0.7} y={1.1} width={5.6} height={5.6} rx={0.5} fill={definition.bodyColour} stroke="#151c2b" strokeWidth={0.18} />
+      <rect
+        x={0.7}
+        y={1.1}
+        width={5.6}
+        height={5.6}
+        rx={0.5}
+        fill={definition.bodyColour}
+        stroke="#151c2b"
+        strokeWidth={0.18}
+      />
       <rect x={0.7} y={1.1} width={1.5} height={5.6} fill="#ffffff" opacity={0.2} />
       <rect x={4.4} y={1.1} width={1.9} height={5.6} fill="#000000" opacity={0.22} />
       <ellipse cx={3.5} cy={1.1} rx={2.8} ry={0.5} fill="#39527f" />
@@ -867,7 +1045,12 @@ const CapacitorBody = staticBody(function CapacitorBody({
         </text>
       ))}
       {/* The scored vent on the top face. */}
-      <path d="M 2.6 1.1 L 4.4 1.1 M 3.5 0.75 L 3.5 1.45" stroke="#2a3a5c" strokeWidth={0.14} opacity={0.8} />
+      <path
+        d="M 2.6 1.1 L 4.4 1.1 M 3.5 0.75 L 3.5 1.45"
+        stroke="#2a3a5c"
+        strokeWidth={0.14}
+        opacity={0.8}
+      />
       <text
         x={4.6}
         y={3.9}
@@ -902,13 +1085,31 @@ function ButtonBody({
     <g filter="url(#nz-lift)">
       {/* Four legs, two to each side, splayed as a tactile switch's are. */}
       <RadialLeads left={0} right={5.08} y={3} bendLeft={1.1} bendRight={3.98} width={0.22} />
-      <rect x={0.6} y={0.6} width={5.2} height={5.2} rx={0.5} fill={definition.bodyColour} stroke="#000" strokeWidth={0.18} />
+      <rect
+        x={0.6}
+        y={0.6}
+        width={5.2}
+        height={5.2}
+        rx={0.5}
+        fill={definition.bodyColour}
+        stroke="#000"
+        strokeWidth={0.18}
+      />
       <rect x={0.6} y={0.6} width={5.2} height={5.2} rx={0.5} fill="url(#nz-body)" />
       {/* The actuator, which visibly sinks when the switch is held. */}
-      <circle cx={3.1} cy={3.1 + travel} r={1.62 - travel * 0.28} fill={part.capColour ?? '#2b2f36'} stroke="#4b515c" strokeWidth={0.16} />
+      <circle
+        cx={3.1}
+        cy={3.1 + travel}
+        r={1.62 - travel * 0.28}
+        fill={part.capColour ?? '#2b2f36'}
+        stroke="#4b515c"
+        strokeWidth={0.16}
+      />
       <circle cx={3.1} cy={3.1 + travel} r={1.62 - travel * 0.28} fill="url(#nz-knob)" />
       <circle cx={2.7} cy={2.6 + travel} r={0.42} fill="#ffffff" opacity={0.28} />
-      {pressed && <circle cx={3.1} cy={3.1} r={2.5} fill="#38bdf8" opacity={0.16} filter="url(#nz-bloom)" />}
+      {pressed && (
+        <circle cx={3.1} cy={3.1} r={2.5} fill="#38bdf8" opacity={0.16} filter="url(#nz-bloom)" />
+      )}
     </g>
   );
 }
@@ -929,7 +1130,16 @@ function PotentiometerBody({
     <g filter="url(#nz-lift)">
       <RadialLeads left={0} right={10.16} y={4.5} bendLeft={1.1} bendRight={9.06} width={0.24} />
       {/* Moulded body with the three terminals along its bottom edge. */}
-      <rect x={0.6} y={2.4} width={10.2} height={5.4} rx={0.8} fill={definition.bodyColour} stroke="#0d1017" strokeWidth={0.2} />
+      <rect
+        x={0.6}
+        y={2.4}
+        width={10.2}
+        height={5.4}
+        rx={0.8}
+        fill={definition.bodyColour}
+        stroke="#0d1017"
+        strokeWidth={0.2}
+      />
       <rect x={0.6} y={2.4} width={10.2} height={5.4} rx={0.8} fill="url(#nz-body)" />
       {/* Knurled shaft collar. */}
       <circle cx={5.7} cy={3.6} r={2.6} fill="#1b1f27" stroke="#0d1017" strokeWidth={0.18} />
@@ -1035,9 +1245,11 @@ function DisplayBody({
    * controller is what keeps this right before a controller exists at all, and
    * is why a portrait panel gets a portrait bezel.
    */
-  const glass = definition.glassMm ?? (isColour
-    ? { width: TFT_PANEL_MM, height: TFT_PANEL_MM }
-    : { width: PANEL_MM, height: PANEL_MM });
+  const glass =
+    definition.glassMm ??
+    (isColour
+      ? { width: TFT_PANEL_MM, height: TFT_PANEL_MM }
+      : { width: PANEL_MM, height: PANEL_MM });
 
   return (
     <g filter="url(#nz-lift)">
@@ -1062,7 +1274,11 @@ function DisplayBody({
       )}
 
       <SolderPads definition={definition} />
-      <HeaderSilkscreen definition={definition} left={definition.pins} right={definition.pins.slice(0, 0)} />
+      <HeaderSilkscreen
+        definition={definition}
+        left={definition.pins}
+        right={definition.pins.slice(0, 0)}
+      />
 
       <text
         x={definition.widthMm / 2}
@@ -1123,7 +1339,16 @@ function MonoPanel({
       ))}
       {/* Glass over the top, which is what makes it read as a screen. */}
       <rect x={1.4} y={1.4} width={PANEL_MM - 1.4} height={PANEL_MM - 1.4} fill="url(#nz-glass)" />
-      <rect x={0.7} y={0.7} width={PANEL_MM} height={PANEL_MM} rx={0.8} fill="none" stroke="#000" strokeWidth={0.5} />
+      <rect
+        x={0.7}
+        y={0.7}
+        width={PANEL_MM}
+        height={PANEL_MM}
+        rx={0.8}
+        fill="none"
+        stroke="#000"
+        strokeWidth={0.5}
+      />
     </g>
   );
 }
@@ -1154,9 +1379,9 @@ function ColourPanel({
    * What the panel is showing right now. The controller knows, and it is the
    * only thing that does: the definition records the glass, the controller
    * records how it is being read. Falling back to the definition means a panel
- * whose controller has not been built yet still draws at its own size rather
+   * whose controller has not been built yet still draws at its own size rather
    * than at nothing.
- */
+   */
   const width = tft?.width ?? panel?.width ?? 0;
   const height = tft?.height ?? panel?.height ?? 0;
 
@@ -1209,8 +1434,23 @@ function ColourPanel({
           />
         </foreignObject>
       )}
-      <rect x={1.4} y={1.4} width={glassWidthMm - 1.4} height={glassHeightMm - 1.4} fill="url(#nz-glass)" />
-      <rect x={0.7} y={0.7} width={glassWidthMm} height={glassHeightMm} rx={0.8} fill="none" stroke="#000" strokeWidth={0.5} />
+      <rect
+        x={1.4}
+        y={1.4}
+        width={glassWidthMm - 1.4}
+        height={glassHeightMm - 1.4}
+        fill="url(#nz-glass)"
+      />
+      <rect
+        x={0.7}
+        y={0.7}
+        width={glassWidthMm}
+        height={glassHeightMm}
+        rx={0.8}
+        fill="none"
+        stroke="#000"
+        strokeWidth={0.5}
+      />
     </g>
   );
 }

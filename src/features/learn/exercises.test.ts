@@ -85,9 +85,7 @@ describe('the exercise curriculum', () => {
   it('names only parts the catalogue actually stocks', () => {
     for (const exercise of EXERCISES) {
       for (const entry of exercise.parts) {
-        expect(CATALOGUE_NAMES.has(entry.name), `${exercise.id} part "${entry.name}"`).toBe(
-          true,
-        );
+        expect(CATALOGUE_NAMES.has(entry.name), `${exercise.id} part "${entry.name}"`).toBe(true);
       }
       for (const row of exercise.wiring) {
         expect(CATALOGUE_NAMES.has(row.part), `${exercise.id} wiring part "${row.part}"`).toBe(
@@ -114,8 +112,10 @@ describe('the exercise curriculum', () => {
       simulation.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
       // A sketch the interpreter cannot parse reports here rather than silently
       // doing nothing on the bench.
-      expect(simulation.firmwareError, `${exercise.id} sketch: ${simulation.firmwareError}`)
-        .toBeNull();
+      expect(
+        simulation.firmwareError,
+        `${exercise.id} sketch: ${simulation.firmwareError}`,
+      ).toBeNull();
     }
   });
 
@@ -157,9 +157,10 @@ describe('the exercise curriculum', () => {
         placed.set(p.definition.name, (placed.get(p.definition.name) ?? 0) + 1);
       }
       for (const entry of exercise.parts) {
-        expect(placed.get(entry.name) ?? 0, `${exercise.id} "${entry.name}" qty`).toBeGreaterThanOrEqual(
-          entry.qty,
-        );
+        expect(
+          placed.get(entry.name) ?? 0,
+          `${exercise.id} "${entry.name}" qty`,
+        ).toBeGreaterThanOrEqual(entry.qty);
       }
     }
   });

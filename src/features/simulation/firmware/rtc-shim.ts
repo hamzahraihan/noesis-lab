@@ -47,14 +47,7 @@ export class DateTimeValue {
   private readonly storedMinute: number;
   private readonly storedSecond: number;
 
-  constructor(
-    year = 2000,
-    month = 1,
-    day = 1,
-    hour = 0,
-    minute = 0,
-    second = 0,
-  ) {
+  constructor(year = 2000, month = 1, day = 1, hour = 0, minute = 0, second = 0) {
     this.storedYear = year;
     this.storedMonth = month;
     this.storedDay = day;

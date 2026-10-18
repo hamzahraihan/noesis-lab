@@ -302,7 +302,8 @@ class SimCore implements CoreHandle {
     this.rp2040Backend = null;
     this.rp2040Generation += 1;
     if (execution === 'avr') this.tryFlashAvr(firmware);
-    if (execution === 'rp2040') void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
+    if (execution === 'rp2040')
+      void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
     this.engine.rebuild(bench, this.controls);
     this.engine.settle();
     this.ensureSnapshotBuffer();
@@ -584,11 +585,16 @@ class SimCore implements CoreHandle {
       i2c: this.avrI2cSink(),
     });
     this.avrBackend = flashed;
-    if (this.wantWasm && !this.wasmDemoted) void this.attachWasmAsync(flashed, this.wasmGeneration, program);
+    if (this.wantWasm && !this.wasmDemoted)
+      void this.attachWasmAsync(flashed, this.wasmGeneration, program);
   }
 
   /** Async attach: JS path until the module arrives; stale loads never land. */
-  private async attachWasmAsync(backend: AvrBackend, generation: number, program: Uint16Array): Promise<void> {
+  private async attachWasmAsync(
+    backend: AvrBackend,
+    generation: number,
+    program: Uint16Array,
+  ): Promise<void> {
     const loaded = await loadWasmModule(this.wasmFetch);
     if (generation !== this.wasmGeneration || this.avrBackend !== backend) return;
     if (!loaded.ok) {
@@ -628,10 +634,7 @@ class SimCore implements CoreHandle {
     try {
       const assets = await fetcher();
       if (generation !== this.rp2040Generation) return;
-      const image = await buildLittlefsImage(
-        firmware.files,
-        new Uint8Array(assets.littlefsWasm),
-      );
+      const image = await buildLittlefsImage(firmware.files, new Uint8Array(assets.littlefsWasm));
       if (generation !== this.rp2040Generation) return;
       this.rp2040Backend = new Rp2040Backend(
         { uf2: new Uint8Array(assets.uf2), image },

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addFile, removeFile, renameFile, toSingleFileProject, validateProject, type FirmwareProject } from './project';
+import {
+  addFile,
+  removeFile,
+  renameFile,
+  toSingleFileProject,
+  validateProject,
+  type FirmwareProject,
+} from './project';
 
 describe('toSingleFileProject', () => {
   it('wraps a sketch as the entry file', () => {
@@ -50,7 +57,12 @@ describe('validateProject', () => {
   it('rejects malformed library declarations', () => {
     const files = [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }];
     expect(
-      validateProject({ language: 'arduino-cpp', activeName: 'main.ino', files, libraries: 'SevSeg' as unknown as FirmwareProject['libraries'] }),
+      validateProject({
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files,
+        libraries: 'SevSeg' as unknown as FirmwareProject['libraries'],
+      }),
     ).not.toEqual([]);
     expect(
       validateProject({

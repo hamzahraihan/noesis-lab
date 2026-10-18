@@ -112,11 +112,10 @@ describe('inserting a waypoint', () => {
   it('keeps the waypoint on the drawn path', () => {
     const { simulation, wire, corners } = benchWithBentWire();
     const middle = midpointOf(corners[0], corners[1]);
-    simulation.insertWireBend(
-      wire.id,
-      simulation.bendIndexNear(wire.id, middle.x, middle.y),
-      { x: 25, y: 10 },
-    );
+    simulation.insertWireBend(wire.id, simulation.bendIndexNear(wire.id, middle.x, middle.y), {
+      x: 25,
+      y: 10,
+    });
 
     const updated = simulation.bench.wires[0];
     const from = simulation.bench.terminals[updated.from];

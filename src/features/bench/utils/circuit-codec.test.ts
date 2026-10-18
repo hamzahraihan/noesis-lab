@@ -1,7 +1,13 @@
 // src/features/bench/utils/circuit-codec.test.ts
 import { describe, expect, it } from 'vitest';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { circuitShareQuery, decodeShareToCircuit, encodeCircuitToShare, isCircuitShareable, CIRCUIT_SHARE_URL_LIMIT } from './circuit-codec';
+import {
+  circuitShareQuery,
+  decodeShareToCircuit,
+  encodeCircuitToShare,
+  isCircuitShareable,
+  CIRCUIT_SHARE_URL_LIMIT,
+} from './circuit-codec';
 import { validateCircuit, compile, type CircuitDocument } from '@/features/simulation';
 
 describe('circuit codec', () => {
@@ -40,14 +46,10 @@ describe('circuit codec', () => {
 
   it('rejects well-formed payloads that fail circuit validation', () => {
     // Missing version.
-    const noVersion = compressToEncodedURIComponent(
-      JSON.stringify({ parts: [], wires: [] }),
-    );
+    const noVersion = compressToEncodedURIComponent(JSON.stringify({ parts: [], wires: [] }));
     expect(decodeShareToCircuit(noVersion)).toBeNull();
     // Missing parts array.
-    const noParts = compressToEncodedURIComponent(
-      JSON.stringify({ version: 1, wires: [] }),
-    );
+    const noParts = compressToEncodedURIComponent(JSON.stringify({ version: 1, wires: [] }));
     expect(decodeShareToCircuit(noParts)).toBeNull();
     // Wire missing required fields.
     const badWire = compressToEncodedURIComponent(

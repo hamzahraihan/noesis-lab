@@ -16,7 +16,10 @@ void loop() {
 
 type Edge = { gpio: number; high: boolean };
 
-function backendWithEdges(words: Uint16Array, edges: Array<{ gpio: number; high: boolean }>): AvrBackend {
+function backendWithEdges(
+  words: Uint16Array,
+  edges: Array<{ gpio: number; high: boolean }>,
+): AvrBackend {
   const mcu = new McuRuntime(arduinoUnoR3());
   return new AvrBackend(words, {
     mcu,
@@ -75,7 +78,9 @@ async function instantiateBlinkCore(words: Uint16Array): Promise<AttachedCore> {
   const instance = await WebAssembly.instantiate(mod, {});
   const ex = instance.exports as unknown as BlinkWasmExports;
   if (typeof (ex as unknown as Record<string, unknown>).set_pc !== 'function') {
-    throw new Error('avr-core.wasm missing `set_pc` export — rebuild with `sh scripts/build-avr-wasm.sh`');
+    throw new Error(
+      'avr-core.wasm missing `set_pc` export — rebuild with `sh scripts/build-avr-wasm.sh`',
+    );
   }
   ex.reset_cpu();
   // Wasm flash holds 512 words; longer firmware runs past it and OOB-traps

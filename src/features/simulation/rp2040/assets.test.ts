@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  RP2040_LITTLEFS_WASM_URL,
-  RP2040_UF2_URL,
-  fetchRp2040Assets,
-} from './assets';
+import { RP2040_LITTLEFS_WASM_URL, RP2040_UF2_URL, fetchRp2040Assets } from './assets';
 
 describe('rp2040 assets', () => {
   it('addresses the pinned firmware and the littlefs wasm', () => {
@@ -15,9 +11,7 @@ describe('rp2040 assets', () => {
   it('fetches both assets through the injected fetcher', async () => {
     const uf2 = new ArrayBuffer(8);
     const littlefsWasm = new ArrayBuffer(16);
-    const fetchBytes = vi.fn(async (url: string) =>
-      url === RP2040_UF2_URL ? uf2 : littlefsWasm,
-    );
+    const fetchBytes = vi.fn(async (url: string) => (url === RP2040_UF2_URL ? uf2 : littlefsWasm));
     const assets = await fetchRp2040Assets(fetchBytes);
     expect(fetchBytes).toHaveBeenCalledWith(RP2040_UF2_URL);
     expect(fetchBytes).toHaveBeenCalledWith(RP2040_LITTLEFS_WASM_URL);

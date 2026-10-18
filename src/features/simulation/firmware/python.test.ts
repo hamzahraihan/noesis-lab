@@ -51,12 +51,13 @@ describe('indentation', () => {
     if (only.kind !== 'if' || only.then.kind !== 'suite') throw new Error('expected a suite');
     expect(only.then.statements).toHaveLength(1);
   });
-
 });
 
 describe('control flow', () => {
   it('reads elif as the else branch of an if', () => {
-    const program = parsePython(['if a:', '    x = 1', 'elif b:', '    x = 2', 'else:', '    x = 3'].join('\n'));
+    const program = parsePython(
+      ['if a:', '    x = 1', 'elif b:', '    x = 2', 'else:', '    x = 3'].join('\n'),
+    );
 
     const outer = program.globals[0];
     if (outer.kind !== 'if' || outer.otherwise?.kind !== 'if') throw new Error('expected an elif');
@@ -130,7 +131,15 @@ describe('control flow', () => {
 
   it('reads break, continue, return and pass', () => {
     const program = parsePython(
-      ['def f():', '    for i in range(3):', '        if i:', '            break', '        else:', '            continue', '    pass'].join('\n'),
+      [
+        'def f():',
+        '    for i in range(3):',
+        '        if i:',
+        '            break',
+        '        else:',
+        '            continue',
+        '    pass',
+      ].join('\n'),
     );
 
     const fn = program.functions.get('f');
@@ -308,7 +317,9 @@ describe('strings', () => {
 
 describe('imports', () => {
   it('are skipped, because the VM binds its own runtime names', () => {
-    const program = parsePython(['from gpiozero import LED, Button', 'import time', 'x = 1'].join('\n'));
+    const program = parsePython(
+      ['from gpiozero import LED, Button', 'import time', 'x = 1'].join('\n'),
+    );
 
     expect(program.globals).toHaveLength(1);
     expect(program.globals[0].kind).toBe('varDecl');

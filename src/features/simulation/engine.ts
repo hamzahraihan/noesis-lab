@@ -19,7 +19,12 @@ import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from '@/features/parts';
 import { DIGIT_KNOB } from '@/features/parts';
 import { SD_CARD_BYTES } from '@/features/parts';
 import { clampChannel, pixelCount, type PixelColor } from '@/features/parts';
-import { STEP_DEGREES, stepTransition, windingPolarity, type WindingPolarity } from '@/features/parts';
+import {
+  STEP_DEGREES,
+  stepTransition,
+  windingPolarity,
+  type WindingPolarity,
+} from '@/features/parts';
 import { Servo } from '@/features/parts';
 import { createLcd, type Lcd1602 } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
@@ -258,8 +263,7 @@ export class Engine {
         .pins()
         .find((pin) => pin.role === 'power' && pin.label === railLabel);
       if (railPin) {
-        this.supplyNet =
-          this.netlist.pinNode.get(`${this.mcuPart.id}:${railPin.id}`) ?? GROUND;
+        this.supplyNet = this.netlist.pinNode.get(`${this.mcuPart.id}:${railPin.id}`) ?? GROUND;
       }
     }
     this.rebuildBus();
@@ -361,7 +365,6 @@ export class Engine {
 
   /** Last level seen on each LCD's enable line, to spot its rising edge. */
   private readonly lcdStrobe = new Map<string, boolean>();
-
 
   /** Nets the firmware's I2C pins are driving. */
   private i2cNets = new Set<number>();
@@ -552,11 +555,9 @@ export class Engine {
         this.currentNetlist.nets.find((entry) => entry.index === net)?.terminals.length ?? 0;
       const high = this.mcu.board.logicVolts;
       const segmentLevel = (net: number): number =>
-        this.mcuOutputLevelOfNet(net) ??
-        (terminalCount(net) <= 1 ? high : this.voltageOfNet(net));
+        this.mcuOutputLevelOfNet(net) ?? (terminalCount(net) <= 1 ? high : this.voltageOfNet(net));
       const digitLevel = (net: number): number =>
-        this.mcuOutputLevelOfNet(net) ??
-        (terminalCount(net) <= 1 ? 0 : this.voltageOfNet(net));
+        this.mcuOutputLevelOfNet(net) ?? (terminalCount(net) <= 1 ? 0 : this.voltageOfNet(net));
       const com =
         nets.colon !== null
           ? (this.mcuOutputLevelOfNet(nets.colon.com) ??
@@ -621,9 +622,20 @@ export class Engine {
     if (!hasSeg || !hasDig) return null;
 
     const colon =
-      digitCount === 4 && hasPin('COM') && hasPin('CLN') ? { com: net('COM'), cln: net('CLN') } : null;
+      digitCount === 4 && hasPin('COM') && hasPin('CLN')
+        ? { com: net('COM'), cln: net('CLN') }
+        : null;
     return { segments, digits, colon };
-  }  private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
+  }
+  private lcdNets(partId: string): {
+    rs: number;
+    enable: number;
+    d0: number;
+    d4: number;
+    d5: number;
+    d6: number;
+    d7: number;
+  } | null {
     const netlist = this.currentNetlist;
     const net = (pin: string): number => {
       const found = netlist.pinNode.get(`${partId}:${pin}`);
@@ -1176,7 +1188,15 @@ export class Engine {
     };
     for (const part of this.bench.parts) {
       const kind = part.definition.component.kind;
-      const axes = kind === 'stepper' ? [['A', 'B']] : kind === 'biaxial-stepper' ? [['A1', 'B1'], ['A2', 'B2']] : null;
+      const axes =
+        kind === 'stepper'
+          ? [['A', 'B']]
+          : kind === 'biaxial-stepper'
+            ? [
+                ['A1', 'B1'],
+                ['A2', 'B2'],
+              ]
+            : null;
       if (!axes) continue;
       let state = this.stepperState.get(part.id);
       if (!state || state.length !== axes.length) {
@@ -1368,7 +1388,13 @@ export class Engine {
       const supply = netlist.pinNode.get(`${partId}:V+`);
       const ground = netlist.pinNode.get(`${partId}:GND`);
       if (supply === undefined || ground === undefined) continue;
-      elements.push({ kind: 'resistor', a: supply, b: ground, ohms: servo.loadOhms, label: 'servo' });
+      elements.push({
+        kind: 'resistor',
+        a: supply,
+        b: ground,
+        ohms: servo.loadOhms,
+        label: 'servo',
+      });
     }
     let internalNet = netlist.nodeCount;
     let sourceOrdinal = 0;

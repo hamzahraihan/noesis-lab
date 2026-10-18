@@ -9,7 +9,16 @@ import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 describe('SPI OLED definition', () => {
   it('exposes the eight-pin SPI header', () => {
     const def = ssd1306SpiDefinition();
-    expect(def.pins.map((p) => p.id)).toEqual(['VCC', 'GND', 'CS', 'RESET', 'DC', 'MOSI', 'SCK', 'VIN']);
+    expect(def.pins.map((p) => p.id)).toEqual([
+      'VCC',
+      'GND',
+      'CS',
+      'RESET',
+      'DC',
+      'MOSI',
+      'SCK',
+      'VIN',
+    ]);
     expect([def.widthMm, def.heightMm]).toEqual([39.69, 30.69]);
   });
 });

@@ -31,7 +31,7 @@ function bench4(): {
 function drive(controller: SevenSegment, digit: number, mask: number): void {
   const digitVolts = [0, 0, 0, 0];
   digitVolts[digit - 1] = 5;
-  const segVolts = Array.from({ length: 8 }, (_, index) => (mask >> index) & 1 ? 0 : 5);
+  const segVolts = Array.from({ length: 8 }, (_, index) => ((mask >> index) & 1 ? 0 : 5));
   controller.update(digitVolts, segVolts);
 }
 

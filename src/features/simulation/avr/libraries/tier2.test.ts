@@ -97,7 +97,11 @@ function stubCache(initial: ReadonlyMap<string, Uint8Array> = new Map()) {
 function sevSegZip(): Uint8Array {
   const encoder = new TextEncoder();
   return buildFixtureZip([
-    { name: 'SevSeg-3.7.0/SevSeg.cpp', data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n'), method: 8 },
+    {
+      name: 'SevSeg-3.7.0/SevSeg.cpp',
+      data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n'),
+      method: 8,
+    },
     { name: 'SevSeg-3.7.0/SevSeg.h', data: encoder.encode('#pragma once\nint x;\n'), method: 0 },
   ]);
 }
@@ -185,7 +189,8 @@ describe('tier-2 build', () => {
     // event-loop handle, so the build died silently instead of failing.
     const encoder = new TextEncoder();
     const lines: string[] = [];
-    for (let i = 0; i < 800; i += 1) lines.push(`void tu_symbol_${i}(void) { volatile int v${i} = ${i}; }\n`);
+    for (let i = 0; i < 800; i += 1)
+      lines.push(`void tu_symbol_${i}(void) { volatile int v${i} = ${i}; }\n`);
     const bigSource = `#include "SevSeg.h"\n${lines.join('')}`;
     expect(encoder.encode(bigSource).length).toBeGreaterThan(16_384);
     const zip = buildFixtureZip([
@@ -212,7 +217,11 @@ describe('tier-2 build', () => {
     const entry = TIER2_MANIFEST[1];
     const encoder = new TextEncoder();
     const zip = buildFixtureZip([
-      { name: 'RTClib-2.1.4/src/RTClib.cpp', data: encoder.encode('#include "RTClib.h"\n'), method: 8 },
+      {
+        name: 'RTClib-2.1.4/src/RTClib.cpp',
+        data: encoder.encode('#include "RTClib.h"\n'),
+        method: 8,
+      },
       { name: 'RTClib-2.1.4/src/RTClib.h', data: encoder.encode('#pragma once\n'), method: 0 },
       { name: 'RTClib-2.1.4/library.properties', data: encoder.encode('name=RTClib\n'), method: 0 },
     ]);
@@ -244,7 +253,9 @@ describe('tier-2 build', () => {
         throw new Error('cc1plus failed: boom');
       },
     };
-    await expect(buildTier2Objects('SevSeg', undefined, deps)).rejects.toThrow('cc1plus failed: boom');
+    await expect(buildTier2Objects('SevSeg', undefined, deps)).rejects.toThrow(
+      'cc1plus failed: boom',
+    );
     expect(stub.puts).toEqual([]);
   });
 });

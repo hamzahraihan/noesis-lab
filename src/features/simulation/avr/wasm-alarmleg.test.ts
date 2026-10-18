@@ -42,9 +42,8 @@ describe('alarm leg', () => {
 
     // Attached path: second Simulation with the real Wasm module.
     const at = await buildSim();
-    const backend = (
-      at.sim as unknown as { avrBackend: { attachWasm(c: unknown): void } | null }
-    ).avrBackend;
+    const backend = (at.sim as unknown as { avrBackend: { attachWasm(c: unknown): void } | null })
+      .avrBackend;
     expect(backend, 'alarm AVR core flashed').not.toBeNull();
     const hexText = hexForSourcesHash(sourcesHashForProject(at.fw));
     expect(hexText, 'committed HEX matches staged sources').not.toBeNull();

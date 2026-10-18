@@ -32,15 +32,10 @@ import { SevenSegment } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import type { DiodeProfile } from '@/features/simulation';
 import { WIPER_KNOB } from '@/features/parts';
-import {
-  HORIZONTAL_KNOB,
-  SLIDE_POSITION_KNOB,
-  VERTICAL_KNOB,
-} from '@/features/parts';
+import { HORIZONTAL_KNOB, SLIDE_POSITION_KNOB, VERTICAL_KNOB } from '@/features/parts';
 import { DIGIT_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import type { FootprintState } from './footprints';
-
 
 /** CSS pixels per millimetre, fixed by the CSS spec at 96 dpi. */
 const PX_PER_MM = 96 / 25.4;
@@ -292,7 +287,9 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
       return WOKWI_PARTS.keypad;
     case '7segment': {
       const digits = definition.component.digits ?? 1;
-      return WOKWI_PARTS[`7segment${digits > 1 ? `-${digits}digit` : ''}`] ?? WOKWI_PARTS['7segment'];
+      return (
+        WOKWI_PARTS[`7segment${digits > 1 ? `-${digits}digit` : ''}`] ?? WOKWI_PARTS['7segment']
+      );
     }
     case 'i2c-sensor':
       return WOKWI_PARTS[definition.component.device];
@@ -316,9 +313,7 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
        */
       // The SPI OLED is the eight-pin module Wokwi does draw, and it draws it
       // from its own text buffer rather than a canvas, so it keeps that path.
-      return definition.component.controller === 'ssd1306-spi'
-        ? WOKWI_PARTS.ssd1306
-        : null;
+      return definition.component.controller === 'ssd1306-spi' ? WOKWI_PARTS.ssd1306 : null;
     default:
       return null;
   }
@@ -568,7 +563,6 @@ export function pushWokwiState(
     return;
   }
 
-
   if (kind === 'display' && definition.component.controller === 'ili9341') {
     blitFramebuffer(element, state.displays?.get(part.id));
   }
@@ -704,7 +698,10 @@ function blitFramebuffer(element: HTMLElement, controller: DisplayController | u
  * alpha and a dark one stays transparent black -- the element's own
  * glass tints it from there.
  */
-function blitMonoFramebuffer(element: HTMLElement, controller: DisplayController | undefined): void {
+function blitMonoFramebuffer(
+  element: HTMLElement,
+  controller: DisplayController | undefined,
+): void {
   if (!(controller instanceof Ssd1306)) return;
   const canvas: unknown = Reflect.get(element, 'canvas');
   if (!(canvas instanceof HTMLCanvasElement)) return;

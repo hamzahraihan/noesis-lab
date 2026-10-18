@@ -326,8 +326,18 @@ const OSM_MAP: Exercise = {
   wiring: [
     { pin: 'GPIO23', part: '3.2" TFT (ILI9341)', terminal: 'DIN', goesTo: "SPI1's data line" },
     { pin: 'GPIO18', part: '3.2" TFT (ILI9341)', terminal: 'CLK', goesTo: "SPI1's clock" },
-    { pin: 'GPIO5', part: '3.2" TFT (ILI9341)', terminal: 'CS', goesTo: 'chip-select — the hardware SS pin' },
-    { pin: 'GPIO15', part: '3.2" TFT (ILI9341)', terminal: 'D/C', goesTo: 'data/command, an ordinary GPIO' },
+    {
+      pin: 'GPIO5',
+      part: '3.2" TFT (ILI9341)',
+      terminal: 'CS',
+      goesTo: 'chip-select — the hardware SS pin',
+    },
+    {
+      pin: 'GPIO15',
+      part: '3.2" TFT (ILI9341)',
+      terminal: 'D/C',
+      goesTo: 'data/command, an ordinary GPIO',
+    },
     { pin: '3V3', part: '3.2" TFT (ILI9341)', terminal: 'VCC', goesTo: 'the 3.3 V rail' },
     { pin: 'GND', part: '3.2" TFT (ILI9341)', terminal: 'GND', goesTo: 'ground' },
     { pin: 'GPIO4', part: 'Tactile Button', terminal: 'a', goesTo: 'west' },

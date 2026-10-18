@@ -120,7 +120,7 @@ const NETWORK_DESK: Exercise = {
     {
       name: '3.2" TFT (ILI9341)',
       qty: 1,
-      why: "It shows both halves of the program at once: the time that was asked for, and the temperature that simply arrived.",
+      why: 'It shows both halves of the program at once: the time that was asked for, and the temperature that simply arrived.',
     },
   ],
   board: 'esp32',
@@ -159,7 +159,7 @@ const NETWORK_DESK: Exercise = {
       pin: 'D15',
       part: '3.2" TFT (ILI9341)',
       terminal: 'D/C',
-      goesTo: "the data-or-command line, which changes what the next byte means",
+      goesTo: 'the data-or-command line, which changes what the next byte means',
     },
   ],
   steps: [
@@ -255,26 +255,22 @@ const NETWORK_DESK: Exercise = {
   references: [
     {
       term: 'The WiFi library: begin, status and localIP',
-      what:
-        'Arduino\'s reference for the calls this lesson starts with. Read it for the status codes — the join is a process with states, not a function that returns connected.',
+      what: "Arduino's reference for the calls this lesson starts with. Read it for the status codes — the join is a process with states, not a function that returns connected.",
       readMore: 'https://docs.arduino.cc/libraries/wifi/',
     },
     {
       term: 'Publish and subscribe, as a model',
-      what:
-        'MQTT is why a sensor can publish to nobody in particular and a subscriber can still receive it. The bench\'s `subscribe`/`available`/`message` is that model without the wire protocol.',
+      what: "MQTT is why a sensor can publish to nobody in particular and a subscriber can still receive it. The bench's `subscribe`/`available`/`message` is that model without the wire protocol.",
       readMore: 'https://mqtt.org/',
     },
     {
       term: 'HTTP: requests and responses',
-      what:
-        'The request/response shape the clock endpoint speaks. The part worth reading twice is that a response has a status, which is why a request can complete and still be a failure.',
+      what: 'The request/response shape the clock endpoint speaks. The part worth reading twice is that a response has a status, which is why a request can complete and still be a failure.',
       readMore: 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview',
     },
     {
       term: 'millis(), and why the difference comes first',
-      what:
-        'The reference for the counter itself. The wrap-safe comparison — `now - last >= span` — is the idiom every non-blocking program here uses.',
+      what: 'The reference for the counter itself. The wrap-safe comparison — `now - last >= span` — is the idiom every non-blocking program here uses.',
       readMore: 'https://docs.arduino.cc/language-reference/en/functions/time/millis/',
     },
   ],

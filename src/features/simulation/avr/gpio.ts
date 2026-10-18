@@ -5,7 +5,13 @@ import { UNO_GPIO_MAP } from './backend';
 const PORTS = { B: portBConfig, C: portCConfig, D: portDConfig } as const;
 
 /** Pushes AVR DDR/PORT state into McuRuntime intent on every change. */
-export function attachGpioBridge(cpu: CPU, mcu: McuRuntime, nowMs: () => number, readPin: (gpio: number) => boolean, onEdge?: (gpio: number, cycles: number, high: boolean) => void): void {
+export function attachGpioBridge(
+  cpu: CPU,
+  mcu: McuRuntime,
+  nowMs: () => number,
+  readPin: (gpio: number) => boolean,
+  onEdge?: (gpio: number, cycles: number, high: boolean) => void,
+): void {
   const ports = {
     B: new AVRIOPort(cpu, PORTS.B),
     C: new AVRIOPort(cpu, PORTS.C),

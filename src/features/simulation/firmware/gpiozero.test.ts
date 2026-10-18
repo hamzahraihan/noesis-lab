@@ -80,10 +80,7 @@ describe('a device is what the program named it', () => {
 
   it('settles a constructor as an output and a button as an input', () => {
     const target = host();
-    run(
-      'from gpiozero import LED, Button\nlamp = LED(17)\nswitch = Button(2)\n',
-      target,
-    );
+    run('from gpiozero import LED, Button\nlamp = LED(17)\nswitch = Button(2)\n', target);
 
     // PIN_OUTPUT is 1 and PIN_INPUT is 0; asserting the numbers would pin the
     // wire format rather than the intent, so the pair is compared.
@@ -124,7 +121,10 @@ describe('driving a device', () => {
 
   it('writes a PWM value as a fraction', () => {
     const target = host();
-    run('from gpiozero import PWMOutputDevice\nlamp = PWMOutputDevice(18)\nlamp.value = 0.5\n', target);
+    run(
+      'from gpiozero import PWMOutputDevice\nlamp = PWMOutputDevice(18)\nlamp.value = 0.5\n',
+      target,
+    );
 
     expect(target.analog).toEqual([{ pin: 18, value: 0.5 }]);
   });
@@ -218,8 +218,8 @@ describe('the Python runtime', () => {
   });
 
   it('reports a Python syntax error rather than failing silently', () => {
-    expect(() =>
-      new FirmwareRunner('for i in range(3)\n    print(i)\n', host().services, 'python'),
+    expect(
+      () => new FirmwareRunner('for i in range(3)\n    print(i)\n', host().services, 'python'),
     ).toThrow(/line 2/);
   });
 });

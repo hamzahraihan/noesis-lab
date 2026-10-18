@@ -35,10 +35,7 @@ describe('worked solutions', () => {
       const wired = exercise.wiring.map((wire) => `${wire.pin}:${wire.terminal}`);
       const explained = exercise.solution!.wiring.map((wire) => `${wire.pin}:${wire.terminal}`);
 
-      expect(
-        explained,
-        `${exercise.id} covers its wiring table exactly`,
-      ).toEqual(wired);
+      expect(explained, `${exercise.id} covers its wiring table exactly`).toEqual(wired);
     }
   });
 

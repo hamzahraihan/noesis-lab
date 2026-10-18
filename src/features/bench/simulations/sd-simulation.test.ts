@@ -34,10 +34,9 @@ describe('sd sketch', () => {
 
   it('fails closed on a pin with no card wired', () => {
     const { simulation } = cardBench();
-    expect(runSketch(simulation, 'Serial.println(sd.begin(4)); Serial.println(sd.read(4, "x"));')).toEqual([
-      '0',
-      '',
-    ]);
+    expect(
+      runSketch(simulation, 'Serial.println(sd.begin(4)); Serial.println(sd.read(4, "x"));'),
+    ).toEqual(['0', '']);
   });
 
   it('forgets files with the removed card', () => {

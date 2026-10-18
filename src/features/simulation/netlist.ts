@@ -190,10 +190,7 @@ function unionCoincidentContacts(bench: Bench, sets: DisjointSet): void {
  * Returns `GROUND` when the bench has no ground at all, which callers surface
  * as "no reference" rather than solving against an arbitrary datum.
  */
-function chooseGroundRoot(
-  bench: Bench,
-  sets: DisjointSet,
-): number {
+function chooseGroundRoot(bench: Bench, sets: DisjointSet): number {
   for (const part of bench.parts) {
     if (part.definition.component.kind !== 'mcu') continue;
     for (const pin of part.definition.boardPins ?? []) {
@@ -347,8 +344,7 @@ function elementsForPart(
        * at the supply until the divider passes the trimmer, then pulls it down
        * through the output's own impedance.
        */
-      const tripped =
-        dividerFraction > state.knob(part.id, COMPARATOR_THRESHOLD_KNOB) / 100;
+      const tripped = dividerFraction > state.knob(part.id, COMPARATOR_THRESHOLD_KNOB) / 100;
       if (tripped) {
         elements.push({
           kind: 'resistor',
@@ -364,8 +360,7 @@ function elementsForPart(
     case 'thermistor': {
       const celsius = state.knob(part.id, TEMPERATURE_KNOB);
       const kelvin = KELVIN_AT_25C + (celsius - 25);
-      const ohms =
-        NTC_OHMS_AT_25C * Math.exp(NTC_BETA_K * (1 / kelvin - 1 / KELVIN_AT_25C));
+      const ohms = NTC_OHMS_AT_25C * Math.exp(NTC_BETA_K * (1 / kelvin - 1 / KELVIN_AT_25C));
       return [
         { kind: 'resistor', a: nodeAt('VCC'), b: nodeAt('OUT'), ohms, label: 'thermistor' },
         {
@@ -390,10 +385,7 @@ function elementsForPart(
     case 'ir-receiver':
       // The operator's code knob or a live transmission through the air:
       // either pulls DAT low, and neither disturbs the other.
-      return openDrainOutput(
-        'DAT',
-        state.knob(part.id, IR_CODE_KNOB) >= 0.5 || irTransmitting,
-      );
+      return openDrainOutput('DAT', state.knob(part.id, IR_CODE_KNOB) >= 0.5 || irTransmitting);
 
     case 'slide-switch': {
       const thrownToOne = state.knob(part.id, SLIDE_POSITION_KNOB) >= 0.5;
@@ -480,9 +472,8 @@ function elementsForPart(
     case '7segment': {
       const elements: Element[] = [];
       const digits = component.digits ?? 1;
-      const commons = digits > 1
-        ? Array.from({ length: digits }, (_, i) => `DIG${i + 1}`)
-        : ['COM.1'];
+      const commons =
+        digits > 1 ? Array.from({ length: digits }, (_, i) => `DIG${i + 1}`) : ['COM.1'];
       for (const common of commons) {
         for (const segment of SEVEN_SEGMENT_SEGMENTS) {
           elements.push({
@@ -544,10 +535,15 @@ function elementsForPart(
        * no analogue tap out, and have no divider to bring it out of.
        */
       if (part.terminals.AOUT !== undefined) {
-        const sensorOhms =
-          SENSOR_IDLE_OHMS * (SENSOR_FULL_SCALE_OHMS / SENSOR_IDLE_OHMS) ** level;
+        const sensorOhms = SENSOR_IDLE_OHMS * (SENSOR_FULL_SCALE_OHMS / SENSOR_IDLE_OHMS) ** level;
         elements.push(
-          { kind: 'resistor', a: nodeAt('VCC'), b: nodeAt('AOUT'), ohms: sensorOhms, label: 'sensor' },
+          {
+            kind: 'resistor',
+            a: nodeAt('VCC'),
+            b: nodeAt('AOUT'),
+            ohms: sensorOhms,
+            label: 'sensor',
+          },
           {
             kind: 'resistor',
             a: nodeAt('AOUT'),
@@ -888,7 +884,14 @@ export function buildNetlist(
 
   const elements: Element[] = [];
   for (const part of bench.parts) {
-    for (const element of elementsForPart(part, pinNode, state, relayEnergized, sonarMeasuring, irTransmitting)) {
+    for (const element of elementsForPart(
+      part,
+      pinNode,
+      state,
+      relayEnergized,
+      sonarMeasuring,
+      irTransmitting,
+    )) {
       if (!isDegenerate(element)) elements.push(element);
     }
   }

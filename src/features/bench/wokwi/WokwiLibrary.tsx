@@ -26,8 +26,8 @@ export function WokwiLibrary() {
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       <p className="mb-3 text-xs text-slate-500">
         Every element <code className="text-slate-400">@wokwi/elements</code> ships, drawn by
-        itself. The bench adopts the ones whose circuit the solver can solve; the rest are here
-        so you can see what they would take.
+        itself. The bench adopts the ones whose circuit the solver can solve; the rest are here so
+        you can see what they would take.
       </p>
       <ul className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2">
         {WOKWI_LIBRARY.map((element) => (
@@ -68,7 +68,9 @@ function ElementCard({ element }: { element: LibraryElement }) {
   return (
     <figure
       className={`flex h-full flex-col rounded-none border p-2 ${
-        element.status === 'placed' ? 'border-slate-800 bg-slate-950' : 'border-slate-800/60 bg-slate-950/50'
+        element.status === 'placed'
+          ? 'border-slate-800 bg-slate-950'
+          : 'border-slate-800/60 bg-slate-950/50'
       }`}
       title={element.note}
     >
@@ -88,9 +90,15 @@ function ElementCard({ element }: { element: LibraryElement }) {
         {element.sizeMm.w.toFixed(1)} × {element.sizeMm.h.toFixed(1)} mm
       </p>
       <span className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
-        {element.status === 'placed' && <CheckCircledIcon className="icon-sm text-emerald-500" aria-hidden="true" />}
-        {element.status === 'needs-api' && <ClockIcon className="icon-sm text-amber-400" aria-hidden="true" />}
-        {element.status === 'other-part' && <InfoCircledIcon className="icon-sm text-slate-500" aria-hidden="true" />}
+        {element.status === 'placed' && (
+          <CheckCircledIcon className="icon-sm text-emerald-500" aria-hidden="true" />
+        )}
+        {element.status === 'needs-api' && (
+          <ClockIcon className="icon-sm text-amber-400" aria-hidden="true" />
+        )}
+        {element.status === 'other-part' && (
+          <InfoCircledIcon className="icon-sm text-slate-500" aria-hidden="true" />
+        )}
         {STATUS_LABEL[element.status]}
       </span>
     </figure>

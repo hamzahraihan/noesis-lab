@@ -7,7 +7,13 @@ import { DynamicState } from '@/features/parts';
 import { buildNetlist, type Netlist } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
-import { clampChannel, ledRingDefinition, neopixelDefinition, neopixelMatrixDefinition, pixelCount } from './pixels';
+import {
+  clampChannel,
+  ledRingDefinition,
+  neopixelDefinition,
+  neopixelMatrixDefinition,
+  pixelCount,
+} from './pixels';
 import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('pixel definitions', () => {
@@ -15,7 +21,11 @@ describe('pixel definitions', () => {
     expect(neopixelDefinition().pins.map((p) => p.id)).toEqual(['VDD', 'DOUT', 'VSS', 'DIN']);
     expect(neopixelMatrixDefinition().pins.map((p) => p.id)).toEqual(['GND', 'VCC', 'DIN', 'DOUT']);
     expect(ledRingDefinition().pins.map((p) => p.id)).toEqual(['GND', 'VCC', 'DIN', 'DOUT']);
-    expect([pixelCount(neopixelDefinition()), pixelCount(neopixelMatrixDefinition()), pixelCount(ledRingDefinition())]).toEqual([1, 64, 16]);
+    expect([
+      pixelCount(neopixelDefinition()),
+      pixelCount(neopixelMatrixDefinition()),
+      pixelCount(ledRingDefinition()),
+    ]).toEqual([1, 64, 16]);
   });
 });
 
@@ -91,9 +101,16 @@ describe('pixel buffers', () => {
     join(matrix, 'GND', esp32, 'L_GND');
     const netlist: Netlist = buildNetlist(builder.build(), new DynamicState());
     // The matrix stamps nothing itself: only the two jumpers show up.
-    expect(netlist.elements.every((e) => e.kind === 'resistor' && e.label?.startsWith('wire'))).toBe(true);
+    expect(
+      netlist.elements.every((e) => e.kind === 'resistor' && e.label?.startsWith('wire')),
+    ).toBe(true);
     const elements: Element[] = [
-      { kind: 'voltageSource', a: netlist.pinNode.get(`${esp32.id}:R_3V3`)!, b: GROUND, volts: 3.3 },
+      {
+        kind: 'voltageSource',
+        a: netlist.pinNode.get(`${esp32.id}:R_3V3`)!,
+        b: GROUND,
+        volts: 3.3,
+      },
       ...netlist.elements,
     ];
     const solution: Solution = solveCircuit(elements, { nodeCount: netlist.nodeCount });

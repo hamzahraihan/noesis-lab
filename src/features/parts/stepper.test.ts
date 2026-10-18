@@ -5,7 +5,12 @@ import { DynamicState } from '@/features/parts';
 import { buildNetlist } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { Engine } from '@/features/simulation';
-import { STEP_DEGREES, biaxialStepperDefinition, stepperDefinition, stepTransition } from './stepper';
+import {
+  STEP_DEGREES,
+  biaxialStepperDefinition,
+  stepperDefinition,
+  stepTransition,
+} from './stepper';
 import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
 describe('stepper definition', () => {
@@ -26,7 +31,8 @@ describe('step transition', () => {
   });
 });
 
-describe('stepper shaft', () => {  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5, bMinus: 12 };
+describe('stepper shaft', () => {
+  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5, bMinus: 12 };
 
   function shaftBench() {
     const builder = new BenchBuilder();
@@ -66,7 +72,13 @@ describe('stepper shaft', () => {  const PINS = { aMinus: 2, aPlus: 4, bPlus: 5,
 
   it('advances one full step per Gray transition through real pins', () => {
     const { engine, mcu, stepper } = shaftBench();
-    const sequence: Array<readonly [number, number]> = [[1, 1], [-1, 1], [-1, -1], [1, -1], [1, 1]];
+    const sequence: Array<readonly [number, number]> = [
+      [1, 1],
+      [-1, 1],
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+    ];
     for (const [pA, pB] of sequence) {
       driveCoils(mcu, engine.timeMs, pA, pB);
       engine.settle();
@@ -123,7 +135,16 @@ describe('stepper selection', () => {
 describe('biaxial stepper', () => {
   it('exposes eight pins for two axes', () => {
     const def = biaxialStepperDefinition();
-    expect(def.pins.map((p) => p.id)).toEqual(['A1-', 'A1+', 'B1+', 'B1-', 'A2-', 'A2+', 'B2+', 'B2-']);
+    expect(def.pins.map((p) => p.id)).toEqual([
+      'A1-',
+      'A1+',
+      'B1+',
+      'B1-',
+      'A2-',
+      'A2+',
+      'B2+',
+      'B2-',
+    ]);
     expect([def.widthMm, def.heightMm]).toEqual([56, 67.5]);
   });
 
@@ -131,7 +152,10 @@ describe('biaxial stepper', () => {
     const builder = new BenchBuilder();
     builder.addPart(biaxialStepperDefinition(), 200, 0);
     const netlist = buildNetlist(builder.build(), new DynamicState());
-    expect(netlist.elements.filter((e) => e.kind === 'resistor' && e.label?.startsWith('winding')).length).toBe(4);
+    expect(
+      netlist.elements.filter((e) => e.kind === 'resistor' && e.label?.startsWith('winding'))
+        .length,
+    ).toBe(4);
   });
 
   it('sequences one axis without disturbing the other', () => {
@@ -148,13 +172,23 @@ describe('biaxial stepper', () => {
       return { x: pin.x, y: pin.y };
     };
     // Axis 1 coils on gpios 2/4/5/12; axis 2 parked with A2+ high, rest low.
-    const axis1: Array<[number, string]> = [[2, 'A1-'], [4, 'A1+'], [5, 'B1+'], [12, 'B1-']];
+    const axis1: Array<[number, string]> = [
+      [2, 'A1-'],
+      [4, 'A1+'],
+      [5, 'B1+'],
+      [12, 'B1-'],
+    ];
     for (const [gpio, target] of axis1) {
       const from = gpioPin(gpio);
       const to = at(twin, target);
       builder.addWire(from.x, from.y, to.x, to.y);
     }
-    const park: Array<[number, string]> = [[25, 'A2-'], [26, 'A2+'], [27, 'B2+'], [33, 'B2-']];
+    const park: Array<[number, string]> = [
+      [25, 'A2-'],
+      [26, 'A2+'],
+      [27, 'B2+'],
+      [33, 'B2-'],
+    ];
     for (const [gpio, target] of park) {
       const from = gpioPin(gpio);
       const to = at(twin, target);
@@ -171,7 +205,13 @@ describe('biaxial stepper', () => {
       mcu.writeDigital(12, pB < 0, engine.timeMs);
     };
     mcu.writeDigital(26, true, engine.timeMs);
-    for (const [pA, pB] of [[1, 1], [-1, 1], [-1, -1], [1, -1], [1, 1]] as const) {
+    for (const [pA, pB] of [
+      [1, 1],
+      [-1, 1],
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+    ] as const) {
       drive(pA, pB);
       engine.settle();
     }

@@ -51,11 +51,7 @@ export class SpiBus {
   private sawByte = false;
   private payload: SpiByte[] = [];
 
-  private readonly deliver: (
-    byte: number,
-    dataSelect: boolean,
-    chipSelected: boolean,
-  ) => boolean;
+  private readonly deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean;
 
   constructor(deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean) {
     this.deliver = deliver;

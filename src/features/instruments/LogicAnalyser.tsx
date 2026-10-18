@@ -20,19 +20,10 @@ import { Button, CardTitle } from '@/components';
 /** Simulated milliseconds shown across the capture. */
 const WINDOW_MS = 100;
 
-
 /** Enough lanes to fill the panel; past this the lanes stop being readable. */
 const MAX_LANES = 8;
 
-const PIN_COLOURS = [
-  '#38bdf8',
-  '#34d399',
-  '#fbbf24',
-  '#f472b6',
-  '#fb923c',
-  '#22d3ee',
-  '#f87171',
-];
+const PIN_COLOURS = ['#38bdf8', '#34d399', '#fbbf24', '#f472b6', '#fb923c', '#22d3ee', '#f87171'];
 
 /** Lane height in CSS pixels, set explicitly so a narrow panel squashes the
  *  trace rather than flattening it into nothing. */
@@ -58,7 +49,10 @@ export function LogicAnalyser({
   isCapturing,
 }: LogicAnalyserProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const capturing = traces.map((trace, index) => ({ ...trace, colour: PIN_COLOURS[index % PIN_COLOURS.length] }));
+  const capturing = traces.map((trace, index) => ({
+    ...trace,
+    colour: PIN_COLOURS[index % PIN_COLOURS.length],
+  }));
 
   // No dependency list, for the same reason the scope has none: the capture
   // buffer is mutated in place as the engine solves, so its identity never
@@ -168,7 +162,9 @@ export function LogicAnalyser({
               size="sm"
               variant={on ? 'default' : 'secondary'}
               className="h-6 px-2 text-[11px]"
-              title={full ? `Capture is full: ${MAX_LANES} lanes is as many as stay readable` : undefined}
+              title={
+                full ? `Capture is full: ${MAX_LANES} lanes is as many as stay readable` : undefined
+              }
             >
               {pin.label}
             </Button>

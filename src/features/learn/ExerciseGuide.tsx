@@ -108,7 +108,8 @@ export function ExerciseGuide({
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-mono text-[11px] tracking-wide text-slate-500">
-              EXERCISE {exercise.id} · {exercise.difficulty.toUpperCase()} · {exercise.minutes.toUpperCase()}
+              EXERCISE {exercise.id} · {exercise.difficulty.toUpperCase()} ·{' '}
+              {exercise.minutes.toUpperCase()}
             </p>
             <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-balance text-slate-100">
               {exercise.title}
@@ -135,9 +136,7 @@ export function ExerciseGuide({
             <span className="text-slate-400">
               Step {Math.min(stepIndex + 1, totalSteps)} of {totalSteps}
             </span>
-            <span className="num text-slate-500">
-              {doneCount} done
-            </span>
+            <span className="num text-slate-500">{doneCount} done</span>
           </div>
           <div
             className="mt-1.5 h-1 overflow-hidden rounded-none bg-slate-800"
@@ -193,7 +192,10 @@ export function ExerciseGuide({
               <ul className="mt-2 space-y-1.5">
                 {exercise.solution.working.map((sign) => (
                   <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-slate-400">
-                    <CheckIcon className="icon-sm mt-0.5 shrink-0 text-emerald-500" aria-hidden="true" />
+                    <CheckIcon
+                      className="icon-sm mt-0.5 shrink-0 text-emerald-500"
+                      aria-hidden="true"
+                    />
                     <span>{sign}</span>
                   </li>
                 ))}
@@ -315,8 +317,12 @@ export function ExerciseGuide({
                 <InfoCircledIcon className="icon-sm shrink-0" aria-hidden="true" />
                 Break it on purpose
               </p>
-              <p className="mt-1.5 text-sm font-medium text-amber-100/90">{exercise.fault.break_}</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-400">{exercise.fault.teaches}</p>
+              <p className="mt-1.5 text-sm font-medium text-amber-100/90">
+                {exercise.fault.break_}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                {exercise.fault.teaches}
+              </p>
             </div>
           )}
 
@@ -327,7 +333,10 @@ export function ExerciseGuide({
             </p>
             <div className="mt-2.5 space-y-2">
               {exercise.hints.slice(0, hintsRevealed).map((hint) => (
-                <div key={hint.when} className="rounded-none border border-slate-800 bg-slate-950/60 p-3.5">
+                <div
+                  key={hint.when}
+                  className="rounded-none border border-slate-800 bg-slate-950/60 p-3.5"
+                >
                   <p className="text-sm font-medium text-slate-200">{hint.when}</p>
                   <p className="mt-1 text-sm leading-relaxed text-slate-400">{hint.answer}</p>
                 </div>

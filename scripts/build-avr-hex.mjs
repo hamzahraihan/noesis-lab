@@ -25,13 +25,18 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STAGE = join(ROOT, '.avr-stage');
 const PKG_DIR = join(ROOT, 'node_modules', '@horang-corp', 'avr-gcc-wasm');
-const variant = (process.argv.find((a) => a.startsWith('--variant=')) ?? '').split('=')[1] === 'library' ? 'library' : undefined;
-const HEX_PATH = variant === 'library'
-  ? join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-lib-uno.hex')
-  : join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-uno.hex');
-const MANIFEST_PATH = variant === 'library'
-  ? join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-lib-manifest.json')
-  : join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'manifest.json');
+const variant =
+  (process.argv.find((a) => a.startsWith('--variant=')) ?? '').split('=')[1] === 'library'
+    ? 'library'
+    : undefined;
+const HEX_PATH =
+  variant === 'library'
+    ? join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-lib-uno.hex')
+    : join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-uno.hex');
+const MANIFEST_PATH =
+  variant === 'library'
+    ? join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'alarm-clock-lib-manifest.json')
+    : join(ROOT, 'src', 'features', 'simulation', 'avr', 'hex', 'manifest.json');
 
 if (!existsSync(join(PKG_DIR, 'firmware-builder.js'))) {
   console.error(
@@ -84,7 +89,9 @@ runViteNode(join('.avr-stage', 'package-tu.mts'));
 
 const { source, sourcesHash } = JSON.parse(await readFile(join(STAGE, 'tu.json'), 'utf8'));
 const staged = JSON.parse(await readFile(join(STAGE, 'sources.json'), 'utf8'));
-console.log(`staged sketch: ${staged.sketch.length} chars, ${staged.files.length} extra tabs; TU: ${source.length} chars`);
+console.log(
+  `staged sketch: ${staged.sketch.length} chars, ${staged.files.length} extra tabs; TU: ${source.length} chars`,
+);
 
 // Step 3: serve the toolchain package; the WASM compiler fetches its
 // tools/ and assets/ over HTTP even when driven from Node.
@@ -212,24 +219,29 @@ writeFileSync('.avr-stage/lib-hex.txt', hex);
       }
     }
     fitsTarget = flashBytes <= 32256;
-    console.log(`built (library): flash ${flashBytes} bytes (budget 32256), fitsTarget=${fitsTarget}`);
+    console.log(
+      `built (library): flash ${flashBytes} bytes (budget 32256), fitsTarget=${fitsTarget}`,
+    );
     if (!fitsTarget) {
       throw new Error('HEX overflows the Uno flash budget; refusing to commit it.');
     }
   } else {
-  const result = await toolchain.buildFirmware({ source });
-  hex = result.hex;
-  fitsTarget = result.flashBytes <= result.target.appFlashBytes;
-  console.log(
-    `built: flash ${result.flashBytes} bytes (budget ${result.target.appFlashBytes}), ` +
-      `HEX ${result.hexBytes} bytes, fitsTarget=${result.fitsTarget}`,
-  );
-  if (!result.fitsTarget) {
-    throw new Error('HEX overflows the Uno flash budget; refusing to commit it.');
-  }
+    const result = await toolchain.buildFirmware({ source });
+    hex = result.hex;
+    fitsTarget = result.flashBytes <= result.target.appFlashBytes;
+    console.log(
+      `built: flash ${result.flashBytes} bytes (budget ${result.target.appFlashBytes}), ` +
+        `HEX ${result.hexBytes} bytes, fitsTarget=${result.fitsTarget}`,
+    );
+    if (!result.fitsTarget) {
+      throw new Error('HEX overflows the Uno flash budget; refusing to commit it.');
+    }
   }
 } catch (error) {
-  console.error('buildFirmware failed:', error instanceof Error ? (error.stack ?? error.message) : error);
+  console.error(
+    'buildFirmware failed:',
+    error instanceof Error ? (error.stack ?? error.message) : error,
+  );
   process.exit(1);
 } finally {
   server.close();

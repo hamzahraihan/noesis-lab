@@ -64,7 +64,10 @@ describe('class instances', () => {
   });
 
   it('rejects an unknown class global loudly instead of answering zero', () => {
-    const typo = toSingleFileProject(`Buton b(A0);\nvoid setup() {}\nvoid loop() {}`, 'arduino-cpp');
+    const typo = toSingleFileProject(
+      `Buton b(A0);\nvoid setup() {}\nvoid loop() {}`,
+      'arduino-cpp',
+    );
     expect(() => FirmwareRuntime.fromProject(typo)).toThrowError(FirmwareProjectError);
     expect(() => FirmwareRuntime.fromProject(typo)).toThrowError("unknown class 'Buton'");
   });

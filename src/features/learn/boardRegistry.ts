@@ -227,22 +227,52 @@ export interface StarterWiring {
 }
 
 export const STARTER_WIRING: Readonly<Record<BoardId, StarterWiring>> = {
-  esp32: { ledPin: 2, led: 'R_D2', ground: 'L_GND', i2c: ['R_D21', 'R_D22'], spi: ['R_D5', 'R_D15', 'R_D18', 'R_D23'] },
-  uno: { ledPin: 2, led: 'J1_D2', ground: 'J1_GND', i2c: ['J3_A4', 'J3_A5'], spi: ['J1_D10', 'J1_D9', 'J1_D13', 'J1_D11'] },
+  esp32: {
+    ledPin: 2,
+    led: 'R_D2',
+    ground: 'L_GND',
+    i2c: ['R_D21', 'R_D22'],
+    spi: ['R_D5', 'R_D15', 'R_D18', 'R_D23'],
+  },
+  uno: {
+    ledPin: 2,
+    led: 'J1_D2',
+    ground: 'J1_GND',
+    i2c: ['J3_A4', 'J3_A5'],
+    spi: ['J1_D10', 'J1_D9', 'J1_D13', 'J1_D11'],
+  },
   /*
    * The Mega's SPI is the 50-53 block its own peripheral sits on, not the
    * 10-13 an Uno sketch names, and its SDA and SCL holes are shadowed by the
    * numbered 20 and 21 beside them -- so the bus is wired to the numbered
    * pair, which is what a pin number resolves to.
    */
-  mega: { ledPin: 2, led: 'J1_2', ground: 'J3_GND2', i2c: ['J1_20', 'J1_21'], spi: ['J2b_53', 'J1_9', 'J2a_52', 'J2b_51'] },
-  nano: { ledPin: 2, led: 'J1_2', ground: 'J1_GND', i2c: ['J3_A4', 'J3_A5'], spi: ['J1_10', 'J1_9', 'J2_13', 'J1_11'] },
+  mega: {
+    ledPin: 2,
+    led: 'J1_2',
+    ground: 'J3_GND2',
+    i2c: ['J1_20', 'J1_21'],
+    spi: ['J2b_53', 'J1_9', 'J2a_52', 'J2b_51'],
+  },
+  nano: {
+    ledPin: 2,
+    led: 'J1_2',
+    ground: 'J1_GND',
+    i2c: ['J3_A4', 'J3_A5'],
+    spi: ['J1_10', 'J1_9', 'J2_13', 'J1_11'],
+  },
   /*
    * The RP2040's analog block silkscreens A0-A3 on the GPIO its ADC samples,
    * so that is what the I2C pair is wired to. A4 and A5 name those same two
    * holes as their I2C aliases but carry no pin number of their own.
    */
-  rp2040: { ledPin: 2, led: 'J1_D2', ground: 'J1_GND', i2c: ['J3_A0', 'J3_A1'], spi: ['J1_D10', 'J1_D9', 'J2_D13', 'J1_D11'] },
+  rp2040: {
+    ledPin: 2,
+    led: 'J1_D2',
+    ground: 'J1_GND',
+    i2c: ['J3_A0', 'J3_A1'],
+    spi: ['J1_D10', 'J1_D9', 'J2_D13', 'J1_D11'],
+  },
   /*
    * GPIO17 for the LED rather than GPIO2, which is what every microcontroller
    * here uses: on a Pi that pin is I2C SDA1 and the starter bench already has a
@@ -264,5 +294,11 @@ export const STARTER_WIRING: Readonly<Record<BoardId, StarterWiring>> = {
    * the starter LED shares the SDA hole -- the one board here where a sketch
    * cannot own pin 2 for itself.
    */
-  franzininho: { ledPin: 2, led: 'J1_PB2', ground: 'J1_GND.1', i2c: ['J1_PB2', 'J1_PB3'], spi: ['J1_PB0', 'J1_PB5', 'J1_PB4', 'J1_PB3'] },
+  franzininho: {
+    ledPin: 2,
+    led: 'J1_PB2',
+    ground: 'J1_GND.1',
+    i2c: ['J1_PB2', 'J1_PB3'],
+    spi: ['J1_PB0', 'J1_PB5', 'J1_PB4', 'J1_PB3'],
+  },
 };

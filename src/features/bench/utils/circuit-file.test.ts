@@ -18,7 +18,10 @@ import {
  * newline — not the byte value of `\n`, which belongs to the working copy.
  */
 function shippedCircuitText(id: string): string {
-  return readFileSync(join(__dirname, '..', '..', 'learn', 'circuits', `${id}.json`), 'utf8').replace(/\r\n/g, '\n');
+  return readFileSync(
+    join(__dirname, '..', '..', 'learn', 'circuits', `${id}.json`),
+    'utf8',
+  ).replace(/\r\n/g, '\n');
 }
 
 describe('circuitFileText', () => {
@@ -60,13 +63,21 @@ describe('readCircuitFile', () => {
   });
 
   it('names the file when a part type does not exist', () => {
-    const bad = JSON.stringify({ version: 1, parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0 }], wires: [] });
-    expect(() => readCircuitFile(bad, 'handed-in.json')).toThrow(/handed-in\.json: unknown part type/);
+    const bad = JSON.stringify({
+      version: 1,
+      parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0 }],
+      wires: [],
+    });
+    expect(() => readCircuitFile(bad, 'handed-in.json')).toThrow(
+      /handed-in\.json: unknown part type/,
+    );
   });
 
   it('names the file when the version is one it cannot read', () => {
     const ahead = JSON.stringify({ version: 2, parts: [], wires: [] });
-    expect(() => readCircuitFile(ahead, 'tomorrow.json')).toThrow(/tomorrow\.json: unsupported circuit version: 2/);
+    expect(() => readCircuitFile(ahead, 'tomorrow.json')).toThrow(
+      /tomorrow\.json: unsupported circuit version: 2/,
+    );
   });
 
   /*
@@ -75,7 +86,11 @@ describe('readCircuitFile', () => {
    * split of duties is visible: this module is the format gate, not the bench's.
    */
   it('parses a boardless document and leaves the refusal to the bench', () => {
-    const boardless = { version: 1, parts: [{ id: 'led', type: 'led-red', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const boardless = {
+      version: 1,
+      parts: [{ id: 'led', type: 'led-red', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     expect(readCircuitFile(JSON.stringify(boardless), 'led.json').parts).toHaveLength(1);
   });
 });

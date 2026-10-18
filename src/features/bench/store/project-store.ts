@@ -9,21 +9,45 @@ export const benchProjectKey = (boardId: string) => `noesis:bench:${boardId}:pro
 export const CORRUPT_SAVE_NOTICE =
   'The saved project could not be read, so the bench opened a fresh project instead.';
 
-export function saveBenchProject(boardId: string, project: FirmwareProject, storage: Storage = localStorage): void {
+export function saveBenchProject(
+  boardId: string,
+  project: FirmwareProject,
+  storage: Storage = localStorage,
+): void {
   try {
     // `libraries`/`slots` ride along when present; JSON drops the undefined
     // keys, so older single-file saves read exactly as before.
-    storage.setItem(benchProjectKey(boardId), JSON.stringify({ language: project.language, files: project.files, activeName: project.activeName, libraries: project.libraries, slots: project.slots }));
-  } catch { /* quota or private mode: bench stays session-local */ }
+    storage.setItem(
+      benchProjectKey(boardId),
+      JSON.stringify({
+        language: project.language,
+        files: project.files,
+        activeName: project.activeName,
+        libraries: project.libraries,
+        slots: project.slots,
+      }),
+    );
+  } catch {
+    /* quota or private mode: bench stays session-local */
+  }
 }
 
-export function loadBenchProject(boardId: string, storage: Storage = localStorage): FirmwareProject | null {
+export function loadBenchProject(
+  boardId: string,
+  storage: Storage = localStorage,
+): FirmwareProject | null {
   try {
     const raw = storage.getItem(benchProjectKey(boardId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as FirmwareProject;
     if (!Array.isArray(parsed.files) || parsed.files.length === 0) return null;
-    const candidate: FirmwareProject = { language: parsed.language, files: parsed.files, activeName: parsed.activeName, libraries: parsed.libraries, slots: parsed.slots };
+    const candidate: FirmwareProject = {
+      language: parsed.language,
+      files: parsed.files,
+      activeName: parsed.activeName,
+      libraries: parsed.libraries,
+      slots: parsed.slots,
+    };
     // A save from an older shape, a hand-edited slot, an unknown library
     // shape, or over-the-cap content never reaches the editor: it falls back
     // the same way a corrupt one does.
@@ -77,6 +101,7 @@ export function resolveBenchSeed(request: BenchSeedRequest): BenchSeed {
     return { project: request.starter, shareError: CORRUPT_SHARE_NOTICE };
   }
   if (request.saved !== null) return { project: request.saved, shareError: null };
-  if (request.hadUnreadableSave) return { project: request.starter, shareError: CORRUPT_SAVE_NOTICE };
+  if (request.hadUnreadableSave)
+    return { project: request.starter, shareError: CORRUPT_SAVE_NOTICE };
   return { project: request.starter, shareError: null };
 }

@@ -27,7 +27,6 @@ import type { Exercise } from '../exercises';
 /** The module name both exercises carry, so the list page can group them. */
 const MODULE = 'Module 4 — Hardware Interrupts & Low-Level Control';
 
-
 /* ------------------------------------------------------------------ *
  * 4.1 -- High-Speed Rotary Encoder
  * ------------------------------------------------------------------ */
@@ -69,8 +68,8 @@ const ROTARY_ENCODER: Exercise = {
     { pin: 'D4', part: 'Rotary Encoder (KY-040)', terminal: 'SW', goesTo: 'the press contact' },
   ],
   steps: [
-    'Find the encoder\'s five pins, in a single column: CLK, DT, SW, VCC, GND.',
-    'Wire VCC to 5 V and GND to GND first. The module\'s outputs are 10 kΩ pull-ups to VCC, so with VCC left off they float and every reading is noise.',
+    "Find the encoder's five pins, in a single column: CLK, DT, SW, VCC, GND.",
+    "Wire VCC to 5 V and GND to GND first. The module's outputs are 10 kΩ pull-ups to VCC, so with VCC left off they float and every reading is noise.",
     'Wire CLK to D2 and DT to D3. On the Uno those two are the only pins with external interrupts, and the bench build needs both.',
     'Wire SW to D4. It is active-LOW and already pulled up inside the module; INPUT_PULLUP is only belt and braces.',
     'Put the sketch on the bench and run it. The serial line prints counts and rejected transitions twice a second.',
@@ -100,7 +99,7 @@ const ROTARY_ENCODER: Exercise = {
         pin: '5V',
         terminal: 'VCC',
         why:
-          'The encoder\'s three outputs are open-collector with 10 kΩ pull-ups to VCC, so this is ' +
+          "The encoder's three outputs are open-collector with 10 kΩ pull-ups to VCC, so this is " +
           'the wire that gives CLK, DT and SW defined levels. Leave it off and they float: ' +
           '`digitalRead` returns whatever the bench has, and counts and rejected both climb with ' +
           'nobody touching the knob — which reads as contact bounce rather than as a missing supply.',
@@ -167,7 +166,7 @@ const ROTARY_ENCODER: Exercise = {
         'applied as motion and one detent counts four, which reads as having written an x1 decoder ' +
         'against an x4 encoder rather than as having dropped the illegal rows.',
       'Seeding `state` to 0 instead of reading the pins in `setup()`. The first detent then compares ' +
-        'the encoder\'s real resting state against a state it was never in, so `rejected` jumps by ' +
+        "the encoder's real resting state against a state it was never in, so `rejected` jumps by " +
         'one the instant you start turning — a first-movement fault that looks like the very first ' +
         'detent being a bad one.',
     ],
@@ -257,7 +256,7 @@ void loop() {
 }`,
   fault: {
     break_:
-      'Pull the encoder\'s VCC jumper out of 5 V and turn the knob. The serial line fills with counts and rejected transitions that mean nothing.',
+      "Pull the encoder's VCC jumper out of 5 V and turn the knob. The serial line fills with counts and rejected transitions that mean nothing.",
     teaches:
       'CLK, DT and SW are open-collector outputs with 10 kΩ pull-ups to VCC, not driven lines. ' +
       'Unpowered, they float and digitalRead returns whatever noise the bench has. A floating ' +
@@ -288,9 +287,9 @@ void loop() {
       when: 'Everything works until I move the work out of loop() and into a handler, and then it gets worse.',
       answer:
         'A handler is not a normal function. Anything it shares with loop() must be volatile, or ' +
-        'the compiler keeps its own cached copy in a register and never sees the handler\'s write. ' +
+        "the compiler keeps its own cached copy in a register and never sees the handler's write. " +
         'And volatile is not atomic: on this 8-bit core a long is 32 bits and takes four ' +
-        'instructions to read, so a read that straddles the handler\'s store comes back torn — ' +
+        "instructions to read, so a read that straddles the handler's store comes back torn — " +
         'you would see 3 and 4, or −1 and 0. Wrap wide reads in ATOMIC_BLOCK, and keep the handler ' +
         'under about 20 µs: no delay(), no Serial, nothing that can miss the next edge.',
     },
@@ -298,7 +297,7 @@ void loop() {
       when: 'The count drifts by a ±1 every few seconds with nothing touching the knob.',
       answer:
         'That one is not the signal, it is the read. On hardware it is the torn 32-bit read: a ' +
-        'bare load of a long counter can straddle the handler\'s store and return a value that never ' +
+        "bare load of a long counter can straddle the handler's store and return a value that never " +
         'existed. Guard it with ATOMIC_BLOCK(ATOMIC_RESTORESTATE). If it happens here, check instead ' +
         'that nothing else in loop() writes counts, and that state is written on every illegal ' +
         'transition as well as every legal one.',
@@ -373,7 +372,6 @@ void loop() {
   circuit: CIRCUITS['4.1'],
 };
 
-
 /* ------------------------------------------------------------------ *
  * 4.2 -- Distance Radar with the HC-SR04
  * ------------------------------------------------------------------ */
@@ -413,7 +411,7 @@ const ULTRASONIC_RADAR: Exercise = {
       qty: 5,
       why:
         'One per LED, in series. From I = (5 V − Vf) / R that is about 13 mA per ' +
-        'pin, and five lit is 69 mA against the board\'s 200 mA budget.',
+        "pin, and five lit is 69 mA against the board's 200 mA budget.",
     },
     {
       name: '10k Resistor',
@@ -430,9 +428,24 @@ const ULTRASONIC_RADAR: Exercise = {
     },
   ],
   wiring: [
-    { pin: '5V', part: 'Ultrasonic Sensor (HC-SR04)', terminal: 'VCC', goesTo: 'the board 5 V pin' },
-    { pin: 'GND', part: 'Ultrasonic Sensor (HC-SR04)', terminal: 'GND', goesTo: 'the board GND pin' },
-    { pin: 'D6', part: 'Ultrasonic Sensor (HC-SR04)', terminal: 'TRIG', goesTo: 'the trigger line' },
+    {
+      pin: '5V',
+      part: 'Ultrasonic Sensor (HC-SR04)',
+      terminal: 'VCC',
+      goesTo: 'the board 5 V pin',
+    },
+    {
+      pin: 'GND',
+      part: 'Ultrasonic Sensor (HC-SR04)',
+      terminal: 'GND',
+      goesTo: 'the board GND pin',
+    },
+    {
+      pin: 'D6',
+      part: 'Ultrasonic Sensor (HC-SR04)',
+      terminal: 'TRIG',
+      goesTo: 'the trigger line',
+    },
     { pin: 'D7', part: 'Ultrasonic Sensor (HC-SR04)', terminal: 'ECHO', goesTo: 'the ECHO node' },
     { pin: '5V', part: '10k Resistor', terminal: 'a', goesTo: 'the red + rail' },
     { pin: 'D7', part: '10k Resistor', terminal: 'b', goesTo: 'the ECHO node' },
@@ -449,9 +462,9 @@ const ULTRASONIC_RADAR: Exercise = {
     'Wire TRIG straight to D6. Leave it alone after that — the sketch drives it, you do not.',
     'Wire ECHO to D7, with the 10 kΩ from that node back to 5 V. A floating ECHO reads noise, and the sketch will publish the timeout as a distance.',
     'Wire the five LEDs with a 220 Ω each: anodes to the red + rail, cathodes to D2, D3, D4, D5 and D8, so the pin sinks the current.',
-    'Wire the piezo\'s positive terminal to D9. Each LED and the buzzer gets its own pin, so the bar can update without blocking.',
+    "Wire the piezo's positive terminal to D9. Each LED and the buzzer gets its own pin, so the bar can update without blocking.",
     'Put the sketch on the bench and run it. The CSV line prints ms, raw µs, centimetres and a valid flag five times a second.',
-    'Set the sensor\'s Distance knob to 100 cm. raw_us should read 5800 and the distance about 100.',
+    "Set the sensor's Distance knob to 100 cm. raw_us should read 5800 and the distance about 100.",
     'Drop it to 2 cm and back to 400 cm, and watch the lit count step 5, 4, 3, 2 across each band edge.',
   ],
   solution: {
@@ -482,7 +495,7 @@ const ULTRASONIC_RADAR: Exercise = {
         pin: '5V',
         terminal: 'VCC',
         why:
-          'The module needs the full 5 V, and it shares the board\'s ground reference with the ' +
+          "The module needs the full 5 V, and it shares the board's ground reference with the " +
           'ECHO pull-up. On 3V3 the burst is short and the echo comes back weak, so the sketch ' +
           'measures a module that is barely switched on — which reads as a tired transducer rather ' +
           'than an underpowered one.',
@@ -499,7 +512,7 @@ const ULTRASONIC_RADAR: Exercise = {
         pin: 'D6',
         terminal: 'TRIG',
         why:
-          'This is the line the sketch drives, and the pin number is only the sketch\'s choice of ' +
+          "This is the line the sketch drives, and the pin number is only the sketch's choice of " +
           'which pin to write HIGH for 10 µs. Land it on a pin `setup()` never puts in `OUTPUT` and ' +
           'no burst is ever transmitted, so every reading comes back as no target however good the ' +
           'code is.',
@@ -524,7 +537,7 @@ const ULTRASONIC_RADAR: Exercise = {
         pin: 'D7',
         terminal: 'b',
         why:
-          'The pull-up belongs at the ECHO node itself, sharing that row with the module\'s output. ' +
+          "The pull-up belongs at the ECHO node itself, sharing that row with the module's output. " +
           'A pull-up on a neighbouring row is a pull-up of nothing: ECHO floats, and floating ECHO ' +
           'is indistinguishable from no target — so the bar goes dark intermittently and looks like ' +
           'a wiring fault somewhere else.',
@@ -551,7 +564,7 @@ const ULTRASONIC_RADAR: Exercise = {
         terminal: 'b',
         why:
           'The under-60 cm band, `PIN_LED2`. Miss this one and the step from two lit LEDs to one ' +
-          'happens at 60 cm instead, which reads as the sketch\'s comparison being wrong rather than ' +
+          "happens at 60 cm instead, which reads as the sketch's comparison being wrong rather than " +
           'as a resistor on the wrong pin.',
       },
       {
@@ -741,7 +754,7 @@ void loop() {
 }`,
   fault: {
     break_:
-      'Set the sensor\'s Distance knob past 170 cm and drop ECHO_TIMEOUT_US to 10000 in the sketch. Every reading comes back 0 and the bar goes dark.',
+      "Set the sensor's Distance knob past 170 cm and drop ECHO_TIMEOUT_US to 10000 in the sketch. Every reading comes back 0 and the bar goes dark.",
     teaches:
       'An echo wider than the window you gave it is not a distance — it is a measurement that did ' +
       'not happen. pulseIn reports that as 0, which converts to 0 cm; a timed-out poll leaves the ' +
@@ -804,7 +817,7 @@ void loop() {
         'reflection returns. That high time covers the distance twice, so d = t × v / 2. In ' +
         'centimetres one round trip at 20 °C takes 58.1 µs — v = 331.3 + 0.606T, which is 343.4 m/s at ' +
         '20 °C and 346.5 at 25 °C. Ignore temperature and you carry about 4 % error, more than the ' +
-        'sensor\'s own accuracy.',
+        "sensor's own accuracy.",
     },
     {
       term: 'The timing window, and the 60 ms recovery floor',
@@ -831,7 +844,7 @@ void loop() {
         'ECHO is a genuine open-drain output: it pulls the line low and does nothing else, so it ' +
         'needs a pull-up to 5 V and must never be left floating or the sketch will publish the ' +
         'timeout as a distance. On the Uno the pin is 5 V tolerant, so no divider is needed. On a ' +
-        '3.3 V board it is: 5 × 2k / (1k + 2k) = 3.33 V is the design\'s whole reason, and omitting ' +
+        "3.3 V board it is: 5 × 2k / (1k + 2k) = 3.33 V is the design's whole reason, and omitting " +
         'it is how a GPIO dies. The twin cannot show you this — its ECHO is a modelled open-drain ' +
         'line, not a 5 V push-pull output.',
     },

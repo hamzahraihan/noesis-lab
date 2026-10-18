@@ -2,24 +2,22 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { useFirmwareEditorStore } from './editor-store';
 
 beforeEach(() => {
-  useFirmwareEditorStore.setState(
-    {
-      notice: null,
-      libsPopupOpen: false,
-      slotId: null,
-      slotPath: null,
-      browseOpen: false,
-      indexLibs: null,
-      indexLoading: false,
-      query: '',
-      debouncedQuery: '',
-      category: 'all',
-      selectedName: null,
-      pinnedVersion: null,
-      installing: null,
-      installedIndex: new Map(),
-    },
-  );
+  useFirmwareEditorStore.setState({
+    notice: null,
+    libsPopupOpen: false,
+    slotId: null,
+    slotPath: null,
+    browseOpen: false,
+    indexLibs: null,
+    indexLoading: false,
+    query: '',
+    debouncedQuery: '',
+    category: 'all',
+    selectedName: null,
+    pinnedVersion: null,
+    installing: null,
+    installedIndex: new Map(),
+  });
 });
 
 describe('useFirmwareEditorStore', () => {
@@ -27,12 +25,18 @@ describe('useFirmwareEditorStore', () => {
     const s = useFirmwareEditorStore.getState();
     s.toggleLibsPopup();
     s.toggleBrowse();
-    expect(useFirmwareEditorStore.getState()).toMatchObject({ libsPopupOpen: true, browseOpen: true });
+    expect(useFirmwareEditorStore.getState()).toMatchObject({
+      libsPopupOpen: true,
+      browseOpen: true,
+    });
   });
 
   it('picks a slot file in one update', () => {
     useFirmwareEditorStore.getState().pickSlotFile('MyLib', 'MyLib.h');
-    expect(useFirmwareEditorStore.getState()).toMatchObject({ slotId: 'MyLib', slotPath: 'MyLib.h' });
+    expect(useFirmwareEditorStore.getState()).toMatchObject({
+      slotId: 'MyLib',
+      slotPath: 'MyLib.h',
+    });
   });
 
   it('merges restored builds without clobbering session installs', () => {

@@ -41,7 +41,6 @@ import { MODULE_4 } from './exercises/module-4-interrupts';
 
 export { EXERCISE_BOARD };
 
-
 /** One row of a wiring table: where a part's terminal goes, and what it meets. */
 export interface ExerciseWiring {
   /** The silkscreen name on the board: `D8`, `A0`, `5V`, `GND`. */
@@ -170,8 +169,6 @@ export interface Exercise {
   readonly circuit: CircuitDocument;
 }
 
-
-
 /* ------------------------------------------------------------------ *
  * 0.1 -- Your First Circuit
  * ------------------------------------------------------------------ */
@@ -247,7 +244,7 @@ const FIRST_CIRCUIT: Exercise = {
         pin: 'D8',
         terminal: 'b',
         why:
-          'This is the leg the sketch\'s `digitalWrite(RED, HIGH)` is aimed at, and the resistor in it ' +
+          "This is the leg the sketch's `digitalWrite(RED, HIGH)` is aimed at, and the resistor in it " +
           'is the only thing limiting the current. Leave it out and the LED does not merely get ' +
           'brighter — the pin pays for it, which is the fault this exercise ends with.',
       },
@@ -264,7 +261,7 @@ const FIRST_CIRCUIT: Exercise = {
         terminal: 'b',
         why:
           'Each LED needs its own resistor; the three share the rails and nothing else. Two LEDs ' +
-          'sharing one means the second changes the first\'s brightness, and uneven or flickering light ' +
+          "sharing one means the second changes the first's brightness, and uneven or flickering light " +
           'is read as a failing LED rather than as a shared component.',
       },
       {
@@ -378,7 +375,7 @@ void loop() {
       answer:
         'Two usual causes. Either that LED is the wrong way round — the long leg to the rail, the ' +
         'short leg to the resistor — or it is a different colour and needs a different resistor. Blue ' +
-        'runs at about 3.0 V forward voltage against red\'s 1.9 V, so blue is always the dimmer one ' +
+        "runs at about 3.0 V forward voltage against red's 1.9 V, so blue is always the dimmer one " +
         'on the same resistor.',
     },
     {
@@ -395,7 +392,7 @@ void loop() {
         'An LED does not limit its own current. Left alone it draws whatever it can until it destroys ' +
         'itself and possibly the pin. The resistor sets the current: I = (Vsupply − Vforward) / R. At ' +
         '5 V with a red LED (Vforward ≈ 1.9 V) and 220 Ω that is about 14 mA — bright, and well inside ' +
-        'the ATmega328P\'s 40 mA per-pin limit.',
+        "the ATmega328P's 40 mA per-pin limit.",
     },
     {
       term: 'VCC, 5V, GND — the two rails',

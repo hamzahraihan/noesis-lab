@@ -31,7 +31,11 @@ export class LUDecomposition {
   private readonly n: number;
   private singular = false;
 
-  constructor(matrix: Float64Array, size: number, reuse?: { lu: Float64Array; pivots: Int32Array }) {
+  constructor(
+    matrix: Float64Array,
+    size: number,
+    reuse?: { lu: Float64Array; pivots: Int32Array },
+  ) {
     this.n = size;
     if (reuse && reuse.lu.length >= size * size && reuse.pivots.length >= size) {
       // Hot path: copy into the shared buffers instead of allocating. The

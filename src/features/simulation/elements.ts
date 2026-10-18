@@ -55,13 +55,7 @@ export interface GroundElement {
   readonly node: number;
 }
 
-export type Element =
-  | Resistor
-  | VoltageSource
-  | CurrentSource
-  | Capacitor
-  | Diode
-  | GroundElement;
+export type Element = Resistor | VoltageSource | CurrentSource | Capacitor | Diode | GroundElement;
 
 /**
  * Datasheet parameters for a junction.

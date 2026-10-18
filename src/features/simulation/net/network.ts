@@ -155,7 +155,11 @@ export class VirtualNetwork {
    */
   begin(ssid: string, password: string): void {
     const status =
-      ssid !== NET_SSID ? WL_NO_SSID_AVAIL : password !== NET_PASSWORD ? WL_CONNECT_FAILED : WL_CONNECTED;
+      ssid !== NET_SSID
+        ? WL_NO_SSID_AVAIL
+        : password !== NET_PASSWORD
+          ? WL_CONNECT_FAILED
+          : WL_CONNECTED;
     this.joinState = { kind: 'joining', readyAt: this.nowMs() + NET_LATENCY_MS, status };
   }
 

@@ -150,7 +150,8 @@ describe('runHarness', () => {
     const report = await runHarness([ticking, ticking], () => counting, { yieldEvery: 1000 });
     expect(report.metrics.ticks).toBe(4);
     const text = formatReport({ ...report, projectId: 'demo', buildLabel: 'uno' });
-    const expectedFps = report.metrics.wallMs > 0 ? report.metrics.ticks / (report.metrics.wallMs / 1000) : 0;
+    const expectedFps =
+      report.metrics.wallMs > 0 ? report.metrics.ticks / (report.metrics.wallMs / 1000) : 0;
     expect(text).toContain(`fps ${expectedFps.toFixed(1)}`);
   });
 

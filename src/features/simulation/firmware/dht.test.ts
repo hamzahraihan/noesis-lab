@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { FirmwareRunner, type FirmwareServices } from './interpreter';
 
-function stubServices(
-  dht?: { begin: (pin: number) => void; temperature: (pin: number) => number; humidity: (pin: number) => number },
-): FirmwareServices {
+function stubServices(dht?: {
+  begin: (pin: number) => void;
+  temperature: (pin: number) => number;
+  humidity: (pin: number) => number;
+}): FirmwareServices {
   return {
     nowMs: () => 0,
     pinMode: () => {},

@@ -19,7 +19,12 @@ import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { compile } from '@/features/simulation';
 import type { CircuitDocument } from '@/features/simulation';
-import { AvrBackend, hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '@/features/simulation';
+import {
+  AvrBackend,
+  hexForSourcesHash,
+  parseIntelHex,
+  sourcesHashForProject,
+} from '@/features/simulation';
 import {
   compileInWorker as builtinCompileInWorker,
   compileProjectWithLibraries as builtinCompileProjectWithLibraries,
@@ -63,7 +68,6 @@ import { BusLog, type BusEntry } from '@/features/simulation';
 import type { Servo } from '@/features/parts';
 import type { Lcd1602 } from '@/features/parts';
 import { LcdDriver, type LcdCommand } from '@/features/parts';
-
 
 import type { TraceSample } from '@/features/simulation';
 import {
@@ -193,7 +197,13 @@ function compileDetail(error: unknown): string {
     if (typeof message === 'string' && message !== '') {
       const tab = (error as { tab?: unknown }).tab;
       const line = (error as { line?: unknown }).line;
-      if (typeof tab === 'string' && tab !== '' && typeof line === 'number' && Number.isInteger(line) && line > 0) {
+      if (
+        typeof tab === 'string' &&
+        tab !== '' &&
+        typeof line === 'number' &&
+        Number.isInteger(line) &&
+        line > 0
+      ) {
         return `${tab}:${line}: ${message}`;
       }
       return message;
@@ -298,7 +308,11 @@ export class Simulation {
 
   constructor(board: PartDefinition, deps?: SimulationDeps) {
     this.mcu = new McuRuntime(board);
-    this.engine = new Engine({ bench: this.builder.build(), mcu: this.mcu, dynamicState: this.controls });
+    this.engine = new Engine({
+      bench: this.builder.build(),
+      mcu: this.mcu,
+      dynamicState: this.controls,
+    });
     this.avrCompile = deps?.avrCompile ?? builtinCompileInWorker;
     this.avrProjectCompile = deps?.avrProjectCompile ?? builtinCompileProjectWithLibraries;
     this.indexInstalled = deps?.indexInstalled;
@@ -418,9 +432,11 @@ export class Simulation {
     return true;
   }
 
-
   /** Loads firmware, reporting a syntax error instead of throwing at the UI. */
-  loadFirmware(source: string | FirmwareProject, language: FirmwareLanguage = this.firmwareLanguage): void {
+  loadFirmware(
+    source: string | FirmwareProject,
+    language: FirmwareLanguage = this.firmwareLanguage,
+  ): void {
     const project = typeof source === 'string' ? toSingleFileProject(source, language) : source;
     this.firmwareProject = project;
     this.firmwareSource = project.files.find((f) => f.name === project.activeName)?.content ?? '';
@@ -548,7 +564,8 @@ export class Simulation {
     // entirely: the compile below must be reached synchronously, the way an
     // abort between Run and the worker call expects.
     const wantsIndex = libraryDeclarations(project).some((entry) => entry.source === 'index');
-    const indexInstalled = this.indexInstalled ?? (wantsIndex ? await this.restoreIndexInstalled(project) : undefined);
+    const indexInstalled =
+      this.indexInstalled ?? (wantsIndex ? await this.restoreIndexInstalled(project) : undefined);
     const declarationErrors = validateLibraries(project, { slots, indexInstalled });
     if (declarationErrors.length > 0) {
       // Offline-friendly: no worker traffic, straight to the interpreter fallback.
@@ -584,9 +601,13 @@ export class Simulation {
           signal,
         );
       } else {
-        compiled = await this.avrCompile(packed.source, () => {
-          this.compileState = 'compiling';
-        }, signal);
+        compiled = await this.avrCompile(
+          packed.source,
+          () => {
+            this.compileState = 'compiling';
+          },
+          signal,
+        );
       }
     } catch (error) {
       // A newer build owns the verdict now; the stale one stays silent.
@@ -721,7 +742,8 @@ export class Simulation {
     // interpreter cannot parse still runs from the HEX, so reloading here
     // would discard the fresh core for a syntax error and leave the bench
     // dark. Only reload when neither runner exists.
-    if (!this.runner && !this.avrBackend && this.firmwareProject) this.loadFirmware(this.firmwareProject);
+    if (!this.runner && !this.avrBackend && this.firmwareProject)
+      this.loadFirmware(this.firmwareProject);
     this.running = true;
   }
 
@@ -788,7 +810,8 @@ export class Simulation {
    * rewiring: the nets it refers to are the ones the pins have now.
    */
   private resolveMeterProbes(): void {
-    const netOf = (pinId: string | null) => (pinId === null ? GROUND : this.engine.netOfMcuPin(pinId));
+    const netOf = (pinId: string | null) =>
+      pinId === null ? GROUND : this.engine.netOfMcuPin(pinId);
     this.meter.setProbes(netOf(this.meterPinIds.red), netOf(this.meterPinIds.black));
     this.engine.setMeter(this.meter);
   }
@@ -873,12 +896,7 @@ export class Simulation {
    * the header and the wire it places cannot disagree about what colour "next"
    * means.
    */
-  routeWire(
-    from: Terminal,
-    to: Terminal,
-    bends: readonly BendPoint[] = [],
-    colour?: string,
-  ): void {
+  routeWire(from: Terminal, to: Terminal, bends: readonly BendPoint[] = [], colour?: string): void {
     this.checkpoint();
     this.builder.addWire(from.x, from.y, to.x, to.y, {
       colour: colour ?? nextAutomaticWireColour(this.bench.wires.length),
@@ -1005,7 +1023,8 @@ export class Simulation {
    */
   loadCircuit(doc: CircuitDocument): string[] {
     const { bench, snapshot, dynamicState, errors } = compile(doc);
-    if (errors.length > 0 || bench === null || snapshot === null || dynamicState === null) return errors;
+    if (errors.length > 0 || bench === null || snapshot === null || dynamicState === null)
+      return errors;
     // The pin model belongs to the board this Simulation was built for, so a
     // document naming another board -- or no board at all -- would place its
     // parts against the wrong pin map and wire nothing. Document and bench have
@@ -1034,14 +1053,14 @@ export class Simulation {
    * sketch would run and quietly read nothing, which is indistinguishable from
    * the API being broken.
    */
-/**
- * Insulation colour for a wire an example places, by the signal it carries.
- *
- * A real bench has a drawer of coloured Dupont wires: power is red, ground is
- * black, the I2C pair reads yellow/green at a glance, and signal lines cycle
- * the automatic palette so consecutive jumpers differ. Colour carries no
- * electrical meaning -- this is purely so a bench stops being a wall of red.
- */
+  /**
+   * Insulation colour for a wire an example places, by the signal it carries.
+   *
+   * A real bench has a drawer of coloured Dupont wires: power is red, ground is
+   * black, the I2C pair reads yellow/green at a glance, and signal lines cycle
+   * the automatic palette so consecutive jumpers differ. Colour carries no
+   * electrical meaning -- this is purely so a bench stops being a wall of red.
+   */
   placeExampleDevice(
     what: ExampleDevice,
     x: number,
@@ -1096,7 +1115,10 @@ export class Simulation {
       wire('SDA', byNumber(sda));
       wire('SCL', byNumber(scl));
       wire('GND', ground);
-      wire('VCC', this.firstGpio((pin) => pin.role === 'power'));
+      wire(
+        'VCC',
+        this.firstGpio((pin) => pin.role === 'power'),
+      );
 
       /*
        * A character LCD also needs its six control lines, or the glass stays
@@ -1114,9 +1136,9 @@ export class Simulation {
         const taken = new Set([...this.mcu.i2cPins, ...this.mcu.spiPins]);
         // A pin firmware cannot name is no use here: the library addresses its
         // own lines by number, so a hole with none is not one it can hold.
-        const spare = this.mcu.pins().filter(
-          (pin) => pin.role === 'gpio' && pin.gpio !== undefined && !taken.has(pin.gpio),
-        );
+        const spare = this.mcu
+          .pins()
+          .filter((pin) => pin.role === 'gpio' && pin.gpio !== undefined && !taken.has(pin.gpio));
         lcdLines.forEach((line, index) => {
           const boardPin = spare[index];
           if (!boardPin) return;
@@ -1200,7 +1222,7 @@ export class Simulation {
    */
   pinAt(part: PartInstance, pinId: string): Terminal | null {
     const id = part.terminals[pinId];
-    return id === undefined ? null : this.bench.terminals[id] ?? null;
+    return id === undefined ? null : (this.bench.terminals[id] ?? null);
   }
 
   /** The first board pin matching a predicate, which is how a board is asked. */
@@ -1531,7 +1553,10 @@ export class Simulation {
     this.resolveMeterProbes();
     // The panel this driver is talking to may have just left the bench (a
     // replaced circuit); the next call binds to whatever is on it now.
-    if (this.lcdDriverPartId !== null && !this.bench.parts.some((part) => part.id === this.lcdDriverPartId)) {
+    if (
+      this.lcdDriverPartId !== null &&
+      !this.bench.parts.some((part) => part.id === this.lcdDriverPartId)
+    ) {
       this.lcdDriver = null;
       this.lcdDriverPartId = null;
     }
@@ -1679,7 +1704,6 @@ export class Simulation {
     this.engine.settle();
   }
 
-
   /**
    * The panel's own header, resolved to board pin numbers.
    *
@@ -1693,7 +1717,12 @@ export class Simulation {
    * pin: two holes can share one, and looking a control line up by the net it
    * landed on finds whichever of them the board happens to list first.
    */
-  private lcdPins(): { rs: number; enable: number; data: readonly number[]; all: readonly number[] } {
+  private lcdPins(): {
+    rs: number;
+    enable: number;
+    data: readonly number[];
+    all: readonly number[];
+  } {
     const on = (line: string): number => this.lcdBoardPins.get(line) ?? -1;
     // D4 first: the panel's bit 4 is on its D4, and the order here is the
     // order the host writes them in.
@@ -1865,7 +1894,7 @@ export class Simulation {
       // constructor body, and a field initializer would run before it.
       tft: createTftPort(this.engine, () => this.displayControllers()),
       map: this.map,
-    net: createNetPort(this.net),
+      net: createNetPort(this.net),
       nowMs: () => this.engine.timeMs,
       pinMode: (pin, mode) => {
         // No settle here: pin writes only retarget future solves, and the

@@ -108,7 +108,8 @@ function currentManifest() {
   if (manifest === null) return null;
   if (manifest.sourcesHash !== computeSourcesHash()) return null;
   if (!existsSync(CORE) || sha256(readFileSync(CORE)) !== manifest.sha256) return null;
-  if (!existsSync(COUNTER) || sha256(readFileSync(COUNTER)) !== manifest.counter?.sha256) return null;
+  if (!existsSync(COUNTER) || sha256(readFileSync(COUNTER)) !== manifest.counter?.sha256)
+    return null;
   return manifest;
 }
 

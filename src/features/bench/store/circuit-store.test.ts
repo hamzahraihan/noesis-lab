@@ -17,7 +17,11 @@ describe('circuit store', () => {
       setItem: (k: string, v: string) => void backing.set(k, v),
       removeItem: (k: string) => void backing.delete(k),
     };
-    const doc: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     saveCircuit('uno', doc, storage as Storage);
     expect(loadCircuit('uno', storage as Storage)).toEqual(doc);
     expect(circuitStorageKey('uno')).toBe('noesis:circuit:uno');
@@ -34,7 +38,14 @@ describe('circuit store', () => {
 
   it('returns null when the save fails circuit validation', () => {
     const backing = new Map<string, string>([
-      [circuitStorageKey('uno'), JSON.stringify({ version: 1.5, parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] })],
+      [
+        circuitStorageKey('uno'),
+        JSON.stringify({
+          version: 1.5,
+          parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+          wires: [],
+        }),
+      ],
     ]);
     const storage = {
       getItem: (k: string) => backing.get(k) ?? null,
@@ -47,7 +58,14 @@ describe('circuit store', () => {
 
   it('returns null when the save fails to compile', () => {
     const backing = new Map<string, string>([
-      [circuitStorageKey('uno'), JSON.stringify({ version: 1, parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }], wires: [] })],
+      [
+        circuitStorageKey('uno'),
+        JSON.stringify({
+          version: 1,
+          parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }],
+          wires: [],
+        }),
+      ],
     ]);
     const storage = {
       getItem: (k: string) => backing.get(k) ?? null,
@@ -97,8 +115,16 @@ describe('circuit store', () => {
 
 describe('resolveCircuitSeed', () => {
   const board = 'arduino-uno-r3';
-  const shared: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] };
-  const saved: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'arduino-uno-r3', x: 1, y: 1, rotation: 0 }], wires: [] };
+  const shared: CircuitDocument = {
+    version: 1,
+    parts: [{ id: 'b', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+    wires: [],
+  };
+  const saved: CircuitDocument = {
+    version: 1,
+    parts: [{ id: 'b', type: 'arduino-uno-r3', x: 1, y: 1, rotation: 0 }],
+    wires: [],
+  };
   const decode = (payload: string): CircuitDocument | null =>
     payload === 'valid-payload' ? shared : null;
 
@@ -140,7 +166,11 @@ describe('resolveCircuitSeed', () => {
   });
 
   it('falls back with a notice on a share payload that fails to compile', () => {
-    const badDoc: CircuitDocument = { version: 1, parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const badDoc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     const decodeBad = (payload: string): CircuitDocument | null =>
       payload === 'bad-payload' ? badDoc : null;
     const seed = resolveCircuitSeed({
@@ -162,7 +192,11 @@ describe('resolveCircuitSeed', () => {
    * sentence -- the notice the operator reads, not the compiler's version.
    */
   it('refuses a share payload wired for another board', () => {
-    const esp32Doc: CircuitDocument = { version: 1, parts: [{ id: 'b', type: 'esp32-devkit-v1', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const esp32Doc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'b', type: 'esp32-devkit-v1', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     const seed = resolveCircuitSeed({
       boardDefinitionId: board,
       pinned: false,
@@ -176,7 +210,11 @@ describe('resolveCircuitSeed', () => {
   });
 
   it('refuses a document that names no board at all', () => {
-    const boardlessDoc: CircuitDocument = { version: 1, parts: [{ id: 'led', type: 'led-red', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const boardlessDoc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'led', type: 'led-red', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     const seed = resolveCircuitSeed({
       boardDefinitionId: board,
       pinned: false,
@@ -215,7 +253,11 @@ describe('resolveCircuitSeed', () => {
   });
 
   it('falls back with a notice on a saved doc that fails to compile', () => {
-    const badSaved: CircuitDocument = { version: 1, parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const badSaved: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     const seed = resolveCircuitSeed({
       boardDefinitionId: board,
       pinned: false,

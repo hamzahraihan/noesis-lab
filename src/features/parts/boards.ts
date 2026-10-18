@@ -9,7 +9,6 @@
 
 import type { BoardPin, PartDefinition, PinSpec } from './catalog';
 
-
 /**
  * ESP32-WROOM-32 DevKit V1, the 30-pin variant.
  *
@@ -62,8 +61,8 @@ const ESP32_RIGHT_HEADER: ReadonlyArray<[string, string]> = [
  * the element actually paints rather than near them.
  */
 const ESP32_PIN_Y_MM: readonly number[] = [
-  6.35, 8.99, 11.64, 14.05, 16.64, 19.10, 21.61, 24.15, 26.72, 29.31, 31.75, 34.49,
-  36.91, 39.42, 41.94,
+  6.35, 8.99, 11.64, 14.05, 16.64, 19.1, 21.61, 24.15, 26.72, 29.31, 31.75, 34.49, 36.91, 39.42,
+  41.94,
 ];
 
 /** Column centres, from the same conversion. */
@@ -74,16 +73,50 @@ const ESP32_ROW_X_RIGHT = 26.81;
 // header calls GPIO36 "VP", GPIO39 "VN" and GPIO15 "D15" -- and keying this by
 // silkscreen silently leaves those three pins unreachable from firmware.
 const ESP32_GPIO_NUMBERS: Readonly<Record<string, number>> = {
-  EN: -1, VP: 36, VN: 39, GPIO34: 34, GPIO35: 35, GPIO32: 32,
-  GPIO33: 33, GPIO25: 25, GPIO26: 26, GPIO27: 27, GPIO14: 14, GPIO12: 12,
-  GND: -1, GPIO13: 13, D9: 9, D23: 23, D22: 22, TX0: 1, RX0: 3, D21: 21,
-  D19: 19, D18: 18, D5: 5, TX2: 17, RX2: 16, D4: 4, D2: 2, D15: 15,
-  D14: 14, D13: 13, D12: 12, VIN: -1, '3V3': -1,
+  EN: -1,
+  VP: 36,
+  VN: 39,
+  GPIO34: 34,
+  GPIO35: 35,
+  GPIO32: 32,
+  GPIO33: 33,
+  GPIO25: 25,
+  GPIO26: 26,
+  GPIO27: 27,
+  GPIO14: 14,
+  GPIO12: 12,
+  GND: -1,
+  GPIO13: 13,
+  D9: 9,
+  D23: 23,
+  D22: 22,
+  TX0: 1,
+  RX0: 3,
+  D21: 21,
+  D19: 19,
+  D18: 18,
+  D5: 5,
+  TX2: 17,
+  RX2: 16,
+  D4: 4,
+  D2: 2,
+  D15: 15,
+  D14: 14,
+  D13: 13,
+  D12: 12,
+  VIN: -1,
+  '3V3': -1,
 };
 
 /** ADC1 channels for the ESP32 pins that expose them. */
 const ESP32_ADC_CHANNELS: Readonly<Record<string, number>> = {
-  VP: 0, VN: 3, GPIO34: 6, GPIO35: 7, GPIO32: 4, GPIO33: 5, GPIO27: 1,
+  VP: 0,
+  VN: 3,
+  GPIO34: 6,
+  GPIO35: 7,
+  GPIO32: 4,
+  GPIO33: 5,
+  GPIO27: 1,
 };
 
 /** Header labels of the pins with no output driver or internal pull-up. */
@@ -108,7 +141,13 @@ function esp32BoardPin(id: string, headerLabel: string, silkscreen: string): Boa
   return {
     id,
     label: silkscreen,
-    role: isPower ? 'power' : isGround ? 'ground' : headerLabel in ESP32_ADC_CHANNELS ? 'adc' : 'gpio',
+    role: isPower
+      ? 'power'
+      : isGround
+        ? 'ground'
+        : headerLabel in ESP32_ADC_CHANNELS
+          ? 'adc'
+          : 'gpio',
     gpio: gpio >= 0 ? gpio : undefined,
     adc: ESP32_ADC_CHANNELS[headerLabel],
     strapLevel: ESP32_STRAPPING[headerLabel],
@@ -133,7 +172,14 @@ function esp32Definition(): PartDefinition {
         label: silkscreen,
         x,
         y: ESP32_PIN_Y_MM[index],
-        net: silkscreen === 'GND' ? 'GND' : silkscreen === 'VIN' ? 'VIN' : silkscreen === '3V3' ? '3V3' : undefined,
+        net:
+          silkscreen === 'GND'
+            ? 'GND'
+            : silkscreen === 'VIN'
+              ? 'VIN'
+              : silkscreen === '3V3'
+                ? '3V3'
+                : undefined,
       });
       boardPins.push(esp32BoardPin(id, headerLabel, silkscreen));
     });
@@ -190,7 +236,7 @@ const UNO_TOP_ROW: ReadonlyArray<readonly [string, string, number]> = [
   ['GND', 'GND', 30.56],
   ['13', 'D13', 33.07],
   ['12', 'D12', 35.59],
-  ['11', 'D11', 38.10],
+  ['11', 'D11', 38.1],
   ['10', 'D10', 40.61],
   ['9', 'D9', 43.13],
   ['8', 'D8', 45.77],
@@ -201,7 +247,7 @@ const UNO_TOP_ROW: ReadonlyArray<readonly [string, string, number]> = [
   ['3', 'D3', 60.06],
   ['2', 'D2', 62.57],
   ['1', 'TX', 65.09],
-  ['0', 'RX', 67.60],
+  ['0', 'RX', 67.6],
 ];
 
 /** Bottom edge: the power block first, then the analog inputs. */
@@ -218,7 +264,7 @@ const UNO_BOTTOM_ROW: ReadonlyArray<readonly [string, string, number]> = [
   ['A2', 'A2', 60.06],
   ['A3', 'A3', 62.57],
   ['A4', 'A4', 65.09],
-  ['A5', 'A5', 67.60],
+  ['A5', 'A5', 67.6],
 ];
 
 /** The two rows, in the artwork's coordinate space. */
@@ -240,18 +286,44 @@ const UNO_ANALOG_FROM = 7;
  * reaches the bus through A4 and A5, which is what the hardware does too.
  */
 const UNO_PIN_GPIOS: Readonly<Record<string, number>> = {
-  13: 13, 12: 12, 11: 11, 10: 10, 9: 9, 8: 8,
-  7: 7, 6: 6, 5: 5, 4: 4, 3: 3, 2: 2, 1: 1, 0: 0,
-  A0: 14, A1: 15, A2: 16, A3: 17, A4: 18, A5: 19,
+  13: 13,
+  12: 12,
+  11: 11,
+  10: 10,
+  9: 9,
+  8: 8,
+  7: 7,
+  6: 6,
+  5: 5,
+  4: 4,
+  3: 3,
+  2: 2,
+  1: 1,
+  0: 0,
+  A0: 14,
+  A1: 15,
+  A2: 16,
+  A3: 17,
+  A4: 18,
+  A5: 19,
 };
 
 const UNO_ANALOG: Readonly<Record<string, number>> = {
-  A0: 0, A1: 1, A2: 2, A3: 3, A4: 4, A5: 5,
+  A0: 0,
+  A1: 1,
+  A2: 2,
+  A3: 3,
+  A4: 4,
+  A5: 5,
 };
 
 function unoBoardPin(id: string, headerLabel: string): BoardPin {
   const isGround = headerLabel === 'GND';
-  const isPower = headerLabel === '5V' || headerLabel === '3V3' || headerLabel === 'VIN' || headerLabel === 'IOREF';
+  const isPower =
+    headerLabel === '5V' ||
+    headerLabel === '3V3' ||
+    headerLabel === 'VIN' ||
+    headerLabel === 'IOREF';
   return {
     id,
     label: headerLabel,
@@ -275,10 +347,13 @@ function unoDefinition(): PartDefinition {
       x,
       y,
       net:
-        headerLabel === 'GND' ? 'GND'
-        : headerLabel === '5V' ? '5V'
-        : headerLabel === '3V3' ? '3V3'
-        : undefined,
+        headerLabel === 'GND'
+          ? 'GND'
+          : headerLabel === '5V'
+            ? '5V'
+            : headerLabel === '3V3'
+              ? '3V3'
+              : undefined,
     });
     boardPins.push(unoBoardPin(id, headerLabel));
   };
@@ -465,25 +540,104 @@ const MEGA_J3: ReadonlyArray<HeaderHole> = [
  * one board pin, and two of them claiming it means one loses its terminal.
  */
 const MEGA_PIN_GPIOS: Readonly<Record<string, number>> = {
-  0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7,
-  8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15,
-  16: 16, 17: 17, 18: 18, 19: 19, 20: 20, 21: 21, 22: 22, 23: 23,
-  24: 24, 25: 25, 26: 26, 27: 27, 28: 28, 29: 29, 30: 30, 31: 31,
-  32: 32, 33: 33, 34: 34, 35: 35, 36: 36, 37: 37, 38: 38, 39: 39,
-  40: 40, 41: 41, 42: 42, 43: 43, 44: 44, 45: 45, 46: 46, 47: 47,
-  48: 48, 49: 49, 50: 50, 51: 51, 52: 52, 53: 53,
-  A0: 54, A1: 55, A2: 56, A3: 57, A4: 58, A5: 59, A6: 60, A7: 61,
-  A8: 62, A9: 63, A10: 64, A11: 65, A12: 66, A13: 67, A14: 68, A15: 69,
+  0: 0,
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 5,
+  6: 6,
+  7: 7,
+  8: 8,
+  9: 9,
+  10: 10,
+  11: 11,
+  12: 12,
+  13: 13,
+  14: 14,
+  15: 15,
+  16: 16,
+  17: 17,
+  18: 18,
+  19: 19,
+  20: 20,
+  21: 21,
+  22: 22,
+  23: 23,
+  24: 24,
+  25: 25,
+  26: 26,
+  27: 27,
+  28: 28,
+  29: 29,
+  30: 30,
+  31: 31,
+  32: 32,
+  33: 33,
+  34: 34,
+  35: 35,
+  36: 36,
+  37: 37,
+  38: 38,
+  39: 39,
+  40: 40,
+  41: 41,
+  42: 42,
+  43: 43,
+  44: 44,
+  45: 45,
+  46: 46,
+  47: 47,
+  48: 48,
+  49: 49,
+  50: 50,
+  51: 51,
+  52: 52,
+  53: 53,
+  A0: 54,
+  A1: 55,
+  A2: 56,
+  A3: 57,
+  A4: 58,
+  A5: 59,
+  A6: 60,
+  A7: 61,
+  A8: 62,
+  A9: 63,
+  A10: 64,
+  A11: 65,
+  A12: 66,
+  A13: 67,
+  A14: 68,
+  A15: 69,
 };
 
 const MEGA_ANALOG: Readonly<Record<string, number>> = {
-  A0: 0, A1: 1, A2: 2, A3: 3, A4: 4, A5: 5, A6: 6, A7: 7,
-  A8: 8, A9: 9, A10: 10, A11: 11, A12: 12, A13: 13, A14: 14, A15: 15,
+  A0: 0,
+  A1: 1,
+  A2: 2,
+  A3: 3,
+  A4: 4,
+  A5: 5,
+  A6: 6,
+  A7: 7,
+  A8: 8,
+  A9: 9,
+  A10: 10,
+  A11: 11,
+  A12: 12,
+  A13: 13,
+  A14: 14,
+  A15: 15,
 };
 
 function megaBoardPin(id: string, headerLabel: string): BoardPin {
   const isGround = headerLabel === 'GND';
-  const isPower = headerLabel === '5V' || headerLabel === '3V3' || headerLabel === 'VIN' || headerLabel === 'IOREF';
+  const isPower =
+    headerLabel === '5V' ||
+    headerLabel === '3V3' ||
+    headerLabel === 'VIN' ||
+    headerLabel === 'IOREF';
   return {
     id,
     label: headerLabel,
@@ -510,10 +664,13 @@ function megaDefinition(): PartDefinition {
       x,
       y,
       net:
-        headerLabel === 'GND' ? 'GND'
-        : headerLabel === '5V' ? '5V'
-        : headerLabel === '3V3' ? '3V3'
-        : undefined,
+        headerLabel === 'GND'
+          ? 'GND'
+          : headerLabel === '5V'
+            ? '5V'
+            : headerLabel === '3V3'
+              ? '3V3'
+              : undefined,
     });
     boardPins.push(megaBoardPin(id, headerLabel));
   };
@@ -618,13 +775,39 @@ const NANO_ICSP: ReadonlyArray<HeaderHole> = [
 ];
 
 const NANO_PIN_GPIOS: Readonly<Record<string, number>> = {
-  0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7,
-  8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13,
-  A0: 14, A1: 15, A2: 16, A3: 17, A4: 18, A5: 19, A6: 20, A7: 21,
+  0: 0,
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 4,
+  5: 5,
+  6: 6,
+  7: 7,
+  8: 8,
+  9: 9,
+  10: 10,
+  11: 11,
+  12: 12,
+  13: 13,
+  A0: 14,
+  A1: 15,
+  A2: 16,
+  A3: 17,
+  A4: 18,
+  A5: 19,
+  A6: 20,
+  A7: 21,
 };
 
 const NANO_ANALOG: Readonly<Record<string, number>> = {
-  A0: 0, A1: 1, A2: 2, A3: 3, A4: 4, A5: 5, A6: 6, A7: 7,
+  A0: 0,
+  A1: 1,
+  A2: 2,
+  A3: 3,
+  A4: 4,
+  A5: 5,
+  A6: 6,
+  A7: 7,
 };
 
 function nanoBoardPin(id: string, headerLabel: string): BoardPin {
@@ -660,10 +843,13 @@ function nanoDefinition(): PartDefinition {
       x,
       y,
       net:
-        headerLabel === 'GND' ? 'GND'
-        : headerLabel === '5V' ? '5V'
-        : headerLabel === '3V3' ? '3V3'
-        : undefined,
+        headerLabel === 'GND'
+          ? 'GND'
+          : headerLabel === '5V'
+            ? '5V'
+            : headerLabel === '3V3'
+              ? '3V3'
+              : undefined,
     });
     boardPins.push(nanoBoardPin(id, headerLabel));
   };
@@ -758,9 +944,20 @@ const RP2040_J3: ReadonlyArray<HeaderHole> = [
  * TX and RX are pins 0 and 1.
  */
 const RP2040_PIN_GPIOS: Readonly<Record<string, number>> = {
-  TX: 0, RX: 1,
-  D2: 2, D3: 3, D4: 4, D5: 5, D6: 6, D7: 7, D8: 8, D9: 9,
-  D10: 10, D11: 11, D12: 12, D13: 13,
+  TX: 0,
+  RX: 1,
+  D2: 2,
+  D3: 3,
+  D4: 4,
+  D5: 5,
+  D6: 6,
+  D7: 7,
+  D8: 8,
+  D9: 9,
+  D10: 10,
+  D11: 11,
+  D12: 12,
+  D13: 13,
 };
 
 /**
@@ -817,10 +1014,13 @@ function rp2040Definition(): PartDefinition {
       x,
       y,
       net:
-        headerLabel === 'GND' ? 'GND'
-        : headerLabel === '5V' ? '5V'
-        : headerLabel === '3V3' ? '3V3'
-        : undefined,
+        headerLabel === 'GND'
+          ? 'GND'
+          : headerLabel === '5V'
+            ? '5V'
+            : headerLabel === '3V3'
+              ? '3V3'
+              : undefined,
     });
     boardPins.push(rp2040BoardPin(id, headerLabel));
   };
@@ -1048,20 +1248,16 @@ const PI_HEADER_X = 24.0;
 const PI_HEADER_Y = 7.5;
 const PI_HEADER_PITCH = 2.54;
 
-function raspberryPiBoardPin(
-  id: string,
-  label: string,
-  physical: number,
-): BoardPin {
+function raspberryPiBoardPin(id: string, label: string, physical: number): BoardPin {
   const gpio = label.startsWith('GPIO') ? Number(label.slice(4)) : undefined;
   const isGround = label === 'GND';
   const isPower = label === '3V3' || label === '5V';
 
   /*
    * GPIO0 and GPIO1 are on the header but reserved for the board's own HAT ID
- * EEPROM lines. gpiozero will happily construct a device on them and nothing
- * will happen, which is exactly what happens on real hardware -- so they are
- * declared as what they are rather than quietly left out of the count.
+   * EEPROM lines. gpiozero will happily construct a device on them and nothing
+   * will happen, which is exactly what happens on real hardware -- so they are
+   * declared as what they are rather than quietly left out of the count.
    */
   const reserved = physical === 27 || physical === 28;
 

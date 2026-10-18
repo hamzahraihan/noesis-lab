@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CPU, AVRIOPort, portBConfig, portDConfig, timer0Config, timer1Config, timer2Config } from 'avr8js';
+import {
+  CPU,
+  AVRIOPort,
+  portBConfig,
+  portDConfig,
+  timer0Config,
+  timer1Config,
+  timer2Config,
+} from 'avr8js';
 import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -32,7 +40,12 @@ describe('gpio push path', () => {
     new AVRIOPort(cpu, portBConfig);
     new AVRIOPort(cpu, portDConfig);
     const mcu = new McuRuntime(arduinoUnoR3());
-    attachGpioBridge(cpu, mcu, () => 0, () => false);
+    attachGpioBridge(
+      cpu,
+      mcu,
+      () => 0,
+      () => false,
+    );
     cpu.writeData(36, 0x20); // DDRB bit 5: output
     cpu.writeData(37, 0x20); // PORTB bit 5: high
     expect(mcu.configurationOf(mcu.pinIdForGpio(13)!).direction).toBe('output');
@@ -46,7 +59,12 @@ describe('gpio read path', () => {
     new AVRIOPort(cpu, portDConfig);
     const mcu = new McuRuntime(arduinoUnoR3());
     let pressed = false;
-    attachGpioBridge(cpu, mcu, () => 0, (gpio) => (gpio === 13 ? pressed : false));
+    attachGpioBridge(
+      cpu,
+      mcu,
+      () => 0,
+      (gpio) => (gpio === 13 ? pressed : false),
+    );
     expect(cpu.readData(35) & 0x20).toBe(0);
     pressed = true;
     expect(cpu.readData(35) & 0x20).toBe(0x20);
@@ -90,7 +108,8 @@ describe('avr timing core', () => {
     expect(settles).toBe(2);
   });
 
-  it('clamps a single step to 40ms', () => {    let settles = 0;
+  it('clamps a single step to 40ms', () => {
+    let settles = 0;
     const backend = new AvrBackend(new Uint16Array(64), {
       mcu: new McuRuntime(arduinoUnoR3()),
       nowMs: () => 0,
@@ -168,7 +187,9 @@ describe('avr timer0', () => {
     const before = backend.millis();
     backend.step(2);
     expect(cpu.readData(timer0Config.TCNT)).not.toBe(0);
-    expect(cpu.readData(timer1Config.TCNT) | (cpu.readData(timer1Config.TCNT + 1) << 8)).not.toBe(0);
+    expect(cpu.readData(timer1Config.TCNT) | (cpu.readData(timer1Config.TCNT + 1) << 8)).not.toBe(
+      0,
+    );
     expect(backend.millis()).toBeGreaterThan(before);
   });
 });
@@ -210,9 +231,7 @@ describe('intel-hex loader', () => {
   });
 
   it('rejects data past the 32KB flash', () => {
-    expect(() => parseIntelHex(':02800000FFFF80\n:00000001FF\n')).toThrow(
-      'unsupported HEX record',
-    );
+    expect(() => parseIntelHex(':02800000FFFF80\n:00000001FF\n')).toThrow('unsupported HEX record');
   });
 });
 
@@ -224,7 +243,9 @@ describe('hex asset gating', () => {
     const build = galleryById('alarm-clock')!.builds[0]!;
     const project = firmwareForBuild(build, 'arduino-cpp');
     const parts = [build.sketch, ...(build.files ?? []).map((f) => `${f.name}\n${f.content}`)];
-    expect(sourcesHashForProject(project)).toBe(createHash('sha256').update(parts.join('\n')).digest('hex'));
+    expect(sourcesHashForProject(project)).toBe(
+      createHash('sha256').update(parts.join('\n')).digest('hex'),
+    );
   });
 
   it('finds no HEX while the toolchain build is pending', () => {
@@ -396,9 +417,7 @@ describe('avr i2c bus log', () => {
     expect(simulation.busLines()).toHaveLength(0);
     // The AVR sink is built inline where the HEX is flashed; reach it for
     // wiring-level driving (no committed HEX exists in this checkout).
-    const sink = (
-      simulation as unknown as { avrI2cSink(): TwiSink }
-    ).avrI2cSink();
+    const sink = (simulation as unknown as { avrI2cSink(): TwiSink }).avrI2cSink();
     const { completer } = recorder();
     const handler = new TwiBridgeHandler(completer, sink);
     handler.start(false);
@@ -451,7 +470,11 @@ describe('sketch packager', () => {
   });
 
   it('ensures Arduino.h with a mapped marker line', () => {
-    const packed = packageSketch({ language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void loop() {}\n' }] });
+    const packed = packageSketch({
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [{ name: 'main.ino', content: 'void loop() {}\n' }],
+    });
     expect(packed.source.startsWith('#include <Arduino.h>\n')).toBe(true);
     expect(packed.lineMap[0]).toEqual({ file: '<packager>', line: 0 });
   });
@@ -467,8 +490,12 @@ describe('sketch packager', () => {
   });
 
   it('does not treat keyword-led call lines as definitions', () => {
-    expect(lintPrototypes('void loop() {\n  return foo();\n}\n')).toEqual([{ line: 2, name: 'foo' }]);
-    expect(lintPrototypes('void loop() {\n  if (x) {\n  } else foo();\n}\n')).toEqual([{ line: 3, name: 'foo' }]);
+    expect(lintPrototypes('void loop() {\n  return foo();\n}\n')).toEqual([
+      { line: 2, name: 'foo' },
+    ]);
+    expect(lintPrototypes('void loop() {\n  if (x) {\n  } else foo();\n}\n')).toEqual([
+      { line: 3, name: 'foo' },
+    ]);
   });
 
   it('keeps quoted includes that name no project tab', () => {
@@ -539,7 +566,9 @@ describe('avr compile fallback matrix', () => {
       signal: AbortSignal,
     ): Promise<CompileResult> =>
       new Promise<CompileResult>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('compile cancelled')), { once: true });
+        signal.addEventListener('abort', () => reject(new Error('compile cancelled')), {
+          once: true,
+        });
       });
     const simulation = new Simulation(arduinoUnoR3(), { avrCompile: stub });
     simulation.execution = 'avr';
@@ -596,7 +625,10 @@ describe('avr compile fallback matrix', () => {
       multiCalls += 1;
       return { hex: new Uint16Array(64), warnings: [] };
     };
-    const simulation = new Simulation(arduinoUnoR3(), { avrCompile: single, avrProjectCompile: multi });
+    const simulation = new Simulation(arduinoUnoR3(), {
+      avrCompile: single,
+      avrProjectCompile: multi,
+    });
     simulation.execution = 'avr';
     await simulation.compileAndRun({
       ...blink(),

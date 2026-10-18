@@ -13,7 +13,6 @@
 import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
 
-
 /* ------------------------------------------------------------------ *
  * 1.1 -- Industrial Push-Button & Mechanical Debouncing
  * ------------------------------------------------------------------ */
@@ -37,9 +36,17 @@ const PUSH_BUTTON: Exercise = {
     'Active-LOW fails safe when the wire breaks',
   ],
   parts: [
-    { name: 'Tactile Button', qty: 1, why: 'The input. Four legs, but the two on each side are one terminal.' },
+    {
+      name: 'Tactile Button',
+      qty: 1,
+      why: 'The input. Four legs, but the two on each side are one terminal.',
+    },
     { name: '220 Resistor', qty: 1, why: 'Sets the LED current. Not optional.' },
-    { name: 'Red LED', qty: 1, why: 'Shows what the program currently believes the button is doing.' },
+    {
+      name: 'Red LED',
+      qty: 1,
+      why: 'Shows what the program currently believes the button is doing.',
+    },
   ],
   wiring: [
     { pin: '5V', part: 'Red LED', terminal: 'anode', goesTo: 'the red + rail' },
@@ -52,26 +59,26 @@ const PUSH_BUTTON: Exercise = {
     'Run the red + rail from the 5V pin and the blue − rail from GND. A rail runs the whole length of the board: one long connection, not a row of them.',
     'Red LED: long leg (the anode) to the red + rail, short leg (the cathode) to a free row, and a 220 Ω resistor from that row to D7. The flat spot on the rim of the dome is the cathode side.',
     'Tactile Button: one leg into a free row of its own, the other leg into the blue − rail. The legs on each side of the body are joined inside the case, so the button has two terminals, not four.',
-    'Run a jumper from the button\'s row to D2. Note which leg went to the pin — every decision about polarity downstream hangs on that.',
+    "Run a jumper from the button's row to D2. Note which leg went to the pin — every decision about polarity downstream hangs on that.",
     'Clip the meter on D2 and GND before you write any code. Idle should read about 5 V; hold the button down and it should collapse to near 0 V. Seeing the two levels once makes the rest obvious.',
     'Run the sketch, open the Serial monitor, and press the button once — gently, then hard.',
   ],
   solution: {
     approach: [
       'The LED needs a 220 Ω in series with it, and the current has to be sunk by a pin rather than ' +
-      'sourced by one — so the anode goes to the red + rail and the cathode, through the resistor, to ' +
-      'D7. Any GPIO pin would light it just as well; D7 is chosen so the button has D2 to itself.',
-      'The button\'s other leg goes to the blue − rail, so a held button pulls the pin to 0 V. On its ' +
-      'own that pin would float, so the pull-up has to be the internal one, set in code by ' +
-      '`pinMode(PIN_BUTTON, INPUT_PULLUP)` — which is why this exercise has no pull-up resistor among ' +
-      'its parts.',
+        'sourced by one — so the anode goes to the red + rail and the cathode, through the resistor, to ' +
+        'D7. Any GPIO pin would light it just as well; D7 is chosen so the button has D2 to itself.',
+      "The button's other leg goes to the blue − rail, so a held button pulls the pin to 0 V. On its " +
+        'own that pin would float, so the pull-up has to be the internal one, set in code by ' +
+        '`pinMode(PIN_BUTTON, INPUT_PULLUP)` — which is why this exercise has no pull-up resistor among ' +
+        'its parts.',
       'That inversion settles every comparison downstream: pressed reads LOW, so the LED is lit by ' +
-      'writing HIGH while the settled level is LOW. Swap the two button legs and the whole sketch has ' +
-      'to be inverted instead, which is the same circuit wearing the wrong trousers.',
+        'writing HIGH while the settled level is LOW. Swap the two button legs and the whole sketch has ' +
+        'to be inverted instead, which is the same circuit wearing the wrong trousers.',
       'The debounce is a second pair of variables rather than a wait. `rawLevel` is what the pin says, ' +
-      '`settledLevel` is what the program is prepared to believe, and `rawChangedAt` restarts on every ' +
-      'raw edge. The window is 25 ms — long enough to outlast the worst bounce, short enough that a ' +
-      'press still feels instant.',
+        '`settledLevel` is what the program is prepared to believe, and `rawChangedAt` restarts on every ' +
+        'raw edge. The window is 25 ms — long enough to outlast the worst bounce, short enough that a ' +
+        'press still feels instant.',
     ],
     wiring: [
       {
@@ -117,29 +124,29 @@ const PUSH_BUTTON: Exercise = {
     ],
     working: [
       'The LED is dark while the button is untouched and lights while it is held, which is the pull-up ' +
-      'inverting the input and the sink arrangement being right.',
+        'inverting the input and the sink arrangement being right.',
       'The monitor prints `Ready. Press the button.` once, then one `press 1 at <ms>` line per press ' +
-      'and a `release` line when the finger comes off. The counter is the proof that the debounce is ' +
-      'filtering rather than merely delaying.',
+        'and a `release` line when the finger comes off. The counter is the proof that the debounce is ' +
+        'filtering rather than merely delaying.',
       'The count rises by exactly one per press, gently or hard. Three or four for one press means the ' +
-      'bounce is getting through; an LED still lit after you let go means the settled level has not ' +
-      'been believed yet.',
+        'bounce is getting through; an LED still lit after you let go means the settled level has not ' +
+        'been believed yet.',
       'A meter across D2 and GND sits near 5 V idle and collapses to about 0 V under the button, and the ' +
-      'LED occupies exactly those two intervals — the wire and the program agree about the same signal.',
+        'LED occupies exactly those two intervals — the wire and the program agree about the same signal.',
     ],
     traps: [
       'Both button legs in one breadboard row. The legs on each side of the body are already joined ' +
-      'inside the case, so the switch is shorted across nothing. It feels entirely normal under the ' +
-      'finger and the LED never changes, which is read as a dead switch rather than a mis-wire.',
+        'inside the case, so the switch is shorted across nothing. It feels entirely normal under the ' +
+        'finger and the LED never changes, which is read as a dead switch rather than a mis-wire.',
       'The pull-up left off — `pinMode` says plain `INPUT`. Nothing then holds the pin at a defined ' +
-      'level, its voltage wanders across the threshold, and the LED flickers and the counter creeps up ' +
-      'with nobody touching anything. It looks like noise on a long wire.',
+        'level, its voltage wanders across the threshold, and the LED flickers and the counter creeps up ' +
+        'with nobody touching anything. It looks like noise on a long wire.',
       'Believing the level as soon as it changes, without waiting for it to hold: the LED flickers and ' +
-      'the log shows `press 1`, `press 2`, `press 3` for one press, and pressing harder makes it worse. ' +
-      'Every one of those symptoms points at the button, not at the missing stability test.',
+        'the log shows `press 1`, `press 2`, `press 3` for one press, and pressing harder makes it worse. ' +
+        'Every one of those symptoms points at the button, not at the missing stability test.',
       'A resistor fitted across the button rather than in series with the LED. It is the same two ' +
-      'components, the same row, and it does nothing visible at all — so the LED reads as unsoldered ' +
-      'or the wrong colour rather than as a current limit that is in the wrong place.',
+        'components, the same row, and it does nothing visible at all — so the LED reads as unsoldered ' +
+        'or the wrong colour rather than as a current limit that is in the wrong place.',
     ],
   },
   sketch: `#include <Arduino.h>
@@ -325,7 +332,6 @@ void loop() {
   circuit: CIRCUITS['1.1'],
 };
 
-
 /* ------------------------------------------------------------------ *
  * 1.2 -- Traffic Signal State Machine
  * ------------------------------------------------------------------ */
@@ -350,10 +356,18 @@ const TRAFFIC_SIGNAL: Exercise = {
   ],
   parts: [
     { name: 'Green LED', qty: 1, why: 'The go aspect: D6.' },
-    { name: 'Yellow LED', qty: 1, why: 'Amber: D7. The shortest phase, and the one most often left out.' },
+    {
+      name: 'Yellow LED',
+      qty: 1,
+      why: 'Amber: D7. The shortest phase, and the one most often left out.',
+    },
     { name: 'Red LED', qty: 1, why: 'The stop aspect: D8.' },
     { name: '220 Resistor', qty: 3, why: 'One per aspect, in series. Never an LED without one.' },
-    { name: 'Tactile Button', qty: 1, why: 'Calls the phase forward. Its only job here is to prove the loop is awake.' },
+    {
+      name: 'Tactile Button',
+      qty: 1,
+      why: 'Calls the phase forward. Its only job here is to prove the loop is awake.',
+    },
   ],
   wiring: [
     { pin: '5V', part: 'Green LED', terminal: 'anode', goesTo: 'the red + rail' },
@@ -369,7 +383,7 @@ const TRAFFIC_SIGNAL: Exercise = {
   steps: [
     'Run the red + rail from 5V and the blue − rail from GND before anything else.',
     'All three LEDs: long leg (anode) to the red + rail, short leg (cathode) to a row of its own, and a 220 Ω resistor from that row to its pin — green to D6, amber to D7, red to D8.',
-    'Tactile Button on D2, exactly as in 1.1: one leg to D2\'s row, the other to the blue − rail. The sketch uses the internal pull-up, so there is no resistor on this node.',
+    "Tactile Button on D2, exactly as in 1.1: one leg to D2's row, the other to the blue − rail. The sketch uses the internal pull-up, so there is no resistor on this node.",
     'Open the Serial monitor and raise it above the bench before you run. The sketch announces every state change and then reports twice a second.',
     'Watch one full cycle go by without touching anything. The four timestamps should read 8000 ms of green, then 2500 of amber, then 12000 of red — and the amber line and the next green line are 14500 ms apart.',
     'Now press the button during a green phase. Amber comes early, and amber and red then run their full lengths — which is what a machine does when it is told to change its mind.',
@@ -377,22 +391,22 @@ const TRAFFIC_SIGNAL: Exercise = {
   solution: {
     approach: [
       'Three aspects means three pins and three resistors, and the sketch already names them: ' +
-      '`LED_GREEN` 6, `LED_AMBER` 7, `LED_RED` 8. So green goes to D6, amber to D7 and red to D8. The ' +
-      'amber pin is the one to decide carefully — it is the shortest phase and the aspect most often ' +
-      'left out, so a swap there still produces a machine that looks like it runs.',
+        '`LED_GREEN` 6, `LED_AMBER` 7, `LED_RED` 8. So green goes to D6, amber to D7 and red to D8. The ' +
+        'amber pin is the one to decide carefully — it is the shortest phase and the aspect most often ' +
+        'left out, so a swap there still produces a machine that looks like it runs.',
       'Every aspect is the sink arrangement from 1.1 repeated three times: anode to the red + rail, ' +
-      'cathode through its own 220 Ω to its pin, and all three resistor `a` legs to the blue − rail. ' +
-      'Sharing that rail is right; sharing one resistor between two aspects is not.',
-      'The button is 1.1\'s circuit unchanged — one leg to D2, one to the blue − rail, no resistor, and ' +
-      '`pinMode(PIN_CALL, INPUT_PULLUP)` in setup so a press reads LOW. Its only job here is to prove ' +
-      'the loop is awake, which is why the exercise bothers to include it at all.',
+        'cathode through its own 220 Ω to its pin, and all three resistor `a` legs to the blue − rail. ' +
+        'Sharing that rail is right; sharing one resistor between two aspects is not.',
+      "The button is 1.1's circuit unchanged — one leg to D2, one to the blue − rail, no resistor, and " +
+        '`pinMode(PIN_CALL, INPUT_PULLUP)` in setup so a press reads LOW. Its only job here is to prove ' +
+        'the loop is awake, which is why the exercise bothers to include it at all.',
       'The machine itself is two variables and a set of constants: a state, the millis() stamp of when ' +
-      'that state was entered, and 8000 / 2500 / 12000 ms for green / amber / red. Every change of ' +
-      'state goes through `enterState()`, which writes all three aspects and the timestamp together, ' +
-      'so no transition can forget to switch a light off.',
+        'that state was entered, and 8000 / 2500 / 12000 ms for green / amber / red. Every change of ' +
+        'state goes through `enterState()`, which writes all three aspects and the timestamp together, ' +
+        'so no transition can forget to switch a light off.',
       'Each phase ends in a comparison — `now - stateEntered >= span` — re-checked on every pass, and ' +
-      'never a `delay()`. Subtracting rather than adding the span is what keeps the machine running ' +
-      'past the 49.7-day rollover of millis().',
+        'never a `delay()`. Subtracting rather than adding the span is what keeps the machine running ' +
+        'past the 49.7-day rollover of millis().',
     ],
     wiring: [
       {
@@ -469,31 +483,31 @@ const TRAFFIC_SIGNAL: Exercise = {
     ],
     working: [
       'Exactly one aspect is lit at any moment and the other two are dark, and every move is announced ' +
-      'by a `-> AMBER at <ms>` line. The absence of two lit aspects is the proof that all three writes ' +
-      'went through `enterState()` rather than half of them from loop().',
+        'by a `-> AMBER at <ms>` line. The absence of two lit aspects is the proof that all three writes ' +
+        'went through `enterState()` rather than half of them from loop().',
       'The twice-a-second report counts the phase down: 8 s left on green, 2 on amber, 12 on red, and ' +
-      'the amber line and the next green line are 14500 ms apart. Those numbers are the spans, and a ' +
-      'countdown rather than a freeze is the proof that nothing is sleeping.',
+        'the amber line and the next green line are 14500 ms apart. Those numbers are the spans, and a ' +
+        'countdown rather than a freeze is the proof that nothing is sleeping.',
       'A press during green brings amber forward at once, and amber and red then run their full lengths ' +
-      '— the loop was never blocked, so the request was read on the very next pass.',
+        '— the loop was never blocked, so the request was read on the very next pass.',
       'A held button advances the phase once and then nothing more, and the monitor stays quiet until ' +
-      'the button is released. A counter that climbs on every pass is the tell that the release is ' +
-      'being counted as a request too.',
+        'the button is released. A counter that climbs on every pass is the tell that the release is ' +
+        'being counted as a request too.',
     ],
     traps: [
       'Amber on D8 and red on D7. The machine still cycles, still prints the right state names and ' +
-      'still uses the right spans, so nothing in the output is wrong — the aspect that lights for 2.5 ' +
-      'seconds is simply the one that ran for 12. It reads as a mistake in millis() rather than a swap ' +
-      'on the board.',
+        'still uses the right spans, so nothing in the output is wrong — the aspect that lights for 2.5 ' +
+        'seconds is simply the one that ran for 12. It reads as a mistake in millis() rather than a swap ' +
+        'on the board.',
       'Driving the aspects from loop() as well as from `enterState()`. Two writers, one pin, and the ' +
-      'last one to run wins, so an aspect can stay lit after the state has already moved on. The ' +
-      'symptom is a light stuck on, which is what a failed LED looks like.',
+        'last one to run wins, so an aspect can stay lit after the state has already moved on. The ' +
+        'symptom is a light stuck on, which is what a failed LED looks like.',
       'Ending each phase with `delay(GREEN_MS)` instead of a comparison. Every timestamp is correct and ' +
-      'the cycle is perfect, so the sketch looks finished — and every press made during a phase is ' +
-      'lost, which is the entire point of the exercise and the one thing nothing on the bench reveals.',
+        'the cycle is perfect, so the sketch looks finished — and every press made during a phase is ' +
+        'lost, which is the entire point of the exercise and the one thing nothing on the bench reveals.',
       'Treating the release as a request as well as the press. Two transitions per press, and a press ' +
-      'during green jumps straight to red. The state names in the log are all legal, so the fault ' +
-      'survives a whole evening of watching before anyone suspects the button.',
+        'during green jumps straight to red. The state names in the log are all legal, so the fault ' +
+        'survives a whole evening of watching before anyone suspects the button.',
     ],
   },
   sketch: `#include <Arduino.h>
@@ -710,6 +724,5 @@ void loop() {
   writeUp: 'docs/exercises/module-1-gpio.md',
   circuit: CIRCUITS['1.2'],
 };
-
 
 export const MODULE_1: readonly Exercise[] = [PUSH_BUTTON, TRAFFIC_SIGNAL];

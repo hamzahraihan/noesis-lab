@@ -297,7 +297,7 @@ export interface MapPort {
    */
   blit(z: number, x: number, y: number, destX: number, destY: number): boolean;
   /** True once everything asked for has arrived. */
- ready(): boolean;
+  ready(): boolean;
   /** Forgets outstanding requests, so a new region starts from nothing. */
   reset(): void;
 }
@@ -571,7 +571,6 @@ type Flow =
 
 const NORMAL: Flow = { kind: 'normal' };
 
-
 class Scope {
   readonly values = new Map<string, Value>();
   /** GPIO devices built by a Python program, kept beside the values. */
@@ -678,7 +677,6 @@ function asNumber(value: Value): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-
 /** Renders a value the way `print` and an f-string would write it. */
 function formatValue(value: Value): string {
   if (typeof value === 'string') return value;
@@ -720,7 +718,8 @@ function constructDateTime(args: Value[]): DateTimeValue {
 
 /** Builds a `TimeSpan` from call arguments: days, hours, minutes, seconds. */
 function constructTimeSpan(args: Value[]): TimeSpanValue {
-  const component = (index: number): number => (args[index] === undefined ? 0 : asNumber(args[index] as Value));
+  const component = (index: number): number =>
+    args[index] === undefined ? 0 : asNumber(args[index] as Value);
   return new TimeSpanValue(component(0), component(1), component(2), component(3));
 }
 
@@ -775,7 +774,8 @@ const SYSTEM_QUOTED_HEADERS = new Set(['arduino.h', 'wire.h', 'spi.h']);
  */
 const LIBRARY_OWNED_INSTANCES = new Set(['SevSeg', 'RTC_DS1307']);
 function localIncludes(content: string): string[] {
-  return content.split('\n')
+  return content
+    .split('\n')
     .map((line) => LOCAL_INCLUDE.exec(line.trim())?.[1])
     .filter((name): name is string => Boolean(name));
 }
@@ -957,12 +957,24 @@ export class FirmwareRuntime {
 
   /** Merged-construction path for fromProject; shares init with the constructor. */
   private static __merged(
-    merged: { defines: Map<string, number>; macros: Map<string, Expr>; globals: Stmt[]; functions: Map<string, FunctionDecl>; classes: Map<string, ClassDecl> },
+    merged: {
+      defines: Map<string, number>;
+      macros: Map<string, Expr>;
+      globals: Stmt[];
+      functions: Map<string, FunctionDecl>;
+      classes: Map<string, ClassDecl>;
+    },
     language: FirmwareLanguage,
   ): FirmwareRuntime {
     const runtime = Object.create(FirmwareRuntime.prototype) as FirmwareRuntime;
     runtime.init(
-      { defines: merged.defines, macros: merged.macros, globals: merged.globals, functions: merged.functions, classes: merged.classes },
+      {
+        defines: merged.defines,
+        macros: merged.macros,
+        globals: merged.globals,
+        functions: merged.functions,
+        classes: merged.classes,
+      },
       language,
     );
     return runtime;
@@ -983,7 +995,8 @@ export class FirmwareRuntime {
     const visited = new Set<string>();
     const visit = (name: string, stack: string[]) => {
       if (visited.has(name)) return;
-      if (visiting.has(name)) throw new FirmwareProjectError(`${[...stack, name].join(' → ')}: include cycle detected`);
+      if (visiting.has(name))
+        throw new FirmwareProjectError(`${[...stack, name].join(' → ')}: include cycle detected`);
       visiting.add(name);
       const content = byName.get(name) ?? '';
       const rawEdges =
@@ -1038,7 +1051,9 @@ export class FirmwareRuntime {
       const owner = order[index];
       for (const [key, value] of program.defines) {
         if (defines.has(key) && defines.get(key) !== value) {
-          throw new FirmwareProjectError(`${owner}: conflicting #define ${key} (also in ${defineOwner.get(key)})`);
+          throw new FirmwareProjectError(
+            `${owner}: conflicting #define ${key} (also in ${defineOwner.get(key)})`,
+          );
         }
         defines.set(key, value);
         if (!defineOwner.has(key)) defineOwner.set(key, owner);
@@ -1052,7 +1067,9 @@ export class FirmwareRuntime {
       }
       for (const [key, decl] of program.functions) {
         if (functions.has(key)) {
-          throw new FirmwareProjectError(`${owner}: duplicate function '${key}' (also in ${functionOwner.get(key)})`);
+          throw new FirmwareProjectError(
+            `${owner}: duplicate function '${key}' (also in ${functionOwner.get(key)})`,
+          );
         }
         functions.set(key, decl);
         functionOwner.set(key, owner);
@@ -1071,7 +1088,9 @@ export class FirmwareRuntime {
         const methods = new Map(existing.methods);
         for (const [methodName, methodDecl] of decl.methods) {
           if (methods.has(methodName)) {
-            throw new FirmwareProjectError(`${owner}: duplicate method '${key}::${methodName}' (also in ${classOwner.get(key)})`);
+            throw new FirmwareProjectError(
+              `${owner}: duplicate method '${key}::${methodName}' (also in ${classOwner.get(key)})`,
+            );
           }
           methods.set(methodName, methodDecl);
         }
@@ -1096,7 +1115,10 @@ export class FirmwareRuntime {
         );
       }
     });
-    return FirmwareRuntime.__merged({ defines, macros, globals, functions, classes }, project.language);
+    return FirmwareRuntime.__merged(
+      { defines, macros, globals, functions, classes },
+      project.language,
+    );
   }
 
   hasFunction(name: string): boolean {
@@ -1485,11 +1507,8 @@ export class FirmwareRuntime {
         return services.analogRead(asNumber(args[0] ?? 0));
       case 'pulseIn': {
         const timeoutUs = asNumber(args[2] ?? 1000000);
-        const micros = services.pulseInBegin?.(
-          asNumber(args[0] ?? 0),
-          asNumber(args[1] ?? 0),
-          timeoutUs,
-        ) ?? 0;
+        const micros =
+          services.pulseInBegin?.(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0), timeoutUs) ?? 0;
         // A timeout still costs the wait: hardware sits on the line for
         // the whole window, so a sketch timing around the call observes it.
         if (micros <= 0) {
@@ -1578,7 +1597,10 @@ export class FirmwareRuntime {
       }
 
       case 'varDecl': {
-        if (statement.init && this.bindDeviceFrom(statement.name, statement.init, scope, services)) {
+        if (
+          statement.init &&
+          this.bindDeviceFrom(statement.name, statement.init, scope, services)
+        ) {
           return NORMAL;
         }
         const value = statement.init
@@ -1618,7 +1640,8 @@ export class FirmwareRuntime {
 
       case 'if': {
         const condition = yield* this.evaluate(statement.condition, scope, services);
-        if (isTruthy(condition as Value)) return yield* this.execute(statement.then, scope, services);
+        if (isTruthy(condition as Value))
+          return yield* this.execute(statement.then, scope, services);
         if (statement.otherwise) return yield* this.execute(statement.otherwise, scope, services);
         return NORMAL;
       }
@@ -1687,9 +1710,7 @@ export class FirmwareRuntime {
             if (fallback < 0) fallback = index;
             continue;
           }
-          const probe = asNumber(
-            (yield* this.evaluate(entry.test, scope, services)) as Value,
-          );
+          const probe = asNumber((yield* this.evaluate(entry.test, scope, services)) as Value);
           if (probe === discriminant) {
             selected = index;
             break;
@@ -1797,12 +1818,16 @@ export class FirmwareRuntime {
         if (expression.operator === '&&') {
           const left = (yield* this.evaluate(expression.left, scope, services)) as Value;
           if (!isTruthy(left)) return 0;
-          return isTruthy((yield* this.evaluate(expression.right, scope, services)) as Value) ? 1 : 0;
+          return isTruthy((yield* this.evaluate(expression.right, scope, services)) as Value)
+            ? 1
+            : 0;
         }
         if (expression.operator === '||') {
           const left = (yield* this.evaluate(expression.left, scope, services)) as Value;
           if (isTruthy(left)) return 1;
-          return isTruthy((yield* this.evaluate(expression.right, scope, services)) as Value) ? 1 : 0;
+          return isTruthy((yield* this.evaluate(expression.right, scope, services)) as Value)
+            ? 1
+            : 0;
         }
 
         const leftValue = (yield* this.evaluate(expression.left, scope, services)) as Value;
@@ -1878,10 +1903,7 @@ export class FirmwareRuntime {
         }
 
         // `led.value = 0.5` and `pwm.value = 1` drive the pin directly.
-        if (
-          expression.target.kind === 'member' &&
-          expression.target.target.kind === 'identifier'
-        ) {
+        if (expression.target.kind === 'member' && expression.target.target.kind === 'identifier') {
           const device = scope.deviceFor(expression.target.target.name);
           if (device && expression.operator === '=') {
             this.writeDevice(device, expression.target.member, value, services);
@@ -1934,7 +1956,9 @@ export class FirmwareRuntime {
 
         if (expression.target.kind === 'index') {
           const store = this.resolveArray(expression.target.target, scope);
-          const index = asNumber((yield* this.evaluate(expression.target.index, scope, services)) as Value);
+          const index = asNumber(
+            (yield* this.evaluate(expression.target.index, scope, services)) as Value,
+          );
           if (!store || index < 0 || index >= store.length) return 0;
           store[index] = asNumber(value);
           return store[index];
@@ -2453,11 +2477,7 @@ export class FirmwareRuntime {
    * a C++ sketch and a Python one -- which is the point of the VM having one
    * AST rather than two.
    */
-  private evaluateMapCall(
-    member: string,
-    args: Value[],
-    services: FirmwareServices,
-  ): Value {
+  private evaluateMapCall(member: string, args: Value[], services: FirmwareServices): Value {
     const map = services.map;
     if (!map) return 0;
 
@@ -2495,11 +2515,7 @@ export class FirmwareRuntime {
    * sketch that asks for an orientation it cannot have learns that from the
    * return value instead of carrying on with the wrong idea about the screen.
    */
-  private evaluateTftCall(
-    member: string,
-    args: Value[],
-    services: FirmwareServices,
-  ): Value {
+  private evaluateTftCall(member: string, args: Value[], services: FirmwareServices): Value {
     const tft = services.tft;
     if (!tft) return 0;
 
@@ -2546,9 +2562,13 @@ export class FirmwareRuntime {
     }
   }
 
-
   /** Writes a `0`/`1` or `0..1` value to a device's pin. */
-  private writeDevice(device: Device, member: string, value: Value, services: FirmwareServices): void {
+  private writeDevice(
+    device: Device,
+    member: string,
+    value: Value,
+    services: FirmwareServices,
+  ): void {
     if (member !== 'value') return;
     if (device.kind === 'pwm') {
       services.analogWrite(device.pin, asNumber(value));
@@ -2561,9 +2581,7 @@ export class FirmwareRuntime {
   /** Reads a device's pin as `value` is written, or as its switch reads. */
   private readDevice(device: Device, member: string, services: FirmwareServices): Value {
     const raw = services.digitalRead(device.pin);
-    const level = device.kind === 'switch' && SWITCH_ACTIVE_LOW
-      ? (raw ? 0 : 1)
-      : raw ? 1 : 0;
+    const level = device.kind === 'switch' && SWITCH_ACTIVE_LOW ? (raw ? 0 : 1) : raw ? 1 : 0;
 
     switch (member) {
       case 'value':
@@ -2693,7 +2711,10 @@ export class FirmwareRuntime {
         return 0;
       case 'createChar': {
         const bitmap = Array.isArray(args[1]) ? (args[1] as number[]) : [];
-        lcd.createChar(number(0), bitmap.map((row) => asNumber(row)));
+        lcd.createChar(
+          number(0),
+          bitmap.map((row) => asNumber(row)),
+        );
         return 0;
       }
       case 'backlight':
@@ -2759,7 +2780,13 @@ export class FirmwareRuntime {
       case 'count':
         return pixels.count(pin);
       case 'setColor':
-        pixels.setColor(pin, asNumber(args[1] ?? 0), asNumber(args[2] ?? 0), asNumber(args[3] ?? 0), asNumber(args[4] ?? 0));
+        pixels.setColor(
+          pin,
+          asNumber(args[1] ?? 0),
+          asNumber(args[2] ?? 0),
+          asNumber(args[3] ?? 0),
+          asNumber(args[4] ?? 0),
+        );
         return 0;
       default:
         return 0;
@@ -2865,9 +2892,7 @@ const BUILTIN_CONSTANTS: Readonly<Record<string, number>> = {
 };
 
 /** Native helpers that are pure arithmetic and need no host access. */
-const BUILTINS: Readonly<
-  Record<string, (args: number[]) => Value>
-> = {
+const BUILTINS: Readonly<Record<string, (args: number[]) => Value>> = {
   abs: (args) => Math.abs(args[0] ?? 0),
   min: (args) => Math.min(...args),
   max: (args) => Math.max(...args),
@@ -2906,7 +2931,7 @@ const BUILTINS: Readonly<
     if (inHigh === inLow) return outLow ?? 0;
     return (
       (outLow ?? 0) +
-      ((value ?? 0) - (inLow ?? 0)) * ((outHigh ?? 0) - (outLow ?? 0)) / (inHigh - inLow)
+      (((value ?? 0) - (inLow ?? 0)) * ((outHigh ?? 0) - (outLow ?? 0))) / (inHigh - inLow)
     );
   },
 };
@@ -3005,9 +3030,10 @@ export class FirmwareRunner {
     services: FirmwareServices,
     language: FirmwareLanguage = 'arduino-cpp',
   ) {
-    this.runtime = typeof source === 'string'
-      ? new FirmwareRuntime(source, language)
-      : FirmwareRuntime.fromProject(source);
+    this.runtime =
+      typeof source === 'string'
+        ? new FirmwareRuntime(source, language)
+        : FirmwareRuntime.fromProject(source);
     this.generator = this.runtime.main(this.withSerialSink(services));
   }
 

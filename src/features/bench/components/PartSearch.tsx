@@ -9,11 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import {
-  Cross2Icon,
-  MagnifyingGlassIcon,
-  ReaderIcon,
-} from '@radix-ui/react-icons';
+import { Cross2Icon, MagnifyingGlassIcon, ReaderIcon } from '@radix-ui/react-icons';
 import { PART_CATALOGUE, type CatalogueEntry } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import { Button, Input } from '@/components';

@@ -65,7 +65,10 @@ export function avrAsArgsFor(asmPath: string, objectPath: string): string[] {
  * firmware, library, and prebuilt objects (slot objects precede provided
  * ones, so slots shadow on duplicate symbols — GNU ld first-wins), then the
  * manifest core objects, then the system libs. */
-export function linkerArgsFor(extraObjects: readonly string[], manifestObjects: readonly string[]): string[] {
+export function linkerArgsFor(
+  extraObjects: readonly string[],
+  manifestObjects: readonly string[],
+): string[] {
   return [
     '-m',
     'avr5',
@@ -103,7 +106,7 @@ const TOOL_NAMES = ['cc1plus', 'avr-as', 'avr-ld', 'avr-objcopy'] as const;
 type ToolName = (typeof TOOL_NAMES)[number];
 
 const WASM_FILE_BY_TOOL: Record<ToolName, string> = {
-  'cc1plus': 'cc1plus.wasm',
+  cc1plus: 'cc1plus.wasm',
   'avr-as': 'avr-as.wasm',
   'avr-ld': 'avr-ld.wasm',
   'avr-objcopy': 'avr-objcopy.wasm',
@@ -114,7 +117,8 @@ const factoryCache = new Map<ToolName, Promise<EmscriptenFactory>>();
 function toolModuleUrl(text: string): string {
   // Blob import in workers/browsers; data: import under Node.
   if (!isNode()) return URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
-  if (typeof Buffer !== 'undefined') return `data:text/javascript;base64,${Buffer.from(text, 'utf8').toString('base64')}`;
+  if (typeof Buffer !== 'undefined')
+    return `data:text/javascript;base64,${Buffer.from(text, 'utf8').toString('base64')}`;
   return `data:text/javascript,${encodeURIComponent(text)}`;
 }
 
@@ -185,7 +189,11 @@ async function fetchBytes(url: URL): Promise<Uint8Array> {
 
 interface ToolchainManifest {
   readonly headerFiles: readonly string[];
-  readonly objectGroups: { readonly base: readonly string[]; readonly oled: readonly string[]; readonly tof: readonly string[] };
+  readonly objectGroups: {
+    readonly base: readonly string[];
+    readonly oled: readonly string[];
+    readonly tof: readonly string[];
+  };
   readonly libs: readonly string[];
 }
 
@@ -241,14 +249,19 @@ async function runTool(
     mod.callMain(args);
   } catch (error) {
     const message = String((error as { message?: unknown })?.message ?? error);
-    if ((error as { status?: unknown })?.status !== 0 && !/Program terminated with exit\(0\)/.test(message)) {
+    if (
+      (error as { status?: unknown })?.status !== 0 &&
+      !/Program terminated with exit\(0\)/.test(message)
+    ) {
       throw new BuildFailedError(`${tool} failed: ${message}\n${stderr.slice(-20).join('\n')}`);
     }
   }
   try {
     return readBytes(mod.FS, outputPath);
   } catch (error) {
-    throw new BuildFailedError(`${tool} did not produce ${outputPath}: ${describeError(error)}\n${stderr.slice(-20).join('\n')}`);
+    throw new BuildFailedError(
+      `${tool} did not produce ${outputPath}: ${describeError(error)}\n${stderr.slice(-20).join('\n')}`,
+    );
   }
 }
 
@@ -266,14 +279,20 @@ export async function compileToolchainUnit(unit: ToolchainUnit): Promise<Uint8Ar
     cc1plusArgsFor(paths.cpp, unit.name, paths.asm),
     async (fs) => {
       await writeManifestHeaders(fs);
-      for (const [headerName, content] of unit.headers) writeFile(fs, `/build/include/${headerName}`, content);
+      for (const [headerName, content] of unit.headers)
+        writeFile(fs, `/build/include/${headerName}`, content);
       writeFile(fs, paths.cpp, unit.source);
     },
     paths.asm,
   );
-  return runTool('avr-as', avrAsArgsFor(paths.asm, paths.object), (fs) => {
-    writeFile(fs, paths.asm, assembly);
-  }, paths.object);
+  return runTool(
+    'avr-as',
+    avrAsArgsFor(paths.asm, paths.object),
+    (fs) => {
+      writeFile(fs, paths.asm, assembly);
+    },
+    paths.object,
+  );
 }
 
 /**
@@ -282,7 +301,10 @@ export async function compileToolchainUnit(unit: ToolchainUnit): Promise<Uint8Ar
  * BuildFailedError (with GCC frames) on toolchain failure, plain Error on
  * transport failure or abort.
  */
-export async function buildProjectHex(request: ProjectBuildRequest, signal?: AbortSignal): Promise<string> {
+export async function buildProjectHex(
+  request: ProjectBuildRequest,
+  signal?: AbortSignal,
+): Promise<string> {
   const check = (): void => {
     if (signal?.aborted) throw new Error('compile cancelled');
   };
@@ -294,30 +316,42 @@ export async function buildProjectHex(request: ProjectBuildRequest, signal?: Abo
   }
   check();
   const manifest = await loadToolchainManifest();
-  const manifestObjects = request.manifestObjects ?? ['/objects/core_abi.o', ...manifest.objectGroups.base];
+  const manifestObjects = request.manifestObjects ?? [
+    '/objects/core_abi.o',
+    ...manifest.objectGroups.base,
+  ];
   const extraPaths = [
     ...request.units.map((unit) => objectPathFor(unit.name).object),
     ...request.prebuiltObjects.map((_, index) => `/build/prebuilt-${index}.o`),
   ];
-  const elf = await runTool('avr-ld', linkerArgsFor(extraPaths, manifestObjects), async (fs) => {
-    request.units.forEach((unit, index) => {
-      writeFile(fs, objectPathFor(unit.name).object, unitObjects[index] as Uint8Array);
-    });
-    request.prebuiltObjects.forEach((bytes, index) => {
-      writeFile(fs, `/build/prebuilt-${index}.o`, bytes);
-    });
-    writeFile(fs, '/ldscripts/avr5.xn', await fetchBytes(new URL('assets/ldscripts/avr5.xn', CDN_BASE)));
-    await Promise.all(
-      manifestObjects.map(async (virtualPath) => {
-        writeFile(fs, virtualPath, await fetchBytes(new URL(`assets${virtualPath}`, CDN_BASE)));
-      }),
-    );
-    await Promise.all(
-      manifest.libs.map(async (virtualPath) => {
-        writeFile(fs, virtualPath, await fetchBytes(new URL(`assets${virtualPath}`, CDN_BASE)));
-      }),
-    );
-  }, '/build/HorangFirmware.elf');
+  const elf = await runTool(
+    'avr-ld',
+    linkerArgsFor(extraPaths, manifestObjects),
+    async (fs) => {
+      request.units.forEach((unit, index) => {
+        writeFile(fs, objectPathFor(unit.name).object, unitObjects[index] as Uint8Array);
+      });
+      request.prebuiltObjects.forEach((bytes, index) => {
+        writeFile(fs, `/build/prebuilt-${index}.o`, bytes);
+      });
+      writeFile(
+        fs,
+        '/ldscripts/avr5.xn',
+        await fetchBytes(new URL('assets/ldscripts/avr5.xn', CDN_BASE)),
+      );
+      await Promise.all(
+        manifestObjects.map(async (virtualPath) => {
+          writeFile(fs, virtualPath, await fetchBytes(new URL(`assets${virtualPath}`, CDN_BASE)));
+        }),
+      );
+      await Promise.all(
+        manifest.libs.map(async (virtualPath) => {
+          writeFile(fs, virtualPath, await fetchBytes(new URL(`assets${virtualPath}`, CDN_BASE)));
+        }),
+      );
+    },
+    '/build/HorangFirmware.elf',
+  );
   check();
   const hexBytes = await runTool(
     'avr-objcopy',

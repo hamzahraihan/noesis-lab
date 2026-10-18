@@ -211,7 +211,7 @@ describe('the port a sketch talks to', () => {
   });
 });
 
-describe('messages from the network\'s sensor', () => {
+describe("messages from the network's sensor", () => {
   function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
     const held = bench();
     held.network.begin(NET_SSID, NET_PASSWORD);
@@ -225,7 +225,7 @@ describe('messages from the network\'s sensor', () => {
     expect(network.available()).toBe(0);
   });
 
-  it('has the sensor\'s latest reading waiting on the turn it subscribes', () => {
+  it("has the sensor's latest reading waiting on the turn it subscribes", () => {
     const { network } = joined();
     expect(network.subscribe(NET_READING_TOPIC)).toBe(1);
     // A retained value, as a broker hands one over: the first second's reading.

@@ -37,7 +37,9 @@ describe('timer1 PWM acceptance', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP fade: toolchain absent');
       return;
@@ -87,7 +89,9 @@ describe('timer1 input-capture loopback', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP loopback: toolchain absent');
       return;
@@ -188,7 +192,9 @@ describe('dashboard servo HEX acceptance', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP servo: toolchain absent');
       return;
@@ -254,7 +260,9 @@ describe('dashboard servo HEX acceptance', () => {
       (part) => part.definition.component.kind === 'servo',
     );
     expect(hornPart, 'dashboard servo is on the bench').toBeDefined();
-    expect(simulation.engine.servo(hornPart!.id)!.angle, 'horn follows the 45-degree pulse').toBe(45);
+    expect(simulation.engine.servo(hornPart!.id)!.angle, 'horn follows the 45-degree pulse').toBe(
+      45,
+    );
     // Sink wiring (anode to 5V): the lit MID LED's pin sits LOW, the dark
     // LOW/HIGH pins sit HIGH.
     for (const [gpio, duty] of [

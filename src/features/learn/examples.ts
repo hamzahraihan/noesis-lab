@@ -321,7 +321,13 @@ export const LCD_EXAMPLE: Example = {
   sketch: LCD_SKETCH,
   wire: (simulation) => {
     simulation.placeExampleDevice('lcd1602', BENCH_X, BENCH_Y, EXAMPLE_DEVICES, LCD_LINES);
-    simulation.placeExampleDevice('ds1307', BENCH_X, BENCH_Y + BENCH_STEP, EXAMPLE_DEVICES, LCD_LINES);
+    simulation.placeExampleDevice(
+      'ds1307',
+      BENCH_X,
+      BENCH_Y + BENCH_STEP,
+      EXAMPLE_DEVICES,
+      LCD_LINES,
+    );
   },
 };
 

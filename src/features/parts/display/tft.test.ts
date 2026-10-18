@@ -212,16 +212,13 @@ describe('the tft library on the bench', () => {
     expect(simulation.serialLines().join('')).toContain('size 320x240');
   });
 
-  it.each(['CS', 'DC', 'SCK', 'MOSI'])(
-    'hears nothing with %s left unwired',
-    (signal) => {
-      const simulation = tftBench({ omitSignal: signal });
-      run(simulation, LIBRARY_SKETCH, 200);
-      const tft = tftOf(simulation);
-      expect(tft.pixelAt(0, 0)).toBe(0);
-      expect(tft.isOn()).toBe(false);
-    },
-  );
+  it.each(['CS', 'DC', 'SCK', 'MOSI'])('hears nothing with %s left unwired', (signal) => {
+    const simulation = tftBench({ omitSignal: signal });
+    run(simulation, LIBRARY_SKETCH, 200);
+    const tft = tftOf(simulation);
+    expect(tft.pixelAt(0, 0)).toBe(0);
+    expect(tft.isOn()).toBe(false);
+  });
 
   it('still answers its size when the panel is not wired', () => {
     const simulation = tftBench({ omitSignal: 'CS' });

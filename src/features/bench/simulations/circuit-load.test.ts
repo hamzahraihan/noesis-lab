@@ -109,7 +109,9 @@ describe('Simulation.loadCircuit', () => {
     const simulation = new Simulation(arduinoUnoR3());
     simulation.addPart(arduinoUnoR3(), 0, 0);
     simulation.addPart(breadboardDefinition(), 230, 0);
-    simulation.loadFirmware('void setup() { pinMode(8, OUTPUT); digitalWrite(8, HIGH); } void loop() { }');
+    simulation.loadFirmware(
+      'void setup() { pinMode(8, OUTPUT); digitalWrite(8, HIGH); } void loop() { }',
+    );
     simulation.start();
     for (let i = 0; i < 5; i++) simulation.tick(1);
 
@@ -129,7 +131,9 @@ describe('Simulation.loadCircuit', () => {
             { id: 'led', type: 'led-red', x: 415, y: 70, rotation: 0 },
             { id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 },
           ],
-          wires: [{ id: 'w1', from: 'u:8', to: 'led:A', colour: '#ef4444', gaugeAwg: 26, bends: [] }],
+          wires: [
+            { id: 'w1', from: 'u:8', to: 'led:A', colour: '#ef4444', gaugeAwg: 26, bends: [] },
+          ],
         },
         'board-last',
       ),

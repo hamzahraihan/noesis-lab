@@ -52,8 +52,7 @@ interface LayoutStore {
 }
 
 export const useLayoutStore = create<LayoutStore>()((set) => ({
-  layout:
-    typeof window === 'undefined' ? { ...DEFAULT_LAYOUT } : initialLayout(),
+  layout: typeof window === 'undefined' ? { ...DEFAULT_LAYOUT } : initialLayout(),
   nudge: (key, delta) =>
     set((s) => {
       try {

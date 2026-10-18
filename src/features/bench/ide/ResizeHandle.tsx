@@ -53,9 +53,7 @@ export function ResizeHandle({
       }}
       onKeyDown={(event) => {
         const step = event.shiftKey ? 24 : 8;
-        const forward = vertical
-          ? event.key === 'ArrowRight'
-          : event.key === 'ArrowDown';
+        const forward = vertical ? event.key === 'ArrowRight' : event.key === 'ArrowDown';
         const backward = vertical ? event.key === 'ArrowLeft' : event.key === 'ArrowUp';
         if (!forward && !backward) return;
         event.preventDefault();

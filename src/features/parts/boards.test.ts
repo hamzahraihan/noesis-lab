@@ -93,7 +93,9 @@ describe('board definitions', () => {
   });
 
   it('runs the RP2040 at 3.3 V, which is what changes a sketch across boards', () => {
-    expect(nanoRp2040Connect().component).toMatchObject({ board: { logicVolts: 3.3, adcBits: 12 } });
+    expect(nanoRp2040Connect().component).toMatchObject({
+      board: { logicVolts: 3.3, adcBits: 12 },
+    });
   });
 
   it('keeps A6 and A7 off the Nano as output pins', () => {

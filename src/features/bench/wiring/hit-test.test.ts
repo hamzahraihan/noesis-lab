@@ -5,7 +5,13 @@ import { resistorDefinition, ledDefinition, buttonDefinition } from '@/features/
 import { arduinoUnoR3 } from '@/features/parts';
 import { ili9341Definition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
-import { rotatedPartAt, pressHitsOwnPin, hoverPinLabel, wireClickAction, type BenchForHit } from './hit-test';
+import {
+  rotatedPartAt,
+  pressHitsOwnPin,
+  hoverPinLabel,
+  wireClickAction,
+  type BenchForHit,
+} from './hit-test';
 
 /**
  * Picking a part out from under a wire, and off its own artwork.
@@ -145,8 +151,13 @@ describe('finding the part under a point', () => {
     // A part underneath still wins outright, clicks on existing handles
     // keep the old palette behaviour, and a press inside a pin's own core
     // defers to wiring from that pin rather than splitting under it.
-    const split = (part: string | null, wire: string | null, sel: string | null, handle: boolean, core: boolean) =>
-      wireClickAction(part, wire, sel, handle, core);
+    const split = (
+      part: string | null,
+      wire: string | null,
+      sel: string | null,
+      handle: boolean,
+      core: boolean,
+    ) => wireClickAction(part, wire, sel, handle, core);
     expect(split(null, 'w1', null, false, false)).toBe('split');
     expect(split(null, 'w1', 'w1', false, false)).toBe('palette');
     expect(split(null, 'w1', 'w2', false, false)).toBe('split');

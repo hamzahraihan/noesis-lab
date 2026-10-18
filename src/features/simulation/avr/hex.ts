@@ -104,13 +104,14 @@ export function sha256Hex(message: string): string {
   let h6 = 0x1f83d9ab;
   let h7 = 0x5be0cd19;
   const schedule = new Uint32Array(64);
-  const rotr = (value: number, bits: number): number =>
-    (value >>> bits) | (value << (32 - bits));
+  const rotr = (value: number, bits: number): number => (value >>> bits) | (value << (32 - bits));
   for (let block = 0; block < paddedLen; block += 64) {
     for (let i = 0; i < 16; i++) schedule[i] = view.getUint32(block + i * 4);
     for (let i = 16; i < 64; i++) {
-      const s0 = rotr(schedule[i - 15]!, 7) ^ rotr(schedule[i - 15]!, 18) ^ (schedule[i - 15]! >>> 3);
-      const s1 = rotr(schedule[i - 2]!, 17) ^ rotr(schedule[i - 2]!, 19) ^ (schedule[i - 2]! >>> 10);
+      const s0 =
+        rotr(schedule[i - 15]!, 7) ^ rotr(schedule[i - 15]!, 18) ^ (schedule[i - 15]! >>> 3);
+      const s1 =
+        rotr(schedule[i - 2]!, 17) ^ rotr(schedule[i - 2]!, 19) ^ (schedule[i - 2]! >>> 10);
       schedule[i] = (schedule[i - 16]! + s0 + schedule[i - 7]! + s1) | 0;
     }
     let a = h0;

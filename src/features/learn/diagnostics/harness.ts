@@ -66,13 +66,26 @@ function yieldToLoop(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function withCap(result: Promise<CheckResult> | CheckResult, wallCapMs: number, name: string): Promise<CheckResult> {
+async function withCap(
+  result: Promise<CheckResult> | CheckResult,
+  wallCapMs: number,
+  name: string,
+): Promise<CheckResult> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       Promise.resolve(result),
       new Promise<CheckResult>((resolve) => {
-        timer = setTimeout(() => resolve({ name, status: 'timeout', detail: `exceeded ${wallCapMs} ms`, wallMs: wallCapMs }), wallCapMs);
+        timer = setTimeout(
+          () =>
+            resolve({
+              name,
+              status: 'timeout',
+              detail: `exceeded ${wallCapMs} ms`,
+              wallMs: wallCapMs,
+            }),
+          wallCapMs,
+        );
       }),
     ]);
   } finally {
@@ -81,7 +94,11 @@ async function withCap(result: Promise<CheckResult> | CheckResult, wallCapMs: nu
 }
 
 /** A faulty check lands a fail row instead of rejecting the whole run. */
-async function settleCheck(check: CheckDef, sim: HarnessSim, wallCapMs: number): Promise<CheckResult> {
+async function settleCheck(
+  check: CheckDef,
+  sim: HarnessSim,
+  wallCapMs: number,
+): Promise<CheckResult> {
   const started = performance.now();
   const fail = (error: unknown): CheckResult => {
     const detail = error instanceof Error ? error.message : String(error);
@@ -125,7 +142,12 @@ export async function runHarness(
   const wallMs = performance.now() - started;
   const simMs = readSimMs(sim);
   const ticks = readSimTicks(sim);
-  return { projectId: '', buildLabel: '', results, metrics: { wallMs, simMs, ratio: simMs / Math.max(wallMs, 1), ticks } };
+  return {
+    projectId: '',
+    buildLabel: '',
+    results,
+    metrics: { wallMs, simMs, ratio: simMs / Math.max(wallMs, 1), ticks },
+  };
 }
 
 export function formatReport(report: HarnessReport): string {

@@ -82,10 +82,7 @@ export function wireClickAction(
  * the part's own rotation. Testing anything else misses the visible body --
  * a press on it finds no part and the drag becomes a pan.
  */
-export function rotatedPartAt(
-  bench: BenchForHit,
-  point: PointMm,
-): PartInstance | null {
+export function rotatedPartAt(bench: BenchForHit, point: PointMm): PartInstance | null {
   let best: PartInstance | null = null;
   let bestDepth = Number.POSITIVE_INFINITY;
 
@@ -143,7 +140,9 @@ export function pressHitsOwnPin(
   const byId = new Map(terminals.map((terminal) => [terminal.id, terminal]));
   return Object.values(part.terminals).some((terminalId) => {
     const terminal = byId.get(terminalId);
-    return terminal !== undefined && Math.hypot(terminal.x - world.x, terminal.y - world.y) <= radiusMm;
+    return (
+      terminal !== undefined && Math.hypot(terminal.x - world.x, terminal.y - world.y) <= radiusMm
+    );
   });
 }
 

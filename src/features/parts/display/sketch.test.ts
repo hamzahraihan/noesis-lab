@@ -104,9 +104,7 @@ describe('the sketch the bench opens with', () => {
   it('blinks the LED alongside the display', () => {
     const simulation = openedBench();
     simulation.tick(0.05);
-    const led = simulation.bench.parts.find(
-      (part) => part.definition.component.kind === 'led',
-    );
+    const led = simulation.bench.parts.find((part) => part.definition.component.kind === 'led');
     // The LED only exists if the caller wired one; the panel is the subject here.
     void led;
     expect(simulation.serial.join('')).toContain('ESP32 online');

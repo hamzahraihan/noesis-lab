@@ -5,11 +5,7 @@ import { CPU, avrInstruction } from 'avr8js';
 
 function encodeAdd(rd: number, rr: number): number {
   return (
-    0x0c00 |
-    (((rr >> 4) & 1) << 9) |
-    (((rd >> 4) & 1) << 8) |
-    ((rd & 0x0f) << 4) |
-    (rr & 0x0f)
+    0x0c00 | (((rr >> 4) & 1) << 9) | (((rd >> 4) & 1) << 8) | ((rd & 0x0f) << 4) | (rr & 0x0f)
   );
 }
 

@@ -22,11 +22,13 @@ const holeY = (row: number): number => stripRowY(row);
  * `wireDisplay` decides whether SDA and SCL are actually routed to the pins the
  * firmware drives, which is what separates a working screen from a blank one.
  */
-function buildDisplayBench(options: {
-  wireDisplay?: boolean;
-  sdaPin?: string;
-  sclPin?: string;
-} = {}) {
+function buildDisplayBench(
+  options: {
+    wireDisplay?: boolean;
+    sdaPin?: string;
+    sclPin?: string;
+  } = {},
+) {
   const builder = new BenchBuilder();
   const esp32 = builder.addPart(esp32DevKitV1(), BOARD_ORIGIN_X, 0);
   builder.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
@@ -155,12 +157,21 @@ function runSketch(sources: {
 
 /** The LCD and servo ports a display test never touches. */
 const UNUSED_LCD: LiquidCrystalPort = {
-  begin: () => 0, clear: () => {}, home: () => {}, setCursor: () => {},
-  print: () => {}, write: () => {}, createChar: () => {},
-  backlight: () => {}, noBacklight: () => {},
+  begin: () => 0,
+  clear: () => {},
+  home: () => {},
+  setCursor: () => {},
+  print: () => {},
+  write: () => {},
+  createChar: () => {},
+  backlight: () => {},
+  noBacklight: () => {},
 };
 const UNUSED_SERVO: ServoPort = {
-  attach: () => {}, write: () => {}, read: () => 0, detach: () => {},
+  attach: () => {},
+  write: () => {},
+  read: () => 0,
+  detach: () => {},
 };
 
 describe('display on the bench', () => {
@@ -246,9 +257,13 @@ describe('driving the display from firmware', () => {
     const services: FirmwareServices = {
       spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
       nowMs: () => engine.timeMs,
-      pinMode: () => {}, digitalWrite: () => {}, digitalRead: () => 0,
-      analogWrite: () => {}, analogRead: () => 0,
-      serialBegin: () => {}, serialWrite: () => {},
+      pinMode: () => {},
+      digitalWrite: () => {},
+      digitalRead: () => 0,
+      analogWrite: () => {},
+      analogRead: () => 0,
+      serialBegin: () => {},
+      serialWrite: () => {},
       wire: {
         begin: () => bus.begin(21, 22),
         beginTransmission: (address) => bus.beginTransmission(address),
@@ -266,7 +281,6 @@ describe('driving the display from firmware', () => {
     // The runner reports the transfer's bus time; the host is what spends it.
     const requested = runner.step();
     if (requested !== null) engine.skip(requested / 1000);
-
 
     // Setup pushes four transactions, the last carrying a full 1024-byte frame
     // would be tens of milliseconds; even a handful of bytes must cost time.

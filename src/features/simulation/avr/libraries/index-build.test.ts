@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { buildIndexObjects, reinstallIndexObjects, restoreInstalledIndex, selectIndexRelease } from './index-build';
+import {
+  buildIndexObjects,
+  reinstallIndexObjects,
+  restoreInstalledIndex,
+  selectIndexRelease,
+} from './index-build';
 import { encodeTier2Map, tier2CacheKey } from './tier2';
 import { validateLibraries } from './model';
 import type { IndexLibrary } from './index';
 
 const lib: IndexLibrary = {
-  name: 'SevSeg', author: 'A', sentence: 's', category: 'Display', architectures: ['*'],
+  name: 'SevSeg',
+  author: 'A',
+  sentence: 's',
+  category: 'Display',
+  architectures: ['*'],
   providesIncludes: ['SevSeg.h'],
   versions: [
     { version: '3.2.0', url: 'u32', checksum: 'SHA-256:' + 'a'.repeat(64), size: 10 },
@@ -97,10 +106,18 @@ describe('index entry builds', () => {
         fetches += 1;
         return new Uint8Array([0]);
       },
-      cache: { get: async () => null, put: async (key: string) => { puts.push(key); } },
+      cache: {
+        get: async () => null,
+        put: async (key: string) => {
+          puts.push(key);
+        },
+      },
       compileUnit: async () => new Uint8Array([1]),
     };
-    const bad = { ...lib, versions: [{ version: '9.9.9', url: 'u', checksum: 'SHA-256:' + '0'.repeat(64), size: 1 }] };
+    const bad = {
+      ...lib,
+      versions: [{ version: '9.9.9', url: 'u', checksum: 'SHA-256:' + '0'.repeat(64), size: 1 }],
+    };
     await expect(
       buildIndexObjects({ name: 'SevSeg', release: bad.versions[0] }, deps),
     ).rejects.toThrow(/checksum mismatch/);
@@ -155,20 +172,28 @@ describe('index entry builds', () => {
       compileUnit: async (): Promise<Uint8Array> => new Uint8Array([1]),
     };
     const release = { version: '1.0.0', url: 'u', checksum: 'MD5:abc', size: 1 };
-    await expect(
-      buildIndexObjects({ name: 'SevSeg', release }, deps),
-    ).rejects.toThrow(/unsupported checksum scheme/);
+    await expect(buildIndexObjects({ name: 'SevSeg', release }, deps)).rejects.toThrow(
+      /unsupported checksum scheme/,
+    );
     expect(fetches).toBe(0);
   });
 
   it('surfaces quota put failures as cache unavailable with nothing half-written', async () => {
     const encoder = new TextEncoder();
     const archive = buildStoredZip([
-      { name: 'SevSeg-1.0.0/SevSeg.cpp', data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n') },
+      {
+        name: 'SevSeg-1.0.0/SevSeg.cpp',
+        data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n'),
+      },
       { name: 'SevSeg-1.0.0/SevSeg.h', data: encoder.encode('#pragma once\nint x;\n') },
     ]);
     const sha = createHash('sha256').update(archive).digest('hex');
-    const release = { version: '1.0.0', url: 'u', checksum: `SHA-256:${sha}`, size: archive.length };
+    const release = {
+      version: '1.0.0',
+      url: 'u',
+      checksum: `SHA-256:${sha}`,
+      size: archive.length,
+    };
     const objectsKey = tier2CacheKey('SevSeg', release.version, 'objects');
     const headersKey = tier2CacheKey('SevSeg', release.version, 'headers');
     const store = new Map<string, Uint8Array>();
@@ -187,9 +212,9 @@ describe('index entry builds', () => {
         return new Uint8Array([7]);
       },
     };
-    await expect(
-      buildIndexObjects({ name: 'SevSeg', release }, deps),
-    ).rejects.toThrow(/cache unavailable/);
+    await expect(buildIndexObjects({ name: 'SevSeg', release }, deps)).rejects.toThrow(
+      /cache unavailable/,
+    );
     expect(compiles).toBe(1);
     expect(await cache.get(objectsKey)).toBeNull();
     expect(await cache.get(headersKey)).toBeNull();
@@ -198,11 +223,19 @@ describe('index entry builds', () => {
   it('reinstall evicts the exact-key hit and refetches instead of no-op', async () => {
     const encoder = new TextEncoder();
     const archive = buildStoredZip([
-      { name: 'SevSeg-1.0.0/SevSeg.cpp', data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n') },
+      {
+        name: 'SevSeg-1.0.0/SevSeg.cpp',
+        data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n'),
+      },
       { name: 'SevSeg-1.0.0/SevSeg.h', data: encoder.encode('#pragma once\nint x;\n') },
     ]);
     const sha = createHash('sha256').update(archive).digest('hex');
-    const release = { version: '1.0.0', url: 'u', checksum: `SHA-256:${sha}`, size: archive.length };
+    const release = {
+      version: '1.0.0',
+      url: 'u',
+      checksum: `SHA-256:${sha}`,
+      size: archive.length,
+    };
     // A previous build's bytes behind the exact key: a plain install no-ops on this hit.
     const seedObjects = new Map([['SevSeg.o', new Uint8Array([1, 2, 3])]]);
     const seedHeaders = new Map([['SevSeg.h', encoder.encode('#pragma once')]]);
@@ -246,11 +279,19 @@ describe('index entry builds', () => {
   it('restores the installed map from the versioned cache for saved declarations', async () => {
     const encoder = new TextEncoder();
     const archive = buildStoredZip([
-      { name: 'SevSeg-1.0.0/SevSeg.cpp', data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n') },
+      {
+        name: 'SevSeg-1.0.0/SevSeg.cpp',
+        data: encoder.encode('#include "SevSeg.h"\nint x = 1;\n'),
+      },
       { name: 'SevSeg-1.0.0/SevSeg.h', data: encoder.encode('#pragma once\nint x;\n') },
     ]);
     const sha = createHash('sha256').update(archive).digest('hex');
-    const release = { version: '1.0.0', url: 'u', checksum: `SHA-256:${sha}`, size: archive.length };
+    const release = {
+      version: '1.0.0',
+      url: 'u',
+      checksum: `SHA-256:${sha}`,
+      size: archive.length,
+    };
     const store = new Map<string, Uint8Array>();
     const cache = {
       get: async (key: string): Promise<Uint8Array | null> => store.get(key) ?? null,
@@ -273,15 +314,14 @@ describe('index entry builds', () => {
       '<SevSeg>: unknown index library',
     ]);
     // Rebuilt deterministically from the outliving object cache: validates clean, no reinstall.
-    const restored = await restoreInstalledIndex(
-      [{ name: 'SevSeg', version: '1.0.0' }],
-      cache,
-    );
+    const restored = await restoreInstalledIndex([{ name: 'SevSeg', version: '1.0.0' }], cache);
     expect(restored.get('SevSeg')).toEqual({ version: '1.0.0', headers: ['SevSeg.h'] });
     expect(validateLibraries(saved, { slots: [], indexInstalled: restored })).toEqual([]);
     // Unpinned declarations and evicted entries stay unknown until install.
     expect(await restoreInstalledIndex([{ name: 'SevSeg' }], cache)).toEqual(new Map());
     store.clear();
-    expect(await restoreInstalledIndex([{ name: 'SevSeg', version: '1.0.0' }], cache)).toEqual(new Map());
+    expect(await restoreInstalledIndex([{ name: 'SevSeg', version: '1.0.0' }], cache)).toEqual(
+      new Map(),
+    );
   });
 });

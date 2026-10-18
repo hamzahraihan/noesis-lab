@@ -53,19 +53,87 @@ export interface PythonToken {
 }
 
 const KEYWORDS: ReadonlySet<string> = new Set([
-  'and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif',
-  'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in',
-  'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try',
-  'while', 'with', 'yield', 'True', 'False', 'None',
+  'and',
+  'as',
+  'assert',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'del',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'nonlocal',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield',
+  'True',
+  'False',
+  'None',
 ]);
 
 /** Longest first, so `<=` never lexes as `<` followed by `=`. */
 const PUNCTUATION: ReadonlyArray<string> = [
-  '**=', '//=', '>>=', '<<=',
-  '**', '//', '==', '!=', '<=', '>=', '+=', '-=', '*=', '/=', '%=', '&=',
-  '|=', '^=', '<<', '>>',
-  '(', ')', '[', ']', '{', '}', ',', ':', '.', ';', '+', '-', '*', '/', '%',
-  '=', '<', '>', '!', '~', '&', '|', '^', '@',
+  '**=',
+  '//=',
+  '>>=',
+  '<<=',
+  '**',
+  '//',
+  '==',
+  '!=',
+  '<=',
+  '>=',
+  '+=',
+  '-=',
+  '*=',
+  '/=',
+  '%=',
+  '&=',
+  '|=',
+  '^=',
+  '<<',
+  '>>',
+  '(',
+  ')',
+  '[',
+  ']',
+  '{',
+  '}',
+  ',',
+  ':',
+  '.',
+  ';',
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '=',
+  '<',
+  '>',
+  '!',
+  '~',
+  '&',
+  '|',
+  '^',
+  '@',
 ];
 
 /** Higher binds tighter. `=` is absent on purpose: assignment is handled apart. */
@@ -75,15 +143,33 @@ const PRECEDENCE: Readonly<Record<string, number>> = {
   '|': 3,
   '^': 4,
   '&': 5,
-  '==': 6, '!=': 6,
-  '<': 7, '>': 7, '<=': 7, '>=': 7,
-  '<<': 8, '>>': 8,
-  '+': 9, '-': 9,
-  '*': 10, '/': 10, '%': 10,
+  '==': 6,
+  '!=': 6,
+  '<': 7,
+  '>': 7,
+  '<=': 7,
+  '>=': 7,
+  '<<': 8,
+  '>>': 8,
+  '+': 9,
+  '-': 9,
+  '*': 10,
+  '/': 10,
+  '%': 10,
 };
 
 const ASSIGN_OPERATORS: ReadonlyArray<string> = [
-  '=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>=',
+  '=',
+  '+=',
+  '-=',
+  '*=',
+  '/=',
+  '%=',
+  '&=',
+  '|=',
+  '^=',
+  '<<=',
+  '>>=',
 ];
 
 const COMPARISON: ReadonlySet<string> = new Set(['==', '!=', '<', '>', '<=', '>=']);
@@ -255,7 +341,10 @@ export function tokenizePython(source: string, file = 'main.py'): PythonToken[] 
 
     // Checked before the identifier rule, which would otherwise take the `f`
     // for a name and leave the quote to start a string of its own.
-    if ((char === 'f' || char === 'F') && (source[index + 1] === '"' || source[index + 1] === "'")) {
+    if (
+      (char === 'f' || char === 'F') &&
+      (source[index + 1] === '"' || source[index + 1] === "'")
+    ) {
       const literal = readStringLiteral(source, index + 1);
       advance(literal.end - index);
       emit('fstring', literal.body, location);
@@ -419,7 +508,11 @@ class PythonParser {
     if (this.atKeyword('def')) {
       // The VM has no nested functions. Reporting that beats hoisting the
       // definition to file scope where it would quietly become visible.
-      throw new FirmwareSyntaxError('functions must be defined at the top level', token.location, this.file);
+      throw new FirmwareSyntaxError(
+        'functions must be defined at the top level',
+        token.location,
+        this.file,
+      );
     }
     if (token.kind === 'keyword') {
       throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
@@ -629,7 +722,11 @@ class PythonParser {
     if (value.kind === 'identifier') {
       // Two names on the left, as in `a, b = 1, 2`, which this VM has no way to
       // bind. Saying so beats dropping the second value without a word.
-      throw new FirmwareSyntaxError(`'${value.name}' on its own is not a statement`, location, this.file);
+      throw new FirmwareSyntaxError(
+        `'${value.name}' on its own is not a statement`,
+        location,
+        this.file,
+      );
     }
     return { kind: 'expression', value, location };
   }
@@ -729,7 +826,11 @@ class PythonParser {
       }
 
       if (UNSUPPORTED_OPERATORS.has(token.text)) {
-        throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
+        throw new FirmwareSyntaxError(
+          `'${token.text}' is not supported`,
+          token.location,
+          this.file,
+        );
       }
 
       const precedence = token.kind === 'punctuation' ? PRECEDENCE[token.text] : undefined;
@@ -745,11 +846,7 @@ class PythonParser {
        * with a comparison already built is exactly what a chain looks like
        * once the shared operand has been consumed.
        */
-      if (
-        COMPARISON.has(token.text) &&
-        left.kind === 'binary' &&
-        COMPARISON.has(left.operator)
-      ) {
+      if (COMPARISON.has(token.text) && left.kind === 'binary' && COMPARISON.has(left.operator)) {
         throw new FirmwareSyntaxError(
           'chained comparisons are not supported; use `and` between them',
           token.location,
@@ -772,7 +869,12 @@ class PythonParser {
     }
     if (token.kind === 'punctuation' && ['-', '+', '~'].includes(token.text)) {
       this.next();
-      return { kind: 'unary', operator: token.text, operand: this.readUnary(), location: token.location };
+      return {
+        kind: 'unary',
+        operator: token.text,
+        operand: this.readUnary(),
+        location: token.location,
+      };
     }
     if (token.kind === 'keyword' && (token.text === 'lambda' || token.text === 'yield')) {
       throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
@@ -826,7 +928,8 @@ class PythonParser {
     }
     if (token.kind === 'keyword') {
       if (token.text === 'True') return { kind: 'boolean', value: true, location: token.location };
-      if (token.text === 'False') return { kind: 'boolean', value: false, location: token.location };
+      if (token.text === 'False')
+        return { kind: 'boolean', value: false, location: token.location };
       // `None` means "nothing", which is exactly what zero already is here.
       if (token.text === 'None') return { kind: 'number', value: 0, location: token.location };
     }
@@ -866,7 +969,11 @@ class PythonParser {
   private expect(kind: PythonTokenKind): PythonToken {
     const token = this.next();
     if (token.kind !== kind) {
-      throw new FirmwareSyntaxError(`expected ${kind}, found '${token.text}'`, token.location, this.file);
+      throw new FirmwareSyntaxError(
+        `expected ${kind}, found '${token.text}'`,
+        token.location,
+        this.file,
+      );
     }
     return token;
   }
@@ -878,7 +985,11 @@ class PythonParser {
   private expectKeyword(text: string): PythonToken {
     const token = this.peek();
     if (!this.atKeyword(text)) {
-      throw new FirmwareSyntaxError(`expected '${text}', found '${token.text}'`, token.location, this.file);
+      throw new FirmwareSyntaxError(
+        `expected '${text}', found '${token.text}'`,
+        token.location,
+        this.file,
+      );
     }
     return this.next();
   }
@@ -954,7 +1065,11 @@ function readFstring(token: PythonToken, file = 'main.py'): Expr {
       continue;
     }
     if (char === '}') {
-      throw new FirmwareSyntaxError("single '}' is not allowed in an f-string", token.location, file);
+      throw new FirmwareSyntaxError(
+        "single '}' is not allowed in an f-string",
+        token.location,
+        file,
+      );
     }
     if (char !== '{') {
       literal += char;
@@ -982,7 +1097,12 @@ function readFstring(token: PythonToken, file = 'main.py'): Expr {
 }
 
 /** The index of the `}` closing the replacement field that starts at `from`. */
-function findClosingBrace(body: string, from: number, location: SourceLocation, file = 'main.py'): number {
+function findClosingBrace(
+  body: string,
+  from: number,
+  location: SourceLocation,
+  file = 'main.py',
+): number {
   let depth = 0;
   let quote: string | null = null;
   for (let index = from; index < body.length; index++) {

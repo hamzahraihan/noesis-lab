@@ -48,7 +48,10 @@ export interface CustomUnit {
   readonly headers: ReadonlyMap<string, string>;
 }
 
-export function collectCustomUnits(slot: LibrarySlot): { units: CustomUnit[]; diagnostics: string[] } {
+export function collectCustomUnits(slot: LibrarySlot): {
+  units: CustomUnit[];
+  diagnostics: string[];
+} {
   const live = slot.files.filter((file) => !isPruned(file.path));
   const headers = new Map<string, string>();
   for (const file of live) {

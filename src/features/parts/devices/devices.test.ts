@@ -364,7 +364,8 @@ describe('a sketch using the new APIs', () => {
       },
     };
 
-    const runner = new FirmwareRunner(`
+    const runner = new FirmwareRunner(
+      `
       void setup() {
         Wire.beginTransmission(0x68);
         Wire.write(0x00);
@@ -375,7 +376,9 @@ describe('a sketch using the new APIs', () => {
         Serial.println(sec + min);
       }
       void loop() { }
-    `, services);
+    `,
+      services,
+    );
 
     for (let slice = 0; slice < 200 && !runner.done; slice++) runner.step();
 
@@ -397,13 +400,22 @@ describe('a sketch using the new APIs', () => {
     const hornModel = engine.servo(horn.id)!;
     const services: FirmwareServices = {
       nowMs: () => 0,
-      pinMode: () => {}, digitalWrite: () => {}, digitalRead: () => 0,
-      analogWrite: () => {}, analogRead: () => 0,
-      serialBegin: () => {}, serialWrite: () => {},
+      pinMode: () => {},
+      digitalWrite: () => {},
+      digitalRead: () => 0,
+      analogWrite: () => {},
+      analogRead: () => 0,
+      serialBegin: () => {},
+      serialWrite: () => {},
       spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
       wire: {
-        begin: () => {}, beginTransmission: () => {}, write: () => 1, endTransmission: () => 0,
-        requestFrom: () => 0, read: () => -1, available: () => 0,
+        begin: () => {},
+        beginTransmission: () => {},
+        write: () => 1,
+        endTransmission: () => 0,
+        requestFrom: () => 0,
+        read: () => -1,
+        available: () => 0,
       },
       servo: {
         attach: () => {},
@@ -481,7 +493,11 @@ describe('ds1307 preset', () => {
   it('reads back preset time and advances it with the host', async () => {
     const { Ds1307 } = await import('./ds1307');
     const rtc = new Ds1307();
-    rtc.applyPreset(15, 0, 0, [[0x08, 1], [0x09, 15], [0x0a, 10]]);
+    rtc.applyPreset(15, 0, 0, [
+      [0x08, 1],
+      [0x09, 15],
+      [0x0a, 10],
+    ]);
     rtc.setTime(new Date(2000, 0, 1, 0, 0, 0));
     rtc.receive(0x00, true);
     expect([...rtc.read(3)]).toEqual([0x00, 0x00, 0x15]);

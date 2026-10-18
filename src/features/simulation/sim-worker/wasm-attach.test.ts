@@ -5,7 +5,9 @@ import { boardOption } from '@/features/learn/boardRegistry';
 
 const realBytes = () => {
   const buf = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
-  return Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+  return Promise.resolve(
+    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+  );
 };
 
 function bench() {
@@ -46,11 +48,16 @@ function misalignedBytes(): Promise<ArrayBuffer> {
   const exp = (name: string, kind: number, idx: number) => [...str(name), kind, idx];
   const exps = [
     ...uleb(10),
-    ...exp('flash_base', 0, 0), ...exp('reset_cpu', 0, 1),
-    ...exp('get_reg', 0, 2), ...exp('set_reg', 0, 3),
-    ...exp('get_pc', 0, 4), ...exp('set_pc', 0, 5),
-    ...exp('get_sreg', 0, 6), ...exp('set_sreg', 0, 7),
-    ...exp('step', 0, 8), ...exp('memory', 2, 0),
+    ...exp('flash_base', 0, 0),
+    ...exp('reset_cpu', 0, 1),
+    ...exp('get_reg', 0, 2),
+    ...exp('set_reg', 0, 3),
+    ...exp('get_pc', 0, 4),
+    ...exp('set_pc', 0, 5),
+    ...exp('get_sreg', 0, 6),
+    ...exp('set_sreg', 0, 7),
+    ...exp('step', 0, 8),
+    ...exp('memory', 2, 0),
   ];
   const body = (...code: number[]) => {
     const b = [0x00, ...code, 0x0b];
@@ -58,17 +65,35 @@ function misalignedBytes(): Promise<ArrayBuffer> {
   };
   const codeSec = [
     ...uleb(9),
-    ...body(0x41, 0x01), ...body(), ...body(0x41, 0x00), ...body(),
-    ...body(0x41, 0x00), ...body(), ...body(0x41, 0x00), ...body(),
+    ...body(0x41, 0x01),
+    ...body(),
+    ...body(0x41, 0x00),
+    ...body(),
+    ...body(0x41, 0x00),
+    ...body(),
+    ...body(0x41, 0x00),
+    ...body(),
     ...body(0x41, 0x00),
   ];
   const mod = [
-    0, 0x61, 0x73, 0x6d, 1, 0, 0, 0,
-    ...sec(1, typeSec), ...sec(3, funcSec), ...sec(5, memSec),
-    ...sec(7, exps), ...sec(10, codeSec),
+    0,
+    0x61,
+    0x73,
+    0x6d,
+    1,
+    0,
+    0,
+    0,
+    ...sec(1, typeSec),
+    ...sec(3, funcSec),
+    ...sec(5, memSec),
+    ...sec(7, exps),
+    ...sec(10, codeSec),
   ];
   const buf = Buffer.from(mod);
-  return Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+  return Promise.resolve(
+    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+  );
 }
 
 describe('worker wasm attach', () => {
@@ -92,7 +117,9 @@ describe('worker wasm attach', () => {
 
   it('never attaches a stale load to a newer backend', async () => {
     let release!: (v: ArrayBuffer) => void;
-    const gate = new Promise<ArrayBuffer>((res) => { release = res; });
+    const gate = new Promise<ArrayBuffer>((res) => {
+      release = res;
+    });
     const core = createSimCore(boardOption('uno').make());
     core.rebuild(bench(), firmware, 'interpreter', true, () => gate);
     core.flash(WORDS);

@@ -48,7 +48,6 @@ export interface BoardPin {
   readonly canDrive?: boolean;
 }
 
-
 export interface BoardSpec {
   readonly id: string;
   readonly name: string;
@@ -107,7 +106,7 @@ export type ComponentSpec =
   | { readonly kind: 'i2c-sensor'; readonly device: I2cSensorVariant }
   | { readonly kind: 'lcd'; readonly variant: LcdVariant }
   | { readonly kind: 'servo' }
-  | { readonly kind: '7segment'; readonly digits: 1 | 2 | 3 | 4 }
+  | { readonly kind: '7segment'; readonly digits: 1 | 2 | 3 | 4 };
 
 /**
  * The comparator sensor boards, which are the same circuit however many times
@@ -215,10 +214,7 @@ export class DynamicState {
   private readonly pressed: Set<string>;
   private readonly values: Map<string, number>;
 
-  constructor(
-    pressed: Iterable<string> = [],
-    values: ReadonlyMap<string, number> = new Map(),
-  ) {
+  constructor(pressed: Iterable<string> = [], values: ReadonlyMap<string, number> = new Map()) {
     this.pressed = new Set(pressed);
     this.values = new Map(values);
   }

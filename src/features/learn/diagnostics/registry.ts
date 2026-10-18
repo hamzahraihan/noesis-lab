@@ -14,7 +14,11 @@
 
 import { Simulation } from '@/features/bench';
 // Boundary-explicit: learn → simulation value edges are outside the gate's forbidden set (bench|instruments → learn, parts → simulation, shared → features); verified by `node scripts/check-boundaries.mjs`.
-import { hexForSourcesHash, sourcesHashForProject, type FirmwareProject } from '@/features/simulation';
+import {
+  hexForSourcesHash,
+  sourcesHashForProject,
+  type FirmwareProject,
+} from '@/features/simulation';
 import { boardOption } from '../boardRegistry';
 import { firmwareForBuild, GALLERY, type GalleryBuild } from '../gallery';
 import {
@@ -60,8 +64,14 @@ function sameGlyph(actual: readonly number[] | undefined, expected: readonly num
   );
 }
 
-function sameGlass(actual: readonly (readonly number[])[], expected: readonly (readonly number[])[]): boolean {
-  return actual.length === expected.length && actual.every((glyph, index) => sameGlyph(glyph, expected[index]!));
+function sameGlass(
+  actual: readonly (readonly number[])[],
+  expected: readonly (readonly number[])[],
+): boolean {
+  return (
+    actual.length === expected.length &&
+    actual.every((glyph, index) => sameGlyph(glyph, expected[index]!))
+  );
 }
 
 /**
@@ -118,9 +128,7 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
           await sim.compileAndRun(project);
         } catch (error) {
           const detail = error instanceof Error ? error.message : String(error);
-          return OFFLINE_RE.test(detail)
-            ? { status: 'skip', detail }
-            : { status: 'fail', detail };
+          return OFFLINE_RE.test(detail) ? { status: 'skip', detail } : { status: 'fail', detail };
         }
         if (sim.compileState === 'ready') return { status: 'ready' };
         const detail =
@@ -283,7 +291,8 @@ const alarmLibraryChecks: CheckDef[] = [
       const started = performance.now();
       const name = 'buzzer silent while armed but not due';
       for (let frame = 0; frame < 8; frame++) sim.tick(0.05);
-      if (sim.readGpio(17)) return verdict(name, started, 'fail', 'buzzer driven while armed but not due');
+      if (sim.readGpio(17))
+        return verdict(name, started, 'fail', 'buzzer driven while armed but not due');
       return verdict(name, started, 'pass');
     },
   },
@@ -318,7 +327,8 @@ const alarmLibraryChecks: CheckDef[] = [
     run: (sim) => {
       const started = performance.now();
       const name = 'nvram persists the arm across reset';
-      if (sim.resetAvrCore?.() !== true) return verdict(name, started, 'skip', 'no avr core flashed');
+      if (sim.resetAvrCore?.() !== true)
+        return verdict(name, started, 'skip', 'no avr core flashed');
       for (let frame = 0; frame < 8; frame++) sim.tick(0.05);
       const rearmed = convergeGlass(asProbe(sim), 60);
       if (!rearmed.converged) {
@@ -342,7 +352,8 @@ const alarmLibraryChecks: CheckDef[] = [
       const started = performance.now();
       const name = 'buzzer rings while the alarm is due';
       sim.stageArmedAlarm?.();
-      if (sim.resetAvrCore?.() !== true) return verdict(name, started, 'skip', 'no avr core flashed');
+      if (sim.resetAvrCore?.() !== true)
+        return verdict(name, started, 'skip', 'no avr core flashed');
       for (let frame = 0; frame < 10; frame++) sim.tick(0.05);
       // Land inside the 15:10 alarm minute from wherever prior checks left
       // the clock, reading the same live glass and serial seconds the legs
@@ -804,7 +815,8 @@ export function buildRegistry(): RegistryEntry[] {
         makeSim: makeSimFor(build, project),
         checks: checksFor(entry.id, build),
         // The AVR worker compile measures ~150 s, over the 120 s runner default.
-        extendedCapMs: entry.id === 'alarm-clock' && build.variant === 'library' ? 1_600_000 : undefined,
+        extendedCapMs:
+          entry.id === 'alarm-clock' && build.variant === 'library' ? 1_600_000 : undefined,
       };
     }),
   );

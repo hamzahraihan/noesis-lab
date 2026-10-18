@@ -19,7 +19,11 @@ const lineMap = [
 
 describe('gcc error mapping', () => {
   it('maps a TU error frame back to its tab', () => {
-    const err = mapGccError('HorangFirmware.cpp:3:5: error: \u2018appTick\u2019 was not declared', lineMap, 'main.ino');
+    const err = mapGccError(
+      'HorangFirmware.cpp:3:5: error: \u2018appTick\u2019 was not declared',
+      lineMap,
+      'main.ino',
+    );
     expect(err).toEqual({ tab: 'main.ino', line: 2, message: expect.stringContaining('appTick') });
   });
 
@@ -34,25 +38,36 @@ describe('multi-TU gcc error mapping', () => {
   it('maps a library TU frame to its file', () => {
     // lineMap is TU-line-indexed (TU line n -> lineMap[n - 1]), as packed by
     // packageSketch: the frame's TU line 12 resolves through entry 11.
-    const lineMap = Array.from({ length: 12 }, (_, index) => ({ file: 'other.cpp', line: index + 1 }));
+    const lineMap = Array.from({ length: 12 }, (_, index) => ({
+      file: 'other.cpp',
+      line: index + 1,
+    }));
     lineMap[11] = { file: 'SevSeg/SevSeg.cpp', line: 12 };
     const err = mapGccErrorForUnits('/build/SevSeg.cpp:12:3: error: thing broke', [
       { unit: 'SevSeg.cpp', lineMap },
     ]);
-    expect(err).toEqual({ tab: 'SevSeg/SevSeg.cpp', line: 12, message: expect.stringContaining('thing broke') });
+    expect(err).toEqual({
+      tab: 'SevSeg/SevSeg.cpp',
+      line: 12,
+      message: expect.stringContaining('thing broke'),
+    });
   });
 
   it('falls back to the active file for frames from unknown units', () => {
-    const err = mapGccErrorForUnits('/build/Other.cpp:1:1: error: boom', [
-      { unit: 'SevSeg.cpp', lineMap: [{ file: 'SevSeg/SevSeg.cpp', line: 1 }] },
-    ], 'main.ino');
+    const err = mapGccErrorForUnits(
+      '/build/Other.cpp:1:1: error: boom',
+      [{ unit: 'SevSeg.cpp', lineMap: [{ file: 'SevSeg/SevSeg.cpp', line: 1 }] }],
+      'main.ino',
+    );
     expect(err).toEqual({ tab: 'main.ino', line: 1, message: expect.stringContaining('boom') });
   });
 
   it('degrades to capped raw text when unparseable', () => {
-    const err = mapGccErrorForUnits('ld blew up\nsecond line', [
-      { unit: 'SevSeg.cpp', lineMap: [{ file: 'SevSeg/SevSeg.cpp', line: 1 }] },
-    ], 'main.ino');
+    const err = mapGccErrorForUnits(
+      'ld blew up\nsecond line',
+      [{ unit: 'SevSeg.cpp', lineMap: [{ file: 'SevSeg/SevSeg.cpp', line: 1 }] }],
+      'main.ino',
+    );
     expect(err.tab).toBe('main.ino');
     expect(err.line).toBe(1);
   });
@@ -117,10 +132,16 @@ describe('project assembly', () => {
       libraries: [{ name: 'Nope', source: 'provided' }],
     } as unknown as FirmwareProject;
     await expect(
-      assembleProjectUnits(project, stubContext({ tier2: async () => {
-        fetches += 1;
-        throw new Error('unexpected Tier-2 fetch');
-      } }), SUPPORTED),
+      assembleProjectUnits(
+        project,
+        stubContext({
+          tier2: async () => {
+            fetches += 1;
+            throw new Error('unexpected Tier-2 fetch');
+          },
+        }),
+        SUPPORTED,
+      ),
     ).rejects.toThrow(/unknown provided library/);
     expect(fetches).toBe(0);
   });
@@ -140,7 +161,12 @@ describe('project assembly', () => {
     const project = {
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include <Arduino.h>\n#include <SevSeg.h>\nvoid setup(){}\nvoid loop(){}\n' }],
+      files: [
+        {
+          name: 'main.ino',
+          content: '#include <Arduino.h>\n#include <SevSeg.h>\nvoid setup(){}\nvoid loop(){}\n',
+        },
+      ],
       libraries: [{ name: 'SevSeg', source: 'provided' }],
     } as unknown as FirmwareProject;
     const assembled = await assembleProjectUnits(
@@ -164,7 +190,12 @@ describe('project assembly', () => {
     const project = {
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include <Arduino.h>\n#include <Bounce2.h>\nvoid setup(){}\nvoid loop(){}\n' }],
+      files: [
+        {
+          name: 'main.ino',
+          content: '#include <Arduino.h>\n#include <Bounce2.h>\nvoid setup(){}\nvoid loop(){}\n',
+        },
+      ],
       libraries: [{ name: 'Bounce2', source: 'index', version: '2.71.0' }],
     } as unknown as FirmwareProject;
     const indexCalls: Array<[string, string | undefined]> = [];
@@ -218,7 +249,12 @@ describe('project assembly', () => {
     const project = {
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include <Arduino.h>\n#include <Bounce2.h>\nvoid setup(){}\nvoid loop(){}\n' }],
+      files: [
+        {
+          name: 'main.ino',
+          content: '#include <Arduino.h>\n#include <Bounce2.h>\nvoid setup(){}\nvoid loop(){}\n',
+        },
+      ],
       libraries: [{ name: 'Bounce2', source: 'index', version: '2.71.0' }],
     } as unknown as FirmwareProject;
     await expect(
@@ -247,34 +283,54 @@ describe('avr compile client', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP: toolchain absent');
       return;
     }
-    const { hex } = await compileInWorker('#include <Arduino.h>\nvoid setup(){}\nvoid loop(){}\n', () => {}, new AbortController().signal);
+    const { hex } = await compileInWorker(
+      '#include <Arduino.h>\nvoid setup(){}\nvoid loop(){}\n',
+      () => {},
+      new AbortController().signal,
+    );
     expect(hex.length).toBeGreaterThan(0);
   }, 120_000);
 
   it('rejects unbundled libraries before compiling', async () => {
     await expect(
-      compileInWorker('#include <Arduino.h>\n#include <NopeLib.h>\nvoid setup(){}\nvoid loop(){}\n', () => {}, new AbortController().signal),
+      compileInWorker(
+        '#include <Arduino.h>\n#include <NopeLib.h>\nvoid setup(){}\nvoid loop(){}\n',
+        () => {},
+        new AbortController().signal,
+      ),
     ).rejects.toThrow(/not bundled/);
   });
 
   it('reports the counted supported-header set size', async () => {
-    const outcome = await compileInWorker('#include <NopeLib.h>\nvoid setup(){}\nvoid loop(){}\n', () => {}, new AbortController().signal).then(
-      () => { throw new Error('expected a bundled-library rejection'); },
+    const outcome = await compileInWorker(
+      '#include <NopeLib.h>\nvoid setup(){}\nvoid loop(){}\n',
+      () => {},
+      new AbortController().signal,
+    ).then(
+      () => {
+        throw new Error('expected a bundled-library rejection');
+      },
       (error: Error) => error,
     );
-    expect(outcome.message).toMatch(/library <NopeLib\.h> is not bundled \(see (\d+) supported headers\)/);
+    expect(outcome.message).toMatch(
+      /library <NopeLib\.h> is not bundled \(see (\d+) supported headers\)/,
+    );
   });
 
   it('links a custom-slot TU across translation units', async () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP: toolchain absent');
       return;
@@ -282,7 +338,12 @@ describe('avr compile client', () => {
     const project = slotProject(
       '#include <Arduino.h>\n#include <MyLib.h>\nvoid setup(){int x=libAdd(1,2);(void)x;}\nvoid loop(){}\n',
     );
-    const { hex } = await compileProjectWithLibraries(project, stubContext(), () => {}, new AbortController().signal);
+    const { hex } = await compileProjectWithLibraries(
+      project,
+      stubContext(),
+      () => {},
+      new AbortController().signal,
+    );
     expect(hex.length).toBeGreaterThan(0);
   }, 120_000);
 });

@@ -14,7 +14,10 @@ describe('loadFirmware with a project', () => {
       language: 'arduino-cpp',
       activeName: 'main.ino',
       files: [
-        { name: 'main.ino', content: '#include "helpers.h"\nvoid setup() { pinMode(2, 1); }\nvoid loop() {}\n' },
+        {
+          name: 'main.ino',
+          content: '#include "helpers.h"\nvoid setup() { pinMode(2, 1); }\nvoid loop() {}\n',
+        },
         { name: 'helpers.h', content: 'void helper() {}\n' },
       ],
     });
@@ -26,7 +29,9 @@ describe('loadFirmware with a project', () => {
     sim.loadFirmware({
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' }],
+      files: [
+        { name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' },
+      ],
     });
     expect(sim.firmwareError).toContain('missing.h');
   });
@@ -50,7 +55,9 @@ describe('loadFirmware with a project', () => {
     sim.loadFirmware({
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' }],
+      files: [
+        { name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' },
+      ],
     });
     const before = sim.firmwareError;
     expect(before).toContain('missing.h');
@@ -64,7 +71,10 @@ describe('loadFirmware with a project', () => {
       language: 'arduino-cpp',
       activeName: 'main.ino',
       files: [
-        { name: 'main.ino', content: '#include "helpers.h"\nvoid setup() { helper(); }\nvoid loop() {}\n' },
+        {
+          name: 'main.ino',
+          content: '#include "helpers.h"\nvoid setup() { helper(); }\nvoid loop() {}\n',
+        },
         { name: 'helpers.h', content: 'void helper() {}\n' },
       ],
     });
@@ -79,7 +89,9 @@ describe('loadFirmware with a project', () => {
     sim.loadFirmware({
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' }],
+      files: [
+        { name: 'main.ino', content: '#include "missing.h"\nvoid setup() {}\nvoid loop() {}\n' },
+      ],
     });
     expect(sim.runner).toBeNull();
     sim.start();

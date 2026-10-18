@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 /*
  * The bench's visual world.
@@ -133,20 +133,20 @@
   }
 
   /* Monospace readouts stay legible while a value is mid-update. */
-  input[type="range"].wiper {
+  input[type='range'].wiper {
     appearance: none;
     height: 1.25rem;
     background: transparent;
     cursor: ew-resize;
   }
 
-  input[type="range"].wiper::-webkit-slider-runnable-track {
+  input[type='range'].wiper::-webkit-slider-runnable-track {
     height: 0.25rem;
     border-radius: 0;
     background: var(--color-slate-700);
   }
 
-  input[type="range"].wiper::-webkit-slider-thumb {
+  input[type='range'].wiper::-webkit-slider-thumb {
     appearance: none;
     margin-top: -0.3125rem;
     height: 0.875rem;
@@ -241,7 +241,7 @@
   --hd-warn: #f9e2af;
 }
 
-[data-theme="paper"] {
+[data-theme='paper'] {
   --hd-bg: #efece5;
   --hd-surface: #e6e2d8;
   --hd-border: #c9c4b8;
@@ -260,14 +260,30 @@
 /* Herdr-style frame + grid + a11y utilities for non-bench surfaces. */
 .hd-grid {
   background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--hd-border) 30%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--hd-border) 30%, transparent) 1px, transparent 1px);
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--hd-border) 30%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--hd-border) 30%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 32px 32px;
 }
-[data-theme="paper"] .hd-grid {
+[data-theme='paper'] .hd-grid {
   background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--hd-border) 10%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--hd-border) 10%, transparent) 1px, transparent 1px);
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--hd-border) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--hd-border) 10%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 48px 48px;
 }
 

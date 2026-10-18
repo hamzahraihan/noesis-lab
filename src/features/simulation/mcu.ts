@@ -19,7 +19,6 @@ export interface PinConfiguration {
   readonly duty: number;
 }
 
-
 /**
  * Internal pull-up resistance brought out by `INPUT_PULLUP`.
  *
@@ -71,7 +70,6 @@ const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
   'raspberry-pi-4': [2, 3],
 };
 
-
 /**
  * Where each board's SPI peripheral sits, as [chipSelect, clock, mosi], with
  * the data-select line the bench's TFT happens to be wired to in between.
@@ -99,7 +97,6 @@ const SPI_PINS: Readonly<Record<string, readonly number[]>> = {
    */
   'raspberry-pi-4': [8, 24, 11, 10],
 };
-
 
 export class McuRuntime {
   readonly definition: PartDefinition;
@@ -200,7 +197,12 @@ export class McuRuntime {
       pwm: direction === 'output' ? (existing?.pwm ?? false) : false,
       duty: direction === 'output' ? (existing?.duty ?? 0) : 0,
     };
-    if (existing?.direction === next.direction && existing.pwm === next.pwm && existing.duty === next.duty) return;
+    if (
+      existing?.direction === next.direction &&
+      existing.pwm === next.pwm &&
+      existing.duty === next.duty
+    )
+      return;
     this.configurations.set(pinId, next);
     this.mutationCount++;
   }
@@ -221,7 +223,8 @@ export class McuRuntime {
       this.mutationCount++;
       return;
     }
-    if (existing?.direction === 'output' && !existing.pwm && existing.duty === (high ? 1 : 0)) return;
+    if (existing?.direction === 'output' && !existing.pwm && existing.duty === (high ? 1 : 0))
+      return;
     this.configurations.set(pinId, { direction: 'output', pwm: false, duty: high ? 1 : 0 });
     this.mutationCount++;
     if (existing?.pwm) this.pwmEpochMs.set(pinId, timeMs);
@@ -260,7 +263,7 @@ export class McuRuntime {
 
     const periodMs = 1000 / this.board.pwmHz;
     const epoch = this.pwmEpochMs.get(pinId) ?? 0;
-    const phase = (((timeMs - epoch) / periodMs) % 1 + 1) % 1;
+    const phase = ((((timeMs - epoch) / periodMs) % 1) + 1) % 1;
     return phase < configuration.duty ? 1 : 0;
   }
 

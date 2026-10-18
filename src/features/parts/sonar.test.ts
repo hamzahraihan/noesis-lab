@@ -12,7 +12,12 @@ describe('sonar definition', () => {
   it('exposes VCC/TRIG/ECHO/GND with a distance knob', () => {
     const def = sonarDefinition();
     expect(def.pins.map((p) => p.id)).toEqual(['VCC', 'TRIG', 'ECHO', 'GND']);
-    expect([DISTANCE_KNOB.min, DISTANCE_KNOB.max, DISTANCE_KNOB.step, DISTANCE_KNOB.defaultValue]).toEqual([2, 400, 1, 100]);
+    expect([
+      DISTANCE_KNOB.min,
+      DISTANCE_KNOB.max,
+      DISTANCE_KNOB.step,
+      DISTANCE_KNOB.defaultValue,
+    ]).toEqual([2, 400, 1, 100]);
   });
 });
 
@@ -55,7 +60,12 @@ function solveWith(
     measuring ? new Map([[bench.sonar.id, true]]) : new Map(),
   );
   const elements: Element[] = [
-    { kind: 'voltageSource', a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!, b: GROUND, volts: 3.3 },
+    {
+      kind: 'voltageSource',
+      a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!,
+      b: GROUND,
+      volts: 3.3,
+    },
     ...netlist.elements,
   ];
   return { netlist, solution: solveCircuit(elements, { nodeCount: netlist.nodeCount }) };

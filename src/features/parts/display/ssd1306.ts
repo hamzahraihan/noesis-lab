@@ -19,7 +19,6 @@ export const SSD1306_PAGES = SSD1306_HEIGHT / 8;
 
 const FRAMEBUFFER_BYTES = SSD1306_WIDTH * SSD1306_PAGES;
 
-
 const ADDRESSING_VERTICAL = 0x01;
 const ADDRESSING_PAGE = 0x02;
 
@@ -146,7 +145,6 @@ export class Ssd1306 {
     return this.segmentRemap;
   }
 
-
   /**
    * Sets a single pixel directly, bypassing the addressing pointer.
    *
@@ -208,18 +206,49 @@ export class Ssd1306 {
     }
 
     // Single-byte commands, in datasheet order.
-    if (byte === 0xae) { this.displayOn = false; return; }
-    if (byte === 0xaf) { this.displayOn = true; return; }
-    if (byte === 0xa0) { this.segmentRemap = false; return; }
-    if (byte === 0xa1) { this.segmentRemap = true; return; }
-    if (byte >= 0xb0 && byte <= 0xb7) { this.page = byte & 0x07; return; }
-    if (byte <= 0x0f) { this.column = (this.column & 0xf0) | byte; return; }
-    if (byte >= 0x10 && byte <= 0x1f) { this.column = (this.column & 0x0f) | ((byte & 0x0f) << 4); return; }
-    if (byte >= 0x40 && byte <= 0x7f) { return; } // display start line
+    if (byte === 0xae) {
+      this.displayOn = false;
+      return;
+    }
+    if (byte === 0xaf) {
+      this.displayOn = true;
+      return;
+    }
+    if (byte === 0xa0) {
+      this.segmentRemap = false;
+      return;
+    }
+    if (byte === 0xa1) {
+      this.segmentRemap = true;
+      return;
+    }
+    if (byte >= 0xb0 && byte <= 0xb7) {
+      this.page = byte & 0x07;
+      return;
+    }
+    if (byte <= 0x0f) {
+      this.column = (this.column & 0xf0) | byte;
+      return;
+    }
+    if (byte >= 0x10 && byte <= 0x1f) {
+      this.column = (this.column & 0x0f) | ((byte & 0x0f) << 4);
+      return;
+    }
+    if (byte >= 0x40 && byte <= 0x7f) {
+      return;
+    } // display start line
 
     // 0x15 and 0x16 carry their value in the low nibble, not as arguments.
-    if (byte === 0x15) { this.columnStart = byte & 0x0f; this.column = this.columnStart; return; }
-    if (byte === 0x16) { this.pageStart = byte & 0x0f; this.page = this.pageStart; return; }
+    if (byte === 0x15) {
+      this.columnStart = byte & 0x0f;
+      this.column = this.columnStart;
+      return;
+    }
+    if (byte === 0x16) {
+      this.pageStart = byte & 0x0f;
+      this.page = this.pageStart;
+      return;
+    }
 
     const arguments_ = ARGUMENT_COUNTS[byte];
     if (arguments_ === undefined) return; // unknown command: ignore, as the chip does

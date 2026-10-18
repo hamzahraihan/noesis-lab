@@ -12,13 +12,7 @@
  * walks them.
  */
 
-import {
-  GLYPH_ADVANCE,
-  GLYPH_HEIGHT,
-  GLYPH_WIDTH,
-  glyphFor,
-  measureText,
-} from './font5x7';
+import { GLYPH_ADVANCE, GLYPH_HEIGHT, GLYPH_WIDTH, glyphFor, measureText } from './font5x7';
 
 export const ILI9341_WIDTH = 320;
 export const ILI9341_HEIGHT = 240;
@@ -67,8 +61,6 @@ const ROTATION_MADCTL: Readonly<Record<PanelRotation, number>> = {
   2: MADCTL_MY | MADCTL_MX,
   3: MADCTL_MV,
 };
-
-
 
 /**
  * How many parameter bytes each command consumes.
@@ -550,7 +542,8 @@ export class Ili9341 {
   private writePixelByte(byte: number): void {
     if (this.cursorColumn < 0 || this.cursorColumn >= this.ramWidth) return;
     if (this.cursorPage < 0 || this.cursorPage >= this.ramHeight) return;
-    const index = (this.cursorPage * this.ramWidth + this.cursorColumn) * 2 + (this.expectHighByte ? 0 : 1);
+    const index =
+      (this.cursorPage * this.ramWidth + this.cursorColumn) * 2 + (this.expectHighByte ? 0 : 1);
     this.framebuffer[index] = byte;
     if (this.expectHighByte) {
       this.expectHighByte = false;

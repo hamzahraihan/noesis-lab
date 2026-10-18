@@ -37,12 +37,12 @@ function ledBench() {
   // Anode-anchored: the long leg lands on its hole, cathode one column along.
   const scopeLed = ledDefinition(DIODE_PROFILES.red, 'Red');
   const scopeAnode = scopeLed.pins.find((pin) => pin.id === 'anode')!;
-  builder.addPart(
-    scopeLed,
-    holeX(SIGNAL_COLUMN + 4) - scopeAnode.x,
-    holeY(8) - scopeAnode.y,
+  builder.addPart(scopeLed, holeX(SIGNAL_COLUMN + 4) - scopeAnode.x, holeY(8) - scopeAnode.y);
+  link(
+    builder,
+    { x: holeX(SIGNAL_COLUMN + 3), y: holeY(8) },
+    { x: holeX(SIGNAL_COLUMN + 3), y: railY },
   );
-  link(builder, { x: holeX(SIGNAL_COLUMN + 3), y: holeY(8) }, { x: holeX(SIGNAL_COLUMN + 3), y: railY });
   link(builder, pinAt('L_GND'), { x: holeX(10), y: railY });
 
   const mcu = new McuRuntime(esp32.definition);
@@ -79,8 +79,13 @@ function runSketch(engine: Engine, mcu: McuRuntime, source: string, ms: number):
     serialWrite: () => {},
     spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
     wire: {
-      begin: () => {}, beginTransmission: () => {}, write: () => 1, endTransmission: () => 0,
-      requestFrom: () => 0, read: () => -1, available: () => 0,
+      begin: () => {},
+      beginTransmission: () => {},
+      write: () => 1,
+      endTransmission: () => 0,
+      requestFrom: () => 0,
+      read: () => -1,
+      available: () => 0,
     },
   });
 
@@ -103,7 +108,6 @@ void setup() { pinMode(2, OUTPUT); }
 void loop() { analogWrite(2, 128); delay(1000); }
 `;
 
-
 /**
  * Probing a live circuit is the most expensive thing the suite does: every
  * sample is a fresh solve of a bench with a whole breadboard on it. The
@@ -112,7 +116,6 @@ void loop() { analogWrite(2, 128); delay(1000); }
  */
 const PROBE_TEST_TIMEOUT_MS = 20_000;
 describe('probing a running circuit', () => {
-
   it('records the voltages a solve produced on a watched net', () => {
     const { engine, mcu } = ledBench();
     const net = engine.netOfMcuPin('R_D2');
@@ -154,25 +157,25 @@ describe('probing a running circuit', () => {
   it(
     'measures a duty cycle that tracks what analogWrite asked for',
     () => {
-    const dutyAt = (value: number): number => {
-      const { engine, mcu } = ledBench();
-      const net = engine.netOfMcuPin('R_D2');
-      engine.probes.watch(net);
-      runSketch(engine, mcu, PWM_SKETCH.replace("128", String(value)), 25);
-      return measureDutyCycle(engine.probes.waveform(net)!.toArray());
-    };
+      const dutyAt = (value: number): number => {
+        const { engine, mcu } = ledBench();
+        const net = engine.netOfMcuPin('R_D2');
+        engine.probes.watch(net);
+        runSketch(engine, mcu, PWM_SKETCH.replace('128', String(value)), 25);
+        return measureDutyCycle(engine.probes.waveform(net)!.toArray());
+      };
 
-    const half = dutyAt(128);
-    const quarter = dutyAt(64);
+      const half = dutyAt(128);
+      const quarter = dutyAt(64);
 
-    // Compared rather than pinned to a number: the bench takes roughly ten
-    // samples per PWM cycle, so an absolute reading depends on where the
-    // capture happens to start. What must hold is that a lower duty measures
-    // lower. `measureDutyCycle`'s accuracy against a clean signal is covered
-    // in probe.test.ts.
-    expect(half).toBeGreaterThan(0);
-    expect(quarter).toBeLessThan(half);
-    expect(quarter).toBeGreaterThan(0);
+      // Compared rather than pinned to a number: the bench takes roughly ten
+      // samples per PWM cycle, so an absolute reading depends on where the
+      // capture happens to start. What must hold is that a lower duty measures
+      // lower. `measureDutyCycle`'s accuracy against a clean signal is covered
+      // in probe.test.ts.
+      expect(half).toBeGreaterThan(0);
+      expect(quarter).toBeLessThan(half);
+      expect(quarter).toBeGreaterThan(0);
     },
     PROBE_TEST_TIMEOUT_MS,
   );

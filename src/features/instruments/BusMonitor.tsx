@@ -62,7 +62,10 @@ export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMoni
         </Button>
       </div>
 
-      <ul ref={listRef} className="max-h-48 overflow-y-auto px-3 pb-3 font-mono text-[11px] leading-relaxed">
+      <ul
+        ref={listRef}
+        className="max-h-48 overflow-y-auto px-3 pb-3 font-mono text-[11px] leading-relaxed"
+      >
         {entries.length === 0 ? (
           <li className="font-sans text-slate-600">
             Nothing yet. Wire.beginTransmission and SPI.transfer land here as the sketch makes them.
@@ -71,14 +74,24 @@ export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMoni
           entries.slice(-VISIBLE_ENTRIES).map((entry, index) => (
             <li key={`${entry.timeMs}-${index}`} className="flex gap-2 whitespace-pre">
               <span className="num shrink-0 text-slate-600">{formatTime(entry.timeMs)}</span>
-              <span className={entry.bus === 'i2c' ? 'shrink-0 text-amber-400' : 'shrink-0 text-sky-400'}>
+              <span
+                className={
+                  entry.bus === 'i2c' ? 'shrink-0 text-amber-400' : 'shrink-0 text-sky-400'
+                }
+              >
                 {entry.bus === 'i2c' ? 'I2C' : 'SPI'}
               </span>
               {entry.address !== null && (
-                <span className="shrink-0 text-slate-500">0x{entry.address.toString(16).padStart(2, '0')}</span>
+                <span className="shrink-0 text-slate-500">
+                  0x{entry.address.toString(16).padStart(2, '0')}
+                </span>
               )}
               <span className="truncate text-slate-300">{formatBytes(entry.bytes)}</span>
-              <span className={entry.acknowledged ? 'shrink-0 text-emerald-500' : 'shrink-0 text-rose-500'}>
+              <span
+                className={
+                  entry.acknowledged ? 'shrink-0 text-emerald-500' : 'shrink-0 text-rose-500'
+                }
+              >
                 {entry.acknowledged ? 'ACK' : 'NACK'}
               </span>
               <span className="num shrink-0 text-slate-600">{formatMicros(entry.micros)}</span>
@@ -94,7 +107,9 @@ export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMoni
 function formatBytes(bytes: readonly number[]): string {
   if (bytes.length === 0) return '--';
   const shown = bytes.slice(0, BYTES_PER_LINE).map((byte) => byte.toString(16).padStart(2, '0'));
-  return shown.join(' ') + (bytes.length > BYTES_PER_LINE ? ` +${bytes.length - BYTES_PER_LINE}` : '');
+  return (
+    shown.join(' ') + (bytes.length > BYTES_PER_LINE ? ` +${bytes.length - BYTES_PER_LINE}` : '')
+  );
 }
 
 /** Simulated milliseconds, which grow without bound, so they are trimmed. */

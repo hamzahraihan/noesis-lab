@@ -79,9 +79,9 @@ describe('ILI9341 addressing', () => {
     command(display, 0x2c);
 
     // One full row of green, then a single pixel's worth of red.
-    const row = new Array<number>(ILI9341_WIDTH * 2).fill(0).map((_, i) =>
-      i % 2 === 0 ? 0x00 : 0x07,
-    );
+    const row = new Array<number>(ILI9341_WIDTH * 2)
+      .fill(0)
+      .map((_, i) => (i % 2 === 0 ? 0x00 : 0x07));
     data(display, ...row, 0xf8, 0x00);
     deselect(display);
 
@@ -96,7 +96,10 @@ describe('ILI9341 addressing', () => {
     command(display, 0x2b, 0x00, 0x00, 0x00, 0x07);
     command(display, 0x2c);
 
-    data(display, ...new Array<number>((5 - 2 + 1) * 2).fill(0).map((_, i) => (i % 2 ? 0xff : 0x00)));
+    data(
+      display,
+      ...new Array<number>((5 - 2 + 1) * 2).fill(0).map((_, i) => (i % 2 ? 0xff : 0x00)),
+    );
     deselect(display);
 
     expect(display.pixelAt(2, 0)).toBe(0x00ff);

@@ -47,7 +47,8 @@ export interface Tier2BuildResult {
 // mod.FS (ensureDir/writeFile), mod.callMain(args), read back the output.
 export const TIER2_CC1_FLAGS: readonly string[] = Object.freeze([
   '-quiet',
-  '-imultilib', 'avr5',
+  '-imultilib',
+  'avr5',
   '-D__AVR_ATmega328P__',
   '-D__AVR_DEVICE_NAME__=atmega328p',
   '-DF_CPU=16000000L',
@@ -56,31 +57,51 @@ export const TIER2_CC1_FLAGS: readonly string[] = Object.freeze([
   '-DARDUINO_ARCH_AVR',
   '-DUSE_OLED=0',
   '-DUSE_TOF=0',
-  '-isystem', '/sysroot/gcc/include',
-  '-isystem', '/sysroot/avr/include',
-  '-I', '/arduino/core',
-  '-I', '/arduino/variant',
-  '-I', '/arduino/libraries/Wire/src',
-  '-I', '/arduino/libraries/SPI/src',
-  '-I', '/arduino/libraries/Wire/src/utility',
-  '-I', '/libraries/Servo/src',
-  '-I', '/libraries/Servo/src/avr',
-  '-I', '/libraries/Firmata',
-  '-I', '/libraries/Firmata/utility',
-  '-I', '/libraries/Adafruit_BMP085_Library',
-  '-I', '/libraries/DHT_sensor_library',
-  '-I', '/libraries/Adafruit_GFX_Library',
-  '-I', '/libraries/Adafruit_SSD1306',
-  '-I', '/libraries/VL53L0X',
-  '-I', '/libraries/Adafruit_BusIO',
-  '-I', '/libraries/Adafruit_Unified_Sensor',
+  '-isystem',
+  '/sysroot/gcc/include',
+  '-isystem',
+  '/sysroot/avr/include',
+  '-I',
+  '/arduino/core',
+  '-I',
+  '/arduino/variant',
+  '-I',
+  '/arduino/libraries/Wire/src',
+  '-I',
+  '/arduino/libraries/SPI/src',
+  '-I',
+  '/arduino/libraries/Wire/src/utility',
+  '-I',
+  '/libraries/Servo/src',
+  '-I',
+  '/libraries/Servo/src/avr',
+  '-I',
+  '/libraries/Firmata',
+  '-I',
+  '/libraries/Firmata/utility',
+  '-I',
+  '/libraries/Adafruit_BMP085_Library',
+  '-I',
+  '/libraries/DHT_sensor_library',
+  '-I',
+  '/libraries/Adafruit_GFX_Library',
+  '-I',
+  '/libraries/Adafruit_SSD1306',
+  '-I',
+  '/libraries/VL53L0X',
+  '-I',
+  '/libraries/Adafruit_BusIO',
+  '-I',
+  '/libraries/Adafruit_Unified_Sensor',
   '<tu.cpp>',
   '-mn-flash=1',
   '-mno-skip-bug',
   '-quiet',
-  '-dumpbase', '<tu>',
+  '-dumpbase',
+  '<tu>',
   '-mmcu=avr5',
-  '-auxbase-strip', '<tu.s>',
+  '-auxbase-strip',
+  '<tu.s>',
   '-Os',
   '-std=gnu++11',
   '-fpermissive',
@@ -90,7 +111,8 @@ export const TIER2_CC1_FLAGS: readonly string[] = Object.freeze([
   '-fno-enforce-eh-specs',
   '-ffunction-sections',
   '-fdata-sections',
-  '-o', '<tu.s>',
+  '-o',
+  '<tu.s>',
 ]);
 
 /** Constant half of the package's avr-as argv (["-mmcu=atmega328p", "-o", out, in.s]). */
@@ -227,7 +249,10 @@ const ZIP_CENTRAL_SIG = 0x02014b50;
 const ZIP_EOCD_SIG = 0x06050b50;
 
 /** Minimal zip reader: local file headers, stored/deflated entries, CRC32-checked. */
-export async function unzipArchive(archive: Uint8Array, label: string): Promise<Map<string, Uint8Array>> {
+export async function unzipArchive(
+  archive: Uint8Array,
+  label: string,
+): Promise<Map<string, Uint8Array>> {
   const fail = (detail: string): Error => new Error(`${label}: ${detail}`);
   const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
   const decoder = new TextDecoder();
@@ -271,7 +296,10 @@ export async function unzipArchive(archive: Uint8Array, label: string): Promise<
  * tree stays `src/`-rooted (src/RTClib.h, src/RTClib.cpp) rather than being
  * flattened — callers key headers by basename.
  */
-export function stripTopFolder(files: ReadonlyMap<string, Uint8Array>, label: string): Map<string, Uint8Array> {
+export function stripTopFolder(
+  files: ReadonlyMap<string, Uint8Array>,
+  label: string,
+): Map<string, Uint8Array> {
   const fail = (detail: string): Error => new Error(`${label}: ${detail}`);
   const tops = new Set<string>();
   for (const name of files.keys()) {
@@ -332,7 +360,9 @@ export async function buildTier2Objects(
     try {
       await deps.cache.put(archiveKey, archive);
     } catch (error) {
-      throw new Error(`${resolved}: cache unavailable (${cacheDetail(error)}), rebuild from network next time`);
+      throw new Error(
+        `${resolved}: cache unavailable (${cacheDetail(error)}), rebuild from network next time`,
+      );
     }
   }
 
@@ -347,11 +377,13 @@ export async function buildTier2Objects(
     }
   }
   sources.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  if (sources.length === 0) throw new Error(`${resolved}: archive contains no .cpp/.c sources, refusing`);
+  if (sources.length === 0)
+    throw new Error(`${resolved}: archive contains no .cpp/.c sources, refusing`);
 
   const decoder = new TextDecoder();
   const headerText = new Map<string, string>();
-  for (const [headerName, headerBytes] of headers) headerText.set(headerName, decoder.decode(headerBytes));
+  for (const [headerName, headerBytes] of headers)
+    headerText.set(headerName, decoder.decode(headerBytes));
 
   const objects = new Map<string, Uint8Array>();
   for (const source of sources) {
@@ -363,7 +395,9 @@ export async function buildTier2Objects(
     await deps.cache.put(objectsKey, encodeTier2Map(objects));
     await deps.cache.put(headersKey, encodeTier2Map(headers));
   } catch (error) {
-    throw new Error(`${resolved}: cache unavailable (${cacheDetail(error)}), rebuild from network next time`);
+    throw new Error(
+      `${resolved}: cache unavailable (${cacheDetail(error)}), rebuild from network next time`,
+    );
   }
   return { objects, headers };
 }

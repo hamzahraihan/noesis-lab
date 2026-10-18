@@ -64,7 +64,13 @@ function PreviewSvg({
       </defs>
       <HardwareDefs />
       <rect x={frame.x} y={frame.y} width={frame.width} height={frame.height} fill="#020617" />
-      <rect x={frame.x} y={frame.y} width={frame.width} height={frame.height} fill={`url(#${gridId})`} />
+      <rect
+        x={frame.x}
+        y={frame.y}
+        width={frame.width}
+        height={frame.height}
+        fill={`url(#${gridId})`}
+      />
       <g data-layer="parts">
         {preview.parts.map((part) => (
           <g key={part.id} transform={partTransform(part)}>
@@ -119,7 +125,12 @@ export function ExercisePreview({
 }) {
   const preview = useMemo(() => previewFor(exercise), [exercise]);
   return (
-    <PreviewSvg preview={preview} label={`Finished wiring for ${exercise.title}`} className={className} fit={fit} />
+    <PreviewSvg
+      preview={preview}
+      label={`Finished wiring for ${exercise.title}`}
+      className={className}
+      fit={fit}
+    />
   );
 }
 
@@ -146,6 +157,11 @@ export function GalleryPreview({
 }) {
   const preview = useMemo(() => previewBench(board, circuit, cacheKey), [board, circuit, cacheKey]);
   return (
-    <PreviewSvg preview={preview} label={`Finished wiring for ${title}`} className={className} fit={fit} />
+    <PreviewSvg
+      preview={preview}
+      label={`Finished wiring for ${title}`}
+      className={className}
+      fit={fit}
+    />
   );
 }

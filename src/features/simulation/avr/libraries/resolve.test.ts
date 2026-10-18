@@ -37,7 +37,11 @@ describe('angle include resolution', () => {
   });
 
   it('leaves undeclared-but-bundled headers to the toolchain', () => {
-    const ctx = { project: { ...declared, libraries: [] as const }, slots: [], toolchainHeaders: toolchain };
+    const ctx = {
+      project: { ...declared, libraries: [] as const },
+      slots: [],
+      toolchainHeaders: toolchain,
+    };
     expect(resolveAngleInclude('Wire.h', ctx)).toEqual({ kind: 'toolchain' });
   });
 

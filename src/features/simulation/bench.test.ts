@@ -148,7 +148,10 @@ describe('hand-placed bends', () => {
     const builder = new BenchBuilder();
     const straight = builder.addWire(0, 0, 40, 20);
     const bent = new BenchBuilder().addWire(0, 0, 40, 20, {
-      bends: [{ x: 10, y: 40 }, { x: 30, y: 40 }],
+      bends: [
+        { x: 10, y: 40 },
+        { x: 30, y: 40 },
+      ],
     });
 
     // Bends are a routing detail. The netlist unions a wire's two ends
@@ -169,7 +172,6 @@ describe('hand-placed bends', () => {
     expect(builder.build().wires[0].bends).toHaveLength(1);
   });
 });
-
 
 describe('reshaping a placed wire', () => {
   /**
@@ -273,7 +275,6 @@ describe('reshaping a placed wire', () => {
   });
 });
 
-
 describe('taking a jumper off the bench', () => {
   it('removes only that wire', () => {
     const builder = new BenchBuilder();
@@ -296,8 +297,11 @@ describe('taking a jumper off the bench', () => {
       const bench = builder.build();
       const pinTerminal = board.terminals.R_D2;
       const node = buildNetlist(bench, NO_DYNAMIC_STATE).nodeOfTerminal[pinTerminal];
-      return buildNetlist(bench, NO_DYNAMIC_STATE).nets.find((net) => net.index === node)
-        ?.terminals ?? [pinTerminal];
+      return (
+        buildNetlist(bench, NO_DYNAMIC_STATE).nets.find((net) => net.index === node)?.terminals ?? [
+          pinTerminal,
+        ]
+      );
     };
 
     expect(bridgedTo().length).toBeGreaterThan(1);

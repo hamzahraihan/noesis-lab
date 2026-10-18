@@ -255,7 +255,10 @@ describe('every bend lands on the wire', () => {
     {
       name: 'a Z',
       from: { x: 0, y: 0 },
-      via: [{ x: 40, y: 0 }, { x: 40, y: 40 }],
+      via: [
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+      ],
       to: { x: 90, y: 40 },
     },
     {
@@ -267,7 +270,10 @@ describe('every bend lands on the wire', () => {
     {
       name: 'collinear waypoints',
       from: { x: 0, y: 0 },
-      via: [{ x: 20, y: 0 }, { x: 50, y: 0 }],
+      via: [
+        { x: 20, y: 0 },
+        { x: 50, y: 0 },
+      ],
       to: { x: 50, y: 40 },
     },
     {

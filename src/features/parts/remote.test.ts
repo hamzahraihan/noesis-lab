@@ -16,7 +16,9 @@ describe('remote definition', () => {
     expect(NEC_CODES).toHaveLength(20);
     expect(NEC_CODES[0]).toEqual({ name: 'power', code: 0xa2 });
     expect(def.knobs).toEqual([REMOTE_KEY_KNOB]);
-    expect([REMOTE_KEY_KNOB.min, REMOTE_KEY_KNOB.max, REMOTE_KEY_KNOB.defaultValue]).toEqual([0, 19, 0]);
+    expect([REMOTE_KEY_KNOB.min, REMOTE_KEY_KNOB.max, REMOTE_KEY_KNOB.defaultValue]).toEqual([
+      0, 19, 0,
+    ]);
   });
 });
 
@@ -59,8 +61,16 @@ describe('remote transmission', () => {
     const receiver = builder.addPart(irReceiverDefinition(), 200, 0);
     const remote = builder.addPart(remoteDefinition(), 300, 0);
     const sonar = builder.addPart(sonarDefinition(), 400, 0);
-    const wire = (a: { x: number; y: number }, b: { x: number; y: number }) => builder.addWire(a.x, a.y, b.x, b.y);
-    const at = (part: { x: number; y: number; definition: { pins: ReadonlyArray<{ id: string; x: number; y: number }> } }, pinId: string) => {
+    const wire = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      builder.addWire(a.x, a.y, b.x, b.y);
+    const at = (
+      part: {
+        x: number;
+        y: number;
+        definition: { pins: ReadonlyArray<{ id: string; x: number; y: number }> };
+      },
+      pinId: string,
+    ) => {
       const pin = part.definition.pins.find((p) => p.id === pinId)!;
       return { x: part.x + pin.x, y: part.y + pin.y };
     };

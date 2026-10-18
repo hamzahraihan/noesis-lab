@@ -27,7 +27,9 @@ describe('wasm perf gate', () => {
     for (let i = 0; i < 20; i++) noop.tick(1 / 60);
     const cpuMs = performance.now() - t1;
     const settleMs = fullMs - cpuMs;
-    console.log(`fullMs=${fullMs.toFixed(0)} cpuMs=${cpuMs.toFixed(0)} settleMs=${settleMs.toFixed(0)}`);
+    console.log(
+      `fullMs=${fullMs.toFixed(0)} cpuMs=${cpuMs.toFixed(0)} settleMs=${settleMs.toFixed(0)}`,
+    );
     const wasmWorthIt = cpuMs > settleMs;
     if (cpuMs < settleMs) {
       console.log('GATE: settle-dominated, stop B');

@@ -51,7 +51,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     what:
       'An input pin reads whatever the air decides if nothing drives it — a floating input picks up ' +
       'noise and can flip at random. A pull-up (to VCC) or pull-down (to GND) gives it a defined ' +
-      'resting value. The Uno\'s internal ones are 20–50 kΩ and are switched off during reset.',
+      "resting value. The Uno's internal ones are 20–50 kΩ and are switched off during reset.",
   },
   {
     term: 'Active-LOW',
@@ -86,7 +86,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   {
     term: 'analogRead',
     what:
-      'Reads a voltage on an analog pin and returns a number: 0–1023 on the Uno\'s 10-bit converter. ' +
+      "Reads a voltage on an analog pin and returns a number: 0–1023 on the Uno's 10-bit converter. " +
       'The resolution is the limit — no amount of care gets you more than 1024 distinct readings.',
     readMore: 'https://docs.arduino.cc/language-reference/en/functions/analog/analogRead/',
   },
@@ -180,7 +180,7 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
     what:
       '#define LED_PIN 8 is textually replaced before compiling, which is why it cannot be given a ' +
       'type. const byte LED_PIN = 8 is a real typed variable. The twin sketches in this course use ' +
-      'plain globals at file scope because the simulator\'s parser is deliberately small — the lesson ' +
+      "plain globals at file scope because the simulator's parser is deliberately small — the lesson " +
       'in Module 1 is that idiomatic const is better, and the exercise says so.',
   },
 ];

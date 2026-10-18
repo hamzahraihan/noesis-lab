@@ -146,7 +146,10 @@ const textDecoder = new TextDecoder();
  * `'stale'`, and rebinds (clearing per-frame maps, keeping accumulated
  * serial) on `'reallocated'`.
  */
-export function ingestSnapshot(state: MirrorState, buf: SharedArrayBuffer): 'ok' | 'reallocated' | 'stale' {
+export function ingestSnapshot(
+  state: MirrorState,
+  buf: SharedArrayBuffer,
+): 'ok' | 'reallocated' | 'stale' {
   let generation: number;
   let current: SnapshotLayout;
   try {
@@ -205,7 +208,8 @@ function copyFrame(state: MirrorState, buf: SharedArrayBuffer): void {
     const text = textDecoder.decode(new Uint8Array(drained));
     if (text !== '') {
       state.serial.push(text);
-      if (state.serial.length > SERIAL_CAP) state.serial.splice(0, state.serial.length - SERIAL_CAP);
+      if (state.serial.length > SERIAL_CAP)
+        state.serial.splice(0, state.serial.length - SERIAL_CAP);
     }
   }
 }
@@ -216,7 +220,11 @@ function displayBytesForPart(definition: PartDefinition): number {
   if (component.kind === '7segment') return (component.digits ?? 1) + 1;
   if (component.kind === 'lcd') return LCD_TEXT_BYTES + 1;
   if (component.kind === 'servo') return 1;
-  if (component.kind === 'neopixel' || component.kind === 'neopixel-matrix' || component.kind === 'led-ring') {
+  if (
+    component.kind === 'neopixel' ||
+    component.kind === 'neopixel-matrix' ||
+    component.kind === 'led-ring'
+  ) {
     return pixelCount(definition) * 3;
   }
   return 0;
@@ -283,7 +291,8 @@ export function sevenSegmentFromSnapshot(
   for (let digit = 0; digit < count; digit++) {
     const pattern = patterns[digit] ?? 0;
     const segVolts: number[] = [];
-    for (let index = 0; index < 8; index++) segVolts.push(((pattern >> index) & 1) === 1 ? 0 : high);
+    for (let index = 0; index < 8; index++)
+      segVolts.push(((pattern >> index) & 1) === 1 ? 0 : high);
     const digitVolts: number[] = [];
     for (let index = 0; index < count; index++) digitVolts.push(index === digit ? high : 0);
     seven.update(digitVolts, segVolts, high, colonLit ? 0 : high);
@@ -374,7 +383,11 @@ export function tftRgbaFromFrame(
  * Decodes a frame straight to `ImageData` for the existing canvas blit path
  * (`createImageData` + `putImageData` at the panel's own size).
  */
-export function tftImageDataFromFrame(width: number, height: number, rgb565: Uint8Array): ImageData {
+export function tftImageDataFromFrame(
+  width: number,
+  height: number,
+  rgb565: Uint8Array,
+): ImageData {
   const w = Math.max(0, Math.floor(width));
   const h = Math.max(0, Math.floor(height));
   return new ImageData(tftRgbaFromFrame(w, h, rgb565), w, h);
@@ -422,7 +435,13 @@ function compileDetail(error: unknown): string {
     if (typeof message === 'string' && message !== '') {
       const tab = (error as { tab?: unknown }).tab;
       const line = (error as { line?: unknown }).line;
-      if (typeof tab === 'string' && tab !== '' && typeof line === 'number' && Number.isInteger(line) && line > 0) {
+      if (
+        typeof tab === 'string' &&
+        tab !== '' &&
+        typeof line === 'number' &&
+        Number.isInteger(line) &&
+        line > 0
+      ) {
         return `${tab}:${line}: ${message}`;
       }
       return message;
@@ -808,7 +827,14 @@ class WorkerClientImpl implements WorkerClient {
     const id = this.nextId++;
     this.pending.set(id, 'init');
     try {
-      port.postMessage({ id, type: 'init', bench, firmware, execution: this.execution, wasm: this.wasm });
+      port.postMessage({
+        id,
+        type: 'init',
+        bench,
+        firmware,
+        execution: this.execution,
+        wasm: this.wasm,
+      });
     } catch {
       this.demote('sim worker post failed');
     }
@@ -816,7 +842,8 @@ class WorkerClientImpl implements WorkerClient {
 
   /** Flashes the staged HEX onto the worker's AVR core. */
   private postFlash(): void {
-    if (this.stagedHex !== null && this.port !== null) this.post('flash', { words: this.stagedHex });
+    if (this.stagedHex !== null && this.port !== null)
+      this.post('flash', { words: this.stagedHex });
   }
 
   /**
@@ -838,7 +865,8 @@ class WorkerClientImpl implements WorkerClient {
     if (typeof reply.id !== 'number') return;
     const kind = this.pending.get(reply.id);
     if (reply.ok === false) {
-      const detail = typeof reply.error === 'string' && reply.error !== '' ? reply.error : 'worker fault';
+      const detail =
+        typeof reply.error === 'string' && reply.error !== '' ? reply.error : 'worker fault';
       this.pending.delete(reply.id);
       this.demote(`sim worker fault: ${detail}`);
       return;
@@ -923,7 +951,8 @@ class WorkerClientImpl implements WorkerClient {
 
   /** Drops samples older than the one-second poll window. */
   private pruneSamples(now: number): void {
-    while (this.samples.length > 0 && now - (this.samples[0]?.wall ?? now) > 1000) this.samples.shift();
+    while (this.samples.length > 0 && now - (this.samples[0]?.wall ?? now) > 1000)
+      this.samples.shift();
   }
 
   /**
@@ -979,7 +1008,8 @@ function defaultPort(): SimWorkerPort {
     terminate: () => worker.terminate(),
   };
   worker.onmessage = (event: MessageEvent) => port.onmessage?.({ data: event.data });
-  worker.onerror = () => port.onmessage?.({ data: { id: -1, ok: false, error: 'sim worker crashed' } });
+  worker.onerror = () =>
+    port.onmessage?.({ data: { id: -1, ok: false, error: 'sim worker crashed' } });
   return port;
 }
 
@@ -1037,14 +1067,18 @@ export function createWorkerClient(opts: {
       return null;
     }
   } catch (error) {
-    onFallback(`sim worker unavailable: shared memory failed (${error instanceof Error ? error.message : String(error)})`);
+    onFallback(
+      `sim worker unavailable: shared memory failed (${error instanceof Error ? error.message : String(error)})`,
+    );
     return null;
   }
   let port: SimWorkerPort;
   try {
     port = opts.createPort?.() ?? defaultPort();
   } catch (error) {
-    onFallback(`sim worker unavailable: worker construction failed (${error instanceof Error ? error.message : String(error)})`);
+    onFallback(
+      `sim worker unavailable: worker construction failed (${error instanceof Error ? error.message : String(error)})`,
+    );
     return null;
   }
   return new WorkerClientImpl(board, opts.deps, {

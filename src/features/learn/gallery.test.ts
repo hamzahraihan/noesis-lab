@@ -4,13 +4,28 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { PART_CATALOGUE, SevenSegment } from '@/features/parts';
 import { boardOption } from './boardRegistry';
-import { GALLERY, boardsFor, buildFor, firmwareForBuild, galleryById, type GalleryBuild } from './gallery';
+import {
+  GALLERY,
+  boardsFor,
+  buildFor,
+  firmwareForBuild,
+  galleryById,
+  type GalleryBuild,
+} from './gallery';
 import { TIER2_MANIFEST } from '@/features/simulation';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { pushWokwiState } from '@/features/bench/wokwi/wokwi';
 import type { FootprintState } from '@/features/bench/wokwi/footprints';
-import { FIVE_GLYPH, F_GLYPH, N_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe } from './diagnostics/probes';
+import {
+  FIVE_GLYPH,
+  F_GLYPH,
+  N_GLYPH,
+  ONE_GLYPH,
+  ZERO_GLYPH,
+  convergeGlass,
+  liveProbe,
+} from './diagnostics/probes';
 
 const CATALOGUE_NAMES = new Set(PART_CATALOGUE.map((entry) => entry.make().name));
 
@@ -115,7 +130,10 @@ describe('the project gallery', () => {
       for (const build of entry.builds) {
         const simulation = benchFor(build);
         simulation.loadFirmware(firmwareForBuild(build, boardOption(build.board).language));
-        expect(simulation.firmwareError, `${entry.id}/${build.board}: ${simulation.firmwareError}`).toBeNull();
+        expect(
+          simulation.firmwareError,
+          `${entry.id}/${build.board}: ${simulation.firmwareError}`,
+        ).toBeNull();
       }
     }
     const lib = buildFor(galleryById('alarm-clock')!, 'uno', 'library')!;
@@ -190,7 +208,7 @@ describe('the project gallery', () => {
     runFrames(5);
     sampleColon();
     // Land just inside the next even second, then a second later.
-    libSim.engine.timeMs += (2000 - (libSim.engine.timeMs % 2000)) % 2000 + 300;
+    libSim.engine.timeMs += ((2000 - (libSim.engine.timeMs % 2000)) % 2000) + 300;
     expect(awaitColon(true, 40), 'colon lights on an even second').toBe(true);
     libSim.engine.timeMs += 1000;
     expect(awaitColon(false, 40), 'colon darkens on an odd second').toBe(true);
@@ -217,10 +235,9 @@ describe('the project gallery', () => {
         afternoon[d],
       );
     }
-    expect(
-      (element as unknown as { colon: boolean }).colon,
-      'library build colon enabled',
-    ).toBe(true);
+    expect((element as unknown as { colon: boolean }).colon, 'library build colon enabled').toBe(
+      true,
+    );
     // Buttons rest HIGH on their pull-ups; the disarmed buzzer rests LOW.
     expect(libSim.engine.readDigital(14), 'library build hours button released').toBe(true);
     expect(libSim.engine.readDigital(15), 'library build minutes button released').toBe(true);
@@ -315,7 +332,9 @@ describe('the project gallery', () => {
         // reaching the assertions below is one the operator would be given.
         const simulation = benchFor(build);
         expect(
-          simulation.bench.parts.some((part) => part.definition.id === simulation.mcu.definition.id),
+          simulation.bench.parts.some(
+            (part) => part.definition.id === simulation.mcu.definition.id,
+          ),
           `${key} board`,
         ).toBe(true);
         expect(simulation.bench.wires.length, `${key} wires`).toBeGreaterThanOrEqual(
@@ -330,7 +349,9 @@ describe('the project gallery', () => {
           touched.add(wire.to);
         }
         for (const part of entry.parts) {
-          const placed = simulation.bench.parts.filter((p) => p.definition.name === part.name).length;
+          const placed = simulation.bench.parts.filter(
+            (p) => p.definition.name === part.name,
+          ).length;
           expect(placed, `${key} "${part.name}" qty`).toBeGreaterThanOrEqual(part.qty);
         }
         for (const part of simulation.bench.parts) {
@@ -346,7 +367,11 @@ describe('the project gallery', () => {
   it('frames every project preview on real content', () => {
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
-        const preview = previewBench(build.board, build.circuit, `gallery:${build.board}:${entry.id}`);
+        const preview = previewBench(
+          build.board,
+          build.circuit,
+          `gallery:${build.board}:${entry.id}`,
+        );
         expect(preview.parts.length, `${entry.id} parts`).toBeGreaterThan(0);
         expect(preview.paths.length, `${entry.id} paths`).toBeGreaterThan(0);
       }
@@ -405,7 +430,9 @@ describe('the project gallery', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP avr parity: toolchain absent');
       return;
@@ -464,7 +491,7 @@ describe('the project gallery', () => {
       return false;
     };
     for (let frame = 0; frame < 120; frame++) simulation.tick(0.05);
-    simulation.engine.timeMs += (2000 - (simulation.engine.timeMs % 2000)) % 2000 + 300;
+    simulation.engine.timeMs += ((2000 - (simulation.engine.timeMs % 2000)) % 2000) + 300;
     expect(awaitColonRaw(true, 60), 'declared build colon lights on an even second').toBe(true);
     simulation.engine.timeMs += 1000;
     expect(awaitColonRaw(false, 60), 'declared build colon darkens on an odd second').toBe(true);
@@ -476,9 +503,12 @@ describe('the project gallery', () => {
     expect(glass(), 'declared build shows 15:01 a minute later').toBe('1501');
     // The serial log carries one t=H:M:S line per loop: the seconds in them
     // must advance, proving the RTC ticks under the display.
-    const seconds = [...simulation.serialLines().join('').matchAll(/t=\d+:\d+:(\d+)/g)].map(
-      (match) => Number(match[1]),
-    );
+    const seconds = [
+      ...simulation
+        .serialLines()
+        .join('')
+        .matchAll(/t=\d+:\d+:(\d+)/g),
+    ].map((match) => Number(match[1]));
     expect(new Set(seconds).size, 'declared build clock ticks').toBeGreaterThan(1);
   }, 180_000);
 
@@ -497,7 +527,9 @@ describe('the project gallery', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP Tier-2 fixture: toolchain absent');
       return;
@@ -579,114 +611,125 @@ void loop() {
    */
   it('runs each LCD project live on the bench', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
-    for (const id of ['alarm-clock', 'weather'] as const) {
-      const entry = galleryById(id)!;
-      const build = entry.builds[0];
-      if (execution === 'avr' && !hexAvailable()) { console.warn('SKIP avr parity: no HEX'); continue; }
-      const simulation = benchFor(build);
-      simulation.execution = execution;
-      simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
-      expect(simulation.firmwareError, `${id} firmware`).toBeNull();
-      simulation.start();
-      if (id === 'alarm-clock') {
-        let digitSeenHigh = false;
-        const segPartEarly = (): NonNullable<ReturnType<Simulation['bench']['parts']['find']>> =>
-          // Resolved per frame: the part list is stable, but looking it up
-          // here keeps the sampling loop honest about what is on the bench.
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-        const colonSamples: boolean[] = [];
+      for (const id of ['alarm-clock', 'weather'] as const) {
+        const entry = galleryById(id)!;
+        const build = entry.builds[0];
+        if (execution === 'avr' && !hexAvailable()) {
+          console.warn('SKIP avr parity: no HEX');
+          continue;
+        }
+        const simulation = benchFor(build);
+        simulation.execution = execution;
+        simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+        expect(simulation.firmwareError, `${id} firmware`).toBeNull();
+        simulation.start();
+        if (id === 'alarm-clock') {
+          let digitSeenHigh = false;
+          const segPartEarly = (): NonNullable<ReturnType<Simulation['bench']['parts']['find']>> =>
+            // Resolved per frame: the part list is stable, but looking it up
+            // here keeps the sampling loop honest about what is on the bench.
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+          const colonSamples: boolean[] = [];
+          for (let frame = 0; frame < 120; frame++) {
+            simulation.tick(0.05);
+            // D2-D5 are the four digit commons; the last-driven one persists
+            // HIGH through the end-of-loop delay.
+            for (const gpio of [2, 3, 4, 5]) {
+              if (simulation.engine.readDigital(gpio)) digitSeenHigh = true;
+            }
+            if (frame % 20 === 19) {
+              const probe = {
+                values: [] as number[],
+                digits: 0,
+                colon: false,
+                colonValue: false,
+              } as unknown as HTMLElement;
+              pushWokwiState(probe, segPartEarly().definition, segPartEarly(), {
+                pinVolts: simulation.pinVoltages(),
+                displays: simulation.displayControllers(),
+              } as unknown as FootprintState);
+              const target = probe as unknown as { colonValue: boolean };
+              colonSamples.push(target.colonValue);
+            }
+          }
+          expect(digitSeenHigh, `${id} multiplexes its digits`).toBe(true);
+          // The glass itself: push the solved state into the Wokwi element and
+          // read back all four digits. The bench starts at 15:00, so the digits
+          // hold '1', '5', '0', '0'. The colon blinks once a second beside them.
+          const segPart = simulation.bench.parts.find(
+            (p) => p.definition.id === '7segment-4digit',
+          )!;
+          const element = {
+            values: [] as number[],
+            digits: 0,
+            colon: false,
+            colonValue: false,
+          } as unknown as HTMLElement;
+          pushWokwiState(element, segPart.definition, segPart, {
+            pinVolts: simulation.pinVoltages(),
+            displays: simulation.displayControllers(),
+          } as unknown as FootprintState);
+          const values = (element as unknown as { values: number[] }).values;
+          expect(values).toHaveLength(32);
+          const afternoon = [ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH];
+          for (let d = 0; d < 4; d++) {
+            const slice = values.slice(d * 8, d * 8 + 8);
+            expect(slice, `${id} digit ${d + 1} shows 1500`).toEqual(afternoon[d]);
+          }
+          const colonState = element as unknown as { colon: boolean; colonValue: boolean };
+          expect(colonState.colon, `${id} colon enabled`).toBe(true);
+          // The blink proves the glass moves every second, not just once a minute.
+          expect(new Set(colonSamples), `${id} colon blinks once a second`).toEqual(
+            new Set([false, true]),
+          );
+          // Buttons rest HIGH on their pull-ups; the disarmed buzzer rests LOW.
+          expect(simulation.engine.readDigital(14), `${id} hours button released`).toBe(true);
+          expect(simulation.engine.readDigital(15), `${id} minutes button released`).toBe(true);
+          expect(simulation.engine.readDigital(16), `${id} alarm button released`).toBe(true);
+          expect(
+            simulation.engine.readDigital(17),
+            `${id} buzzer silent while armed but not due`,
+          ).toBe(false);
+          // The serial log carries one t=H:M:S line per loop: the seconds in
+          // them must advance, proving the RTC ticks under the display.
+          const seconds = [
+            ...simulation
+              .serialLines()
+              .join('')
+              .matchAll(/t=\d+:\d+:(\d+)/g),
+          ].map((match) => Number(match[1]));
+          expect(new Set(seconds).size, `${id} clock ticks`).toBeGreaterThan(1);
+          // A tap on Alarm exercises the multi-file path end to end: the
+          // button module's release verdict, the clock module's toggle plus
+          // NVRAM save over real I2C writes, and the status view switch.
+          const alarmButton = simulation.bench.parts.filter(
+            (p) => p.definition.name === 'Tactile Button',
+          )[2]!;
+          simulation.setPressed(alarmButton.id, true);
+          for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+          simulation.setPressed(alarmButton.id, false);
+          for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+          expect(simulation.firmwareError, `${id} still runs after the tap`).toBeNull();
+          expect(
+            simulation.serialLines().join(''),
+            `${id} alarm toggles on a short press`,
+          ).toContain('alarm toggled');
+          continue;
+        }
+        const glasses: string[] = [];
         for (let frame = 0; frame < 120; frame++) {
           simulation.tick(0.05);
-          // D2-D5 are the four digit commons; the last-driven one persists
-          // HIGH through the end-of-loop delay.
-          for (const gpio of [2, 3, 4, 5]) {
-            if (simulation.engine.readDigital(gpio)) digitSeenHigh = true;
-          }
-          if (frame % 20 === 19) {
-            const probe = {
-              values: [] as number[],
-              digits: 0,
-              colon: false,
-              colonValue: false,
-            } as unknown as HTMLElement;
-            pushWokwiState(probe, segPartEarly().definition, segPartEarly(), {
-              pinVolts: simulation.pinVoltages(),
-              displays: simulation.displayControllers(),
-            } as unknown as FootprintState);
-            const target = probe as unknown as { colonValue: boolean };
-            colonSamples.push(target.colonValue);
+          if (frame % 40 === 39) {
+            const lcd = [...simulation.lcdModels().values()][0];
+            glasses.push(lcd ? lcd.text() : '');
           }
         }
-        expect(digitSeenHigh, `${id} multiplexes its digits`).toBe(true);
-        // The glass itself: push the solved state into the Wokwi element and
-        // read back all four digits. The bench starts at 15:00, so the digits
-        // hold '1', '5', '0', '0'. The colon blinks once a second beside them.
-        const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-        const element = {
-          values: [] as number[],
-          digits: 0,
-          colon: false,
-          colonValue: false,
-        } as unknown as HTMLElement;
-        pushWokwiState(element, segPart.definition, segPart, {
-          pinVolts: simulation.pinVoltages(),
-          displays: simulation.displayControllers(),
-        } as unknown as FootprintState);
-        const values = (element as unknown as { values: number[] }).values;
-        expect(values).toHaveLength(32);
-        const afternoon = [ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH];
-        for (let d = 0; d < 4; d++) {
-          const slice = values.slice(d * 8, d * 8 + 8);
-          expect(slice, `${id} digit ${d + 1} shows 1500`).toEqual(afternoon[d]);
-        }
-        const colonState = element as unknown as { colon: boolean; colonValue: boolean };
-        expect(colonState.colon, `${id} colon enabled`).toBe(true);
-        // The blink proves the glass moves every second, not just once a minute.
-        expect(new Set(colonSamples), `${id} colon blinks once a second`).toEqual(
-          new Set([false, true]),
-        );
-        // Buttons rest HIGH on their pull-ups; the disarmed buzzer rests LOW.
-        expect(simulation.engine.readDigital(14), `${id} hours button released`).toBe(true);
-        expect(simulation.engine.readDigital(15), `${id} minutes button released`).toBe(true);
-        expect(simulation.engine.readDigital(16), `${id} alarm button released`).toBe(true);
-        expect(simulation.engine.readDigital(17), `${id} buzzer silent while armed but not due`).toBe(false);
-        // The serial log carries one t=H:M:S line per loop: the seconds in
-        // them must advance, proving the RTC ticks under the display.
-        const seconds = [...simulation.serialLines().join('').matchAll(/t=\d+:\d+:(\d+)/g)].map(
-          (match) => Number(match[1]),
-        );
-        expect(new Set(seconds).size, `${id} clock ticks`).toBeGreaterThan(1);
-        // A tap on Alarm exercises the multi-file path end to end: the
-        // button module's release verdict, the clock module's toggle plus
-        // NVRAM save over real I2C writes, and the status view switch.
-        const alarmButton = simulation.bench.parts.filter(
-          (p) => p.definition.name === 'Tactile Button',
-        )[2]!;
-        simulation.setPressed(alarmButton.id, true);
-        for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
-        simulation.setPressed(alarmButton.id, false);
-        for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
-        expect(simulation.firmwareError, `${id} still runs after the tap`).toBeNull();
-        expect(
-          simulation.serialLines().join(''),
-          `${id} alarm toggles on a short press`,
-        ).toContain('alarm toggled');
-        continue;
-      }
-      const glasses: string[] = [];
-      for (let frame = 0; frame < 120; frame++) {
-        simulation.tick(0.05);
-        if (frame % 40 === 39) {
-          const lcd = [...simulation.lcdModels().values()][0];
-          glasses.push(lcd ? lcd.text() : '');
+        for (const glass of glasses) {
+          expect(glass, `${id} glass shows readings`).toMatch(/t \d/);
+          expect(glass, `${id} glass shows humidity`).toMatch(/rh \d/);
         }
       }
-      for (const glass of glasses) {
-        expect(glass, `${id} glass shows readings`).toMatch(/t \d/);
-        expect(glass, `${id} glass shows humidity`).toMatch(/rh \d/);
-      }
-    }
     }
     // Budget covers the newly-live avr legs: cycle-accurate 16 MHz
     // simulation of 120 frames x 4 combos costs ~40 s solo, more under
@@ -701,32 +744,37 @@ void loop() {
    */
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
-    const build = galleryById('alarm-clock')!.builds[0];
-    if (execution === 'avr' && !hexAvailable()) { console.warn('SKIP avr parity: no HEX'); continue; }
-    const simulation = benchFor(build);
-    simulation.execution = execution;
-    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
-    expect(simulation.firmwareError, 'alarm-clock firmware').toBeNull();
-    simulation.start();
-    const glass = (): string => {
-      const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-      const ctrl = simulation.displayControllers().get(seg.id) as unknown as SevenSegment;
-      return ctrl.getText();
-    };
-    for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
-    expect(glass(), 'idle shows 15:00').toBe('1500');
-    // A minute of RTC time must move the minute digits.
-    simulation.engine.timeMs += 61000;
-    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
-    expect(glass(), 'a minute later shows 15:01').toBe('1501');
-    // An Hour tap retunes the shown time through the persisted offset. The
-    // hold may additionally trip one auto-repeat tick, so either +1 or +2.
-    const hours = simulation.bench.parts.filter((p) => p.definition.name === 'Tactile Button')[0]!;
-    simulation.setPressed(hours.id, true);
-    for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
-    simulation.setPressed(hours.id, false);
-    for (let frame = 0; frame < 22; frame++) simulation.tick(0.05);
-    expect(glass(), 'hour tap moves the hour digits').toMatch(/^1[67]01$/);
+      const build = galleryById('alarm-clock')!.builds[0];
+      if (execution === 'avr' && !hexAvailable()) {
+        console.warn('SKIP avr parity: no HEX');
+        continue;
+      }
+      const simulation = benchFor(build);
+      simulation.execution = execution;
+      simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+      expect(simulation.firmwareError, 'alarm-clock firmware').toBeNull();
+      simulation.start();
+      const glass = (): string => {
+        const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
+        const ctrl = simulation.displayControllers().get(seg.id) as unknown as SevenSegment;
+        return ctrl.getText();
+      };
+      for (let frame = 0; frame < 30; frame++) simulation.tick(0.05);
+      expect(glass(), 'idle shows 15:00').toBe('1500');
+      // A minute of RTC time must move the minute digits.
+      simulation.engine.timeMs += 61000;
+      for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+      expect(glass(), 'a minute later shows 15:01').toBe('1501');
+      // An Hour tap retunes the shown time through the persisted offset. The
+      // hold may additionally trip one auto-repeat tick, so either +1 or +2.
+      const hours = simulation.bench.parts.filter(
+        (p) => p.definition.name === 'Tactile Button',
+      )[0]!;
+      simulation.setPressed(hours.id, true);
+      for (let frame = 0; frame < 12; frame++) simulation.tick(0.05);
+      simulation.setPressed(hours.id, false);
+      for (let frame = 0; frame < 22; frame++) simulation.tick(0.05);
+      expect(glass(), 'hour tap moves the hour digits').toMatch(/^1[67]01$/);
     }
   }, 60_000);
 
@@ -796,7 +844,12 @@ void loop() {
     const segPart = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
     const colonSamples: boolean[] = [];
     const sampleColonAt = (): void => {
-      const probe = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
+      const probe = {
+        values: [] as number[],
+        digits: 0,
+        colon: false,
+        colonValue: false,
+      } as unknown as HTMLElement;
       pushWokwiState(probe, segPart.definition, segPart, {
         pinVolts: simulation.pinVoltages(),
         displays: simulation.displayControllers(),
@@ -811,13 +864,18 @@ void loop() {
       }
       return false;
     };
-    simulation.engine.timeMs += (2000 - (simulation.engine.timeMs % 2000)) % 2000 + 300;
+    simulation.engine.timeMs += ((2000 - (simulation.engine.timeMs % 2000)) % 2000) + 300;
     expect(awaitColon(true, 60), 'colon lights on an even second').toBe(true);
     simulation.engine.timeMs += 1000;
     expect(awaitColon(false, 60), 'colon darkens on an odd second').toBe(true);
     expect(new Set(colonSamples), 'library colon blinks').toEqual(new Set([false, true]));
     // DP slice stays dark: SevSeg begun with 7 segment pins.
-    const element = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
+    const element = {
+      values: [] as number[],
+      digits: 0,
+      colon: false,
+      colonValue: false,
+    } as unknown as HTMLElement;
     pushWokwiState(element, segPart.definition, segPart, {
       pinVolts: simulation.pinVoltages(),
       displays: simulation.displayControllers(),
@@ -863,7 +921,10 @@ void loop() {
     // Fresh NVRAM starts disarmed (zeroed model NVRAM ⇒ DISABLED per
     // Clock::begin): the buzzer rests LOW before anything is armed.
     for (let frame = 0; frame < 8; frame++) simulation.tick(0.05);
-    expect(simulation.engine.readDigital(17), 'library build buzzer silent while armed but not due').toBe(false);
+    expect(
+      simulation.engine.readDigital(17),
+      'library build buzzer silent while armed but not due',
+    ).toBe(false);
     // Disarming press: the pre-armed clock toggles off, saving NVRAM over
     // glass switches to the setChars status view — the SevSeg API the
     // fixture never covers. ALARM_STATUS_DISPLAY_TIME is 1000 ms firmware,
@@ -964,7 +1025,9 @@ void loop() {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP library build worker compile: toolchain absent');
       return;
@@ -1045,9 +1108,7 @@ describe('alarm wiring paths', () => {
       return { x0: p.x, y0: p.y, x1: p.x + def.widthMm, y1: p.y + def.heightMm, id: p.id };
     });
     const terminals = sim.bench.terminals;
-    const crosses = (
-      ax: number, ay: number, bx: number, by: number, box: Box,
-    ): boolean => {
+    const crosses = (ax: number, ay: number, bx: number, by: number, box: Box): boolean => {
       // Shrunk box: grazes along an edge do not count, crossings do.
       const x0 = box.x0 + 0.4;
       const y0 = box.y0 + 0.4;
@@ -1056,8 +1117,14 @@ describe('alarm wiring paths', () => {
       if (x0 >= x1 || y0 >= y1) return false;
       const inside = (x: number, y: number): boolean => x > x0 && x < x1 && y > y0 && y < y1;
       if (inside(ax, ay) || inside(bx, by)) return true;
-      const orient = (px: number, py: number, qx: number, qy: number, rx: number, ry: number): number =>
-        Math.sign((qy - py) * (rx - qx) - (qx - px) * (ry - qy));
+      const orient = (
+        px: number,
+        py: number,
+        qx: number,
+        qy: number,
+        rx: number,
+        ry: number,
+      ): number => Math.sign((qy - py) * (rx - qx) - (qx - px) * (ry - qy));
       const intersect = (cx: number, cy: number, dx: number, dy: number): boolean => {
         const o1 = orient(ax, ay, bx, by, cx, cy);
         const o2 = orient(ax, ay, bx, by, dx, dy);
@@ -1079,11 +1146,13 @@ describe('alarm wiring paths', () => {
       // A wire must touch its own endpoint parts: any part containing an
       // endpoint (with margin) is excluded for that wire.
       const owned = new Set(
-        boxes.filter((box) => {
-          const near = (x: number, y: number): boolean =>
-            x > box.x0 - 1 && x < box.x1 + 1 && y > box.y0 - 1 && y < box.y1 + 1;
-          return near(a.x, a.y) || near(b.x, b.y);
-        }).map((box) => box.id),
+        boxes
+          .filter((box) => {
+            const near = (x: number, y: number): boolean =>
+              x > box.x0 - 1 && x < box.x1 + 1 && y > box.y0 - 1 && y < box.y1 + 1;
+            return near(a.x, a.y) || near(b.x, b.y);
+          })
+          .map((box) => box.id),
       );
       for (let i = 0; i + 1 < corners.length; i++) {
         const p = corners[i]!;

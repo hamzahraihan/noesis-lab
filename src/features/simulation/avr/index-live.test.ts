@@ -38,7 +38,9 @@ describe('library manager live proof', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP: toolchain absent');
       return;
@@ -47,7 +49,9 @@ describe('library manager live proof', () => {
     try {
       rows = await fetchIndex({ store: new MemoryBackend(), fetchFn: fetch });
     } catch (error) {
-      console.warn(`SKIP: library index unreachable (${error instanceof Error ? error.message : String(error)})`);
+      console.warn(
+        `SKIP: library index unreachable (${error instanceof Error ? error.message : String(error)})`,
+      );
       return;
     }
     const found = rows.find((lib) => lib.name === 'Bounce2') ?? null;

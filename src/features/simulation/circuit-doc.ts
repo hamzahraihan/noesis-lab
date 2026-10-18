@@ -1,4 +1,10 @@
-import { BenchBuilder, BUTTON_CAP_COLOURS, type Bench, type BenchSnapshot, type PartInstance } from './bench';
+import {
+  BenchBuilder,
+  BUTTON_CAP_COLOURS,
+  type Bench,
+  type BenchSnapshot,
+  type PartInstance,
+} from './bench';
 import { DynamicState, partDefinitionById, rotateOffset } from '@/features/parts';
 
 export interface CircuitPart {
@@ -44,20 +50,27 @@ export function validateCircuit(doc: unknown): string[] {
     return errors;
   }
   const d = doc as Record<string, unknown>;
-  if (typeof d.version !== 'number' || !Number.isInteger(d.version)) errors.push('version must be an integer');
+  if (typeof d.version !== 'number' || !Number.isInteger(d.version))
+    errors.push('version must be an integer');
   if (!Array.isArray(d.parts)) errors.push('parts must be an array');
   if (!Array.isArray(d.wires)) errors.push('wires must be an array');
   if (Array.isArray(d.parts)) {
     const ids = new Set<string>();
     for (let i = 0; i < d.parts.length; i++) {
       const p = d.parts[i];
-      if (typeof p !== 'object' || p === null) { errors.push(`parts[${i}] must be an object`); continue; }
+      if (typeof p !== 'object' || p === null) {
+        errors.push(`parts[${i}] must be an object`);
+        continue;
+      }
       const pp = p as Record<string, unknown>;
-      if (typeof pp.id !== 'string' || pp.id === '') errors.push(`parts[${i}].id must be a non-empty string`);
-      if (typeof pp.type !== 'string' || pp.type === '') errors.push(`parts[${i}].type must be a non-empty string`);
+      if (typeof pp.id !== 'string' || pp.id === '')
+        errors.push(`parts[${i}].id must be a non-empty string`);
+      if (typeof pp.type !== 'string' || pp.type === '')
+        errors.push(`parts[${i}].type must be a non-empty string`);
       if (typeof pp.x !== 'number') errors.push(`parts[${i}].x must be a number`);
       if (typeof pp.y !== 'number') errors.push(`parts[${i}].y must be a number`);
-      if (pp.rotation !== undefined && ![0, 90, 180, 270].includes(pp.rotation as number)) errors.push(`parts[${i}].rotation must be 0/90/180/270`);
+      if (pp.rotation !== undefined && ![0, 90, 180, 270].includes(pp.rotation as number))
+        errors.push(`parts[${i}].rotation must be 0/90/180/270`);
       if (typeof pp.id === 'string') {
         if (ids.has(pp.id)) errors.push(`duplicate part id: ${pp.id}`);
         ids.add(pp.id);
@@ -67,9 +80,13 @@ export function validateCircuit(doc: unknown): string[] {
   if (Array.isArray(d.wires)) {
     for (let i = 0; i < d.wires.length; i++) {
       const w = d.wires[i];
-      if (typeof w !== 'object' || w === null) { errors.push(`wires[${i}] must be an object`); continue; }
+      if (typeof w !== 'object' || w === null) {
+        errors.push(`wires[${i}] must be an object`);
+        continue;
+      }
       const ww = w as Record<string, unknown>;
-      if (typeof ww.id !== 'string' || ww.id === '') errors.push(`wires[${i}].id must be a non-empty string`);
+      if (typeof ww.id !== 'string' || ww.id === '')
+        errors.push(`wires[${i}].id must be a non-empty string`);
       if (typeof ww.from !== 'string') errors.push(`wires[${i}].from must be a string`);
       if (typeof ww.to !== 'string') errors.push(`wires[${i}].to must be a string`);
       if (typeof ww.colour !== 'string') errors.push(`wires[${i}].colour must be a string`);
@@ -133,21 +150,37 @@ function findPin(part: PartInstance, ref: string) {
   return undefined;
 }
 
-export function compile(doc: unknown): { bench: Bench | null; snapshot: BenchSnapshot | null; dynamicState: DynamicState | null; errors: string[] } {
+export function compile(doc: unknown): {
+  bench: Bench | null;
+  snapshot: BenchSnapshot | null;
+  dynamicState: DynamicState | null;
+  errors: string[];
+} {
   const errors = validateCircuit(doc);
   if (errors.length > 0) return { bench: null, snapshot: null, dynamicState: null, errors };
   const d = doc as CircuitDocument;
   if (d.version !== 1) {
-    return { bench: null, snapshot: null, dynamicState: null, errors: [`unsupported circuit version: ${d.version}`] };
+    return {
+      bench: null,
+      snapshot: null,
+      dynamicState: null,
+      errors: [`unsupported circuit version: ${d.version}`],
+    };
   }
   const builder = new BenchBuilder();
   const partById = new Map<string, PartInstance>();
   const seenIds = new Set<string>();
   for (const p of d.parts) {
-    if (seenIds.has(p.id)) { errors.push(`duplicate part id: ${p.id}`); continue; }
+    if (seenIds.has(p.id)) {
+      errors.push(`duplicate part id: ${p.id}`);
+      continue;
+    }
     seenIds.add(p.id);
     const definition = partDefinitionById(p.type);
-    if (!definition) { errors.push(`unknown part type: ${p.type}`); continue; }
+    if (!definition) {
+      errors.push(`unknown part type: ${p.type}`);
+      continue;
+    }
     const part = builder.addPartWithId(p.id, definition, p.x, p.y, p.rotation ?? 0);
     partById.set(p.id, part);
     if (p.name !== undefined) part.name = p.name;
@@ -184,20 +217,48 @@ export function compile(doc: unknown): { bench: Bench | null; snapshot: BenchSna
   for (const w of d.wires) {
     const fromMatch = /^([^:]+):(.+)$/.exec(w.from);
     const toMatch = /^([^:]+):(.+)$/.exec(w.to);
-    if (!fromMatch || !toMatch) { errors.push(`invalid pin reference in wire ${w.id}`); continue; }
+    if (!fromMatch || !toMatch) {
+      errors.push(`invalid pin reference in wire ${w.id}`);
+      continue;
+    }
     const fromPart = partById.get(fromMatch[1]);
     const toPart = partById.get(toMatch[1]);
-    if (!fromPart || !toPart) { errors.push(`wire ${w.id} references unknown part`); continue; }
+    if (!fromPart || !toPart) {
+      errors.push(`wire ${w.id} references unknown part`);
+      continue;
+    }
     const fromPin = findPin(fromPart, fromMatch[2]);
     const toPin = findPin(toPart, toMatch[2]);
-    if (!fromPin || !toPin) { errors.push(`wire ${w.id} references unknown pin`); continue; }
-    const fromOff = rotateOffset(fromPin.x, fromPin.y, fromPart.rotation, fromPart.definition.widthMm, fromPart.definition.heightMm);
-    const toOff = rotateOffset(toPin.x, toPin.y, toPart.rotation, toPart.definition.widthMm, toPart.definition.heightMm);
-    builder.addWireWithId(w.id, fromPart.x + fromOff.x, fromPart.y + fromOff.y, toPart.x + toOff.x, toPart.y + toOff.y, {
-      colour: w.colour,
-      gaugeAwg: w.gaugeAwg,
-      bends: w.bends,
-    });
+    if (!fromPin || !toPin) {
+      errors.push(`wire ${w.id} references unknown pin`);
+      continue;
+    }
+    const fromOff = rotateOffset(
+      fromPin.x,
+      fromPin.y,
+      fromPart.rotation,
+      fromPart.definition.widthMm,
+      fromPart.definition.heightMm,
+    );
+    const toOff = rotateOffset(
+      toPin.x,
+      toPin.y,
+      toPart.rotation,
+      toPart.definition.widthMm,
+      toPart.definition.heightMm,
+    );
+    builder.addWireWithId(
+      w.id,
+      fromPart.x + fromOff.x,
+      fromPart.y + fromOff.y,
+      toPart.x + toOff.x,
+      toPart.y + toOff.y,
+      {
+        colour: w.colour,
+        gaugeAwg: w.gaugeAwg,
+        bends: w.bends,
+      },
+    );
   }
   const bench = builder.build();
   const snapshot = builder.snapshot();
@@ -226,7 +287,10 @@ function pinRef(part: PartInstance, pinId: string): string {
   return pinId;
 }
 
-export function decompile(bench: Bench, dynamicState: DynamicState): { doc: CircuitDocument; warnings: string[] } {
+export function decompile(
+  bench: Bench,
+  dynamicState: DynamicState,
+): { doc: CircuitDocument; warnings: string[] } {
   const warnings: string[] = [];
   const owners = new Map<number, { partId: string; pinId: string }[]>();
   for (const part of bench.parts) {

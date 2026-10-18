@@ -40,7 +40,10 @@ export const useWorkbenchStore = create<WorkbenchStore>()((set) => ({
   aspect: DEFAULT_ASPECT,
   startDraft: (terminal) => set({ wireAnchor: terminal, wireBends: [] }),
   pushBend: (bend) => set((s) => ({ wireBends: [...s.wireBends, bend] })),
-  cancelDraft: () => set((s) => (s.wireAnchor === null && s.wireBends.length === 0 ? s : { wireAnchor: null, wireBends: [] })),
+  cancelDraft: () =>
+    set((s) =>
+      s.wireAnchor === null && s.wireBends.length === 0 ? s : { wireAnchor: null, wireBends: [] },
+    ),
   setPointer: (p) => set({ pointerMm: p }),
   setView: (view) => set({ view }),
   panBy: (dx, dy) => set((s) => ({ view: { ...s.view, x: s.view.x - dx, y: s.view.y - dy } })),

@@ -40,13 +40,12 @@ function observe(durationMs: number, frameSeconds: number, scale = 1) {
     simulation.tick(frameSeconds);
     frames += 1;
     const volts = simulation.engine.voltageOfNet(net);
-    if ((volts > 1.65) !== (previous > 1.65)) edges.push(simulation.engine.timeMs);
+    if (volts > 1.65 !== previous > 1.65) edges.push(simulation.engine.timeMs);
     previous = volts;
   }
 
   return { edges, finalTime: simulation.engine.timeMs, finalVolts: previous, frames };
 }
-
 
 describe('frame pacing', () => {
   it('keeps a blocking delay blocking across frame boundaries', () => {
@@ -68,7 +67,6 @@ describe('frame pacing', () => {
     expect(finalVolts).toBeGreaterThan(3.0);
     expect(edges.length).toBe(1);
   });
-
 
   it('advances simulated time at roughly the wall-clock rate', () => {
     const { finalTime } = observe(1000, 0.016);

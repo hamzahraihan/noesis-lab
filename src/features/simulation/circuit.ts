@@ -91,10 +91,7 @@ function scratchFor(size: number): SolveScratch {
   return scratch;
 }
 
-export function solveCircuit(
-  elements: readonly Element[],
-  options: SolveOptions,
-): Solution {
+export function solveCircuit(elements: readonly Element[], options: SolveOptions): Solution {
   const { nodeCount } = options;
   const maxIterations = options.maxIterations ?? 100;
   const tolerance = options.tolerance ?? 1e-7;
@@ -190,8 +187,10 @@ export function solveCircuit(
           const operatingVoltage =
             priorLimit === undefined
               ? bias
-              : Math.min(Math.max(bias, priorLimit - JUNCTION_LIMIT_STEP_VOLTS),
-                         priorLimit + JUNCTION_LIMIT_STEP_VOLTS);
+              : Math.min(
+                  Math.max(bias, priorLimit - JUNCTION_LIMIT_STEP_VOLTS),
+                  priorLimit + JUNCTION_LIMIT_STEP_VOLTS,
+                );
           if (operatingVoltage !== bias) limitingActive = true;
           junctionLimit.set(element, operatingVoltage);
 

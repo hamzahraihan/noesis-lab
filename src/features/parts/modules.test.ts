@@ -78,7 +78,12 @@ function stripBench(definition: PartDefinition) {
       builder.addWire(threeVolt.x, threeVolt.y, holeX(columns.get(supplyPin)!), holeY(4));
     }
     const groundColumn = columns.get(groundPin)!;
-    builder.addWire(holeX(groundColumn), holeY(4), holeX(groundColumn), railRowY(BOTTOM_NEGATIVE_RAIL));
+    builder.addWire(
+      holeX(groundColumn),
+      holeY(4),
+      holeX(groundColumn),
+      railRowY(BOTTOM_NEGATIVE_RAIL),
+    );
     const ground = pinAt(esp32, 'L_GND');
     builder.addWire(ground.x, ground.y, holeX(groundColumn), railRowY(BOTTOM_NEGATIVE_RAIL));
   };
@@ -100,14 +105,24 @@ function solveBench(
   const netlist = buildNetlist(bench.builder.build(), state);
   const elements: Element[] = [
     ...(extra?.(netlist) ?? []),
-    { kind: 'voltageSource', a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!, b: GROUND, volts: SUPPLY_VOLTS },
+    {
+      kind: 'voltageSource',
+      a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!,
+      b: GROUND,
+      volts: SUPPLY_VOLTS,
+    },
     ...netlist.elements,
   ];
   return { netlist, solution: solveCircuit(elements, { nodeCount: netlist.nodeCount }) };
 }
 
 /** Volts standing on one of a module's pins. */
-function pinVolts(netlist: Netlist, solution: Solution, module: PartInstance, pinId: string): number {
+function pinVolts(
+  netlist: Netlist,
+  solution: Solution,
+  module: PartInstance,
+  pinId: string,
+): number {
   const node = netlist.pinNode.get(`${module.id}:${pinId}`);
   if (node === undefined) throw new Error(`${module.id} has no net for pin ${pinId}`);
   return node === GROUND ? 0 : solution.voltages[node];
@@ -274,12 +289,14 @@ describe('rgb led', () => {
     bench.wirePower(null, 'common');
     const state = new DynamicState();
 
-    const channel = (pinId: string, volts: number) => (netlist: Netlist): Element => ({
-      kind: 'voltageSource',
-      a: netlist.pinNode.get(`${bench.module.id}:${pinId}`)!,
-      b: GROUND,
-      volts,
-    });
+    const channel =
+      (pinId: string, volts: number) =>
+      (netlist: Netlist): Element => ({
+        kind: 'voltageSource',
+        a: netlist.pinNode.get(`${bench.module.id}:${pinId}`)!,
+        b: GROUND,
+        volts,
+      });
 
     const { netlist, solution } = solveBench(bench, state, (built) => [
       channel('red', SUPPLY_VOLTS)(built),

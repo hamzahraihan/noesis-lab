@@ -18,7 +18,14 @@ function pixelBench() {
   return { simulation, board, pixel };
 }
 
-function paint(simulation: Simulation, gpio: number, index: number, r: number, g: number, b: number): void {
+function paint(
+  simulation: Simulation,
+  gpio: number,
+  index: number,
+  r: number,
+  g: number,
+  b: number,
+): void {
   simulation.loadFirmware(
     `void setup() { pixels.setColor(${gpio}, ${index}, ${r}, ${g}, ${b}); } void loop() { delay(1000); }`,
   );

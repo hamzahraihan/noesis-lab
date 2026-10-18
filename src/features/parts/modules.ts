@@ -416,10 +416,18 @@ export function ledBarGraphDefinition(): PartDefinition {
     heightMm: 25.5,
     component: { kind: 'led-bar-graph' },
     pins: [
-      ...headerColumn(1.27, 1.27, Array.from({ length: LED_BAR_GRAPH_SEGMENTS }, (_, i) => `A${i + 1}`)),
+      ...headerColumn(
+        1.27,
+        1.27,
+        Array.from({ length: LED_BAR_GRAPH_SEGMENTS }, (_, i) => `A${i + 1}`),
+      ),
       // 8.83 in the artwork, which is 0.06 mm off the half pitch: the nearest
       // hole the breadboard can actually take.
-      ...headerColumn(8.89, 1.27, Array.from({ length: LED_BAR_GRAPH_SEGMENTS }, (_, i) => `C${i + 1}`)),
+      ...headerColumn(
+        8.89,
+        1.27,
+        Array.from({ length: LED_BAR_GRAPH_SEGMENTS }, (_, i) => `C${i + 1}`),
+      ),
     ],
     bodyColour: '#1b1d21',
     legendColour: '#e0e0e0',
@@ -574,8 +582,16 @@ export function dipSwitchDefinition(): PartDefinition {
        * pitch. The element numbers its holes 1a..8a across the top and 1b..8b
        * across the bottom, which is the order they are declared in here.
        */
-      ...headerRow(2.54, 13.97, Array.from({ length: DIP_WAYS }, (_, index) => `${index + 1}a`)),
-      ...headerRow(2.54, 1.27, Array.from({ length: DIP_WAYS }, (_, index) => `${index + 1}b`)),
+      ...headerRow(
+        2.54,
+        13.97,
+        Array.from({ length: DIP_WAYS }, (_, index) => `${index + 1}a`),
+      ),
+      ...headerRow(
+        2.54,
+        1.27,
+        Array.from({ length: DIP_WAYS }, (_, index) => `${index + 1}b`),
+      ),
     ],
     knobs: DIP_WAY_KNOBS,
     bodyColour: '#7a1f1f',
@@ -663,10 +679,22 @@ export const KEYPAD_COLUMNS = 4;
  * this list is also the matrix's row-major order.
  */
 export const KEYPAD_KEYS: readonly string[] = [
-  '1', '2', '3', 'A',
-  '4', '5', '6', 'B',
-  '7', '8', '9', 'C',
-  '*', '0', '#', 'D',
+  '1',
+  '2',
+  '3',
+  'A',
+  '4',
+  '5',
+  '6',
+  'B',
+  '7',
+  '8',
+  '9',
+  'C',
+  '*',
+  '0',
+  '#',
+  'D',
 ];
 
 /**
@@ -715,7 +743,11 @@ export function keypadDefinition(): PartDefinition {
     heightMm: 91,
     component: { kind: 'keypad' },
     pins: [
-      ...headerRow(26.67, 88.9, Array.from({ length: KEYPAD_ROWS }, (_, index) => `R${index + 1}`)),
+      ...headerRow(
+        26.67,
+        88.9,
+        Array.from({ length: KEYPAD_ROWS }, (_, index) => `R${index + 1}`),
+      ),
       // The column block starts a row-length further along, so the eight holes
       // read R1..R4 then C1..C4 as the element names them.
       ...headerRow(

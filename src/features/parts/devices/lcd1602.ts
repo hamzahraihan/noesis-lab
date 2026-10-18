@@ -84,7 +84,7 @@ const SHIFT_RIGHT = 0x04;
  */
 const TWO_LINE_ROW_BASES: readonly number[] = [0x00, 0x40];
 const FOUR_LINE_ROW_BASES: readonly number[] = [0x00, 0x40, 0x14, 0x54];
- 
+
 /** What a cleared cell holds: a blank, which the font already has a glyph for. */
 const BLANK_CHARACTER = 0x20;
 
@@ -154,7 +154,6 @@ export class Lcd1602 {
   /** The high nibble waiting for its partner, and how many have arrived. */
   private pending = 0;
   private nibblesSeen = 0;
-
 
   /** First DDRAM address of each row, from the datasheet's address map. */
   private readonly rowBases: readonly number[];

@@ -24,7 +24,9 @@ describe('wasm fallback cause', () => {
       activeName: 'main.ino',
       files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
     };
-    core.rebuild(bench as never, firmware as never, 'interpreter', true, () => Promise.reject(new Error('offline')));
+    core.rebuild(bench as never, firmware as never, 'interpreter', true, () =>
+      Promise.reject(new Error('offline')),
+    );
     core.flash(new Uint16Array([0x0000]));
     return new Promise<void>((done) => {
       setTimeout(() => {

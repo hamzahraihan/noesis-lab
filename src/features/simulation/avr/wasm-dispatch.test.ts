@@ -34,7 +34,10 @@ describe('attached dispatch', () => {
 
     const mcuWasm = new McuRuntime(arduinoUnoR3());
     const settlesWasm = { count: 0 };
-    const attached = new AvrBackend(new Uint16Array([0xe401, 0x0c00, 0x0000]), hooks(mcuWasm, settlesWasm));
+    const attached = new AvrBackend(
+      new Uint16Array([0xe401, 0x0c00, 0x0000]),
+      hooks(mcuWasm, settlesWasm),
+    );
     attached.attachWasm({} as never);
     attached.step(2);
     expect(attached.fault).toBeNull();

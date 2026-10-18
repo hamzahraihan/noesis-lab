@@ -11,21 +11,9 @@ export { EXERCISES, exerciseById, exerciseBoard, exerciseLanguage } from './exer
 export type { Exercise } from './exercises';
 export { buildFor, firmwareForBuild, galleryById } from './gallery';
 export type { GalleryBuild, GalleryProject } from './gallery';
-export {
-  BLINK_EXAMPLE,
-  EXAMPLE_DEVICES,
-  EXAMPLES,
-  LCD_LINES,
-  PI_BLINK_SKETCH,
-} from './examples';
+export { BLINK_EXAMPLE, EXAMPLE_DEVICES, EXAMPLES, LCD_LINES, PI_BLINK_SKETCH } from './examples';
 export type { Example, ExampleDevice } from './examples';
-export {
-  BOARDS,
-  boardOption,
-  DEFAULT_BOARD_ID,
-  isBoardId,
-  STARTER_WIRING,
-} from './boardRegistry';
+export { BOARDS, boardOption, DEFAULT_BOARD_ID, isBoardId, STARTER_WIRING } from './boardRegistry';
 export type { BoardId, BoardOption, StarterWiring } from './boardRegistry';
 export { isGuideDismissed, setGuideDismissed } from './guide-dismissal';
 export { DiagnosticsPanel } from './diagnostics/DiagnosticsPanel';

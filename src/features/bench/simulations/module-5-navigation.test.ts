@@ -198,10 +198,7 @@ describe('blitting a tile onto the panel', () => {
     // Hangs off the bottom-right corner.
     redTile(panel, panel.width - 10, panel.height - 20);
 
-    expect(
-      panel.pixelAt(panel.width - 1, panel.height - 1),
-      'the visible corner',
-    ).toBe(0xf800);
+    expect(panel.pixelAt(panel.width - 1, panel.height - 1), 'the visible corner').toBe(0xf800);
     // A wrapped blit would have written the tile's first row at y=0.
     expect(panel.pixelAt(0, 0), 'must not wrap').toBe(0);
   });
@@ -247,9 +244,8 @@ describe('blitting a tile onto the panel', () => {
     ).toEqual({ width: before.height, height: before.width });
 
     panel.setRotation(panel.width > panel.height ? 0 : 1);
-    expect(
-      { width: panel.width, height: panel.height },
-      'and turning it again comes back',
-    ).toEqual(before);
+    expect({ width: panel.width, height: panel.height }, 'and turning it again comes back').toEqual(
+      before,
+    );
   });
 });

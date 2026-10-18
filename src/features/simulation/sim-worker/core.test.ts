@@ -19,7 +19,11 @@ describe('sim core', () => {
     const core = createSimCore(boardOption('uno').make());
     core.rebuild(
       { parts: [], wires: [], terminals: [] } as never,
-      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }] } as never,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
+      } as never,
       'interpreter',
     );
     core.step(16);
@@ -43,7 +47,11 @@ describe('sim core', () => {
     const core = createSimCore(boardOption('uno').make());
     core.rebuild(
       { parts: [], wires: [], terminals: [] } as never,
-      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }] } as never,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
+      } as never,
       'interpreter',
     );
     core.step(16);
@@ -64,7 +72,11 @@ describe('sim core', () => {
     const core = createSimCore(boardOption('mega').make());
     core.rebuild(
       { parts: [], wires: [], terminals: [] } as never,
-      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }] } as never,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
+      } as never,
       'interpreter',
     );
     expect(() => core.flash(new Uint16Array([0xcfff]))).not.toThrow();
@@ -155,7 +167,11 @@ describe('tft snapshot transport', () => {
     const core = createSimCore(boardOption('uno').make());
     core.rebuild(
       { parts: [], wires: [], terminals: [] } as never,
-      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }] } as never,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [{ name: 'main.ino', content: 'void setup() {}\nvoid loop() {}\n' }],
+      } as never,
       'interpreter',
     );
     core.step(16);
@@ -330,7 +346,11 @@ void loop() { delay(500); }
     const core = createSimCore(esp32DevKitV1());
     core.rebuild(
       sim.bench,
-      { language: 'arduino-cpp', activeName: 'main.ino', files: [{ name: 'main.ino', content: sketch }] } as never,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [{ name: 'main.ino', content: sketch }],
+      } as never,
       'interpreter',
     );
     expect(core.fault).toBeNull();

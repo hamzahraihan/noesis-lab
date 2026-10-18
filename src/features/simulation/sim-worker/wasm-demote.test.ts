@@ -9,7 +9,9 @@ import { boardOption } from '@/features/learn/boardRegistry';
 // as Task 1's committed wasm-attach.test.ts: slice the exact bytes.
 const realBytes = () => {
   const buf = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
-  return Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+  return Promise.resolve(
+    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+  );
 };
 
 function bench() {

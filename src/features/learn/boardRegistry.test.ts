@@ -142,9 +142,7 @@ describe('board registry', () => {
 
         expect(specs.gpioCount).toBe(pins.filter((pin) => pin.role === 'gpio').length);
         expect(specs.adcCount).toBe(pins.filter((pin) => pin.role === 'adc').length);
-        expect(specs.inputOnlyCount).toBe(
-          pins.filter((pin) => pin.canDrive === false).length,
-        );
+        expect(specs.inputOnlyCount).toBe(pins.filter((pin) => pin.canDrive === false).length);
         expect(specs.logicVolts).toBeGreaterThan(0);
         // Zero is the honest answer for a board with no converter at all.
         expect(specs.adcBits).toBeGreaterThanOrEqual(0);
@@ -257,10 +255,7 @@ describe('board registry', () => {
         // single-board computer would fail before it reached a pin, which says
         // nothing about whether the wiring is right.
         const language = boardOption(board.id).language;
-        simulation.loadFirmware(
-          language === 'python' ? PI_BLINK_SKETCH : BLINK_SKETCH,
-          language,
-        );
+        simulation.loadFirmware(language === 'python' ? PI_BLINK_SKETCH : BLINK_SKETCH, language);
         simulation.start();
 
         const anodeKey = `${led.id}:anode`;

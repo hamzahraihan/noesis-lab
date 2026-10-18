@@ -44,7 +44,12 @@ function stripBench(definition: PartDefinition) {
       builder.addWire(threeVolt.x, threeVolt.y, holeX(columns.get(supplyPin)!), holeY(4));
     }
     const groundColumn = columns.get(groundPin)!;
-    builder.addWire(holeX(groundColumn), holeY(4), holeX(groundColumn), railRowY(BOTTOM_NEGATIVE_RAIL));
+    builder.addWire(
+      holeX(groundColumn),
+      holeY(4),
+      holeX(groundColumn),
+      railRowY(BOTTOM_NEGATIVE_RAIL),
+    );
     const ground = pinAt(esp32, 'L_GND');
     builder.addWire(ground.x, ground.y, holeX(groundColumn), railRowY(BOTTOM_NEGATIVE_RAIL));
   };
@@ -63,13 +68,23 @@ function solveBench(
   const netlist = buildNetlist(bench.builder.build(), state, relayEnergized);
   const elements: Element[] = [
     ...(extra?.(netlist) ?? []),
-    { kind: 'voltageSource', a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!, b: GROUND, volts: SUPPLY_VOLTS },
+    {
+      kind: 'voltageSource',
+      a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!,
+      b: GROUND,
+      volts: SUPPLY_VOLTS,
+    },
     ...netlist.elements,
   ];
   return { netlist, solution: solveCircuit(elements, { nodeCount: netlist.nodeCount }) };
 }
 
-function pinVolts(netlist: Netlist, solution: Solution, module: PartInstance, pinId: string): number {
+function pinVolts(
+  netlist: Netlist,
+  solution: Solution,
+  module: PartInstance,
+  pinId: string,
+): number {
   const node = netlist.pinNode.get(`${module.id}:${pinId}`);
   if (node === undefined) throw new Error(`${module.id} has no net for pin ${pinId}`);
   return node === GROUND ? 0 : solution.voltages[node];
@@ -82,7 +97,16 @@ function drive(netlist: Netlist, key: string, volts: number): Element {
 describe('relay definition', () => {
   it('exposes two poles and one coil across eight pins', () => {
     const def = relayDefinition();
-    expect(def.pins.map((p) => p.id)).toEqual(['NO2', 'NC2', 'P2', 'COIL-', 'NO1', 'NC1', 'P1', 'COIL+']);
+    expect(def.pins.map((p) => p.id)).toEqual([
+      'NO2',
+      'NC2',
+      'P2',
+      'COIL-',
+      'NO1',
+      'NC1',
+      'P1',
+      'COIL+',
+    ]);
     expect(def.widthMm).toBe(21);
     expect(def.heightMm).toBe(10);
     expect(RELAY_COIL_OHMS).toBe(70);
@@ -194,7 +218,9 @@ describe('relay contacts', () => {
     expect(pinVolts(resting.netlist, resting.solution, bench.module, 'P2')).toBeGreaterThan(2.8);
 
     const energized = solveBench(bench, state, new Map([[id, true]]), extra);
-    expect(pinVolts(energized.netlist, energized.solution, bench.module, 'P1')).toBeGreaterThan(2.8);
+    expect(pinVolts(energized.netlist, energized.solution, bench.module, 'P1')).toBeGreaterThan(
+      2.8,
+    );
     expect(pinVolts(energized.netlist, energized.solution, bench.module, 'P2')).toBeLessThan(0.5);
   });
 

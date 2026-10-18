@@ -50,7 +50,9 @@ export function ProjectPage() {
 
   return (
     <ProjectShell title={board.name}>
-      <p className="max-w-[65ch] text-sm leading-relaxed text-[var(--hd-text)]">{project.tagline}</p>
+      <p className="max-w-[65ch] text-sm leading-relaxed text-[var(--hd-text)]">
+        {project.tagline}
+      </p>
 
       <figure>
         <div className="overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg)]/60 p-6 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
@@ -93,7 +95,9 @@ export function ProjectPage() {
 
       <ProjectSection title="The featured project">
         <p className="text-sm font-medium text-[var(--hd-text)]">{project.project}</p>
-        <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">{project.why}</p>
+        <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
+          {project.why}
+        </p>
       </ProjectSection>
 
       <ProjectSection title="Run it">
@@ -137,8 +141,12 @@ export function ProjectPage() {
                   />
                 </span>
                 <span className="flex flex-1 flex-col gap-1.5 px-4 py-3.5">
-                  <span className="font-medium tracking-tight text-[var(--hd-text)]">{entry.title}</span>
-                  <span className="text-sm leading-relaxed text-[var(--hd-muted)]">{entry.blurb}</span>
+                  <span className="font-medium tracking-tight text-[var(--hd-text)]">
+                    {entry.title}
+                  </span>
+                  <span className="text-sm leading-relaxed text-[var(--hd-muted)]">
+                    {entry.blurb}
+                  </span>
                   <Link
                     to={`/bench/${project.board}?project=${entry.id}`}
                     className="mt-auto inline-flex items-center gap-1.5 pt-2 text-sm font-medium text-[var(--hd-accent)]"
@@ -164,8 +172,8 @@ export function ProjectPage() {
           </ul>
         ) : (
           <p className="max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
-            No finished projects for this board yet — its batch is still being built and
-            validated. The starter bench above runs today; check back soon.
+            No finished projects for this board yet — its batch is still being built and validated.
+            The starter bench above runs today; check back soon.
           </p>
         )}
       </ProjectSection>
@@ -179,7 +187,9 @@ export function ProjectPage() {
                 className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 px-4 py-3"
               >
                 <p className="text-sm font-medium text-[var(--hd-text)]">{example.name}</p>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--hd-muted)]">{example.note}</p>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--hd-muted)]">
+                  {example.note}
+                </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-[var(--hd-faint)]">
                   On the bench: Load an example → {example.name}.
                 </p>
@@ -188,8 +198,8 @@ export function ProjectPage() {
           </ul>
         ) : (
           <p className="max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
-            The examples above are Arduino sketches, and this bench speaks Python — start from
-            the Python blink it opens with instead.
+            The examples above are Arduino sketches, and this bench speaks Python — start from the
+            Python blink it opens with instead.
           </p>
         )}
       </ProjectSection>
@@ -197,27 +207,25 @@ export function ProjectPage() {
   );
 }
 
-function ProjectShell({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function ProjectShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
       <SkipLink />
       <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
-      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
-      <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
-        <Link to="/boards" className="transition-colors hover:text-[var(--hd-muted)]">Boards</Link>
-        <span className="mx-2">/</span>
-        <span>Featured project</span>
-      </div>
-      <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">{title}</h1>
-        <div className="mt-8 space-y-10">{children}</div>
-      </main>
+        <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
+        <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
+          <Link to="/boards" className="transition-colors hover:text-[var(--hd-muted)]">
+            Boards
+          </Link>
+          <span className="mx-2">/</span>
+          <span>Featured project</span>
+        </div>
+        <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
+          <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
+            {title}
+          </h1>
+          <div className="mt-8 space-y-10">{children}</div>
+        </main>
       </div>
     </div>
   );

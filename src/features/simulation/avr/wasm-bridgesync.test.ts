@@ -5,7 +5,13 @@ import { drainPortEvents, syncPins } from './wasm-core';
 describe('bridge sync', () => {
   it('samples all levels then drains edges in order', () => {
     const shm = createShm();
-    syncPins(shm, new Map([[13, true], [12, false]]));
+    syncPins(
+      shm,
+      new Map([
+        [13, true],
+        [12, false],
+      ]),
+    );
     expect(shm.readPin(13)).toBe(true);
     expect(shm.readPin(12)).toBe(false);
     shm.queueEdge(13, true);

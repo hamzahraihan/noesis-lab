@@ -18,7 +18,6 @@
 import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
 
-
 /* ------------------------------------------------------------------ *
  * 3.1 -- I2C Environmental Monitor with OLED & Sensor
  * ------------------------------------------------------------------ */
@@ -42,20 +41,38 @@ const I2C_MONITOR: Exercise = {
     'A 1024-byte frame buffer in 2048 bytes of SRAM',
   ],
   parts: [
-    { name: '128x64 OLED (SSD1306)', qty: 1, why: 'The bus’s first device, and it answers at 0x3C.' },
-    { name: '10k Resistor', qty: 2, why: 'One pull-up per line. A bus with no pull-up has no HIGH on it.' },
+    {
+      name: '128x64 OLED (SSD1306)',
+      qty: 1,
+      why: 'The bus’s first device, and it answers at 0x3C.',
+    },
+    {
+      name: '10k Resistor',
+      qty: 2,
+      why: 'One pull-up per line. A bus with no pull-up has no HIGH on it.',
+    },
     { name: 'DHT22 Temp/Humidity', qty: 1, why: 'The reading itself, on a data wire of its own.' },
   ],
   wiring: [
     { pin: 'A4', part: '128x64 OLED (SSD1306)', terminal: 'SDA', goesTo: 'the shared SDA net' },
     { pin: 'A5', part: '128x64 OLED (SSD1306)', terminal: 'SCL', goesTo: 'the shared SCL net' },
-    { pin: '5V', part: '128x64 OLED (SSD1306)', terminal: 'VCC', goesTo: 'the 5 V rail — the charge pump needs it' },
+    {
+      pin: '5V',
+      part: '128x64 OLED (SSD1306)',
+      terminal: 'VCC',
+      goesTo: 'the 5 V rail — the charge pump needs it',
+    },
     { pin: 'GND', part: '128x64 OLED (SSD1306)', terminal: 'GND', goesTo: 'the ground rail' },
     { pin: '5V', part: '10k Resistor', terminal: 'a', goesTo: 'the top of the SDA pull-up' },
     { pin: 'A4', part: '10k Resistor', terminal: 'b', goesTo: 'the shared SDA net' },
     { pin: '5V', part: '10k Resistor', terminal: 'a', goesTo: 'the top of the SCL pull-up' },
     { pin: 'A5', part: '10k Resistor', terminal: 'b', goesTo: 'the shared SCL net' },
-    { pin: 'D2', part: 'DHT22 Temp/Humidity', terminal: 'SDA', goesTo: 'the sensor data line — one wire, not a bus' },
+    {
+      pin: 'D2',
+      part: 'DHT22 Temp/Humidity',
+      terminal: 'SDA',
+      goesTo: 'the sensor data line — one wire, not a bus',
+    },
     { pin: '5V', part: 'DHT22 Temp/Humidity', terminal: 'VCC', goesTo: 'the 5 V rail' },
     { pin: 'GND', part: 'DHT22 Temp/Humidity', terminal: 'GND', goesTo: 'the ground rail' },
   ],
@@ -502,7 +519,6 @@ void loop() {
   circuit: CIRCUITS['3.1'],
 };
 
-
 /* ------------------------------------------------------------------ *
  * 3.2 -- SPI High-Speed Display Control
  * ------------------------------------------------------------------ */
@@ -527,20 +543,58 @@ const SPI_DISPLAYS: Exercise = {
     'A frame buffer is half this chip’s RAM',
   ],
   parts: [
-    { name: '128x64 OLED (SSD1306 SPI)', qty: 1, why: 'The panel that works, and the one you can watch.' },
-    { name: '2.4" TFT (ILI9341)', qty: 1, why: '320×240 pixels behind the same four wires — and a second select.' },
+    {
+      name: '128x64 OLED (SSD1306 SPI)',
+      qty: 1,
+      why: 'The panel that works, and the one you can watch.',
+    },
+    {
+      name: '2.4" TFT (ILI9341)',
+      qty: 1,
+      why: '320×240 pixels behind the same four wires — and a second select.',
+    },
   ],
   wiring: [
-    { pin: 'D13', part: '128x64 OLED (SSD1306 SPI)', terminal: 'SCK', goesTo: 'the shared clock — every SPI device hears it' },
-    { pin: 'D11', part: '128x64 OLED (SSD1306 SPI)', terminal: 'MOSI', goesTo: 'the shared data line' },
-    { pin: 'D9', part: '128x64 OLED (SSD1306 SPI)', terminal: 'DC', goesTo: 'command or data — one pin, both meanings' },
-    { pin: 'D10', part: '128x64 OLED (SSD1306 SPI)', terminal: 'CS', goesTo: 'this panel’s select, idling HIGH' },
+    {
+      pin: 'D13',
+      part: '128x64 OLED (SSD1306 SPI)',
+      terminal: 'SCK',
+      goesTo: 'the shared clock — every SPI device hears it',
+    },
+    {
+      pin: 'D11',
+      part: '128x64 OLED (SSD1306 SPI)',
+      terminal: 'MOSI',
+      goesTo: 'the shared data line',
+    },
+    {
+      pin: 'D9',
+      part: '128x64 OLED (SSD1306 SPI)',
+      terminal: 'DC',
+      goesTo: 'command or data — one pin, both meanings',
+    },
+    {
+      pin: 'D10',
+      part: '128x64 OLED (SSD1306 SPI)',
+      terminal: 'CS',
+      goesTo: 'this panel’s select, idling HIGH',
+    },
     { pin: '5V', part: '128x64 OLED (SSD1306 SPI)', terminal: 'VCC', goesTo: 'the 5 V rail' },
     { pin: 'GND', part: '128x64 OLED (SSD1306 SPI)', terminal: 'GND', goesTo: 'the ground rail' },
-    { pin: 'D13', part: '2.4" TFT (ILI9341)', terminal: 'SCK', goesTo: 'the same clock, joined to the OLED’s' },
+    {
+      pin: 'D13',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'SCK',
+      goesTo: 'the same clock, joined to the OLED’s',
+    },
     { pin: 'D11', part: '2.4" TFT (ILI9341)', terminal: 'MOSI', goesTo: 'the same data line' },
     { pin: 'D9', part: '2.4" TFT (ILI9341)', terminal: 'DC', goesTo: 'the same command/data pin' },
-    { pin: 'D8', part: '2.4" TFT (ILI9341)', terminal: 'CS', goesTo: 'its own select — never the OLED’s pin' },
+    {
+      pin: 'D8',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'CS',
+      goesTo: 'its own select — never the OLED’s pin',
+    },
     { pin: '5V', part: '2.4" TFT (ILI9341)', terminal: 'VCC', goesTo: 'the 5 V rail' },
     { pin: 'GND', part: '2.4" TFT (ILI9341)', terminal: 'GND', goesTo: 'the ground rail' },
   ],
@@ -1018,6 +1072,5 @@ void loop() {
   writeUp: 'docs/exercises/module-3-bus-protocols.md',
   circuit: CIRCUITS['3.2'],
 };
-
 
 export const MODULE_3: readonly Exercise[] = [I2C_MONITOR, SPI_DISPLAYS];

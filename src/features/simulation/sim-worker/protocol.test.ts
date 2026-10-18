@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { allocSnapshot, headerView, layoutFor, shouldThrottle, SNAP_MAGIC, SNAP_VERSION } from './protocol';
+import {
+  allocSnapshot,
+  headerView,
+  layoutFor,
+  shouldThrottle,
+  SNAP_MAGIC,
+  SNAP_VERSION,
+} from './protocol';
 
 describe('snapshot protocol', () => {
   it('round-trips header, nets, pin nodes, display bytes, and the serial ring', () => {
@@ -40,14 +47,24 @@ describe('snapshot protocol', () => {
 describe('worker pacing gate', () => {
   it('pauses only on backlog plus a stale reader, never on backlog alone', () => {
     // No backlog: always steps, even with no ack ever seen.
-    expect(shouldThrottle({ unread: 0, maxUnread: 4, nowMs: 1000, lastAckMs: 0, staleMs: 250 })).toBe(false);
+    expect(
+      shouldThrottle({ unread: 0, maxUnread: 4, nowMs: 1000, lastAckMs: 0, staleMs: 250 }),
+    ).toBe(false);
     // Backlog with a live (if slow) reader: keeps stepping, so render
     // slowness costs choppiness, never sim slowdown.
-    expect(shouldThrottle({ unread: 4, maxUnread: 4, nowMs: 1000, lastAckMs: 900, staleMs: 250 })).toBe(false);
-    expect(shouldThrottle({ unread: 9, maxUnread: 4, nowMs: 1000, lastAckMs: 850, staleMs: 250 })).toBe(false);
+    expect(
+      shouldThrottle({ unread: 4, maxUnread: 4, nowMs: 1000, lastAckMs: 900, staleMs: 250 }),
+    ).toBe(false);
+    expect(
+      shouldThrottle({ unread: 9, maxUnread: 4, nowMs: 1000, lastAckMs: 850, staleMs: 250 }),
+    ).toBe(false);
     // Backlog with no ack for longer than the window (hidden tab): pauses.
-    expect(shouldThrottle({ unread: 4, maxUnread: 4, nowMs: 1000, lastAckMs: 700, staleMs: 250 })).toBe(true);
+    expect(
+      shouldThrottle({ unread: 4, maxUnread: 4, nowMs: 1000, lastAckMs: 700, staleMs: 250 }),
+    ).toBe(true);
     // Boundary: exactly at the window still steps.
-    expect(shouldThrottle({ unread: 4, maxUnread: 4, nowMs: 1000, lastAckMs: 750, staleMs: 250 })).toBe(false);
+    expect(
+      shouldThrottle({ unread: 4, maxUnread: 4, nowMs: 1000, lastAckMs: 750, staleMs: 250 }),
+    ).toBe(false);
   });
 });

@@ -465,7 +465,7 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
 /** Parts too large to sit on a breadboard strip, dropped below the bench. */
 const LARGE_PARTS: Readonly<Record<string, true>> = {
   'breadboard-830': true,
-  'servo': true,
+  servo: true,
   'lcd-16x2': true,
   'lcd-20x4': true,
   'ssd1306-128x64-3c': true,
@@ -495,7 +495,7 @@ const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
   'arduino-mega-2560': arduinoMega2560,
   'arduino-nano': arduinoNano,
   'arduino-nano-rp2040-connect': nanoRp2040Connect,
-  'franzininho': franzininhoBoard,
+  franzininho: franzininhoBoard,
   'raspberry-pi-4': raspberryPi4,
 };
 
@@ -516,4 +516,3 @@ export const CATALOGUE_GROUPS: ReadonlyArray<{
   { id: 'output', label: 'Outputs' },
   { id: 'breadboard', label: 'Prototyping' },
 ];
-

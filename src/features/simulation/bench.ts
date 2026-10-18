@@ -237,7 +237,6 @@ export class BenchBuilder {
   private nextPartSerial = 1;
   private nextWireSerial = 1;
 
-
   /**
    * Records the bench as it is now.
    *
@@ -355,7 +354,13 @@ export class BenchBuilder {
     return part;
   }
 
-  addPartWithId(id: string, definition: PartDefinition, x: number, y: number, rotation: Rotation = 0): PartInstance {
+  addPartWithId(
+    id: string,
+    definition: PartDefinition,
+    x: number,
+    y: number,
+    rotation: Rotation = 0,
+  ): PartInstance {
     const match = /^p(\d+)$/.exec(id);
     if (match) {
       const n = Number(match[1]);
@@ -660,9 +665,7 @@ export class BenchBuilder {
 
     // Every wire clipped to a terminal the part owned goes with it, in one
     // pass: filtering in a loop would renumber the indices under the cursor.
-    const keep = this.wires.filter(
-      (wire) => !released.has(wire.from) && !released.has(wire.to),
-    );
+    const keep = this.wires.filter((wire) => !released.has(wire.from) && !released.has(wire.to));
     this.wires.length = 0;
     this.wires.push(...keep);
     this.pruneTerminals();

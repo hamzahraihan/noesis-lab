@@ -29,9 +29,10 @@ export function DiagnosticsPanel() {
   const cancelRef = useRef(false);
   const [running, setRunning] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [progress, setProgress] = useState<{ readonly done: number; readonly total: number } | null>(
-    null,
-  );
+  const [progress, setProgress] = useState<{
+    readonly done: number;
+    readonly total: number;
+  } | null>(null);
   const [summary, setSummary] = useState<Record<string, string>>({});
   const [manual, setManual] = useState<Record<string, boolean>>({});
   const [report, setReport] = useState('');
@@ -52,7 +53,10 @@ export function DiagnosticsPanel() {
       const block = formatReport(stamped);
       setReport((prev) => (prev === '' ? block : `${prev}\n\n${block}`));
       const passed = stamped.results.filter((result) => result.status === 'pass').length;
-      setSummary((prev) => ({ ...prev, [key]: `${String(passed)}/${String(stamped.results.length)} pass` }));
+      setSummary((prev) => ({
+        ...prev,
+        [key]: `${String(passed)}/${String(stamped.results.length)} pass`,
+      }));
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       setSummary((prev) => ({ ...prev, [key]: `error: ${detail}` }));

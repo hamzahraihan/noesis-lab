@@ -23,9 +23,7 @@ import { loader } from '@monaco-editor/react';
  */
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string) {
-    return label === 'typescript' || label === 'javascript'
-      ? new tsWorker()
-      : new editorWorker();
+    return label === 'typescript' || label === 'javascript' ? new tsWorker() : new editorWorker();
   },
 };
 
@@ -46,10 +44,34 @@ export const FIRMWARE_LANGUAGE = 'arduino-cpp';
 export const PYTHON_LANGUAGE = 'gpiozero-python';
 
 const PYTHON_KEYWORDS = [
-  'and', 'as', 'break', 'class', 'continue', 'def', 'elif', 'else', 'except',
-  'finally', 'for', 'from', 'if', 'import', 'in', 'is', 'not', 'or', 'pass',
-  'raise', 'return', 'try', 'while', 'with', 'yield',
-  'True', 'False', 'None',
+  'and',
+  'as',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'if',
+  'import',
+  'in',
+  'is',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield',
+  'True',
+  'False',
+  'None',
 ];
 
 const PYTHON_BUILTINS: ReadonlyArray<[name: string, detail: string, doc: string]> = [
@@ -81,7 +103,11 @@ function registerPythonLanguage(): void {
   });
   monaco.languages.setLanguageConfiguration(PYTHON_LANGUAGE, {
     comments: { lineComment: '#' },
-    brackets: [['(', ')'], ['[', ']'], ['{', '}']],
+    brackets: [
+      ['(', ')'],
+      ['[', ']'],
+      ['{', '}'],
+    ],
     autoClosingPairs: [
       { open: '(', close: ')' },
       { open: '[', close: ']' },
@@ -103,7 +129,10 @@ function registerPythonLanguage(): void {
         [/\b\d+\.\d*(?:[eE][+-]?\d+)?\b|\b\.\d+\b/, 'number.float'],
         [/0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+/, 'number.hex'],
         [/\d[\d_]*/, 'number'],
-        [/[fFrRbB]?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/, 'string'],
+        [
+          /[fFrRbB]?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/,
+          'string',
+        ],
         [/#.*$/, 'comment'],
         [/[A-Za-z_]\w*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
         [/[+\-*/%&|^~<>=!]=?/, 'operator'],
@@ -198,7 +227,9 @@ const ARDUINO_FUNCTIONS: ReadonlyArray<[signature: string, doc: string]> = [
   ['pow(base, exponent)', 'Raise base to a power.'],
 ];
 
-const ARDUINO_OBJECTS: ReadonlyArray<[name: string, members: ReadonlyArray<[member: string, doc: string]>]> = [
+const ARDUINO_OBJECTS: ReadonlyArray<
+  [name: string, members: ReadonlyArray<[member: string, doc: string]>]
+> = [
   [
     'Serial',
     [
@@ -227,7 +258,10 @@ const ARDUINO_OBJECTS: ReadonlyArray<[name: string, members: ReadonlyArray<[memb
   [
     'WiFi',
     [
-      ['begin(ssid, password)', 'Start joining a network. Poll status() until it reads WL_CONNECTED.'],
+      [
+        'begin(ssid, password)',
+        'Start joining a network. Poll status() until it reads WL_CONNECTED.',
+      ],
       ['status()', 'How the join is going, as a WL_ code. WL_IDLE_STATUS while it is in flight.'],
       ['localIP()', 'The address the network handed out, or nothing while there is none.'],
     ],
@@ -237,11 +271,17 @@ const ARDUINO_OBJECTS: ReadonlyArray<[name: string, members: ReadonlyArray<[memb
     [
       ['get(url)', 'Ask for a url. Answers whether the answer has arrived, so poll it.'],
       ['read()', 'The body of the answer, once get() has said it is here.'],
-      ['failed()', 'Whether the answer was a failure: a name or a path the network does not serve.'],
+      [
+        'failed()',
+        'Whether the answer was a failure: a name or a path the network does not serve.',
+      ],
       ['subscribe(topic)', 'Listen for messages on a topic the network publishes.'],
       ['available()', 'Whether a subscribed message is waiting to be read.'],
       ['message()', 'Read the last message. It stays readable until the next one arrives.'],
-      ['publish(topic, payload)', 'Send a message. Sending "2" to commands/interval asks the sensor for a reading every two seconds.'],
+      [
+        'publish(topic, payload)',
+        'Send a message. Sending "2" to commands/interval asks the sensor for a reading every two seconds.',
+      ],
       ['reset()', 'Forget the last request, so a new one starts from nothing.'],
     ],
   ],
@@ -252,7 +292,11 @@ function registerArduinoLanguage(): void {
     return;
   }
 
-  monaco.languages.register({ id: FIRMWARE_LANGUAGE, extensions: ['.ino'], aliases: ['Arduino', 'arduino-cpp'] });
+  monaco.languages.register({
+    id: FIRMWARE_LANGUAGE,
+    extensions: ['.ino'],
+    aliases: ['Arduino', 'arduino-cpp'],
+  });
   monaco.languages.setLanguageConfiguration(FIRMWARE_LANGUAGE, {
     comments: { lineComment: '//', blockComment: ['/*', '*/'] },
     brackets: [
@@ -270,14 +314,38 @@ function registerArduinoLanguage(): void {
 
   monaco.languages.setMonarchTokensProvider(FIRMWARE_LANGUAGE, {
     keywords: [
-      'void', 'int', 'long', 'float', 'double', 'char', 'bool', 'const', 'static',
-      'unsigned', 'signed', 'struct', 'enum', 'return', 'if', 'else', 'while', 'do',
-      'for', 'switch', 'case', 'default', 'break', 'continue', 'true', 'false',
+      'void',
+      'int',
+      'long',
+      'float',
+      'double',
+      'char',
+      'bool',
+      'const',
+      'static',
+      'unsigned',
+      'signed',
+      'struct',
+      'enum',
+      'return',
+      'if',
+      'else',
+      'while',
+      'do',
+      'for',
+      'switch',
+      'case',
+      'default',
+      'break',
+      'continue',
+      'true',
+      'false',
     ],
     types: ['void', 'int', 'long', 'float', 'double', 'char', 'bool', 'String'],
     builtins: [
       ...ARDUINO_FUNCTIONS.map(([signature]) => signature.slice(0, signature.indexOf('('))),
-      'setup', 'loop',
+      'setup',
+      'loop',
     ],
     constants: ARDUINO_CONSTANTS.map(([name]) => name),
     tokenizer: {
@@ -285,15 +353,18 @@ function registerArduinoLanguage(): void {
         [/^\s*#\s*\w+/, 'keyword.directive'],
         [/#\s*include\s*[<"]/, 'keyword.directive', '@include'],
         [/#\s*define/, 'keyword.directive'],
-        [/[a-zA-Z_]\w*/, {
-          cases: {
-            '@keywords': 'keyword',
-            '@types': 'type',
-            '@constants': 'constant',
-            '@builtins': 'keyword.flow',
-            '@default': 'identifier',
+        [
+          /[a-zA-Z_]\w*/,
+          {
+            cases: {
+              '@keywords': 'keyword',
+              '@types': 'type',
+              '@constants': 'constant',
+              '@builtins': 'keyword.flow',
+              '@default': 'identifier',
+            },
           },
-        }],
+        ],
         [/\d*\.\d+([eE][-+]?\d+)?[fF]?/, 'number.float'],
         [/\d+[uUlL]*/, 'number'],
         [/[{}()[\]]/, '@brackets'],
@@ -321,9 +392,7 @@ function registerArduinoLanguage(): void {
         [/\\./, 'string.escape'],
         [/'/, 'string', '@pop'],
       ],
-      include: [
-        [/[<"]/, { token: 'string', next: '@includeString' }],
-      ],
+      include: [[/[<"]/, { token: 'string', next: '@includeString' }]],
       includeString: [
         [/[^>"]+/, 'string'],
         [/[>"]/, { token: 'string', next: '@pop' }],

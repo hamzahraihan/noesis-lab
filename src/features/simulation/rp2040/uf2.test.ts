@@ -52,7 +52,9 @@ describe('uf2 decoder', () => {
   });
 
   it('decodes the pinned MicroPython artifact', () => {
-    const file = readFileSync('src/features/simulation/rp2040/firmware/RPI_PICO-20260824-v1.29.0.uf2');
+    const file = readFileSync(
+      'src/features/simulation/rp2040/firmware/RPI_PICO-20260824-v1.29.0.uf2',
+    );
     const image = decodeUf2(file);
     expect(image.baseAddress).toBe(0x10000000);
     expect(image.data.length).toBe(340480);

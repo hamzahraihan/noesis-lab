@@ -232,7 +232,8 @@ export function allocSnapshot(layout: SnapshotLayout): SharedArrayBuffer {
 }
 
 function checkIndex(i: number, length: number): void {
-  if (!Number.isInteger(i) || i < 0 || i >= length) throw new RangeError(`index ${i} out of bounds (length ${length})`);
+  if (!Number.isInteger(i) || i < 0 || i >= length)
+    throw new RangeError(`index ${i} out of bounds (length ${length})`);
 }
 
 function makeRing(buf: SharedArrayBuffer, serialBase: number, cap: number): SerialRing {

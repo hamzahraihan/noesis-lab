@@ -23,7 +23,12 @@ export interface ExercisePreviewData {
   readonly state: FootprintState;
   /** The exercise's own parts — everything but the board and the breadboard. */
   readonly parts: readonly PartInstance[];
-  readonly frame: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  readonly frame: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
   readonly paths: readonly { readonly id: string; readonly d: string; readonly colour: string }[];
 }
 
@@ -58,7 +63,8 @@ export function previewBench(
 
   const bench = simulation.bench;
   const parts = bench.parts.filter(
-    (part) => part.definition.component.kind !== 'mcu' && part.definition.component.kind !== 'breadboard',
+    (part) =>
+      part.definition.component.kind !== 'mcu' && part.definition.component.kind !== 'breadboard',
   );
   const state: FootprintState = {
     pinVolts: simulation.pinVoltages(),
@@ -85,7 +91,10 @@ export function previewBench(
     const to = bench.terminals[wire.to];
     return {
       id: wire.id,
-      d: wire.bends.length > 0 ? routeWireVia(from, wire.bends, to) : routeWire(from, to, lanes.get(wire.id) ?? 0),
+      d:
+        wire.bends.length > 0
+          ? routeWireVia(from, wire.bends, to)
+          : routeWire(from, to, lanes.get(wire.id) ?? 0),
       colour: wire.colour,
     };
   });

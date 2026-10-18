@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-async function ioExports(): Promise<Record<string, CallableFunction> & { memory: WebAssembly.Memory }> {
+async function ioExports(): Promise<
+  Record<string, CallableFunction> & { memory: WebAssembly.Memory }
+> {
   execSync('sh scripts/build-avr-wasm.sh', { stdio: 'pipe' });
   const bytes = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
   const instance = await WebAssembly.instantiate(await WebAssembly.compile(bytes), {});

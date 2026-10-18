@@ -142,7 +142,8 @@ export class LcdDriver {
       commands.push({ isData: true, value: row < bitmap.length ? bitmap[row] & 0x1f : 0 });
     }
     // Back to where the cursor was: CGRAM is a detour, not a move.
-    const returnTo = SET_DDRAM_ADDRESS | (this.panel.rowBase(this.row) & 0x3f) | (this.column & 0x3f);
+    const returnTo =
+      SET_DDRAM_ADDRESS | (this.panel.rowBase(this.row) & 0x3f) | (this.column & 0x3f);
     return [...commands, { isData: false, value: returnTo }];
   }
 }

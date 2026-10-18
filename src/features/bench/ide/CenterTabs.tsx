@@ -87,8 +87,12 @@ export function CenterTabs({
        * switch would feel like a reload. A hidden pane costs a DOM subtree.
        */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className={`min-h-0 flex-1 ${circuitActive ? 'flex flex-col' : 'hidden'}`}>{circuit}</div>
-        <div className={`min-h-0 flex-1 ${circuitActive ? 'hidden' : 'flex flex-col'}`}>{editor}</div>
+        <div className={`min-h-0 flex-1 ${circuitActive ? 'flex flex-col' : 'hidden'}`}>
+          {circuit}
+        </div>
+        <div className={`min-h-0 flex-1 ${circuitActive ? 'hidden' : 'flex flex-col'}`}>
+          {editor}
+        </div>
       </div>
     </div>
   );

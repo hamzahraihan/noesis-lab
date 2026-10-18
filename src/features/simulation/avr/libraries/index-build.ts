@@ -24,7 +24,8 @@ import { latestRelease, type IndexLibrary, type IndexRelease } from './index';
 
 /** Pinned exact match, else semver-aware latest; null when missing or empty. No fetching. */
 export function selectIndexRelease(lib: IndexLibrary, pinned?: string): IndexRelease | null {
-  if (pinned !== undefined) return lib.versions.find((release) => release.version === pinned) ?? null;
+  if (pinned !== undefined)
+    return lib.versions.find((release) => release.version === pinned) ?? null;
   try {
     return latestRelease(lib);
   } catch {
@@ -78,11 +79,13 @@ export async function buildIndexObjects(
     }
   }
   sources.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  if (sources.length === 0) throw new Error(`${resolved}: archive contains no .cpp/.c sources, refusing`);
+  if (sources.length === 0)
+    throw new Error(`${resolved}: archive contains no .cpp/.c sources, refusing`);
 
   const decoder = new TextDecoder();
   const headerText = new Map<string, string>();
-  for (const [headerName, headerBytes] of headers) headerText.set(headerName, decoder.decode(headerBytes));
+  for (const [headerName, headerBytes] of headers)
+    headerText.set(headerName, decoder.decode(headerBytes));
 
   const objects = new Map<string, Uint8Array>();
   for (const source of sources) {
@@ -94,7 +97,9 @@ export async function buildIndexObjects(
     await deps.cache.put(objectsKey, encodeTier2Map(objects));
     await deps.cache.put(headersKey, encodeTier2Map(headers));
   } catch (error) {
-    throw new Error(`${resolved}: cache unavailable (${cacheDetail(error)}), rebuild from network next time`);
+    throw new Error(
+      `${resolved}: cache unavailable (${cacheDetail(error)}), rebuild from network next time`,
+    );
   }
   return { objects, headers };
 }

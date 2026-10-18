@@ -7,7 +7,12 @@ import {
   resolveBenchSeed,
   saveBenchProject,
 } from './project-store';
-import { toSingleFileProject, validateLibraries, validateProject, type FirmwareProject } from '@/features/simulation';
+import {
+  toSingleFileProject,
+  validateLibraries,
+  validateProject,
+  type FirmwareProject,
+} from '@/features/simulation';
 
 describe('project store', () => {
   it('round-trips through injected storage', () => {
@@ -34,7 +39,14 @@ describe('project store', () => {
 
   it('returns null when the save fails project validation', () => {
     const backing = new Map<string, string>([
-      [benchProjectKey('uno'), JSON.stringify({ language: 'arduino-cpp', files: [{ name: 'helpers.h', content: 'x\n' }], activeName: 'helpers.h' })],
+      [
+        benchProjectKey('uno'),
+        JSON.stringify({
+          language: 'arduino-cpp',
+          files: [{ name: 'helpers.h', content: 'x\n' }],
+          activeName: 'helpers.h',
+        }),
+      ],
     ]);
     const storage = {
       getItem: (k: string) => backing.get(k) ?? null,

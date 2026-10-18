@@ -114,7 +114,9 @@ void loop() { delay(500); }
     // Twenty milliseconds of a join that takes thirty-five: the sketch is
     // inside `while (WiFi.status() != WL_CONNECTED)` and has nothing to print.
     for (let i = 0; i < 2; i++) simulation.tick(0.01);
-    expect(simulation.serialLines().join(''), 'no address before the join lands').not.toContain('ip ');
+    expect(simulation.serialLines().join(''), 'no address before the join lands').not.toContain(
+      'ip ',
+    );
 
     for (let i = 0; i < 400; i++) {
       simulation.tick(0.05);
@@ -165,7 +167,7 @@ void loop() { delay(500); }
    * be read twice in one turn (this sketch language has no string variable to
    * hold it in, so the API is what makes print-and-draw possible).
    */
-  it('receives what the network\'s sensor publishes, without waiting', () => {
+  it("receives what the network's sensor publishes, without waiting", () => {
     const simulation = run(
       `
 void setup() {

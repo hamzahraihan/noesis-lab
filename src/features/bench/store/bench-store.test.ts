@@ -39,7 +39,10 @@ describe('useBenchShellStore', () => {
 
   it('opens an activity unconditionally via showActivity', () => {
     useBenchShellStore.getState().showActivity('components');
-    expect(useBenchShellStore.getState()).toMatchObject({ activity: 'components', sidebarOpen: true });
+    expect(useBenchShellStore.getState()).toMatchObject({
+      activity: 'components',
+      sidebarOpen: true,
+    });
   });
 
   it('repairs a stale center key against the file list', () => {
@@ -60,7 +63,11 @@ describe('useBenchShellStore', () => {
     s.selectPart('p1');
     s.selectWire('w1');
     s.clearSelection();
-    expect(useBenchShellStore.getState()).toMatchObject({ selectedId: null, selectedWireId: null, paletteFor: null });
+    expect(useBenchShellStore.getState()).toMatchObject({
+      selectedId: null,
+      selectedWireId: null,
+      paletteFor: null,
+    });
   });
 
   it('toggles panels', () => {
@@ -68,7 +75,11 @@ describe('useBenchShellStore', () => {
     s.toggleBottom();
     s.toggleInstruments();
     s.toggleSidebar();
-    expect(useBenchShellStore.getState()).toMatchObject({ bottomOpen: false, instrumentsOpen: false, sidebarOpen: false });
+    expect(useBenchShellStore.getState()).toMatchObject({
+      bottomOpen: false,
+      instrumentsOpen: false,
+      sidebarOpen: false,
+    });
   });
 });
 

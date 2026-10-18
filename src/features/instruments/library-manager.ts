@@ -10,7 +10,10 @@ import type { FirmwareProject } from '@/features/simulation/firmware/project';
 export const searchPlaceholder = 'Search libraries by name, header, or keyword…';
 
 /** Per-row install state, with text-exact badges the browse and installed rows share. */
-export function badgeFor(state: { readonly installed: string | null; readonly latest: string }): string {
+export function badgeFor(state: {
+  readonly installed: string | null;
+  readonly latest: string;
+}): string {
   if (state.installed === null) return 'install';
   if (state.installed === state.latest) return `installed ${state.installed}`;
   return 'update available';
@@ -53,11 +56,18 @@ export function indexLicenseNote(installed: readonly InstalledIndexEntry[]): str
  * panel spreads `projectRef.current` (fresh each render) through here at
  * land time, never the `project` value closed over when the install started.
  */
-export function applyIndexInstall(project: FirmwareProject, name: string, version: string): FirmwareProject {
+export function applyIndexInstall(
+  project: FirmwareProject,
+  name: string,
+  version: string,
+): FirmwareProject {
   const libraries = project.libraries ?? [];
   return {
     ...project,
-    libraries: [...libraries.filter((entry) => entry.name !== name), { name, source: 'index', version }],
+    libraries: [
+      ...libraries.filter((entry) => entry.name !== name),
+      { name, source: 'index', version },
+    ],
   };
 }
 

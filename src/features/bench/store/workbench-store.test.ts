@@ -4,9 +4,13 @@ import { DEFAULT_ASPECT, useWorkbenchStore } from './workbench-store';
 const initialView = { x: -12, y: -10, width: 428 };
 
 beforeEach(() => {
-  useWorkbenchStore.setState(
-    { wireAnchor: null, wireBends: [], pointerMm: null, view: { ...initialView }, aspect: DEFAULT_ASPECT },
-  );
+  useWorkbenchStore.setState({
+    wireAnchor: null,
+    wireBends: [],
+    pointerMm: null,
+    view: { ...initialView },
+    aspect: DEFAULT_ASPECT,
+  });
 });
 
 describe('useWorkbenchStore', () => {

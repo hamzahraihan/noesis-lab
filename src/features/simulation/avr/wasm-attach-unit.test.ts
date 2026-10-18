@@ -4,9 +4,12 @@ import { loadWasmModule, WASM_DEFAULT, resolveWasmFlag } from './wasm-core';
 
 const realBytes = () => {
   const buf = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
-  return Promise.resolve(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+  return Promise.resolve(
+    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+  );
 };
-const emptyModuleBytes = () => Promise.resolve(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]).buffer as ArrayBuffer);
+const emptyModuleBytes = () =>
+  Promise.resolve(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]).buffer as ArrayBuffer);
 
 describe('loadWasmModule', () => {
   it('loads the committed module with capped flash and zeroed reset', async () => {

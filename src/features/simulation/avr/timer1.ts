@@ -352,7 +352,10 @@ export function attachTimer1(
   cpu.writeHooks[TCNTL] = (value) => {
     tcnt = ((highByteTemp << 8) | value) & MAX;
     countingUp = true;
-    if ((tcnt === 0 && ocrUpdate === OCR_AT_BOTTOM) || (tcnt === top() && ocrUpdate === OCR_AT_TOP)) {
+    if (
+      (tcnt === 0 && ocrUpdate === OCR_AT_BOTTOM) ||
+      (tcnt === top() && ocrUpdate === OCR_AT_TOP)
+    ) {
       latchOcr();
     }
   };
@@ -476,12 +479,15 @@ export function bindTimer1Outputs(cpu: CPU, mcu: McuRuntime, nowMs: () => number
   // chained hook declines the CPU default write (returns falsy), the wrapper
   // replicates `cpu.data[addr] = value` itself before refreshing, so the OC
   // rule always reads post-write register state.
-  const wgm = (): number =>
-    (((cpu.data[TCCRB] & 0x18) >> 1) | (cpu.data[TCCRA] & 0x03)) & 0x0f;
+  const wgm = (): number => (((cpu.data[TCCRB] & 0x18) >> 1) | (cpu.data[TCCRA] & 0x03)) & 0x0f;
 
   const isPwmMode = (): boolean => {
     const mode = WGM_TABLE[wgm()] ?? WGM_TABLE[13]!;
-    return mode[0] === KIND_PHASE_CORRECT || mode[0] === KIND_FAST_PWM || mode[0] === KIND_PHASE_FREQ_CORRECT;
+    return (
+      mode[0] === KIND_PHASE_CORRECT ||
+      mode[0] === KIND_FAST_PWM ||
+      mode[0] === KIND_PHASE_FREQ_CORRECT
+    );
   };
 
   const readWord = (lo: number): number => (cpu.data[lo] | (cpu.data[lo + 1] << 8)) & MAX;
@@ -531,7 +537,19 @@ export function bindTimer1Outputs(cpu: CPU, mcu: McuRuntime, nowMs: () => number
     };
   };
 
-  for (const addr of [TCCRA, TCCRB, OCRAL, OCRAL + 1, OCRBL, OCRBL + 1, ICRL, ICRL + 1, DDRB, PORTB, PINB]) {
+  for (const addr of [
+    TCCRA,
+    TCCRB,
+    OCRAL,
+    OCRAL + 1,
+    OCRBL,
+    OCRBL + 1,
+    ICRL,
+    ICRL + 1,
+    DDRB,
+    PORTB,
+    PINB,
+  ]) {
     wrap(addr);
   }
 }

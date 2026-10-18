@@ -103,7 +103,10 @@ describe('the examples', () => {
      * send. A character that comes out mangled is a wiring problem the panel
      * can see, which is the whole point of driving it from the nets.
      */
-    const rows = panel!.text().split('\n').map((row) => row.trim());
+    const rows = panel!
+      .text()
+      .split('\n')
+      .map((row) => row.trim());
     // The sketch writes the clock on the top row and the title beneath it.
     expect(rows[0]).toMatch(/^\d+:\d+:\d+/);
     expect(rows[1]).toContain('noesis bench');
@@ -233,7 +236,9 @@ describe('loading one example replaces the last', () => {
     expect(firstId, 'the example put a panel on the bench').toBeDefined();
     simulation.loadFirmware(dim);
     run(simulation, 1);
-    expect([...simulation.lcdModels().values()][0]!.backlightOn, 'the sketch can dim it').toBe(false);
+    expect([...simulation.lcdModels().values()][0]!.backlightOn, 'the sketch can dim it').toBe(
+      false,
+    );
 
     // Loading the example again replaces that panel with an identical one: the
     // part is new, so any host object wrapped around the old one is stale.
@@ -262,9 +267,10 @@ describe('loading one example replaces the last', () => {
       ['servo', ['Servo']],
     ];
 
-    const onBench = () => simulation.bench.parts
-      .map((part) => part.definition.name)
-      .filter((name) => name !== esp32DevKitV1().name && name !== breadboardDefinition().name);
+    const onBench = () =>
+      simulation.bench.parts
+        .map((part) => part.definition.name)
+        .filter((name) => name !== esp32DevKitV1().name && name !== breadboardDefinition().name);
 
     // Twice round, so a leftover from the first pass would show up in the second.
     for (const pass of [1, 2]) {

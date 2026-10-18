@@ -23,9 +23,9 @@ export function alu_add(a: i32, b: i32, carryIn: i32): i32 {
   const result = r & 0xff;
   // avr8js-parity H (see header): carry into bit 1, proven equal to
   // avr8js's bit-0 carry-expression test on all 8 (d0, r0, c0) inputs.
-  const h = ((((aa & 1) & (bb & 1)) | (cc & ((aa ^ bb) & 1))) !== 0);
+  const h = ((aa & 1 & (bb & 1)) | (cc & ((aa ^ bb) & 1))) !== 0;
   const c = r > 0xff;
-  const v = (((~(aa ^ bb)) & (aa ^ result)) & 0x80) !== 0;
+  const v = (~(aa ^ bb) & (aa ^ result) & 0x80) !== 0;
   const n = (result & 0x80) !== 0;
   const z = result === 0;
   const s = n !== v;
@@ -38,9 +38,9 @@ export function alu_sub(a: i32, b: i32, carryIn: i32): i32 {
   const cc = carryIn & 0x01;
   const r = aa - bb - cc;
   const result = r & 0xff;
-  const h = (aa & 0x0f) < ((bb & 0x0f) + cc);
+  const h = (aa & 0x0f) < (bb & 0x0f) + cc;
   const c = aa < bb + cc;
-  const v = (((aa ^ bb) & (aa ^ result)) & 0x80) !== 0;
+  const v = ((aa ^ bb) & (aa ^ result) & 0x80) !== 0;
   const n = (result & 0x80) !== 0;
   const z = result === 0;
   const s = n !== v;
@@ -48,7 +48,7 @@ export function alu_sub(a: i32, b: i32, carryIn: i32): i32 {
 }
 
 export function alu_and(a: i32, b: i32): i32 {
-  const result = (a & b) & 0xff;
+  const result = a & b & 0xff;
   const v = false;
   const n = (result & 0x80) !== 0;
   const z = result === 0;

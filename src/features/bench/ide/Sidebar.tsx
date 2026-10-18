@@ -59,7 +59,9 @@ export function Sidebar({
                           // Panels.tsx notice pattern owns the error surface; sidebar stays quiet.
                         }
                       }}
-                      title={isEntry ? `${file.name} (entry)` : `${file.name} — double-click to rename`}
+                      title={
+                        isEntry ? `${file.name} (entry)` : `${file.name} — double-click to rename`
+                      }
                       className="flex-1 truncate rounded-none px-2 py-1.5 text-left transition-colors hover:text-slate-100"
                     >
                       {file.name}

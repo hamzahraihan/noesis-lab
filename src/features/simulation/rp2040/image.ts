@@ -15,7 +15,11 @@ export interface ImageFile {
 interface LittlefsWasm {
   HEAPU8: Uint8Array;
   addFunction(callback: (...args: number[]) => void, signature: string): number;
-  cwrap(name: string, returnType: string | null, argTypes: string[]): (...args: unknown[]) => number;
+  cwrap(
+    name: string,
+    returnType: string | null,
+    argTypes: string[],
+  ): (...args: unknown[]) => number;
   _new_lfs_config(
     read: number,
     prog: number,
@@ -89,11 +93,21 @@ export async function buildLittlefsImage(
   if (mountResult !== 0) {
     throw new Error(`littlefs: lfs_mount failed (${mountResult})`);
   }
-  const writeFile = module.cwrap('lfs_write_file', 'number', ['number', 'string', 'string', 'number']);
+  const writeFile = module.cwrap('lfs_write_file', 'number', [
+    'number',
+    'string',
+    'string',
+    'number',
+  ]);
   for (const file of files) {
     let result: number;
     try {
-      result = writeFile(lfs, file.name, file.content, new TextEncoder().encode(file.content).length);
+      result = writeFile(
+        lfs,
+        file.name,
+        file.content,
+        new TextEncoder().encode(file.content).length,
+      );
     } catch (cause) {
       // The wasm shim aborts the instance for some failures (e.g. an
       // over-long name trips a littlefs assertion) instead of returning an

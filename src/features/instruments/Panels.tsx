@@ -78,7 +78,6 @@ import {
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 
-
 export interface InspectorProps {
   part: PartInstance | null;
   pinVoltages: ReadonlyMap<string, number>;
@@ -249,7 +248,11 @@ export function Inspector({
             onMouseUp={() => onSetPressed(false)}
             onMouseLeave={() => onSetPressed(false)}
             variant={controls.isPressed(part.id) ? 'default' : 'secondary'}
-            className={controls.isPressed(part.id) ? 'h-8 w-full !bg-amber-400 !text-slate-900' : 'h-8 w-full'}
+            className={
+              controls.isPressed(part.id)
+                ? 'h-8 w-full !bg-amber-400 !text-slate-900'
+                : 'h-8 w-full'
+            }
           >
             <ReaderIcon className="icon" aria-hidden="true" />
             {controls.isPressed(part.id) ? 'Pressed' : 'Press and hold'}
@@ -288,7 +291,11 @@ export function Inspector({
             variant="secondary"
             className="h-8 w-full"
             disabled={locked}
-            title={locked ? 'Pause the run to edit the bench' : 'Turn this part a quarter turn clockwise (R)'}
+            title={
+              locked
+                ? 'Pause the run to edit the bench'
+                : 'Turn this part a quarter turn clockwise (R)'
+            }
           >
             <RotateIcon className="icon" aria-hidden="true" />
             Turn part
@@ -493,10 +500,11 @@ export function FirmwareEditor({
    */
   const slots = projectSlots(project);
   const declarations = libraryDeclarations(project);
-  const providedCatalog: readonly { readonly name: string; readonly tier: 'bundled' | 'fetch' }[] = [
-    ...CURATED_LIBRARIES.map((lib) => ({ name: lib.name, tier: 'bundled' as const })),
-    ...TIER2_MANIFEST.map((lib) => ({ name: lib.name, tier: 'fetch' as const })),
-  ];
+  const providedCatalog: readonly { readonly name: string; readonly tier: 'bundled' | 'fetch' }[] =
+    [
+      ...CURATED_LIBRARIES.map((lib) => ({ name: lib.name, tier: 'bundled' as const })),
+      ...TIER2_MANIFEST.map((lib) => ({ name: lib.name, tier: 'fetch' as const })),
+    ];
 
   /*
    * Helper-op failures (add/rename/delete, oversize edits) surface here in
@@ -505,12 +513,36 @@ export function FirmwareEditor({
    * or Run; `window.prompt` stays for name input.
    */
   const {
-    notice, setNotice, libsPopupOpen, setLibsPopupOpen, slotId, slotPath, pickSlotFile,
-    browseOpen, indexLibs, setIndexLibs, indexLoading, setIndexLoading,
-    query, setQuery, debouncedQuery, setDebouncedQuery, category, setCategory,
-    selectedName, setSelectedName, pinnedVersion, setPinnedVersion,
-    installing, setInstalling, installedIndex, mergeInstalled, setInstalled, removeInstalled,
-    toggleLibsPopup, toggleBrowse,
+    notice,
+    setNotice,
+    libsPopupOpen,
+    setLibsPopupOpen,
+    slotId,
+    slotPath,
+    pickSlotFile,
+    browseOpen,
+    indexLibs,
+    setIndexLibs,
+    indexLoading,
+    setIndexLoading,
+    query,
+    setQuery,
+    debouncedQuery,
+    setDebouncedQuery,
+    category,
+    setCategory,
+    selectedName,
+    setSelectedName,
+    pinnedVersion,
+    setPinnedVersion,
+    installing,
+    setInstalling,
+    installedIndex,
+    mergeInstalled,
+    setInstalled,
+    removeInstalled,
+    toggleLibsPopup,
+    toggleBrowse,
   } = useFirmwareEditorStore();
   const libsPopupRef = useRef<HTMLDivElement>(null);
 
@@ -595,7 +627,12 @@ export function FirmwareEditor({
   /** Switches the slot editor, stashing the outgoing file's view state first. */
   const selectSlotFile = (id: string, path: string | null) => {
     const editor = slotEditorRef.current;
-    if (editor && activeSlotId && activeSlotPath && (id !== activeSlotId || path !== activeSlotPath)) {
+    if (
+      editor &&
+      activeSlotId &&
+      activeSlotPath &&
+      (id !== activeSlotId || path !== activeSlotPath)
+    ) {
       try {
         const state = editor.saveViewState();
         if (state) viewStatesRef.current.set(slotViewKey(activeSlotId, activeSlotPath), state);
@@ -619,7 +656,9 @@ export function FirmwareEditor({
   };
 
   const reportHelperError = (cause: unknown) => {
-    useFirmwareEditorStore.getState().setNotice(cause instanceof Error ? cause.message : String(cause));
+    useFirmwareEditorStore
+      .getState()
+      .setNotice(cause instanceof Error ? cause.message : String(cause));
   };
 
   const handleAddFile = () => {
@@ -686,7 +725,8 @@ export function FirmwareEditor({
    */
   useEffect(() => {
     const wanted = declarations.filter(
-      (entry) => entry.source === 'index' && entry.version !== undefined && !installedIndex.has(entry.name),
+      (entry) =>
+        entry.source === 'index' && entry.version !== undefined && !installedIndex.has(entry.name),
     );
     if (wanted.length === 0) return;
     let cancelled = false;
@@ -750,12 +790,17 @@ export function FirmwareEditor({
     () =>
       indexLibs === null
         ? []
-        : searchIndex(indexLibs, debouncedQuery.trim(), category === 'all' ? undefined : { category }),
+        : searchIndex(
+            indexLibs,
+            debouncedQuery.trim(),
+            category === 'all' ? undefined : { category },
+          ),
     [indexLibs, debouncedQuery, category],
   );
   const selectedLib =
     selectedName === null ? null : (indexLibs?.find((lib) => lib.name === selectedName) ?? null);
-  const selectedLatest = selectedLib === null ? null : (selectIndexRelease(selectedLib)?.version ?? null);
+  const selectedLatest =
+    selectedLib === null ? null : (selectIndexRelease(selectedLib)?.version ?? null);
   const effectivePin = pinnedVersion ?? selectedLatest;
 
   /** Declared index version for a name, else null (browse rows then badge 'install'). */
@@ -818,11 +863,11 @@ export function FirmwareEditor({
         return compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers });
       };
       const built = force
-        ? await reinstallIndexObjects({ name, release }, { fetch: fetchArchive, cache, compileUnit })
-        : await buildIndexObjects(
-          { name, release },
-          { fetch: fetchArchive, cache, compileUnit },
-        );
+        ? await reinstallIndexObjects(
+            { name, release },
+            { fetch: fetchArchive, cache, compileUnit },
+          )
+        : await buildIndexObjects({ name, release }, { fetch: fetchArchive, cache, compileUnit });
       if (controller.signal.aborted) throw new Error('install cancelled');
       const headers = [...built.headers.keys()];
       setInstalled(name, { version, headers });
@@ -903,7 +948,8 @@ export function FirmwareEditor({
     setNotice(null);
   };
 
-  const handleRemoveSlot = (id: string) => {    const declaration = `custom:${id}`;
+  const handleRemoveSlot = (id: string) => {
+    const declaration = `custom:${id}`;
     onProjectChange({
       ...project,
       slots: slots.filter((slot) => slot.id !== id),
@@ -918,7 +964,10 @@ export function FirmwareEditor({
   const handleDeclareSlot = (id: string) => {
     const declaration = `custom:${id}`;
     if (declarations.some((entry) => entry.name === declaration)) return;
-    onProjectChange({ ...project, libraries: [...declarations, { name: declaration, source: 'custom' }] });
+    onProjectChange({
+      ...project,
+      libraries: [...declarations, { name: declaration, source: 'custom' }],
+    });
     setNotice(null);
   };
 
@@ -973,7 +1022,9 @@ export function FirmwareEditor({
         candidate.id === id
           ? {
               ...candidate,
-              files: candidate.files.map((file) => (file.path === path ? { ...file, path: trimmed } : file)),
+              files: candidate.files.map((file) =>
+                file.path === path ? { ...file, path: trimmed } : file,
+              ),
             }
           : candidate,
       ),
@@ -1012,7 +1063,9 @@ export function FirmwareEditor({
         candidate.id === id
           ? {
               ...candidate,
-              files: candidate.files.map((file) => (file.path === path ? { ...file, content: next } : file)),
+              files: candidate.files.map((file) =>
+                file.path === path ? { ...file, content: next } : file,
+              ),
             }
           : candidate,
       ),
@@ -1068,21 +1121,21 @@ export function FirmwareEditor({
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
         {!headerHidden && (
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase transition-colors hover:text-slate-200"
-        >
-          <CaretRightIcon
-            className={`icon-sm transition-transform ${expanded ? 'rotate-90' : ''}`}
-            aria-hidden="true"
-          />
-          <span className="text-slate-500">
-            <CodeIcon className="icon-sm" aria-hidden="true" />
-          </span>
-          Firmware
-        </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase transition-colors hover:text-slate-200"
+          >
+            <CaretRightIcon
+              className={`icon-sm transition-transform ${expanded ? 'rotate-90' : ''}`}
+              aria-hidden="true"
+            />
+            <span className="text-slate-500">
+              <CodeIcon className="icon-sm" aria-hidden="true" />
+            </span>
+            Firmware
+          </button>
         )}
 
         {/*
@@ -1181,65 +1234,65 @@ export function FirmwareEditor({
       {expanded && (
         <>
           {!headerHidden && (
-          <>
-          {/*
-           * One tab per file over a single Monaco instance. The entry tab has
-           * no close button; double-click renames in v1. Tab order is file
-           * order, which is also include order.
-           */}
-          <div
-            role="tablist"
-            aria-label="Firmware files"
-            className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
-          >
-            {project.files.map((file) => {
-              const selected = file.name === active?.name;
-              const isEntry = file.name === entry;
-              return (
-                <div
-                  key={file.name}
-                  role="tab"
-                  aria-selected={selected}
-                  className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                    selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => selectFile(file.name)}
-                    onDoubleClick={() => handleRenameFile(file.name)}
-                    title={isEntry ? file.name : `${file.name} — double-click to rename`}
-                    className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
-                  >
-                    {file.name}
-                  </button>
-                  {!isEntry && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFile(file.name)}
-                      aria-label={`Remove ${file.name}`}
-                      title={`Remove ${file.name}`}
-                      className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+            <>
+              {/*
+               * One tab per file over a single Monaco instance. The entry tab has
+               * no close button; double-click renames in v1. Tab order is file
+               * order, which is also include order.
+               */}
+              <div
+                role="tablist"
+                aria-label="Firmware files"
+                className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
+              >
+                {project.files.map((file) => {
+                  const selected = file.name === active?.name;
+                  const isEntry = file.name === entry;
+                  return (
+                    <div
+                      key={file.name}
+                      role="tab"
+                      aria-selected={selected}
+                      className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
+                        selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                      }`}
                     >
-                      ×
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            <Button
-              type="button"
-              onClick={handleAddFile}
-              variant="secondary"
-              size="icon-sm"
-              className="shrink-0 font-mono"
-              aria-label="Add file"
-              title="Add file"
-            >
-              +
-            </Button>
-          </div>
-          </>
+                      <button
+                        type="button"
+                        onClick={() => selectFile(file.name)}
+                        onDoubleClick={() => handleRenameFile(file.name)}
+                        title={isEntry ? file.name : `${file.name} — double-click to rename`}
+                        className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
+                      >
+                        {file.name}
+                      </button>
+                      {!isEntry && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFile(file.name)}
+                          aria-label={`Remove ${file.name}`}
+                          title={`Remove ${file.name}`}
+                          className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <Button
+                  type="button"
+                  onClick={handleAddFile}
+                  variant="secondary"
+                  size="icon-sm"
+                  className="shrink-0 font-mono"
+                  aria-label="Add file"
+                  title="Add file"
+                >
+                  +
+                </Button>
+              </div>
+            </>
           )}
           <Editor
             height="100%"
@@ -1394,10 +1447,14 @@ export function FirmwareEditor({
                                 >
                                   {lib.name}
                                 </button>
-                                <span className="truncate text-[11px] text-slate-500">{lib.sentence}</span>
+                                <span className="truncate text-[11px] text-slate-500">
+                                  {lib.sentence}
+                                </span>
                                 <span className="flex-1" />
                                 <span className="shrink-0 text-[11px] text-slate-500">
-                                  {latest === null ? 'no releases' : badgeFor({ installed, latest })}
+                                  {latest === null
+                                    ? 'no releases'
+                                    : badgeFor({ installed, latest })}
                                 </span>
                               </div>
                             );
@@ -1436,7 +1493,10 @@ export function FirmwareEditor({
                               value={effectivePin ?? undefined}
                               onValueChange={(next) => setPinnedVersion(next)}
                             >
-                              <SelectTrigger className="h-7 text-xs" aria-label="Version to install">
+                              <SelectTrigger
+                                className="h-7 text-xs"
+                                aria-label="Version to install"
+                              >
                                 <SelectValue placeholder="Pick a version" />
                               </SelectTrigger>
                               <SelectContent>
@@ -1475,7 +1535,12 @@ export function FirmwareEditor({
                               size="sm"
                               disabled={effectivePin === null}
                               onClick={() => {
-                                if (effectivePin !== null) void handleInstallIndex(selectedLib.name, effectivePin, installedVersionOf(selectedLib.name) !== null);
+                                if (effectivePin !== null)
+                                  void handleInstallIndex(
+                                    selectedLib.name,
+                                    effectivePin,
+                                    installedVersionOf(selectedLib.name) !== null,
+                                  );
                               }}
                               title={
                                 effectivePin === null
@@ -1485,7 +1550,9 @@ export function FirmwareEditor({
                                     : `Rebuild ${selectedLib.name}@${effectivePin}`
                               }
                             >
-                              {installedVersionOf(selectedLib.name) === null ? 'Install' : 'Reinstall'}
+                              {installedVersionOf(selectedLib.name) === null
+                                ? 'Install'
+                                : 'Reinstall'}
                             </Button>
                           )}
                         </div>
@@ -1697,9 +1764,7 @@ export function FirmwareEditor({
                   <div className="flex flex-col gap-1">
                     {slots.map((slot) => {
                       const declaration = `custom:${slot.id}`;
-                      const isDeclared = declarations.some(
-                        (entry) => entry.name === declaration,
-                      );
+                      const isDeclared = declarations.some((entry) => entry.name === declaration);
                       const selected = slot.id === activeSlotId;
                       return (
                         <div
@@ -1753,86 +1818,85 @@ export function FirmwareEditor({
                 <div
                   role="tablist"
                   aria-label="Library files"
-                      className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
-                    >
-                      {selectedSlot.files.map((file) => {
-                        const selected = file.path === activeSlotPath;
-                        return (
-                          <div
-                            key={file.path}
-                            role="tab"
-                            aria-selected={selected}
-                            className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                              selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => selectSlotFile(selectedSlot.id, file.path)}
-                              onDoubleClick={() => handleRenameSlotFile(selectedSlot.id, file.path)}
-                              title={`${file.path} — double-click to rename`}
-                              className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
-                            >
-                              {file.path}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSlotFile(selectedSlot.id, file.path)}
-                              aria-label={`Remove ${file.path}`}
-                              title={`Remove ${file.path}`}
-                              className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        );
-                      })}
-                      <Button
-                        type="button"
-                        onClick={() => handleAddSlotFile(selectedSlot.id)}
-                        variant="secondary"
-                        size="icon-sm"
-                        className="shrink-0 font-mono"
-                        aria-label="Add library file"
-                        title="Add library file"
+                  className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
+                >
+                  {selectedSlot.files.map((file) => {
+                    const selected = file.path === activeSlotPath;
+                    return (
+                      <div
+                        key={file.path}
+                        role="tab"
+                        aria-selected={selected}
+                        className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
+                          selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                        }`}
                       >
-                        +
-                      </Button>
-                    </div>
-                    {selectedSlotFile && activeSlotId && activeSlotPath ? (
-                      <Editor
-                        height="12rem"
-                        language={FIRMWARE_LANGUAGE}
-                        theme={FIRMWARE_THEME}
-                        value={selectedSlotFile.content}
-                        onChange={(next) => {
-                          handleSlotContentChange(activeSlotId, activeSlotPath, next ?? '');
-                        }}
-                        onMount={handleSlotMount}
-                        options={{
-                          minimap: { enabled: false },
-                          fontSize: 12,
-                          lineHeight: 19,
-                          fontFamily:
-                            "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                          scrollBeyondLastLine: false,
-                          smoothScrolling: true,
-                          cursorBlinking: 'smooth',
-                          padding: { top: 10, bottom: 10 },
-                          renderLineHighlight: 'none',
-                          automaticLayout: true,
-                          tabSize: 2,
-                          wordWrap: 'off',
-                        }}
-                      />
-                    ) : (
-                      <p className="px-1 py-2 text-xs text-slate-600">
-                        Empty library: add a header and its sources from the Libraries popup.
-                      </p>
-                    )}
-                  </>
-              </div>
-            )}
+                        <button
+                          type="button"
+                          onClick={() => selectSlotFile(selectedSlot.id, file.path)}
+                          onDoubleClick={() => handleRenameSlotFile(selectedSlot.id, file.path)}
+                          title={`${file.path} — double-click to rename`}
+                          className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
+                        >
+                          {file.path}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSlotFile(selectedSlot.id, file.path)}
+                          aria-label={`Remove ${file.path}`}
+                          title={`Remove ${file.path}`}
+                          className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <Button
+                    type="button"
+                    onClick={() => handleAddSlotFile(selectedSlot.id)}
+                    variant="secondary"
+                    size="icon-sm"
+                    className="shrink-0 font-mono"
+                    aria-label="Add library file"
+                    title="Add library file"
+                  >
+                    +
+                  </Button>
+                </div>
+                {selectedSlotFile && activeSlotId && activeSlotPath ? (
+                  <Editor
+                    height="12rem"
+                    language={FIRMWARE_LANGUAGE}
+                    theme={FIRMWARE_THEME}
+                    value={selectedSlotFile.content}
+                    onChange={(next) => {
+                      handleSlotContentChange(activeSlotId, activeSlotPath, next ?? '');
+                    }}
+                    onMount={handleSlotMount}
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 12,
+                      lineHeight: 19,
+                      fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                      scrollBeyondLastLine: false,
+                      smoothScrolling: true,
+                      cursorBlinking: 'smooth',
+                      padding: { top: 10, bottom: 10 },
+                      renderLineHighlight: 'none',
+                      automaticLayout: true,
+                      tabSize: 2,
+                      wordWrap: 'off',
+                    }}
+                  />
+                ) : (
+                  <p className="px-1 py-2 text-xs text-slate-600">
+                    Empty library: add a header and its sources from the Libraries popup.
+                  </p>
+                )}
+              </>
+            </div>
+          )}
         </>
       )}
 

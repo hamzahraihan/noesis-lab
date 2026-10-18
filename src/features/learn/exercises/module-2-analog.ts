@@ -13,7 +13,6 @@
 import { CIRCUITS } from '../circuits';
 import type { Exercise } from '../exercises';
 
-
 /* ------------------------------------------------------------------ *
  * 2.1 -- Precision Light Dimmer & Potentiometer Sampling
  * ------------------------------------------------------------------ */
@@ -43,13 +42,22 @@ const PRECISION_DIMMER: Exercise = {
       qty: 1,
       why: 'The knob. Its two ends go across the rails and its wiper goes to the ADC pin.',
     },
-    { name: 'Red LED', qty: 1, why: 'The light being dimmed. One channel is enough to see the curve.' },
+    {
+      name: 'Red LED',
+      qty: 1,
+      why: 'The light being dimmed. One channel is enough to see the curve.',
+    },
     { name: '220 Resistor', qty: 1, why: 'Limits the LED current. Still not optional.' },
   ],
   wiring: [
     { pin: '5V', part: 'Slide Potentiometer', terminal: 'endA', goesTo: 'the red + rail' },
     { pin: 'GND', part: 'Slide Potentiometer', terminal: 'endB', goesTo: 'the blue − rail' },
-    { pin: 'A0', part: 'Slide Potentiometer', terminal: 'wiper', goesTo: "A0's row — the wiper, not either end" },
+    {
+      pin: 'A0',
+      part: 'Slide Potentiometer',
+      terminal: 'wiper',
+      goesTo: "A0's row — the wiper, not either end",
+    },
     { pin: 'D3', part: '220 Resistor', terminal: 'b', goesTo: "D3's row" },
     { pin: 'D3', part: 'Red LED', terminal: 'anode', goesTo: 'the other leg of that resistor' },
     { pin: 'GND', part: 'Red LED', terminal: 'cathode', goesTo: 'the blue − rail' },
@@ -75,7 +83,7 @@ const PRECISION_DIMMER: Exercise = {
         'cathode returns to the blue − rail. That is the orientation in which a bigger duty really ' +
         'is brighter; put the anode on the 5 V rail instead and the duty counts the wrong way ' +
         'round.',
-      'The rescale runs from the pot\'s measured travel, not from the code\'s. A 10 kΩ pot rarely ' +
+      "The rescale runs from the pot's measured travel, not from the code's. A 10 kΩ pot rarely " +
         'reaches 0 or 1023, so `CAL_MIN` 30 and `CAL_MAX` 995 are what its two ends actually read. ' +
         'Map the full 0–1023 instead and the extremes of the knob are unreachable — and because ' +
         '`map()` truncates rather than rounds, only the exact top code reaches 255.',
@@ -91,7 +99,7 @@ const PRECISION_DIMMER: Exercise = {
         why:
           'The top of the divider, so the wiper can reach the full 5 V at the far end of travel. ' +
           'On the low side instead, the wiper only ever sees a fraction of the track, the top of ' +
-          'the knob falls off the top of the ADC\'s range, and the dimmer tops out early.',
+          "the knob falls off the top of the ADC's range, and the dimmer tops out early.",
       },
       {
         pin: 'GND',
@@ -114,7 +122,7 @@ const PRECISION_DIMMER: Exercise = {
         pin: 'D3',
         terminal: 'b',
         why:
-          'This is the leg the sketch\'s PWM comes out on, because `LED_PIN` is 3. Any other pin ' +
+          "This is the leg the sketch's PWM comes out on, because `LED_PIN` is 3. Any other pin " +
           'lights the LED only if it is one of the six PWM channels and lands on nothing ' +
           'otherwise — a perfectly ordinary GPIO, and the LED simply never comes on.',
       },
@@ -281,12 +289,12 @@ void loop() {
   fault: {
     break_:
       'In the loop, change the map range from 0–25500 to 0–102300, so the ADC counts go straight to ' +
-      'analogWrite without being rescaled to the PWM\'s scale.',
+      "analogWrite without being rescaled to the PWM's scale.",
     teaches:
-      'Every count above 255 lands outside the PWM\'s range once it is divided back down, so the ' +
-      'top half of the knob\'s travel produces the same brightness as the knob at three-quarters. It ' +
+      "Every count above 255 lands outside the PWM's range once it is divided back down, so the " +
+      "top half of the knob's travel produces the same brightness as the knob at three-quarters. It " +
       'looks like a dimmer with a dead zone, and the obvious suspicion is the pot. It is the ' +
-      'mismatch between the ADC\'s 1024 counts and the PWM\'s 256: two different scales, and the job ' +
+      "mismatch between the ADC's 1024 counts and the PWM's 256: two different scales, and the job " +
       'of map() is to be the translation between them.',
   },
   hints: [
@@ -309,8 +317,8 @@ void loop() {
     {
       when: 'The brightness moves in visible steps as I turn it, and shimmers.',
       answer:
-        'You are looking at the real resolution of both ends of the chain. The ADC\'s 1024 counts ' +
-        'step one at a time as the knob crosses them, and the PWM\'s 256 steps each move the ' +
+        "You are looking at the real resolution of both ends of the chain. The ADC's 1024 counts " +
+        "step one at a time as the knob crosses them, and the PWM's 256 steps each move the " +
         'average current by 0.39%, which the eye can find on a bare LED much more easily than on ' +
         'a diffused one. Widen the window to 8 and watch the filtered column while the raw one ' +
         'still jumps. Flicker you can also hear at 490 Hz is the same thing arriving at your ear.',
@@ -344,7 +352,7 @@ void loop() {
         'so it truncates rather than rounds: 0–1023 onto 0–255 only reaches 255 at exactly 1023. ' +
         'It does not clamp either — an input below the range you supplied comes out below the output ' +
         'range, which is why the sketch runs the result through constrain() before writing it to a ' +
-        'pin. The simulator\'s map() is the same formula in floating point, so the twin asks for ' +
+        "pin. The simulator's map() is the same formula in floating point, so the twin asks for " +
         'hundredths and divides them off before handing a byte to analogWrite.',
     },
     {
@@ -385,7 +393,6 @@ void loop() {
   circuit: CIRCUITS['2.1'],
 };
 
-
 /* ------------------------------------------------------------------ *
  * 2.2 -- Analog Sensor Calibration & Voltage Dividers
  * ------------------------------------------------------------------ */
@@ -424,19 +431,29 @@ const SENSOR_CALIBRATION: Exercise = {
   wiring: [
     { pin: '5V', part: 'Thermistor (NTC) Module', terminal: 'VCC', goesTo: 'the red + rail' },
     { pin: 'GND', part: 'Thermistor (NTC) Module', terminal: 'GND', goesTo: 'the blue − rail' },
-    { pin: 'A0', part: 'Thermistor (NTC) Module', terminal: 'OUT', goesTo: "A0's row — the analogue output, not the knob" },
+    {
+      pin: 'A0',
+      part: 'Thermistor (NTC) Module',
+      terminal: 'OUT',
+      goesTo: "A0's row — the analogue output, not the knob",
+    },
     { pin: '5V', part: 'Photoresistor (LDR) Module', terminal: 'VCC', goesTo: 'the red + rail' },
     { pin: 'GND', part: 'Photoresistor (LDR) Module', terminal: 'GND', goesTo: 'the blue − rail' },
-    { pin: 'A1', part: 'Photoresistor (LDR) Module', terminal: 'AO', goesTo: "A1's row — AO, not DO" },
+    {
+      pin: 'A1',
+      part: 'Photoresistor (LDR) Module',
+      terminal: 'AO',
+      goesTo: "A1's row — AO, not DO",
+    },
   ],
   steps: [
     'Run the red + rail from the 5V pin and the blue − rail from GND. Both modules take their supply from the board; neither will answer without it.',
     'Thermistor module: VCC to the red rail, GND to the blue rail, OUT to A0. Leave the little trimmer alone for now — the calibration check in this exercise assumes the divider is the one the module ships with.',
-    'Photoresistor module: VCC to the red rail, GND to the blue rail, AO to A1. Wire AO and not DO: DO is the on-board comparator\'s output, and it can only ever be HIGH or LOW, so a sketch reading it with analogRead gets a number that means nothing.',
+    "Photoresistor module: VCC to the red rail, GND to the blue rail, AO to A1. Wire AO and not DO: DO is the on-board comparator's output, and it can only ever be HIGH or LOW, so a sketch reading it with analogRead gets a number that means nothing.",
     'Do not rebuild the divider on the breadboard. Each module already is one — a sensor leg on top, a 10 kΩ below it — which is why both need only three wires.',
     'Meter A0 against GND with the thermistor knob at 25 °C. It must read almost exactly 2.5 V, because at 25 °C the bead and the fixed resistor are both 10 kΩ. That single number is the whole calibration check: if the sketch says 25 °C and the meter says anything else, the divider is not what the maths assumes.',
     'Set the thermistor knob to 25 °C, run the sketch, and open the Serial monitor at 9600 baud. The header prints once and then one CSV row every 500 ms, with the unfiltered count beside the temperature so you can check the maths rather than trust it: at 25 °C that count must read 512.',
-    'Turn the thermistor knob up. The temperature column follows, always a little behind — that gap is the filter\'s group lag, and it is worth measuring rather than guessing at.',
+    "Turn the thermistor knob up. The temperature column follows, always a little behind — that gap is the filter's group lag, and it is worth measuring rather than guessing at.",
     'Cover the LDR with your hand and watch both light columns. The raw count and the percentage move the same way, and the percentage is the one you would put in a log.',
   ],
   solution: {
@@ -447,13 +464,13 @@ const SENSOR_CALIBRATION: Exercise = {
         'carries no resistors for this exercise.',
       'Supply both modules from the rails before anything else, and read each one on its own ADC ' +
         'channel. An unpowered module has no reference for its output, so its count wanders ' +
-        'wherever the pin\'s leakage lets it — and two modules on one pin means one of them is ' +
+        "wherever the pin's leakage lets it — and two modules on one pin means one of them is " +
         'being read as the other.',
-      'The photoresistor has two outputs and only one of them is analogue. `AO` is the divider\'s ' +
-        'node and moves continuously; `DO` is the on-board comparator\'s output and can only ever ' +
+      "The photoresistor has two outputs and only one of them is analogue. `AO` is the divider's " +
+        "node and moves continuously; `DO` is the on-board comparator's output and can only ever " +
         'be HIGH or LOW, so `analogRead` on it returns a number shaped exactly like a reading ' +
         'and meaning nothing. It goes to A1.',
-      'Leave the thermistor\'s trimmer alone, and check the divider with one number rather than ' +
+      "Leave the thermistor's trimmer alone, and check the divider with one number rather than " +
         'with the maths. At 25 °C a 10 kΩ bead and a 10 kΩ resistor are equal, so the node sits ' +
         'at exactly half the supply — count 512. That single figure tells you whether the maths ' +
         'is being applied to the divider actually in front of you.',
@@ -467,7 +484,7 @@ const SENSOR_CALIBRATION: Exercise = {
         pin: '5V',
         terminal: 'VCC',
         why:
-          'The supply the module\'s divider is referenced to. Without it the output floats and ' +
+          "The supply the module's divider is referenced to. Without it the output floats and " +
           'settles near zero, which reads as a dead sensor rather than as a module that was never ' +
           'powered — and every count downstream is then measured against nothing.',
       },
@@ -476,7 +493,7 @@ const SENSOR_CALIBRATION: Exercise = {
         terminal: 'GND',
         why:
           'The bottom of the divider, which is what makes 2.5 V mean half of the supply and 512 ' +
-          'mean half of the ADC\'s range. On any other rail the reference moves, and 512 stops ' +
+          "mean half of the ADC's range. On any other rail the reference moves, and 512 stops " +
           'being the 25 °C anchor the whole table is built on.',
       },
       {
@@ -492,14 +509,14 @@ const SENSOR_CALIBRATION: Exercise = {
         terminal: 'VCC',
         why:
           'The same supply question for the photoresistor. Its divider runs the other way up from ' +
-          'the thermistor\'s, so leaving this off drops `light_pct` towards zero in daylight and ' +
+          "the thermistor's, so leaving this off drops `light_pct` towards zero in daylight and " +
           'looks like an LDR that only responds to darkness.',
       },
       {
         pin: 'GND',
         terminal: 'GND',
         why:
-          'The return the divider\'s other leg is measured against. Both modules share the blue − ' +
+          "The return the divider's other leg is measured against. Both modules share the blue − " +
           'rail, so forgetting this one leaves a photoresistor reading that hovers and twitches ' +
           'without ever reaching the dark end of its range.',
       },
@@ -521,7 +538,7 @@ const SENSOR_CALIBRATION: Exercise = {
         'appearing together is the divider being right and the table being anchored — the single ' +
         'most useful line the monitor will ever print.',
       'Turning the knob up moves the temperature column the same way, always a little behind it. ' +
-        'That gap is the filter\'s group lag of about 40 ms at 100 Hz, not an error, and it is ' +
+        "That gap is the filter's group lag of about 40 ms at 100 Hz, not an error, and it is " +
         'worth measuring rather than guessing at.',
       'Covering the LDR sends the raw count up and the percentage up with it, towards 100 in ' +
         'bright light — the opposite direction from the thermistor on the same board, because the ' +
@@ -698,7 +715,7 @@ void loop() {
       when: 'The reading sits at 0, or sits at 1023, and never moves at all.',
       answer:
         'Either the module is not powered — check VCC is on the red rail and GND on the blue one — ' +
-        'or you have wired DO where AO belongs. DO is the on-board comparator\'s output and can only ' +
+        "or you have wired DO where AO belongs. DO is the on-board comparator's output and can only " +
         'be HIGH or LOW, so analogRead on it returns a number that looks like a reading and is not ' +
         'one. Both modules are three-wire: VCC, GND, and the analogue output.',
     },
@@ -739,7 +756,7 @@ void loop() {
       term: 'Inverting the divider to get back to ohms',
       what:
         'Sensor on top, fixed resistor below, the node on the ADC: V = Vcc × R_f / (R_f + R_s), so ' +
-        'the node falls as the sensor\'s resistance rises. Rearranged, Rs = R_f × (Vcc / V − 1). The ' +
+        "the node falls as the sensor's resistance rises. Rearranged, Rs = R_f × (Vcc / V − 1). The " +
         'useful consequence is the calibration anchor: at 25 °C a 10 kΩ bead and a 10 kΩ resistor ' +
         'are equal, so the node sits at exactly 2.5 V, which is count 512. If your sketch says ' +
         '25 °C and your meter says anything but 2.5 V, one of the two is wrong and you have not got ' +
@@ -748,7 +765,7 @@ void loop() {
     {
       term: 'The NTC thermistor and its beta constant',
       what:
-        'An NTC thermistor\'s resistance falls as it warms, which is why this one is wired with the ' +
+        "An NTC thermistor's resistance falls as it warms, which is why this one is wired with the " +
         'bead on top and the reading rises with temperature. The curve is not linear; it is ' +
         'described by one number called beta: T = (1/T0 + ln(R/R0) / beta)^-1 − 273.15, with R0 = ' +
         '10 kΩ at T0 = 298.15 K for the usual bead, and beta = 3950 K for the common type. Because ' +

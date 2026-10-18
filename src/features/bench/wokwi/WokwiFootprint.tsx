@@ -98,7 +98,13 @@ export function WokwiFootprint({
   const art = artworkBox(definition, 0);
 
   return (
-    <foreignObject x={art.dx} y={art.dy} width={entry.sizeMm.w} height={entry.sizeMm.h} overflow="visible">
+    <foreignObject
+      x={art.dx}
+      y={art.dy}
+      width={entry.sizeMm.w}
+      height={entry.sizeMm.h}
+      overflow="visible"
+    >
       <div
         ref={host}
         className="cursor-inherit"

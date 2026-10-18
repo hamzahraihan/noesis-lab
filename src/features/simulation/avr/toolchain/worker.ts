@@ -33,7 +33,10 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
   // The WASM content type matters: Emscripten's instantiateStreaming path
   // rejects typeless responses, and under Node its readAsync/readBinary
   // hooks are undefined, so streaming compile is the only load path.
-  return new Response(bytes.slice().buffer, { status: 200, headers: { 'Content-Type': contentTypeFor(path) } });
+  return new Response(bytes.slice().buffer, {
+    status: 200,
+    headers: { 'Content-Type': contentTypeFor(path) },
+  });
 }) as typeof fetch;
 
 export interface CompileRequest {
@@ -93,13 +96,17 @@ async function handleProject(request: ProjectCompileRequest): Promise<string> {
   return hexText;
 }
 
-function isProjectRequest(data: CompileRequest | ProjectCompileRequest): data is ProjectCompileRequest {
+function isProjectRequest(
+  data: CompileRequest | ProjectCompileRequest,
+): data is ProjectCompileRequest {
   return Array.isArray((data as ProjectCompileRequest).units);
 }
 
 self.addEventListener('message', (event: MessageEvent) => {
   const data = event.data as CompileRequest | ProjectCompileRequest;
-  const work = isProjectRequest(data) ? handleProject(data) : handle((data as CompileRequest).source);
+  const work = isProjectRequest(data)
+    ? handleProject(data)
+    : handle((data as CompileRequest).source);
   work.then(
     (hexText: string) => {
       self.postMessage({ id: data.id, ok: true, hexText } satisfies CompileResponse);

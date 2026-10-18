@@ -81,10 +81,9 @@ describe('the pocket-map lesson', () => {
 
     expect(simulation.firmwareError).toBeNull();
     expect(panel.isOn(), 'the panel was told to light').toBe(true);
-    expect(
-      simulation.serial.join(''),
-      'the sketch should name the waypoint it drew',
-    ).toContain(marker);
+    expect(simulation.serial.join(''), 'the sketch should name the waypoint it drew').toContain(
+      marker,
+    );
     /*
      * The loop above is bounded in *simulated* time (40 frames of 50 ms), so
      * what it asserts does not drift with machine speed -- but pushing a

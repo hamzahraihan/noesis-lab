@@ -76,10 +76,9 @@ describe('MNA solver', () => {
   it('settles a genuinely unconnected net at ground', () => {
     // Net 1 has nothing attached to it at all -- the "I forgot to wire this
     // pin" case. It must read 0 V rather than making the matrix singular.
-    const solution = solveCircuit(
-      [{ kind: 'voltageSource', a: 0, b: GROUND, volts: 5 }],
-      { nodeCount: 2 },
-    );
+    const solution = solveCircuit([{ kind: 'voltageSource', a: 0, b: GROUND, volts: 5 }], {
+      nodeCount: 2,
+    });
 
     expect(solution.converged).toBe(true);
     expect(solution.voltages[0]).toBeCloseTo(5, 6);

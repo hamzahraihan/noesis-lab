@@ -28,7 +28,13 @@ import { TopBar } from '../ide/TopBar';
 import { ActivityBar } from '../ide/ActivityBar';
 import type { FootprintState } from '../wokwi/footprints';
 import { BREADBOARD_ORIGIN_X, Simulation } from '../simulations/simulation';
-import { createWorkerClient, lcdFromSnapshot, sevenSegmentFromSnapshot, tftFromSnapshot, type WorkerClient } from '../simulations/worker-client';
+import {
+  createWorkerClient,
+  lcdFromSnapshot,
+  sevenSegmentFromSnapshot,
+  tftFromSnapshot,
+  type WorkerClient,
+} from '../simulations/worker-client';
 import { CenterTabs } from '../ide/CenterTabs';
 import { BottomPanel } from '../ide/BottomPanel';
 import { ResizeHandle } from '../ide/ResizeHandle';
@@ -45,13 +51,14 @@ import type {
   StarterWiring,
 } from '@/features/learn';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import { ENTRY_BY_LANGUAGE, removeFile, renameFile, toSingleFileProject, decompile } from '@/features/simulation';
 import {
-  FirmwareEditor,
-  Inspector,
-  SerialMonitor,
-  StatusBar,
-} from '@/features/instruments';
+  ENTRY_BY_LANGUAGE,
+  removeFile,
+  renameFile,
+  toSingleFileProject,
+  decompile,
+} from '@/features/simulation';
+import { FirmwareEditor, Inspector, SerialMonitor, StatusBar } from '@/features/instruments';
 import { WIRE_COLOURS } from '../wiring/wire-colours';
 import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
@@ -74,11 +81,27 @@ import {
   UploadIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components';
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components';
 import { decodeShareToProject, isShareable, projectShareQuery } from '../utils/share-codec';
-import { hasBenchProject, loadBenchProject, resolveBenchSeed, saveBenchProject } from '../store/project-store';
+import {
+  hasBenchProject,
+  loadBenchProject,
+  resolveBenchSeed,
+  saveBenchProject,
+} from '../store/project-store';
 import { resolveCircuitSeed, loadCircuit, hasCircuit, saveCircuit } from '../store/circuit-store';
-import { circuitShareQuery, decodeShareToCircuit, isCircuitShareable } from '../utils/circuit-codec';
+import {
+  circuitShareQuery,
+  decodeShareToCircuit,
+  isCircuitShareable,
+} from '../utils/circuit-codec';
 import {
   CIRCUIT_FILE_MAX_BYTES,
   UNREADABLE_FILE_NOTICE,
@@ -88,7 +111,6 @@ import {
 } from '../utils/circuit-file';
 import { avrAvailableFor, resolveBackendSelection } from '../simulations/avr-mode';
 import { canResumeRun, type RunSession } from '../simulations/run-session';
-
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
 const PALETTE_FLIP_X = 200;
@@ -150,11 +172,7 @@ function buildStartingBench(simulation: Simulation, wiring: StarterWiring): void
   // steps one column along; the cathode sits 0.1 mm off pitch, inside snap.
   const ledDef = ledDefinition(DIODE_PROFILES.red, 'Red');
   const ledAnode = ledDef.pins.find((pin) => pin.id === 'anode')!;
-  simulation.addPart(
-    ledDef,
-    holeX(SIGNAL_COLUMN + 4) - ledAnode.x,
-    holeY(8) - ledAnode.y,
-  );
+  simulation.addPart(ledDef, holeX(SIGNAL_COLUMN + 4) - ledAnode.x, holeY(8) - ledAnode.y);
   simulation.routeWire(
     at(holeX(SIGNAL_COLUMN + 3), holeY(8)),
     at(holeX(SIGNAL_COLUMN + 3), groundRailY),
@@ -166,10 +184,7 @@ function buildStartingBench(simulation: Simulation, wiring: StarterWiring): void
   const connect = (display: PartInstance, pin: string, column: number, row: number) => {
     const spec = display.definition.pins.find((candidate) => candidate.id === pin);
     if (!spec) throw new Error(`${display.definition.name} has no pin ${pin}`);
-    simulation.routeWire(
-      at(holeX(column), holeY(row)),
-      at(display.x + spec.x, display.y + spec.y),
-    );
+    simulation.routeWire(at(holeX(column), holeY(row)), at(display.x + spec.x, display.y + spec.y));
   };
 
   // --- 128x64 OLED, on I2C ------------------------------------------------
@@ -255,11 +270,12 @@ export interface BenchProps {
   readonly exerciseBoard: (exercise: Exercise) => BoardId;
   readonly exerciseById: (id: string) => Exercise | null;
   readonly exerciseLanguage: (exercise: Exercise) => FirmwareLanguage;
-  readonly buildFor: (project: GalleryProject, board: BoardId, variant?: string) => GalleryBuild | null;
-  readonly firmwareForBuild: (
-    build: GalleryBuild,
-    language: FirmwareLanguage,
-  ) => FirmwareProject;
+  readonly buildFor: (
+    project: GalleryProject,
+    board: BoardId,
+    variant?: string,
+  ) => GalleryBuild | null;
+  readonly firmwareForBuild: (build: GalleryBuild, language: FirmwareLanguage) => FirmwareProject;
   readonly galleryById: (id: string) => GalleryProject | null;
   readonly ExerciseGuide: ComponentType<{
     exercise: Exercise;
@@ -316,8 +332,7 @@ export default function Bench(props: BenchProps) {
   const [search] = useSearchParams();
   const requestedExercise = search.get('ex');
   const found = requestedExercise === null ? null : exerciseById(requestedExercise);
-  const exercise =
-    found !== null && boardId === exerciseBoard(found) ? found : null;
+  const exercise = found !== null && boardId === exerciseBoard(found) ? found : null;
 
   /*
    * A project arriving from a board page, as `?project=alarm-clock`.
@@ -331,7 +346,9 @@ export default function Bench(props: BenchProps) {
   const requestedVariant = search.get('variant');
   const foundProject = requestedProject === null ? null : galleryById(requestedProject);
   const projectBuild =
-    exercise === null && foundProject !== null ? buildFor(foundProject, boardId, requestedVariant ?? undefined) : null;
+    exercise === null && foundProject !== null
+      ? buildFor(foundProject, boardId, requestedVariant ?? undefined)
+      : null;
 
   /*
    * Whether this bench is pinned to an exercise or gallery build: in that case
@@ -408,13 +425,43 @@ export default function Bench(props: BenchProps) {
     return () => clearTimeout(timer);
   }, [boardId, project]);
   const {
-    sidebarOpen, activity, activeCenter, instrumentsOpen, bottomTab, bottomOpen,
-    selectedId, selectedWireId, paletteFor, wireColour, guideOpen, projectBannerOpen,
-    baud, meterRedPin, meterBlackPin, pickActivity, showActivity, setActiveCenter,
-    repairCenter, setBottomTab, setBottomOpen, toggleBottom, setInstrumentsOpen,
-    toggleInstruments, toggleSidebar, selectPart, selectWire, openPalette, closePalette,
-    clearSelection, clearWire, setWireColour, setGuideOpen, setProjectBannerOpen,
-    setBaud, setMeterRedPin, setMeterBlackPin,
+    sidebarOpen,
+    activity,
+    activeCenter,
+    instrumentsOpen,
+    bottomTab,
+    bottomOpen,
+    selectedId,
+    selectedWireId,
+    paletteFor,
+    wireColour,
+    guideOpen,
+    projectBannerOpen,
+    baud,
+    meterRedPin,
+    meterBlackPin,
+    pickActivity,
+    showActivity,
+    setActiveCenter,
+    repairCenter,
+    setBottomTab,
+    setBottomOpen,
+    toggleBottom,
+    setInstrumentsOpen,
+    toggleInstruments,
+    toggleSidebar,
+    selectPart,
+    selectWire,
+    openPalette,
+    closePalette,
+    clearSelection,
+    clearWire,
+    setWireColour,
+    setGuideOpen,
+    setProjectBannerOpen,
+    setBaud,
+    setMeterRedPin,
+    setMeterBlackPin,
   } = useBenchShellStore();
   const { layout, nudge: nudgeLayout, resetKey: resetLayoutKey } = useLayoutStore();
   /* The center key must name the canvas or a live file; repaired centrally. */
@@ -497,83 +544,91 @@ export default function Bench(props: BenchProps) {
   // different on each board, so carrying one across would silently misfire.
   const circuitSeedParam = search.get('circuit');
   const circuitSeedErrorRef = useRef<string | null>(null);
-  const simulation = useMemo(
-    () => {
-      circuitSeedErrorRef.current = null;
-      const created = new Simulation(boardOption(boardId).make());
+  const simulation = useMemo(() => {
+    circuitSeedErrorRef.current = null;
+    const created = new Simulation(boardOption(boardId).make());
 
-      if (exercise) {
-        /*
-         * A pinned build IS a circuit document. The document carries the board
-         * and the breadboard, so nothing is placed first: restoring it replaces
-         * whatever is on the bench, and anything placed before it would be
-         * discarded anyway.
-         */
-        const admitted = created.loadCircuit(exercise.circuit);
-        // A pinned circuit that will not load would otherwise leave an empty
-        // bench with nothing said about it; the panel is where the reason goes.
-        circuitSeedErrorRef.current = admitted.length > 0 ? admitted.join('; ') : null;
-        // In the language the exercise is written in, not the board's default.
-        // A Pi lesson hands over Python, and handing that to the C++ parser
-        // reports "expected a type" on the first `from` and stops there.
-        created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
-      } else if (projectBuild) {
-        const admitted = created.loadCircuit(projectBuild.circuit);
-        circuitSeedErrorRef.current = admitted.length > 0 ? admitted.join('; ') : null;
-        created.loadFirmware(firmwareForBuild(projectBuild, boardOption(boardId).language));
+    if (exercise) {
+      /*
+       * A pinned build IS a circuit document. The document carries the board
+       * and the breadboard, so nothing is placed first: restoring it replaces
+       * whatever is on the bench, and anything placed before it would be
+       * discarded anyway.
+       */
+      const admitted = created.loadCircuit(exercise.circuit);
+      // A pinned circuit that will not load would otherwise leave an empty
+      // bench with nothing said about it; the panel is where the reason goes.
+      circuitSeedErrorRef.current = admitted.length > 0 ? admitted.join('; ') : null;
+      // In the language the exercise is written in, not the board's default.
+      // A Pi lesson hands over Python, and handing that to the C++ parser
+      // reports "expected a type" on the first `from` and stops there.
+      created.loadFirmware(exercise.sketch, exerciseLanguage(exercise));
+    } else if (projectBuild) {
+      const admitted = created.loadCircuit(projectBuild.circuit);
+      circuitSeedErrorRef.current = admitted.length > 0 ? admitted.join('; ') : null;
+      created.loadFirmware(firmwareForBuild(projectBuild, boardOption(boardId).language));
+    } else {
+      const boardDefinition = boardOption(boardId).make();
+      const circuitSeed = resolveCircuitSeed({
+        boardDefinitionId: boardDefinition.id,
+        pinned: false,
+        sharedPayload: circuitSeedParam,
+        saved: loadCircuit(boardId),
+        hadUnreadableSave: hasCircuit(boardId),
+        decode: decodeShareToCircuit,
+      });
+      if (circuitSeed.circuit !== null) {
+        // One seeding primitive whichever way the circuit arrived: the
+        // document is compiled, checked against this board's pin model, put
+        // down whole and the operator state copied over.
+        const refused = created.loadCircuit(circuitSeed.circuit);
+        circuitSeedErrorRef.current = refused.length > 0 ? refused.join('; ') : circuitSeed.error;
       } else {
-        const boardDefinition = boardOption(boardId).make();
-        const circuitSeed = resolveCircuitSeed({
-          boardDefinitionId: boardDefinition.id,
-          pinned: false,
-          sharedPayload: circuitSeedParam,
-          saved: loadCircuit(boardId),
-          hadUnreadableSave: hasCircuit(boardId),
-          decode: decodeShareToCircuit,
-        });
-        if (circuitSeed.circuit !== null) {
-          // One seeding primitive whichever way the circuit arrived: the
-          // document is compiled, checked against this board's pin model, put
-          // down whole and the operator state copied over.
-          const refused = created.loadCircuit(circuitSeed.circuit);
-          circuitSeedErrorRef.current = refused.length > 0 ? refused.join('; ') : circuitSeed.error;
-        } else {
-          /*
-           * The starter bench is the one circuit that is not a document: it
-           * routes wires to the board's own pin ids and to breadboard hole
-           * coordinates, so the board and the breadboard have to be down
-           * before it does (`new Simulation(board)` builds the MCU but places
-           * no part). Without them every wire quietly claims a loose contact of
-           * its own and the circuit is drawn but electrically dead.
-           */
-          created.addPart(boardDefinition, 0, 0);
-          created.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
-          buildStartingBench(created, STARTER_WIRING[boardId]);
-          circuitSeedErrorRef.current = circuitSeed.error;
-        }
-        created.loadFirmware(
-          boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
-          boardOption(boardId).language,
-        );
+        /*
+         * The starter bench is the one circuit that is not a document: it
+         * routes wires to the board's own pin ids and to breadboard hole
+         * coordinates, so the board and the breadboard have to be down
+         * before it does (`new Simulation(board)` builds the MCU but places
+         * no part). Without them every wire quietly claims a loose contact of
+         * its own and the circuit is drawn but electrically dead.
+         */
+        created.addPart(boardDefinition, 0, 0);
+        created.addPart(breadboardDefinition(), BREADBOARD_ORIGIN_X, 0);
+        buildStartingBench(created, STARTER_WIRING[boardId]);
+        circuitSeedErrorRef.current = circuitSeed.error;
       }
-      /*
-       * Deliberately left stopped. The bench opens on a loaded sketch at
-       * t=0 that the operator has to run themselves, which is the honest
-       * initial state -- starting the moment the page loads ran the firmware
-       * before anyone had looked at it, and left the status lamp claiming
-       * "running" over a simulation nobody had started.
-       */
-      /*
-       * And the history starts here too. Building the bench went through the
-       * same methods the operator edits with, so it pushed history like any
-       * other change; without this the first Ctrl+Z on a freshly loaded
-       * project would dismantle the project one wire at a time.
-       */
-      created.clearHistory();
-      return created;
-    },
-    [boardId, exercise, projectBuild, boardOption, STARTER_WIRING, PI_BLINK_SKETCH, exerciseLanguage, BLINK_EXAMPLE, firmwareForBuild, circuitSeedParam],
-  );
+      created.loadFirmware(
+        boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
+        boardOption(boardId).language,
+      );
+    }
+    /*
+     * Deliberately left stopped. The bench opens on a loaded sketch at
+     * t=0 that the operator has to run themselves, which is the honest
+     * initial state -- starting the moment the page loads ran the firmware
+     * before anyone had looked at it, and left the status lamp claiming
+     * "running" over a simulation nobody had started.
+     */
+    /*
+     * And the history starts here too. Building the bench went through the
+     * same methods the operator edits with, so it pushed history like any
+     * other change; without this the first Ctrl+Z on a freshly loaded
+     * project would dismantle the project one wire at a time.
+     */
+    created.clearHistory();
+    return created;
+  }, [
+    boardId,
+    exercise,
+    projectBuild,
+    boardOption,
+    STARTER_WIRING,
+    PI_BLINK_SKETCH,
+    exerciseLanguage,
+    BLINK_EXAMPLE,
+    firmwareForBuild,
+    circuitSeedParam,
+  ]);
 
   /*
    * Autosave: every 500 ms decompile the live bench and persist the circuit
@@ -683,7 +738,9 @@ export default function Bench(props: BenchProps) {
   }, [simulation, workerClient, workerActive]);
   /* Firmware verdict from the owning backend (worker fault travels by
    * message; the parse/fallback verdicts stay in-page). */
-  const activeFirmwareError = workerActive ? (workerClient.fault ?? simulation.firmwareError) : simulation.firmwareError;
+  const activeFirmwareError = workerActive
+    ? (workerClient.fault ?? simulation.firmwareError)
+    : simulation.firmwareError;
 
   // Only pins firmware can actually name are worth probing; the power and
   // ground headers are rails, not signals.
@@ -860,8 +917,23 @@ export default function Bench(props: BenchProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [simulation, isRunning, layoutLocked, activeStop, paletteFor, selectedId, selectedWireId, removeWire, stepHistory, toggleSidebar, showActivity, toggleInstruments, toggleBottom, closePalette, selectPart]);
-
+  }, [
+    simulation,
+    isRunning,
+    layoutLocked,
+    activeStop,
+    paletteFor,
+    selectedId,
+    selectedWireId,
+    removeWire,
+    stepHistory,
+    toggleSidebar,
+    showActivity,
+    toggleInstruments,
+    toggleBottom,
+    closePalette,
+    selectPart,
+  ]);
 
   const bench = simulation.bench;
 
@@ -910,11 +982,7 @@ export default function Bench(props: BenchProps) {
           const servo = new Servo();
           servo.write(bytes?.[0] ?? 90);
           servos.set(part.id, servo);
-        } else if (
-          kind === 'neopixel' ||
-          kind === 'neopixel-matrix' ||
-          kind === 'led-ring'
-        ) {
+        } else if (kind === 'neopixel' || kind === 'neopixel-matrix' || kind === 'led-ring') {
           const colors: { r: number; g: number; b: number }[] = [];
           if (bytes !== undefined) {
             for (let i = 0; i + 2 < bytes.length; i += 3) {
@@ -926,7 +994,12 @@ export default function Bench(props: BenchProps) {
           const digits = component.digits ?? 1;
           displays.set(
             part.id,
-            sevenSegmentFromSnapshot(digits, bytes.slice(0, digits), colon.get(part.id) ?? false, logicVolts),
+            sevenSegmentFromSnapshot(
+              digits,
+              bytes.slice(0, digits),
+              colon.get(part.id) ?? false,
+              logicVolts,
+            ),
           );
         } else if (kind === 'lcd' && bytes !== undefined) {
           const panel = lcdFromSnapshot(
@@ -974,7 +1047,6 @@ export default function Bench(props: BenchProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simulation, bench, frameTick, workerClient, workerLive]);
-
 
   // Meter probes come from the same pin list as the scope's. The black probe
   // defaults to bench ground, which is where it sits when unclipped.
@@ -1096,7 +1168,6 @@ export default function Bench(props: BenchProps) {
     },
     [simulation, layoutLocked],
   );
-
 
   /*
    * The chosen colour rides along with the route rather than being read from
@@ -1398,7 +1469,8 @@ export default function Bench(props: BenchProps) {
     if (layoutLocked) return;
     void (async () => {
       try {
-        if (file.size > CIRCUIT_FILE_MAX_BYTES) throw new Error(`${file.name}: too large to be a circuit`);
+        if (file.size > CIRCUIT_FILE_MAX_BYTES)
+          throw new Error(`${file.name}: too large to be a circuit`);
         const doc = readCircuitFile(await file.text(), file.name);
         const refused = simulation.loadCircuit(doc);
         if (refused.length > 0) throw new Error(`${file.name}: ${refused.join('; ')}`);
@@ -1410,7 +1482,10 @@ export default function Bench(props: BenchProps) {
         // The reason goes to the console -- which file, and why -- and the
         // operator gets one sentence, the same one the other circuit paths
         // would give them.
-        console.warn('circuit file rejected:', error instanceof Error ? error.message : String(error));
+        console.warn(
+          'circuit file rejected:',
+          error instanceof Error ? error.message : String(error),
+        );
         setShareError(UNREADABLE_FILE_NOTICE);
       }
     })();
@@ -1462,7 +1537,11 @@ export default function Bench(props: BenchProps) {
               if (isBoardId(next)) navigate(`/bench/${next}`);
             }}
           >
-            <SelectTrigger className="h-7 max-w-44 truncate text-xs" aria-label="Board" title="Swap board">
+            <SelectTrigger
+              className="h-7 max-w-44 truncate text-xs"
+              aria-label="Board"
+              title="Swap board"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1522,10 +1601,7 @@ export default function Bench(props: BenchProps) {
            */}
           <label className="flex items-center gap-1.5">
             <span className="sr-only">Execution backend</span>
-            <Select
-              value={backend.value}
-              onValueChange={(next) => setAvrMode(next === 'avr')}
-            >
+            <Select value={backend.value} onValueChange={(next) => setAvrMode(next === 'avr')}>
               <SelectTrigger
                 className="h-7 text-xs"
                 aria-label="Execution backend"
@@ -1572,10 +1648,7 @@ export default function Bench(props: BenchProps) {
               {`worker · ${workerStatus.fps}fps · ${workerStatus.ratio.toFixed(2)}×`}
             </span>
           ) : (
-            <span
-              className="text-xs text-slate-500"
-              title={workerFallback ?? 'In-page simulation'}
-            >
+            <span className="text-xs text-slate-500" title={workerFallback ?? 'In-page simulation'}>
               in-page
             </span>
           )}
@@ -1603,7 +1676,6 @@ export default function Bench(props: BenchProps) {
             </span>
           )}
 
-
           {/*
            * Undo and redo, beside Run because that is where an operator's
            * hands already are when something has just gone wrong.
@@ -1630,7 +1702,9 @@ export default function Bench(props: BenchProps) {
             size="icon-sm"
             onClick={() => stepHistory(true)}
             disabled={layoutLocked || !simulation.canRedo()}
-            title={layoutLocked ? LAYOUT_LOCK_HINT : 'Redo the change you just undid (Ctrl+Shift+Z)'}
+            title={
+              layoutLocked ? LAYOUT_LOCK_HINT : 'Redo the change you just undid (Ctrl+Shift+Z)'
+            }
             aria-label="Redo"
           >
             <ArrowRightIcon className="icon" aria-hidden="true" />
@@ -1658,9 +1732,10 @@ export default function Bench(props: BenchProps) {
             }
           >
             {WIRE_COLOURS.map((colour) => {
-              const selected = selectedWireId !== null
-                ? bench.wires.find((wire) => wire.id === selectedWireId)?.colour === colour.hex
-                : wireColour === colour.hex;
+              const selected =
+                selectedWireId !== null
+                  ? bench.wires.find((wire) => wire.id === selectedWireId)?.colour === colour.hex
+                  : wireColour === colour.hex;
               return (
                 <button
                   key={colour.hex}
@@ -1806,10 +1881,7 @@ export default function Bench(props: BenchProps) {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <ActivityBar
-          activity={activity}
-          onActivity={(next) => pickActivity(next)}
-        />
+        <ActivityBar activity={activity} onActivity={(next) => pickActivity(next)} />
         {sidebarOpen && (
           <Sidebar
             activity={activity}
@@ -1877,84 +1949,86 @@ export default function Bench(props: BenchProps) {
             circuit={
               <div className="relative min-h-0 flex-1">
                 <Workbench
-              bench={bench}
-              renderState={renderState}
-              netOfTerminal={netOfTerminal}
-              selectedId={selectedId}
-              selectedWireId={selectedWireId}
-              locked={layoutLocked}
-              onSelect={(partId) => selectPart(partId)}
-              onSelectWire={selectWire}
-              onWirePicked={(wireId, x, y) => openPalette({ wireId, x, y })}
-              onMovePart={onMovePart}
-              onRouteWire={onRouteWire}
-              onMoveWireEnd={moveWireEnd}
-              onTogglePressed={onTogglePressed}
-              onSetWireBends={onSetWireBends}
-              onRemoveWireBend={onRemoveWireBend}
-              onInsertWireBend={onInsertWireBend}
-              bendIndexNear={bendIndexNear}
-            />
+                  bench={bench}
+                  renderState={renderState}
+                  netOfTerminal={netOfTerminal}
+                  selectedId={selectedId}
+                  selectedWireId={selectedWireId}
+                  locked={layoutLocked}
+                  onSelect={(partId) => selectPart(partId)}
+                  onSelectWire={selectWire}
+                  onWirePicked={(wireId, x, y) => openPalette({ wireId, x, y })}
+                  onMovePart={onMovePart}
+                  onRouteWire={onRouteWire}
+                  onMoveWireEnd={moveWireEnd}
+                  onTogglePressed={onTogglePressed}
+                  onSetWireBends={onSetWireBends}
+                  onRemoveWireBend={onRemoveWireBend}
+                  onInsertWireBend={onInsertWireBend}
+                  bendIndexNear={bendIndexNear}
+                />
 
-            {/*
-             * The colour palette for a picked wire, opening where it was
-             * picked.
-             *
-             * Positioned `fixed` against the click's client coordinates, so it
-             * lands under the cursor regardless of where the canvas sits in
-             * the page -- which matters because the bench is a column in a
-             * layout, not the whole window.
-             *
-             * Offset above the click so it never covers the wire it is editing,
-             * and flipped to the right near the left edge, because a palette
-             * that opens off the side of the canvas cannot be used.
-             */}
-            {paletteFor && (
-              <div
-                role="group"
-                aria-label="Colour of the picked jumper"
-                className="fixed z-20 flex items-center gap-0.5 rounded-none border border-slate-700 bg-slate-900/95 p-1 shadow-lg"
-                style={{
-                  left: paletteFor.x,
-                  top: paletteFor.y,
-                  // Opens above and to the left of the click, which keeps it off
-                  // the wire and off the cursor that summoned it. Both flips
-                  // matter: a palette that opens over the header or off the
-                  // left of the window is a palette that cannot be used.
-                  transform: [
-                    `translateX(${paletteFor.x < PALETTE_FLIP_X ? '0' : '-100%'})`,
-                    paletteFor.y < PALETTE_FLIP_Y ? 'translateY(12px)' : 'translateY(calc(-100% - 12px))',
-                  ].join(' '),
-                }}
-              >
-                {WIRE_COLOURS.map((colour) => (
-                  <button
-                    key={colour.hex}
-                    type="button"
-                    onClick={() => {
-                      recolourSelectedWire(colour.hex);
-                      closePalette();
-                    }}
-                    aria-label={`Wire colour ${colour.label}`}
-                    title={colour.label}
-                    className="h-5 w-5 rounded-none transition-transform hover:scale-110"
+                {/*
+                 * The colour palette for a picked wire, opening where it was
+                 * picked.
+                 *
+                 * Positioned `fixed` against the click's client coordinates, so it
+                 * lands under the cursor regardless of where the canvas sits in
+                 * the page -- which matters because the bench is a column in a
+                 * layout, not the whole window.
+                 *
+                 * Offset above the click so it never covers the wire it is editing,
+                 * and flipped to the right near the left edge, because a palette
+                 * that opens off the side of the canvas cannot be used.
+                 */}
+                {paletteFor && (
+                  <div
+                    role="group"
+                    aria-label="Colour of the picked jumper"
+                    className="fixed z-20 flex items-center gap-0.5 rounded-none border border-slate-700 bg-slate-900/95 p-1 shadow-lg"
                     style={{
-                      backgroundColor: colour.hex,
-                      boxShadow: `inset 0 0 0 1px ${colour.border}`,
+                      left: paletteFor.x,
+                      top: paletteFor.y,
+                      // Opens above and to the left of the click, which keeps it off
+                      // the wire and off the cursor that summoned it. Both flips
+                      // matter: a palette that opens over the header or off the
+                      // left of the window is a palette that cannot be used.
+                      transform: [
+                        `translateX(${paletteFor.x < PALETTE_FLIP_X ? '0' : '-100%'})`,
+                        paletteFor.y < PALETTE_FLIP_Y
+                          ? 'translateY(12px)'
+                          : 'translateY(calc(-100% - 12px))',
+                      ].join(' '),
                     }}
-                  />
-                ))}
-                <button
-                  type="button"
-                  onClick={() => closePalette()}
-                  aria-label="Close the colour palette"
-                  title="Close (Esc)"
-                  className="ml-1 flex h-5 w-5 items-center justify-center rounded-none text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
-                >
-                  <Cross2Icon className="h-3 w-3" aria-hidden="true" />
-                </button>
-              </div>
-            )}
+                  >
+                    {WIRE_COLOURS.map((colour) => (
+                      <button
+                        key={colour.hex}
+                        type="button"
+                        onClick={() => {
+                          recolourSelectedWire(colour.hex);
+                          closePalette();
+                        }}
+                        aria-label={`Wire colour ${colour.label}`}
+                        title={colour.label}
+                        className="h-5 w-5 rounded-none transition-transform hover:scale-110"
+                        style={{
+                          backgroundColor: colour.hex,
+                          boxShadow: `inset 0 0 0 1px ${colour.border}`,
+                        }}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => closePalette()}
+                      aria-label="Close the colour palette"
+                      title="Close (Esc)"
+                      className="ml-1 flex h-5 w-5 items-center justify-center rounded-none text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+                    >
+                      <Cross2Icon className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
               </div>
             }
             editor={
@@ -2004,7 +2078,8 @@ export default function Bench(props: BenchProps) {
            */}
           {workerActive && (
             <p className="shrink-0 border-t border-slate-800 px-3 py-1 text-[11px] text-slate-500">
-              Worker mode: scope, bus monitor, and meter stay in-page and are frozen while the worker steps.
+              Worker mode: scope, bus monitor, and meter stay in-page and are frozen while the
+              worker steps.
             </p>
           )}
           <BottomPanel
@@ -2014,7 +2089,15 @@ export default function Bench(props: BenchProps) {
             hasError={(activeFirmwareError ?? shareError) !== null}
             onTab={setBottomTab}
             onToggle={() => toggleBottom()}
-            serial={<SerialMonitor lines={workerClient !== null && workerLive ? workerClient.serialLines() : simulation.serialLines()} />}
+            serial={
+              <SerialMonitor
+                lines={
+                  workerClient !== null && workerLive
+                    ? workerClient.serialLines()
+                    : simulation.serialLines()
+                }
+              />
+            }
             scope={
               <ScopePanel
                 pins={probePins}
@@ -2097,12 +2180,14 @@ export default function Bench(props: BenchProps) {
               }}
               onSetPressed={(pressed) => {
                 if (!selected) return;
-                if (workerClient !== null && workerLive) workerClient.setPressed(selected.id, pressed);
+                if (workerClient !== null && workerLive)
+                  workerClient.setPressed(selected.id, pressed);
                 else simulation.setPressed(selected.id, pressed);
               }}
               onSetKnob={(spec, value) => {
                 if (!selected) return;
-                if (workerClient !== null && workerLive) workerClient.setKnob(selected.id, spec, value);
+                if (workerClient !== null && workerLive)
+                  workerClient.setKnob(selected.id, spec, value);
                 else simulation.setKnob(selected.id, spec, value);
               }}
               onRotate={() => {
@@ -2125,34 +2210,35 @@ export default function Bench(props: BenchProps) {
           </div>
         </aside>
 
-      {!instrumentsOpen && (
-        <aside className="hidden w-9 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
-          <button
-            type="button"
-            onClick={() => setInstrumentsOpen(true)}
-            aria-expanded={false}
-            aria-label="Expand the instruments sidebar"
-            title="Expand instruments (I)"
-            className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
-          >
-            <CaretLeftIcon className="icon" aria-hidden="true" />
-          </button>
-        </aside>
-      )}
+        {!instrumentsOpen && (
+          <aside className="hidden w-9 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
+            <button
+              type="button"
+              onClick={() => setInstrumentsOpen(true)}
+              aria-expanded={false}
+              aria-label="Expand the instruments sidebar"
+              title="Expand instruments (I)"
+              className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            >
+              <CaretLeftIcon className="icon" aria-hidden="true" />
+            </button>
+          </aside>
+        )}
 
-      {exercise && (
-        <ExerciseGuide
-          key={exercise.id}
-          exercise={exercise}
-          open={guideOpen}
-          onClose={() => setGuideOpen(false)}
-        />
-      )}
-
+        {exercise && (
+          <ExerciseGuide
+            key={exercise.id}
+            exercise={exercise}
+            open={guideOpen}
+            onClose={() => setGuideOpen(false)}
+          />
+        )}
       </div>
 
       <StatusBar
-        timeMs={workerClient !== null && workerLive ? workerClient.timeMs : simulation.engine.timeMs}
+        timeMs={
+          workerClient !== null && workerLive ? workerClient.timeMs : simulation.engine.timeMs
+        }
         running={isRunning}
         netCount={simulation.engine.currentNetlist.nodeCount}
       />

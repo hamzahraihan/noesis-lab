@@ -33,12 +33,14 @@ export function resolveAngleInclude(header: string, ctx: ResolveContext): AngleR
   for (const entry of declared) {
     if (entry.source !== 'index') continue;
     const installed = ctx.indexInstalled?.get(entry.name);
-    if (installed !== undefined && installed.headers.includes(header)) return { kind: 'index', library: entry.name };
+    if (installed !== undefined && installed.headers.includes(header))
+      return { kind: 'index', library: entry.name };
   }
   for (const entry of declared) {
     if (entry.source !== 'provided') continue;
     const lib = CURATED_LIBRARIES.find((candidate) => candidate.name === entry.name);
-    if (lib !== undefined && lib.headers.includes(header)) return { kind: 'provided', library: lib.name };
+    if (lib !== undefined && lib.headers.includes(header))
+      return { kind: 'provided', library: lib.name };
   }
   if (ctx.toolchainHeaders.has(header)) return { kind: 'toolchain' };
   return { kind: 'unknown' };

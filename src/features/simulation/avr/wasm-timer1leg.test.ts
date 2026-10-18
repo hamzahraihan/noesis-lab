@@ -49,14 +49,18 @@ interface AttachedCore {
   setSreg(v: number): void;
 }
 
-async function instantiateAttachedCore(words: Uint16Array): Promise<{ core: AttachedCore; traps: { n: number } }> {
+async function instantiateAttachedCore(
+  words: Uint16Array,
+): Promise<{ core: AttachedCore; traps: { n: number } }> {
   // Committed-artifact read: avr-core.wasm is checked in, never rebuilt here.
   const bytes = readFileSync('src/features/simulation/avr/wasm/avr-core.wasm');
   const mod = await WebAssembly.compile(bytes);
   const instance = await WebAssembly.instantiate(mod, {});
   const ex = instance.exports as unknown as FadeWasmExports;
   if (typeof (ex as unknown as Record<string, unknown>).set_pc !== 'function') {
-    throw new Error('avr-core.wasm missing `set_pc` export — rebuild with `sh scripts/build-avr-wasm.sh`');
+    throw new Error(
+      'avr-core.wasm missing `set_pc` export — rebuild with `sh scripts/build-avr-wasm.sh`',
+    );
   }
   ex.reset_cpu();
   // Wasm flash holds 512 words; longer firmware runs past it and OOB-traps
@@ -99,7 +103,9 @@ describe('timer1 fade dual leg', () => {
     let pkg: string | null = null;
     try {
       pkg = createRequire(import.meta.url).resolve('@horang-corp/avr-gcc-wasm/package.json');
-    } catch { /* fall through to skip */ }
+    } catch {
+      /* fall through to skip */
+    }
     if (!pkg) {
       console.warn('SKIP fade dual: toolchain absent');
       return;
@@ -131,7 +137,9 @@ describe('timer1 fade dual leg', () => {
     const wallMs = performance.now() - t0;
     expect(atRun.backend.fault, 'no attached core fault').toBeNull();
     const dutyAt = atRun.mcu.configurationOf(atRun.mcu.pinIdForGpio(9)!).duty;
-    console.log(`leg=timer1fade traps=${traps.n} wallMs=${wallMs.toFixed(0)} duty=${dutyAt.toFixed(3)}`);
+    console.log(
+      `leg=timer1fade traps=${traps.n} wallMs=${wallMs.toFixed(0)} duty=${dutyAt.toFixed(3)}`,
+    );
     expect(Math.abs(dutyAt - dutyJs), 'attached duty within ±0.02 of JS').toBeLessThanOrEqual(0.02);
   }, 1_500_000);
 });

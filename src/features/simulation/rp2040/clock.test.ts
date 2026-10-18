@@ -8,7 +8,10 @@ describe('rp2040 clock', () => {
     clock.createAlarm(() => fired.push(['late', clock.nanos])).schedule(80);
     clock.createAlarm(() => fired.push(['early', clock.nanos])).schedule(30);
     clock.tick(100);
-    expect(fired).toEqual([['early', 30], ['late', 80]]);
+    expect(fired).toEqual([
+      ['early', 30],
+      ['late', 80],
+    ]);
     expect(clock.nanos).toBe(100);
     expect(clock.nanosToNextAlarm).toBe(0);
   });

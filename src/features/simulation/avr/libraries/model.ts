@@ -44,7 +44,10 @@ export function projectSlots(project: FirmwareProject): readonly LibrarySlot[] {
 /** Declaration errors only; include resolution lives in resolve.ts. */
 export function validateLibraries(
   project: FirmwareProject,
-  ctx: { slots: readonly LibrarySlot[]; indexInstalled?: ReadonlyMap<string, { headers: readonly string[] }> },
+  ctx: {
+    slots: readonly LibrarySlot[];
+    indexInstalled?: ReadonlyMap<string, { headers: readonly string[] }>;
+  },
 ): string[] {
   const errors: string[] = [];
   const seen = new Set<string>();
@@ -58,7 +61,10 @@ export function validateLibraries(
       // Tier-1 (bundled in the toolchain) and Tier-2 (fetched, SHA-verified,
       // version-pinned in provided.ts) are both provided libraries. Versions
       // are ignored here, as for Tier-1; the build enforces exact pins.
-      if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name) && tier2ByName(entry.name) === null) {
+      if (
+        !CURATED_LIBRARIES.some((lib) => lib.name === entry.name) &&
+        tier2ByName(entry.name) === null
+      ) {
         errors.push(`<${entry.name}>: unknown provided library`);
       }
     } else if (entry.source === 'index') {

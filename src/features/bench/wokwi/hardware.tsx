@@ -76,7 +76,13 @@ export function HardwareDefs() {
         <stop offset="1" stopColor="#3f3b33" />
       </linearGradient>
       <filter id="nz-lift" x="-40%" y="-40%" width="180%" height="180%">
-        <feDropShadow dx="0.25" dy="0.45" stdDeviation="0.35" floodColor="#000000" floodOpacity="0.5" />
+        <feDropShadow
+          dx="0.25"
+          dy="0.45"
+          stdDeviation="0.35"
+          floodColor="#000000"
+          floodOpacity="0.5"
+        />
       </filter>
       <filter id="nz-bloom" x="-120%" y="-120%" width="340%" height="340%">
         <feGaussianBlur stdDeviation="0.9" />
@@ -325,7 +331,16 @@ export function SmdPassive({
 }) {
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} rx={0.15} fill="#c9b48a" stroke="#8d7f5c" strokeWidth={0.1} />
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        rx={0.15}
+        fill="#c9b48a"
+        stroke="#8d7f5c"
+        strokeWidth={0.1}
+      />
       <rect x={x} y={y} width={width} height={height} rx={0.15} fill="url(#nz-body)" />
     </g>
   );
@@ -345,9 +360,30 @@ export function BoardCapacitor({
 }) {
   return (
     <g>
-      <rect x={x - radius} y={y} width={radius * 2} height={height} rx={radius * 0.3} fill="#1b2a4a" />
-      <rect x={x - radius} y={y} width={radius * 2} height={height} rx={radius * 0.3} fill="url(#nz-body)" />
-      <rect x={x - radius} y={y} width={radius * 0.45} height={height} fill="#ffffff" opacity={0.16} />
+      <rect
+        x={x - radius}
+        y={y}
+        width={radius * 2}
+        height={height}
+        rx={radius * 0.3}
+        fill="#1b2a4a"
+      />
+      <rect
+        x={x - radius}
+        y={y}
+        width={radius * 2}
+        height={height}
+        rx={radius * 0.3}
+        fill="url(#nz-body)"
+      />
+      <rect
+        x={x - radius}
+        y={y}
+        width={radius * 0.45}
+        height={height}
+        fill="#ffffff"
+        opacity={0.16}
+      />
       <ellipse cx={x} cy={y} rx={radius} ry={radius * 0.32} fill="#2c3f68" />
       <path
         d={`M ${x - radius * 0.45} ${y + height * 0.2} h ${radius * 0.5} m ${-radius * 0.25} ${-radius * 0.26} v ${radius * 0.52}`}
@@ -377,9 +413,25 @@ export function BoardButton({
 }) {
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} rx={0.5} fill="#1b1d22" stroke="#000" strokeWidth={0.12} />
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        rx={0.5}
+        fill="#1b1d22"
+        stroke="#000"
+        strokeWidth={0.12}
+      />
       <rect x={x} y={y} width={width} height={height} rx={0.5} fill="url(#nz-body)" />
-      <circle cx={x + width / 2} cy={y + height / 2} r={width * 0.28} fill="#2f3238" stroke="#45484f" strokeWidth={0.12} />
+      <circle
+        cx={x + width / 2}
+        cy={y + height / 2}
+        r={width * 0.28}
+        fill="#2f3238"
+        stroke="#45484f"
+        strokeWidth={0.12}
+      />
       <text
         x={x + width / 2}
         y={y + height + 2}
@@ -461,7 +513,16 @@ export function SolderPad({ x, y, radius = 0.6 }: { x: number; y: number; radius
 export function MicroUsb({ x, y, label }: { x: number; y: number; label: string }) {
   return (
     <g>
-      <rect x={x} y={y} width={7.5} height={4.4} rx={0.5} fill="url(#nz-metal)" stroke="#5b636f" strokeWidth={0.15} />
+      <rect
+        x={x}
+        y={y}
+        width={7.5}
+        height={4.4}
+        rx={0.5}
+        fill="url(#nz-metal)"
+        stroke="#5b636f"
+        strokeWidth={0.15}
+      />
       <rect x={x + 1} y={y + 0.7} width={5.5} height={2.8} rx={0.35} fill="#101216" />
       <rect x={x + 0.4} y={y + 0.3} width={6.7} height={0.65} fill="#ffffff" opacity={0.32} />
       <text
@@ -485,7 +546,16 @@ export function UsbB({ x, y, label }: { x: number; y: number; label: string }) {
     <g>
       <rect x={x - 0.9} y={y + 1.6} width={1.2} height={2.2} rx={0.2} fill="url(#nz-metal)" />
       <rect x={x + 11.7} y={y + 1.6} width={1.2} height={2.2} rx={0.2} fill="url(#nz-metal)" />
-      <rect x={x} y={y} width={12} height={5.4} rx={0.6} fill="url(#nz-metal)" stroke="#5b636f" strokeWidth={0.16} />
+      <rect
+        x={x}
+        y={y}
+        width={12}
+        height={5.4}
+        rx={0.6}
+        fill="url(#nz-metal)"
+        stroke="#5b636f"
+        strokeWidth={0.16}
+      />
       <rect x={x + 1.4} y={y + 0.8} width={9.2} height={3.5} rx={0.4} fill="#0c0e11" />
       <rect x={x + 0.5} y={y + 0.35} width={11} height={0.75} fill="#ffffff" opacity={0.3} />
       <text
@@ -507,9 +577,25 @@ export function UsbB({ x, y, label }: { x: number; y: number; label: string }) {
 export function BarrelJack({ x, y }: { x: number; y: number }) {
   return (
     <g>
-      <rect x={x} y={y} width={9} height={5.6} rx={0.5} fill="#1c1e23" stroke="#000" strokeWidth={0.15} />
+      <rect
+        x={x}
+        y={y}
+        width={9}
+        height={5.6}
+        rx={0.5}
+        fill="#1c1e23"
+        stroke="#000"
+        strokeWidth={0.15}
+      />
       <rect x={x} y={y} width={9} height={5.6} rx={0.5} fill="url(#nz-body)" />
-      <circle cx={x + 3} cy={y + 2.8} r={2.3} fill="#0a0b0d" stroke="url(#nz-metal)" strokeWidth={0.7} />
+      <circle
+        cx={x + 3}
+        cy={y + 2.8}
+        r={2.3}
+        fill="#0a0b0d"
+        stroke="url(#nz-metal)"
+        strokeWidth={0.7}
+      />
       <circle cx={x + 3} cy={y + 2.8} r={0.85} fill="#1a1c20" />
       <rect x={x + 6.4} y={y + 0.9} width={1.6} height={3.8} rx={0.3} fill="#2a2d33" />
     </g>

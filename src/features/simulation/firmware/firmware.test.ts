@@ -58,8 +58,7 @@ function harnessWithSketch(source: string, pin = 2): Harness {
   const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
 
   const pinSpec =
-    esp32.definition.pins.find((candidate) => candidate.id === 'R_D2') ??
-    esp32.definition.pins[0];
+    esp32.definition.pins.find((candidate) => candidate.id === 'R_D2') ?? esp32.definition.pins[0];
   builder.addWire(pinSpec.x, pinSpec.y, holeX(SIGNAL_COLUMN), holeY(8));
   builder.addPart(resistorDefinition(330), holeX(SIGNAL_COLUMN), holeY(8) - 1.6);
   // Anode-anchored: the long leg lands on its hole, cathode one column along.
@@ -67,8 +66,10 @@ function harnessWithSketch(source: string, pin = 2): Harness {
   const fwAnode = fwLed.pins.find((pin) => pin.id === 'anode')!;
   builder.addPart(fwLed, holeX(SIGNAL_COLUMN + 4) - fwAnode.x, holeY(8) - fwAnode.y);
   builder.addWire(
-    holeX(SIGNAL_COLUMN + 3), holeY(8),
-    holeX(SIGNAL_COLUMN + 3), railRowY(BOTTOM_NEGATIVE_RAIL),
+    holeX(SIGNAL_COLUMN + 3),
+    holeY(8),
+    holeX(SIGNAL_COLUMN + 3),
+    railRowY(BOTTOM_NEGATIVE_RAIL),
   );
   const ground = esp32.definition.pins.find((candidate) => candidate.id === 'L_GND')!;
   builder.addWire(ground.x, ground.y, holeX(10), railRowY(BOTTOM_NEGATIVE_RAIL));

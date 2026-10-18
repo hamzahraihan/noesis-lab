@@ -22,7 +22,13 @@ import {
 } from './worker-client';
 
 function blankMirror(): MirrorState {
-  return { layout: null, pinVolts: new Map(), values: new Map(), colon: new Map(), serial: [] as string[] };
+  return {
+    layout: null,
+    pinVolts: new Map(),
+    values: new Map(),
+    colon: new Map(),
+    serial: [] as string[],
+  };
 }
 
 function partDef(kind: string, extra?: Record<string, unknown>): never {
@@ -56,7 +62,11 @@ function plainProject(): never {
 describe('worker client fallback', () => {
   it('falls back when workers are unavailable', () => {
     const onFallback = vi.fn();
-    const client = createWorkerClient({ board: { id: 'uno' } as never, onFallback, forceNoWorker: true });
+    const client = createWorkerClient({
+      board: { id: 'uno' } as never,
+      onFallback,
+      forceNoWorker: true,
+    });
     expect(client).toBeNull();
     expect(onFallback).toHaveBeenCalledOnce();
   });
@@ -206,7 +216,11 @@ describe('tft mirror decode', () => {
       expect(frame?.height).toBe(2);
       expect(frame?.rgb565).toEqual(frameBytes);
 
-      const panel = tftFromSnapshot(frame?.width ?? 0, frame?.height ?? 0, frame?.rgb565 ?? new Uint8Array(0));
+      const panel = tftFromSnapshot(
+        frame?.width ?? 0,
+        frame?.height ?? 0,
+        frame?.rgb565 ?? new Uint8Array(0),
+      );
       expect(panel?.pixelAt(0, 0)).toBe(0xf800);
       expect(panel?.pixelAt(1, 0)).toBe(0x07e0);
       expect(panel?.pixelAt(0, 1)).toBe(0x001f);

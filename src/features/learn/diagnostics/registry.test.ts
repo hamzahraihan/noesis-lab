@@ -7,7 +7,10 @@ import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH } from './probes';
 describe('registry', () => {
   it('covers every gallery project and build', () => {
     const expected = GALLERY.flatMap((entry) =>
-      entry.builds.map((build) => `${entry.id}@${build.board}${build.variant === undefined ? '' : `:${build.variant}`}`),
+      entry.builds.map(
+        (build) =>
+          `${entry.id}@${build.board}${build.variant === undefined ? '' : `:${build.variant}`}`,
+      ),
     );
     const actual = buildRegistry().map((entry) => `${entry.projectId}@${entry.buildLabel}`);
     expect(actual.sort()).toEqual(expected.sort());
@@ -27,7 +30,10 @@ describe('registry', () => {
       const report = await runHarness(entry.checks, entry.makeSim);
       const failed = report.results.filter((result) => result.status === 'fail');
       expect(failed, `${id}: ${failed.map((result) => result.detail).join('; ')}`).toEqual([]);
-      expect(report.results.every((result) => result.status === 'pass'), id).toBe(true);
+      expect(
+        report.results.every((result) => result.status === 'pass'),
+        id,
+      ).toBe(true);
     }
   }, 30_000);
 

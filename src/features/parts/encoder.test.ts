@@ -44,13 +44,23 @@ function solveBench(
   const netlist = buildNetlist(bench.builder.build(), state);
   const elements: Element[] = [
     ...(extra?.(netlist) ?? []),
-    { kind: 'voltageSource', a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!, b: GROUND, volts: SUPPLY_VOLTS },
+    {
+      kind: 'voltageSource',
+      a: netlist.pinNode.get(`${bench.esp32.id}:R_3V3`)!,
+      b: GROUND,
+      volts: SUPPLY_VOLTS,
+    },
     ...netlist.elements,
   ];
   return { netlist, solution: solveCircuit(elements, { nodeCount: netlist.nodeCount }) };
 }
 
-function pinVolts(netlist: Netlist, solution: Solution, module: PartInstance, pinId: string): number {
+function pinVolts(
+  netlist: Netlist,
+  solution: Solution,
+  module: PartInstance,
+  pinId: string,
+): number {
   const node = netlist.pinNode.get(`${module.id}:${pinId}`);
   if (node === undefined) throw new Error(`${module.id} has no net for pin ${pinId}`);
   return node === GROUND ? 0 : solution.voltages[node];
@@ -113,7 +123,10 @@ describe('encoder quadrature', () => {
       const clk = pinVolts(solved.netlist, solved.solution, bench.module, 'CLK');
       const dt = pinVolts(solved.netlist, solved.solution, bench.module, 'DT');
       const high = (v: number) => v > 2.8;
-      expect([high(clk), high(dt)]).toEqual([quadratureAt(extreme)[0] === 1, quadratureAt(extreme)[1] === 1]);
+      expect([high(clk), high(dt)]).toEqual([
+        quadratureAt(extreme)[0] === 1,
+        quadratureAt(extreme)[1] === 1,
+      ]);
     }
   });
 
@@ -136,7 +149,13 @@ describe('encoder quadrature', () => {
     const gnd = module.definition.pins.find((p) => p.id === 'GND')!;
     const boardGround = esp32.definition.pins.find((p) => p.id === 'L_GND')!;
     builder.addWire(module.x + gnd.x, module.y + gnd.y, boardGround.x, boardGround.y);
-    const bench = { builder, esp32, module, columns: new Map<string, number>(), wirePower: () => {} };
+    const bench = {
+      builder,
+      esp32,
+      module,
+      columns: new Map<string, number>(),
+      wirePower: () => {},
+    };
     const state = new DynamicState();
     const solved = solveBench(bench, state);
     for (const pinId of ['CLK', 'DT', 'SW']) {

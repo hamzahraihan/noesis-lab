@@ -34,7 +34,10 @@ function benchWithBreadboardAndEsp32() {
 }
 
 /** World position of a named pin on a part placed at the origin. */
-function pinAt(esp32: { definition: { pins: readonly { id: string; x: number; y: number }[] } }, id: string) {
+function pinAt(
+  esp32: { definition: { pins: readonly { id: string; x: number; y: number }[] } },
+  id: string,
+) {
   return esp32.definition.pins.find((pin) => pin.id === id)!;
 }
 
@@ -50,19 +53,27 @@ describe('breadboard geometry', () => {
 
   it('resolves points in both the top and bottom strip blocks', () => {
     expect(holeAt(columnX(10), stripRowY(2))).toEqual({
-      kind: 'strip', column: 10, row: 2,
+      kind: 'strip',
+      column: 10,
+      row: 2,
     });
     expect(holeAt(columnX(10), stripRowY(6))).toEqual({
-      kind: 'strip', column: 10, row: 6,
+      kind: 'strip',
+      column: 10,
+      row: 6,
     });
     expect(holeAt(columnX(10), stripRowY(9))).toEqual({
-      kind: 'strip', column: 10, row: 9,
+      kind: 'strip',
+      column: 10,
+      row: 9,
     });
   });
 
   it('resolves a point inside the rail area', () => {
     expect(holeAt(columnX(25), railRowY(BOTTOM_NEGATIVE_RAIL))).toEqual({
-      kind: 'rail', column: 25, rail: BOTTOM_NEGATIVE_RAIL,
+      kind: 'rail',
+      column: 25,
+      rail: BOTTOM_NEGATIVE_RAIL,
     });
   });
 
@@ -89,9 +100,7 @@ describe('netlist extraction', () => {
     const board = builder.build();
     const breadboard = board.parts[0];
 
-    const holesAtoE = [0, 1, 2, 3, 4].map(
-      (row) => breadboard.terminals[`s10${'abcde'[row]}`],
-    );
+    const holesAtoE = [0, 1, 2, 3, 4].map((row) => breadboard.terminals[`s10${'abcde'[row]}`]);
 
     const netlist = buildNetlist(board, NO_DYNAMIC_STATE);
     const nodes = holesAtoE.map((terminal) => netlist.nodeOfTerminal[terminal]);

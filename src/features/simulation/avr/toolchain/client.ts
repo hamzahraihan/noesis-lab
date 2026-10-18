@@ -10,12 +10,27 @@ import type { PackedLine } from '../packager';
 import { packageSketch } from '../packager';
 import type { FirmwareProject } from '@/features/simulation/firmware/project';
 import { collectCustomUnits } from '../libraries/custom';
-import { CURATED_LIBRARIES, libraryDeclarations, validateLibraries, type LibrarySlot } from '../libraries/model';
+import {
+  CURATED_LIBRARIES,
+  libraryDeclarations,
+  validateLibraries,
+  type LibrarySlot,
+} from '../libraries/model';
 import { tier2ByName } from '../libraries/provided';
-import { buildTier2Objects, decodeTier2Map, tier2CacheKey, type Tier2BuildResult } from '../libraries/tier2';
+import {
+  buildTier2Objects,
+  decodeTier2Map,
+  tier2CacheKey,
+  type Tier2BuildResult,
+} from '../libraries/tier2';
 import { fetchIndex } from '../libraries/index';
 import { buildIndexObjects, selectIndexRelease } from '../libraries/index-build';
-import { BuildFailedError, buildProjectHex, compileToolchainUnit, type ToolchainUnit } from './tools';
+import {
+  BuildFailedError,
+  buildProjectHex,
+  compileToolchainUnit,
+  type ToolchainUnit,
+} from './tools';
 import type { ProjectCompileRequest } from './worker';
 
 /**
@@ -74,7 +89,11 @@ export function mapGccErrorForUnits(
  * anything else degrades to `activeName:1` with capped raw text (first 8
  * lines) so no diagnostic is ever lost.
  */
-export function mapGccError(stderr: string, lineMap: readonly PackedLine[], activeName: string): CompileError {
+export function mapGccError(
+  stderr: string,
+  lineMap: readonly PackedLine[],
+  activeName: string,
+): CompileError {
   return mapGccErrorForUnits(stderr, [{ unit: TU_BASENAME, lineMap }], activeName);
 }
 
@@ -99,8 +118,11 @@ export function loadSupportedHeaders(): Promise<Set<string>> {
     const cache = new FetchCache(createProductionBackend(), globalThis.fetch.bind(globalThis), SRI);
     const bytes = await cache.fetch('assets/manifest.json');
     const manifest = JSON.parse(new TextDecoder().decode(bytes)) as { headerFiles?: unknown };
-    if (!Array.isArray(manifest.headerFiles)) throw new Error('toolchain manifest has no headerFiles');
-    const headers = manifest.headerFiles.filter((entry): entry is string => typeof entry === 'string');
+    if (!Array.isArray(manifest.headerFiles))
+      throw new Error('toolchain manifest has no headerFiles');
+    const headers = manifest.headerFiles.filter(
+      (entry): entry is string => typeof entry === 'string',
+    );
     return supportedHeadersFrom({ headerFiles: headers });
   })();
   return supportedPromise;
@@ -142,13 +164,18 @@ export async function compileInWorker(
   const supported = await loadSupportedHeaders();
   const missing = unsupportedIncludes(source, supported);
   if (missing.length > 0) {
-    throw new Error(`library <${missing[0]}> is not bundled (see ${supported.size} supported headers)`);
+    throw new Error(
+      `library <${missing[0]}> is not bundled (see ${supported.size} supported headers)`,
+    );
   }
   if (signal.aborted) throw new Error('compile cancelled');
   onProgress('compile');
   let hexText: string;
   try {
-    hexText = typeof Worker === 'undefined' ? await buildInNode(source, signal) : await buildInWorker(source, signal);
+    hexText =
+      typeof Worker === 'undefined'
+        ? await buildInNode(source, signal)
+        : await buildInWorker(source, signal);
   } catch (error) {
     if (error instanceof BuildFailedError) {
       throw mapGccError(error.message, identityLineMap(source), '');
@@ -223,14 +250,19 @@ export async function assembleProjectUnits(
   ctx: ProjectLibraryContext,
   supported: ReadonlySet<string>,
 ): Promise<AssembledProject> {
-  const invalid = validateLibraries(project, { slots: ctx.slots, indexInstalled: ctx.indexInstalled });
+  const invalid = validateLibraries(project, {
+    slots: ctx.slots,
+    indexInstalled: ctx.indexInstalled,
+  });
   if (invalid.length > 0) throw new Error(invalid.join('; '));
   const packed = packageSketch(project);
   const firmwareHeaders = new Map<string, string>();
   const prebuiltObjects: Uint8Array[] = [];
   const warnings: string[] = [];
   const usedNames = new Set<string>([TU_BASENAME]);
-  const units: AssembledUnit[] = [{ name: TU_BASENAME, source: packed.source, headers: firmwareHeaders }];
+  const units: AssembledUnit[] = [
+    { name: TU_BASENAME, source: packed.source, headers: firmwareHeaders },
+  ];
   const unitMaps: UnitLineMap[] = [{ unit: TU_BASENAME, lineMap: packed.lineMap }];
   const mergeHeaders = (headers: ReadonlyMap<string, string>): void => {
     for (const [name, content] of headers) {
@@ -239,7 +271,9 @@ export async function assembleProjectUnits(
   };
   for (const entry of libraryDeclarations(project)) {
     if (entry.source === 'custom') {
-      const slot = ctx.slots.find((candidate) => candidate.id === entry.name.slice('custom:'.length));
+      const slot = ctx.slots.find(
+        (candidate) => candidate.id === entry.name.slice('custom:'.length),
+      );
       if (slot === undefined) continue; // refused by the gate above; defensive
       const built = collectCustomUnits(slot);
       warnings.push(...built.diagnostics);
@@ -257,16 +291,21 @@ export async function assembleProjectUnits(
       for (const bytes of built.objects.values()) prebuiltObjects.push(bytes);
       const decoder = new TextDecoder();
       for (const [headerName, headerBytes] of built.headers) {
-        if (!firmwareHeaders.has(headerName)) firmwareHeaders.set(headerName, decoder.decode(headerBytes));
+        if (!firmwareHeaders.has(headerName))
+          firmwareHeaders.set(headerName, decoder.decode(headerBytes));
       }
       continue;
     }
-    if (!CURATED_LIBRARIES.some((lib) => lib.name === entry.name) && tier2ByName(entry.name) !== null) {
+    if (
+      !CURATED_LIBRARIES.some((lib) => lib.name === entry.name) &&
+      tier2ByName(entry.name) !== null
+    ) {
       const built = await ctx.tier2(entry.name, entry.version);
       for (const bytes of built.objects.values()) prebuiltObjects.push(bytes);
       const decoder = new TextDecoder();
       for (const [headerName, headerBytes] of built.headers) {
-        if (!firmwareHeaders.has(headerName)) firmwareHeaders.set(headerName, decoder.decode(headerBytes));
+        if (!firmwareHeaders.has(headerName))
+          firmwareHeaders.set(headerName, decoder.decode(headerBytes));
       }
     }
     // Tier-1 provided libraries ship in the toolchain bundle: nothing to stage.
@@ -275,7 +314,9 @@ export async function assembleProjectUnits(
   for (const name of firmwareHeaders.keys()) allowed.add(name);
   const missing = unsupportedIncludes(packed.source, allowed);
   if (missing.length > 0) {
-    throw new Error(`library <${missing[0]}> is not bundled (see ${supported.size} supported headers)`);
+    throw new Error(
+      `library <${missing[0]}> is not bundled (see ${supported.size} supported headers)`,
+    );
   }
   return { units, prebuiltObjects, unitMaps, warnings };
 }
@@ -299,18 +340,21 @@ export function createProjectLibraryContext(
       // lives off-CDN (SHA-256-verified by buildTier2Objects itself), while
       // every toolchain byte the compile below fetches stays SRI-shimmed.
       const directFetch = globalThis.fetch.bind(globalThis);
-      return withToolchainFetch(() => buildTier2Objects(name, version, {
-        fetch: async (url: string) => {
-          const res = await directFetch(url);
-          if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
-          return new Uint8Array(await res.arrayBuffer());
-        },
-        cache: {
-          get: (key) => backend.get(key),
-          put: (key, value) => backend.put(key, value),
-        },
-        compileUnit: (source, headers) => compileToolchainUnit({ name: 'Tier2Unit.cpp', source, headers }),
-      }));
+      return withToolchainFetch(() =>
+        buildTier2Objects(name, version, {
+          fetch: async (url: string) => {
+            const res = await directFetch(url);
+            if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
+            return new Uint8Array(await res.arrayBuffer());
+          },
+          cache: {
+            get: (key) => backend.get(key),
+            put: (key, value) => backend.put(key, value),
+          },
+          compileUnit: (source, headers) =>
+            compileToolchainUnit({ name: 'Tier2Unit.cpp', source, headers }),
+        }),
+      );
     },
     index: (name, version) => buildProductionIndex(name, version),
   };
@@ -323,7 +367,10 @@ export function createProjectLibraryContext(
  * through the same Tier-2 seam, SRI-shimmed. Requested versions absent from
  * the index fail naming them, never silently latest.
  */
-async function buildProductionIndex(name: string, version: string | undefined): Promise<Tier2BuildResult> {
+async function buildProductionIndex(
+  name: string,
+  version: string | undefined,
+): Promise<Tier2BuildResult> {
   const backend = createProductionBackend();
   if (version !== undefined) {
     const [hitObjects, hitHeaders] = await Promise.all([
@@ -343,19 +390,26 @@ async function buildProductionIndex(name: string, version: string | undefined): 
   const libs = await fetchIndex({ store: backend, fetchFn: directFetch });
   const lib = libs.find((candidate) => candidate.name === name) ?? null;
   const release = lib === null ? null : selectIndexRelease(lib, version);
-  if (release === null) throw new Error(`<${name}>: version ${version ?? 'latest'} is not in the index`);
-  return withToolchainFetch(() => buildIndexObjects({ name, release }, {
-    fetch: async (url: string) => {
-      const res = await directFetch(url);
-      if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
-      return new Uint8Array(await res.arrayBuffer());
-    },
-    cache: {
-      get: (key) => backend.get(key),
-      put: (key, value) => backend.put(key, value),
-    },
-    compileUnit: (source, headers) => compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers }),
-  }));
+  if (release === null)
+    throw new Error(`<${name}>: version ${version ?? 'latest'} is not in the index`);
+  return withToolchainFetch(() =>
+    buildIndexObjects(
+      { name, release },
+      {
+        fetch: async (url: string) => {
+          const res = await directFetch(url);
+          if (!res.ok) throw new Error(`library fetch failed for ${url}: ${res.status}`);
+          return new Uint8Array(await res.arrayBuffer());
+        },
+        cache: {
+          get: (key) => backend.get(key),
+          put: (key, value) => backend.put(key, value),
+        },
+        compileUnit: (source, headers) =>
+          compileToolchainUnit({ name: 'IndexUnit.cpp', source, headers }),
+      },
+    ),
+  );
 }
 
 /**
@@ -380,9 +434,10 @@ export async function compileProjectWithLibraries(
   onProgress('compile');
   let hexText: string;
   try {
-    hexText = typeof Worker === 'undefined'
-      ? await buildProjectInNode(assembled, signal)
-      : await buildProjectInWorker(assembled, signal);
+    hexText =
+      typeof Worker === 'undefined'
+        ? await buildProjectInNode(assembled, signal)
+        : await buildProjectInWorker(assembled, signal);
   } catch (error) {
     if (error instanceof BuildFailedError) {
       throw mapGccErrorForUnits(error.message, assembled.unitMaps, project.activeName);
@@ -411,7 +466,10 @@ function buildProjectInWorker(assembled: AssembledProject, signal: AbortSignal):
     for (const [name, content] of unit.headers) headers[name] = content;
     return { name: unit.name, source: unit.source, headers };
   });
-  const request: Omit<ProjectCompileRequest, 'id'> = { units, prebuiltObjects: assembled.prebuiltObjects };
+  const request: Omit<ProjectCompileRequest, 'id'> = {
+    units,
+    prebuiltObjects: assembled.prebuiltObjects,
+  };
   return runWorkerRequest(request, signal);
 }
 
@@ -438,7 +496,12 @@ function runWorkerRequest(
     };
     signal.addEventListener('abort', onAbort, { once: true });
     worker.addEventListener('message', (event: MessageEvent) => {
-      const data = event.data as { id?: unknown; ok?: unknown; hexText?: unknown; errors?: unknown };
+      const data = event.data as {
+        id?: unknown;
+        ok?: unknown;
+        hexText?: unknown;
+        errors?: unknown;
+      };
       if (data === null || typeof data !== 'object' || data.id !== id || settled) return;
       settled = true;
       clearTimeout(timer);
@@ -447,7 +510,9 @@ function runWorkerRequest(
       if (data.ok === true && typeof data.hexText === 'string' && data.hexText.length > 0) {
         resolve(data.hexText);
       } else if (data.ok === false) {
-        reject(new BuildFailedError(typeof data.errors === 'string' ? data.errors : 'compile failed'));
+        reject(
+          new BuildFailedError(typeof data.errors === 'string' ? data.errors : 'compile failed'),
+        );
       } else {
         reject(new Error('toolchain returned no HEX'));
       }
@@ -475,7 +540,10 @@ function limitConcurrency(realFetch: typeof fetch, maxConcurrent: number): typeo
   let active = 0;
   const waiting: Array<() => void> = [];
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (active >= maxConcurrent) await new Promise<void>((resolve) => { waiting.push(resolve); });
+    if (active >= maxConcurrent)
+      await new Promise<void>((resolve) => {
+        waiting.push(resolve);
+      });
     active += 1;
     try {
       return await realFetch(input, init);
@@ -506,7 +574,8 @@ async function buildInNode(source: string, signal: AbortSignal): Promise<string>
     const toolchain = await import(/* @vite-ignore */ '@horang-corp/avr-gcc-wasm');
     toolchain.setAssetsBase(CDN_BASE);
     const result = await toolchain.buildFirmware({ source });
-    if (typeof result.hex !== 'string' || result.hex.length === 0) throw new Error('toolchain returned no HEX');
+    if (typeof result.hex !== 'string' || result.hex.length === 0)
+      throw new Error('toolchain returned no HEX');
     return result.hex;
   });
   if (signal.aborted) throw new Error('compile cancelled');
@@ -514,7 +583,10 @@ async function buildInNode(source: string, signal: AbortSignal): Promise<string>
 }
 
 /** Multi-TU node fallback: same shim, shared tools.ts driver, abort between stages. */
-async function buildProjectInNode(assembled: AssembledProject, signal: AbortSignal): Promise<string> {
+async function buildProjectInNode(
+  assembled: AssembledProject,
+  signal: AbortSignal,
+): Promise<string> {
   if (signal.aborted) throw new Error('compile cancelled');
   const units: ToolchainUnit[] = assembled.units.map((unit) => ({
     name: unit.name,
@@ -540,7 +612,10 @@ async function withToolchainFetch<T>(run: () => Promise<T>): Promise<T> {
     // See worker.ts: the WASM content type is load-bearing under Node, where
     // Emscripten's readAsync/readBinary hooks are undefined and streaming
     // compile is the only instantiation path.
-    return new Response((await cache.fetch(path)).slice().buffer, { status: 200, headers: { 'Content-Type': contentTypeFor(path) } });
+    return new Response((await cache.fetch(path)).slice().buffer, {
+      status: 200,
+      headers: { 'Content-Type': contentTypeFor(path) },
+    });
   }) as typeof fetch;
   try {
     return await run();

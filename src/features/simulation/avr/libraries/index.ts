@@ -105,7 +105,9 @@ export function searchIndex(
     else continue;
     ranked.push({ lib, rank });
   }
-  ranked.sort((a, b) => a.rank - b.rank || (a.lib.name < b.lib.name ? -1 : a.lib.name > b.lib.name ? 1 : 0));
+  ranked.sort(
+    (a, b) => a.rank - b.rank || (a.lib.name < b.lib.name ? -1 : a.lib.name > b.lib.name ? 1 : 0),
+  );
   return ranked.slice(0, SEARCH_LIMIT).map((entry) => entry.lib);
 }
 
@@ -178,7 +180,11 @@ function parseIndex(json: string): IndexLibrary[] {
   } catch (error) {
     throw indexError(error);
   }
-  if (typeof doc !== 'object' || doc === null || !Array.isArray((doc as { libraries?: unknown }).libraries)) {
+  if (
+    typeof doc !== 'object' ||
+    doc === null ||
+    !Array.isArray((doc as { libraries?: unknown }).libraries)
+  ) {
     throw indexError('missing libraries array');
   }
   const rows = (doc as { libraries: unknown[] }).libraries;
@@ -225,7 +231,9 @@ async function gunzipAndParse(gz: Uint8Array): Promise<IndexLibrary[]> {
 }
 
 /** Primary then fallback origin; corrupt payloads fall through to the next origin. */
-async function fetchAndParse(deps: FetchIndexDeps): Promise<{ libs: IndexLibrary[]; gz: Uint8Array }> {
+async function fetchAndParse(
+  deps: FetchIndexDeps,
+): Promise<{ libs: IndexLibrary[]; gz: Uint8Array }> {
   const fetchFn = deps.fetchFn ?? fetch;
   let detail = 'unknown error';
   for (const url of [INDEX_URL, INDEX_FALLBACK_URL]) {

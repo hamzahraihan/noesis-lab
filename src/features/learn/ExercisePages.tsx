@@ -55,84 +55,94 @@ export function ExercisesPage() {
     <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
       <SkipLink />
       <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
-      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
+        <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
 
-      <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
-        <h2 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
-          Embedded systems, from a pin you can switch
-        </h2>
-        <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
-          Nine exercises in five levels, written for the Arduino Uno R3. Each one is a circuit
-          you build and a program you write; every circuit also runs in the simulator, so you
-          can do the whole track without hardware on the desk. Start at level 1 unless you
-          already know what a pull-up is.
-        </p>
+        <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
+          <h2 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
+            Embedded systems, from a pin you can switch
+          </h2>
+          <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
+            Nine exercises in five levels, written for the Arduino Uno R3. Each one is a circuit you
+            build and a program you write; every circuit also runs in the simulator, so you can do
+            the whole track without hardware on the desk. Start at level 1 unless you already know
+            what a pull-up is.
+          </p>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button asChild size="sm">
-            <Link to={`/bench/${EXERCISE_BOARD}`}>Open the bench</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/learn/references">Reference &amp; glossary</Link>
-          </Button>
-        </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button asChild size="sm">
+              <Link to={`/bench/${EXERCISE_BOARD}`}>Open the bench</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/learn/references">Reference &amp; glossary</Link>
+            </Button>
+          </div>
 
-        {levels.map((level) => (
-          <section key={level} className="mt-12">
-            <div className="flex items-baseline gap-3 border-b border-[var(--hd-border)] pb-2.5">
-              <h3 className="text-sm font-semibold tracking-tight text-[var(--hd-text)]">Level {level}</h3>
-              <span className="text-xs text-[var(--hd-muted)]">
-                {level === STARTING_LEVEL ? 'start here' : `needs level ${level - 1}`}
-              </span>
-            </div>
+          {levels.map((level) => (
+            <section key={level} className="mt-12">
+              <div className="flex items-baseline gap-3 border-b border-[var(--hd-border)] pb-2.5">
+                <h3 className="text-sm font-semibold tracking-tight text-[var(--hd-text)]">
+                  Level {level}
+                </h3>
+                <span className="text-xs text-[var(--hd-muted)]">
+                  {level === STARTING_LEVEL ? 'start here' : `needs level ${level - 1}`}
+                </span>
+              </div>
 
-            <ul className="mt-4 space-y-2.5">
-              {EXERCISES.filter((exercise) => exercise.level === level).map((exercise) => (
-                <li key={exercise.id}>
-                  <Link
-                    to={`/learn/${exercise.id}`}
-                    className="group block overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-[var(--hd-surface)] hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
-                  >
-                    {/*
-                     * The destination, up front: the finished wiring each
-                     * exercise builds toward, drawn by the bench's own
-                     * renderer rather than described.
-                     */}
-                    <span className="block h-28 border-b border-[var(--hd-border)] bg-[var(--hd-bg)]">
-                      <ExercisePreview exercise={exercise} fit="slice" className="h-full w-full" />
-                    </span>
-                    <span className="block px-4 py-3.5">
-                    <div className="flex items-baseline gap-3">
-                      <span className="num font-mono text-xs text-[var(--hd-accent)]/90">{exercise.id}</span>
-                      <span className="font-medium tracking-tight text-[var(--hd-text)]">{exercise.title}</span>
-                      <span className="num ml-auto shrink-0 text-xs text-[var(--hd-faint)]">
-                        {exercise.minutes}
+              <ul className="mt-4 space-y-2.5">
+                {EXERCISES.filter((exercise) => exercise.level === level).map((exercise) => (
+                  <li key={exercise.id}>
+                    <Link
+                      to={`/learn/${exercise.id}`}
+                      className="group block overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-[var(--hd-surface)] hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                    >
+                      {/*
+                       * The destination, up front: the finished wiring each
+                       * exercise builds toward, drawn by the bench's own
+                       * renderer rather than described.
+                       */}
+                      <span className="block h-28 border-b border-[var(--hd-border)] bg-[var(--hd-bg)]">
+                        <ExercisePreview
+                          exercise={exercise}
+                          fit="slice"
+                          className="h-full w-full"
+                        />
                       </span>
-                    </div>
-                    <p className="mt-1.5 line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
-                      {exercise.brief}
-                    </p>
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      <span className="rounded-none bg-[var(--hd-border)] px-1.5 py-0.5 text-xs font-medium text-[var(--hd-text)]">
-                        {exercise.difficulty}
+                      <span className="block px-4 py-3.5">
+                        <div className="flex items-baseline gap-3">
+                          <span className="num font-mono text-xs text-[var(--hd-accent)]/90">
+                            {exercise.id}
+                          </span>
+                          <span className="font-medium tracking-tight text-[var(--hd-text)]">
+                            {exercise.title}
+                          </span>
+                          <span className="num ml-auto shrink-0 text-xs text-[var(--hd-faint)]">
+                            {exercise.minutes}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
+                          {exercise.brief}
+                        </p>
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          <span className="rounded-none bg-[var(--hd-border)] px-1.5 py-0.5 text-xs font-medium text-[var(--hd-text)]">
+                            {exercise.difficulty}
+                          </span>
+                          {exercise.concepts.slice(0, 2).map((concept) => (
+                            <span
+                              key={concept}
+                              className="rounded-none bg-[var(--hd-border)]/70 px-1.5 py-0.5 text-xs text-[var(--hd-faint)]"
+                            >
+                              {concept}
+                            </span>
+                          ))}
+                        </div>
                       </span>
-                      {exercise.concepts.slice(0, 2).map((concept) => (
-                        <span
-                          key={concept}
-                          className="rounded-none bg-[var(--hd-border)]/70 px-1.5 py-0.5 text-xs text-[var(--hd-faint)]"
-                        >
-                          {concept}
-                        </span>
-                      ))}
-                    </div>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-      </main>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </main>
       </div>
     </div>
   );
@@ -155,7 +165,11 @@ export function ExercisePage() {
     return (
       <ExerciseShell title="No such exercise">
         <p className="text-sm text-[var(--hd-muted)]">
-          There is no exercise {id}. <Link to="/learn" className="text-[var(--hd-accent)] underline">Back to the list</Link>.
+          There is no exercise {id}.{' '}
+          <Link to="/learn" className="text-[var(--hd-accent)] underline">
+            Back to the list
+          </Link>
+          .
         </p>
       </ExerciseShell>
     );
@@ -166,7 +180,9 @@ export function ExercisePage() {
       <p className="text-xs text-[var(--hd-muted)]">
         {exercise.module} · {exercise.difficulty} · {exercise.minutes}
       </p>
-      <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-text)]">{exercise.brief}</p>
+      <p className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-text)]">
+        {exercise.brief}
+      </p>
 
       <FinishedBuild exercise={exercise} />
 
@@ -182,7 +198,9 @@ export function ExercisePage() {
 
       <div className="mt-10 flex flex-wrap items-center gap-2 border-t border-[var(--hd-border)] pt-6">
         <Button asChild size="sm">
-          <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`}>Put it on the bench</Link>
+          <Link to={`/bench/${exerciseBoard(exercise)}?ex=${exercise.id}`}>
+            Put it on the bench
+          </Link>
         </Button>
         <span className="text-xs text-[var(--hd-faint)]">
           Opens the bench with wiring + code, and the guide walks you through it.
@@ -209,36 +227,36 @@ function ExerciseShell({
     <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
       <SkipLink />
       <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
-      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
-      <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
-        <Link to="/learn" className="transition-colors hover:text-[var(--hd-muted)]">Learn</Link>
-        {crumb !== undefined && (
-          <>
-            <span className="mx-2">/</span>
-            <span className="font-mono">{crumb}</span>
-          </>
-        )}
-      </div>
-      <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">{title}</h1>
-        <div className="mt-8 space-y-10">{children}</div>
-      </main>
+        <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
+        <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
+          <Link to="/learn" className="transition-colors hover:text-[var(--hd-muted)]">
+            Learn
+          </Link>
+          {crumb !== undefined && (
+            <>
+              <span className="mx-2">/</span>
+              <span className="font-mono">{crumb}</span>
+            </>
+          )}
+        </div>
+        <main id="main" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-10">
+          <h1 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
+            {title}
+          </h1>
+          <div className="mt-8 space-y-10">{children}</div>
+        </main>
       </div>
     </div>
   );
 }
 
 /** A titled block, so every section on the page reads as the same object. */
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="border-b border-[var(--hd-border)] pb-2.5 text-sm font-semibold tracking-tight text-[var(--hd-text)]">{title}</h2>
+      <h2 className="border-b border-[var(--hd-border)] pb-2.5 text-sm font-semibold tracking-tight text-[var(--hd-text)]">
+        {title}
+      </h2>
       <div className="mt-3.5">{children}</div>
     </section>
   );
@@ -258,8 +276,8 @@ function FinishedBuild({ exercise }: { exercise: Exercise }) {
         <ExercisePreview exercise={exercise} className="h-64 w-full" />
       </div>
       <figcaption className="mt-2 text-xs leading-relaxed text-[var(--hd-faint)]">
-        The finished wiring, exactly as the bench loads it — unpowered here, so nothing is lit.
-        Put it on the bench and press Run to see it live.
+        The finished wiring, exactly as the bench loads it — unpowered here, so nothing is lit. Put
+        it on the bench and press Run to see it live.
       </figcaption>
       {working !== undefined && working.length > 0 && (
         <div className="mt-4 rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 p-4">
@@ -269,8 +287,14 @@ function FinishedBuild({ exercise }: { exercise: Exercise }) {
           </h3>
           <ul className="mt-2 space-y-1.5">
             {working.map((sign) => (
-              <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-[var(--hd-muted)]">
-                <CheckIcon className="icon-sm mt-0.5 shrink-0 text-[var(--hd-success)]" aria-hidden="true" />
+              <li
+                key={sign}
+                className="flex gap-2.5 text-sm leading-relaxed text-[var(--hd-muted)]"
+              >
+                <CheckIcon
+                  className="icon-sm mt-0.5 shrink-0 text-[var(--hd-success)]"
+                  aria-hidden="true"
+                />
                 <span>{sign}</span>
               </li>
             ))}
@@ -303,7 +327,9 @@ function PartsTable({ exercise }: { exercise: Exercise }) {
         <tbody>
           {exercise.parts.map((entry) => (
             <tr key={entry.name} className="border-b border-[var(--hd-border)]/60 last:border-0">
-              <td className="w-8 py-1.5 text-right font-mono text-xs text-[var(--hd-faint)]">{entry.qty}×</td>
+              <td className="w-8 py-1.5 text-right font-mono text-xs text-[var(--hd-faint)]">
+                {entry.qty}×
+              </td>
               <td className="w-48 py-1.5 pr-4 text-[var(--hd-text)]">{entry.name}</td>
               <td className="py-1.5 text-[var(--hd-muted)]">{entry.why}</td>
             </tr>
@@ -340,7 +366,10 @@ function WiringTable({ exercise }: { exercise: Exercise }) {
            * from three different buttons.
            */}
           {exercise.wiring.map((row, index) => (
-            <tr key={`${row.pin}-${row.part}-${row.terminal}-${index}`} className="border-t border-[var(--hd-border)]/60">
+            <tr
+              key={`${row.pin}-${row.part}-${row.terminal}-${index}`}
+              className="border-t border-[var(--hd-border)]/60"
+            >
               <td
                 className={`py-1.5 pr-4 font-mono text-xs ${
                   isBoardPin(row.pin) ? 'text-[var(--hd-accent)]' : 'text-[var(--hd-faint)]'
@@ -349,7 +378,9 @@ function WiringTable({ exercise }: { exercise: Exercise }) {
                 {row.pin}
               </td>
               <td className="py-1.5 pr-4 text-[var(--hd-text)]">{row.part}</td>
-              <td className="py-1.5 pr-4 font-mono text-xs text-[var(--hd-muted)]">{row.terminal}</td>
+              <td className="py-1.5 pr-4 font-mono text-xs text-[var(--hd-muted)]">
+                {row.terminal}
+              </td>
               <td className="py-1.5 text-[var(--hd-muted)]">{row.goesTo}</td>
             </tr>
           ))}
@@ -380,9 +411,9 @@ function SketchPanel({ exercise }: { exercise: Exercise }) {
   return (
     <Section title="The program">
       <p className="mb-3 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
-        Press <span className="font-medium text-[var(--hd-text)]">Put it on the bench</span> below: it wires the
-        circuit above onto the bench, loads this sketch into the editor, and opens the guide
-        that walks you through it. Then press Run.
+        Press <span className="font-medium text-[var(--hd-text)]">Put it on the bench</span> below:
+        it wires the circuit above onto the bench, loads this sketch into the editor, and opens the
+        guide that walks you through it. Then press Run.
       </p>
       <pre className="overflow-x-auto rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)] p-4 text-xs leading-relaxed text-[var(--hd-text)] shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)]">
         <code>{exercise.sketch}</code>
@@ -397,7 +428,9 @@ function FaultPanel({ exercise }: { exercise: Exercise }) {
     <Section title="Break it on purpose">
       <div className="rounded-none border border-[var(--hd-warn)]/30 bg-[var(--hd-warn)]/10 p-4">
         <p className="text-sm font-medium text-[var(--hd-warn)]">{exercise.fault.break_}</p>
-        <p className="mt-1.5 text-sm leading-relaxed text-[var(--hd-muted)]">{exercise.fault.teaches}</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-[var(--hd-muted)]">
+          {exercise.fault.teaches}
+        </p>
       </div>
     </Section>
   );
@@ -420,7 +453,10 @@ function Hints({
       </p>
       <div className="space-y-2">
         {exercise.hints.slice(0, revealed).map((hint) => (
-          <div key={hint.when} className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 p-4">
+          <div
+            key={hint.when}
+            className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 p-4"
+          >
             <p className="text-sm font-medium text-[var(--hd-text)]">{hint.when}</p>
             <p className="mt-1.5 text-sm leading-relaxed text-[var(--hd-muted)]">{hint.answer}</p>
           </div>
@@ -478,7 +514,10 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
             <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">Where to start</h3>
             <ol className="space-y-2">
               {solution.approach.map((step, index) => (
-                <li key={step} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
+                <li
+                  key={step}
+                  className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]"
+                >
                   <span className="num shrink-0 text-[var(--hd-faint)]">{index + 1}.</span>
                   <span>{step}</span>
                 </li>
@@ -487,7 +526,9 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">Why each wire is where it is</h3>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">
+              Why each wire is where it is
+            </h3>
             <dl className="space-y-3">
               {/*
                * Keyed by position for the same reason as the wiring table: the
@@ -499,7 +540,9 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
                   <dt className="num text-xs text-[var(--hd-text)]">
                     {wire.pin} → {wire.terminal}
                   </dt>
-                  <dd className="mt-0.5 text-sm leading-relaxed text-[var(--hd-muted)]">{wire.why}</dd>
+                  <dd className="mt-0.5 text-sm leading-relaxed text-[var(--hd-muted)]">
+                    {wire.why}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -509,8 +552,14 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
             <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">When it is working</h3>
             <ul className="space-y-2">
               {solution.working.map((sign) => (
-                <li key={sign} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
-                  <CheckIcon className="icon-sm mt-0.5 shrink-0 text-[var(--hd-success)]" aria-hidden="true" />
+                <li
+                  key={sign}
+                  className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]"
+                >
+                  <CheckIcon
+                    className="icon-sm mt-0.5 shrink-0 text-[var(--hd-success)]"
+                    aria-hidden="true"
+                  />
                   <span>{sign}</span>
                 </li>
               ))}
@@ -518,11 +567,19 @@ function SolutionPanel({ exercise }: { exercise: Exercise }) {
           </div>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">What usually goes wrong</h3>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--hd-text)]">
+              What usually goes wrong
+            </h3>
             <ul className="space-y-2">
               {solution.traps.map((trap) => (
-                <li key={trap} className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]">
-                  <Cross2Icon className="icon-sm mt-0.5 shrink-0 text-amber-500" aria-hidden="true" />
+                <li
+                  key={trap}
+                  className="flex gap-3 text-sm leading-relaxed text-[var(--hd-muted)]"
+                >
+                  <Cross2Icon
+                    className="icon-sm mt-0.5 shrink-0 text-amber-500"
+                    aria-hidden="true"
+                  />
                   <span>{trap}</span>
                 </li>
               ))}
@@ -563,7 +620,10 @@ function References({ exercise }: { exercise: Exercise }) {
       </dl>
       <p className="mt-4 text-xs text-[var(--hd-faint)]">
         Full write-up: <code>{exercise.writeUp}</code> in the repository. More vocabulary on the{' '}
-        <Link to="/learn/references" className="text-[var(--hd-accent)] underline underline-offset-2">
+        <Link
+          to="/learn/references"
+          className="text-[var(--hd-accent)] underline underline-offset-2"
+        >
           reference page
         </Link>
         .
@@ -584,8 +644,8 @@ export function ReferencesPage() {
   return (
     <ExerciseShell title="Reference & glossary">
       <p className="text-sm leading-relaxed text-[var(--hd-muted)]">
-        The words and numbers an embedded course assumes you already know. Nothing here is specific to
-        any one exercise — it is the vocabulary the exercises are written in.
+        The words and numbers an embedded course assumes you already know. Nothing here is specific
+        to any one exercise — it is the vocabulary the exercises are written in.
       </p>
 
       <Section title="Reading a board">
@@ -663,9 +723,18 @@ export function ReferencesPage() {
         <ul className="space-y-2 text-sm">
           {[
             ['Language reference', 'https://docs.arduino.cc/language-reference/'],
-            ['digitalRead / digitalWrite', 'https://docs.arduino.cc/language-reference/en/functions/digital/'],
-            ['analogRead / analogWrite', 'https://docs.arduino.cc/language-reference/en/functions/analog/'],
-            ['millis / micros / delay', 'https://docs.arduino.cc/language-reference/en/functions/time/'],
+            [
+              'digitalRead / digitalWrite',
+              'https://docs.arduino.cc/language-reference/en/functions/digital/',
+            ],
+            [
+              'analogRead / analogWrite',
+              'https://docs.arduino.cc/language-reference/en/functions/analog/',
+            ],
+            [
+              'millis / micros / delay',
+              'https://docs.arduino.cc/language-reference/en/functions/time/',
+            ],
             ['Wire (I²C)', 'https://docs.arduino.cc/language-reference/en/functions/comm/wire/'],
             ['SPI', 'https://docs.arduino.cc/language-reference/en/functions/comm/spi/'],
           ].map(([label, href]) => (
@@ -682,24 +751,16 @@ export function ReferencesPage() {
           ))}
         </ul>
         <p className="mt-3 text-xs leading-relaxed text-[var(--hd-faint)]">
-          Datasheets are where the real answers live, and they are free. The two worth having on hand
-          are the <strong>ATmega328P</strong> datasheet (every pin, register and electrical limit of
-          the Uno) and the datasheet for whichever sensor module you are using.
+          Datasheets are where the real answers live, and they are free. The two worth having on
+          hand are the <strong>ATmega328P</strong> datasheet (every pin, register and electrical
+          limit of the Uno) and the datasheet for whichever sensor module you are using.
         </p>
       </Section>
     </ExerciseShell>
   );
 }
 
-function Term({
-  term,
-  what,
-  readMore,
-}: {
-  term: string;
-  what: string;
-  readMore?: string;
-}) {
+function Term({ term, what, readMore }: { term: string; what: string; readMore?: string }) {
   return (
     <div>
       <dt className="text-sm font-medium text-[var(--hd-text)]">{term}</dt>

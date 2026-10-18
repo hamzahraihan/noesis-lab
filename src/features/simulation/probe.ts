@@ -144,8 +144,7 @@ export function decodeUart(
       continue;
     }
 
-    const bitAt = (offset: number): number =>
-      sampleAt(samples, current.t + offset * bitMs);
+    const bitAt = (offset: number): number => sampleAt(samples, current.t + offset * bitMs);
 
     let value = 0;
     let complete = true;
@@ -186,7 +185,7 @@ export function measureFrequency(samples: readonly TraceSample[], highVolts = 3.
   const low = highVolts / 2;
   const edges: number[] = [];
   for (let i = 1; i < samples.length; i++) {
-    if ((samples[i - 1].v <= low) !== (samples[i].v <= low)) edges.push(samples[i].t);
+    if (samples[i - 1].v <= low !== samples[i].v <= low) edges.push(samples[i].t);
   }
   if (edges.length < 2) return 0;
 

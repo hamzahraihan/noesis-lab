@@ -132,25 +132,35 @@ export function MultimeterPanel({
         <span className="text-slate-300">−</span> {blackLabel}
       </p>
       <div className="flex items-center gap-1 text-[11px]">
-        <Select value={redPinId ?? 'none'} onValueChange={(next) => onRedPin(next === 'none' ? null : next)}>
+        <Select
+          value={redPinId ?? 'none'}
+          onValueChange={(next) => onRedPin(next === 'none' ? null : next)}
+        >
           <SelectTrigger className="h-6 min-w-0 flex-1 text-[11px]" aria-label="Red probe pin">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">+ not clipped</SelectItem>
             {pins.map((pin) => (
-              <SelectItem key={pin.id} value={pin.id}>{pin.label}</SelectItem>
+              <SelectItem key={pin.id} value={pin.id}>
+                {pin.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={blackPinId ?? 'none'} onValueChange={(next) => onBlackPin(next === 'none' ? null : next)}>
+        <Select
+          value={blackPinId ?? 'none'}
+          onValueChange={(next) => onBlackPin(next === 'none' ? null : next)}
+        >
           <SelectTrigger className="h-6 min-w-0 flex-1 text-[11px]" aria-label="Black probe pin">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">− ground</SelectItem>
             {pins.map((pin) => (
-              <SelectItem key={pin.id} value={pin.id}>{pin.label}</SelectItem>
+              <SelectItem key={pin.id} value={pin.id}>
+                {pin.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>

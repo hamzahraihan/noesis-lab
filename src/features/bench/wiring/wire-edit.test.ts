@@ -3,11 +3,7 @@ import { BenchBuilder } from '@/features/simulation';
 import { Simulation } from '../simulations/simulation';
 import { esp32DevKitV1 } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';
-import {
-  DEFAULT_WIRE_COLOUR,
-  WIRE_COLOURS,
-  nextAutomaticWireColour,
-} from './wire-colours';
+import { DEFAULT_WIRE_COLOUR, WIRE_COLOURS, nextAutomaticWireColour } from './wire-colours';
 
 /**
  * Editing a placed jumper.
@@ -45,8 +41,9 @@ describe('dragging a wire end to another hole', () => {
 
     const terminals = builder.build().terminals;
     // The far end went to the new place...
-    expect(Math.hypot(terminals[moved.to].x - target.x, terminals[moved.to].y - target.y))
-      .toBeLessThan(0.001);
+    expect(
+      Math.hypot(terminals[moved.to].x - target.x, terminals[moved.to].y - target.y),
+    ).toBeLessThan(0.001);
     // ...and the near end is exactly where it was, which is what makes this a
     // drag of one end rather than a new wire.
     expect(moved.from).toBe(wire.from);
@@ -65,8 +62,9 @@ describe('dragging a wire end to another hole', () => {
     // old length would quietly carry the wrong resistance.
     expect(after.lengthMm).not.toBe(before);
     const terminals = builder.build().terminals;
-    const direct = Math.abs(terminals[after.to].x - terminals[after.from].x)
-      + Math.abs(terminals[after.to].y - terminals[after.from].y);
+    const direct =
+      Math.abs(terminals[after.to].x - terminals[after.from].x) +
+      Math.abs(terminals[after.to].y - terminals[after.from].y);
     expect(after.lengthMm).toBeCloseTo(direct, 6);
   });
 
@@ -91,7 +89,8 @@ describe('dragging a wire end to another hole', () => {
     const first = builder.addWire(
       pinAt(builder, board.id, 'R_D2').x,
       pinAt(builder, board.id, 'R_D2').y,
-      300, 80,
+      300,
+      80,
     );
     const second = builder.addWire(360, 200, 380, 240);
     const shared = { x: 340, y: 140 };
@@ -114,9 +113,10 @@ describe('dragging a wire end to another hole', () => {
     // Terminal ids are renumbered whenever the pool is compacted, so the check
     // is by position: a contact nothing holds at (300, 80) must not survive as a
     // phantom net after the end left it.
-    const stranded = () => builder.build().terminals.filter(
-      (terminal) => Math.hypot(terminal.x - 300, terminal.y - 80) < 0.001,
-    );
+    const stranded = () =>
+      builder
+        .build()
+        .terminals.filter((terminal) => Math.hypot(terminal.x - 300, terminal.y - 80) < 0.001);
     expect(stranded()).toHaveLength(1);
 
     builder.moveWireEnd(builder.build().wires[0].id, 'to', 320, 150);
@@ -232,9 +232,7 @@ describe('changing a wire colour', () => {
 describe('the palette', () => {
   it('has Wokwi ten numbered colours and then its extended set', () => {
     const labels = WIRE_COLOURS.map((colour) => colour.label);
-    expect(labels.slice(0, 10)).toEqual([
-      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    ]);
+    expect(labels.slice(0, 10)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
     expect(labels.length).toBeGreaterThan(10);
   });
 

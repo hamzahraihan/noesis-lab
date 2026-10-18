@@ -14,7 +14,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Bench, Terminal, Wire, WireEnd } from '@/features/simulation';
 import { PartFootprint, type FootprintState } from '../wokwi/footprints';
 import { HardwareDefs, SILKSCREEN_FONT } from '../wokwi/hardware';
-import { routeWire, routeWireVia, wireLanes, type Point, type RouteSpan } from '../wiring/wire-route';
+import {
+  routeWire,
+  routeWireVia,
+  wireLanes,
+  type Point,
+  type RouteSpan,
+} from '../wiring/wire-route';
 import { artworkBox } from '../wokwi/wokwi';
 import { partTransform } from '../wiring/part-transform';
 import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from '../wiring/hit-test';
@@ -214,7 +220,7 @@ function PinTag({
   const fontSize = 13 / scale;
   const padX = 8 / scale;
   const padY = 6 / scale;
-  const width = label.length * 7.6 / scale + padX * 2;
+  const width = (label.length * 7.6) / scale + padX * 2;
   const height = fontSize + padY * 2;
   const left = Math.min(Math.max(x - width / 2, view.x + 1), view.x + view.width - width - 1);
   const above = y - 3 - height;
@@ -446,7 +452,6 @@ export function Workbench({
         : pressedTarget.closest('[data-wire-end]') !== null
           ? 'end'
           : null;
-
 
     /*
      * Wire handles are picked up before part hit-testing.
@@ -719,7 +724,12 @@ export function Workbench({
      */
     if (drag.kind === 'press') {
       onTogglePressed(drag.partId, false);
-      const moved = { kind: 'move' as const, partId: drag.partId, grabDx: drag.grabDx, grabDy: drag.grabDy };
+      const moved = {
+        kind: 'move' as const,
+        partId: drag.partId,
+        grabDx: drag.grabDx,
+        grabDy: drag.grabDy,
+      };
       dragRef.current = moved;
       onMovePart(moved.partId, world.x - moved.grabDx, world.y - moved.grabDy);
       return;
@@ -755,7 +765,11 @@ export function Workbench({
     const focusY = view.y + ((event.clientY - rect.top) / rect.height) * viewHeight;
 
     const unit = WHEEL_UNITS_PER_MODE[event.deltaMode] ?? 1;
-    const step = clamp(event.deltaY * unit * ZOOM_PER_WHEEL_MM, -MAX_WHEEL_ZOOM_STEP, MAX_WHEEL_ZOOM_STEP);
+    const step = clamp(
+      event.deltaY * unit * ZOOM_PER_WHEEL_MM,
+      -MAX_WHEEL_ZOOM_STEP,
+      MAX_WHEEL_ZOOM_STEP,
+    );
     const width = clamp(view.width * Math.exp(step), MIN_VIEW_WIDTH_MM, MAX_VIEW_WIDTH_MM);
 
     // Hold the pointer at the same fraction across the view rather than at the
@@ -767,7 +781,7 @@ export function Workbench({
       y: focusY - fractionY * (width / aspect),
       width,
     });
-  }
+  };
 
   /**
    * Routing and picking, both driven by a plain click.
@@ -831,7 +845,13 @@ export function Workbench({
     const nearPin =
       terminal !== null &&
       Math.hypot(terminal.x - world.x, terminal.y - world.y) <= PIN_CORE_RADIUS_MM;
-    const action = wireClickAction(partId, wireId, selectedWireId, pressedHandleRef.current !== null, nearPin);
+    const action = wireClickAction(
+      partId,
+      wireId,
+      selectedWireId,
+      pressedHandleRef.current !== null,
+      nearPin,
+    );
     if (action === 'select-part' && partId !== null) {
       onSelectWire(null);
       onSelect(partId);
@@ -1234,7 +1254,7 @@ export function Workbench({
         <g data-layer="wire-ends">
           {bench.wires
             .filter((wire) => wire.id === selectedWireId)
-            .flatMap((wire) => (
+            .flatMap((wire) =>
               (['from', 'to'] as const).map((end) => {
                 const terminal = bench.terminals[end === 'from' ? wire.from : wire.to];
                 if (!terminal) return null;
@@ -1259,16 +1279,10 @@ export function Workbench({
                   terminal.y < view.y + margin ||
                   terminal.y > view.y + viewHeight - margin;
                 const x = offScreen
-                  ? Math.min(
-                      Math.max(terminal.x, view.x + margin),
-                      view.x + view.width - margin,
-                    )
+                  ? Math.min(Math.max(terminal.x, view.x + margin), view.x + view.width - margin)
                   : terminal.x;
                 const y = offScreen
-                  ? Math.min(
-                      Math.max(terminal.y, view.y + margin),
-                      view.y + viewHeight - margin,
-                    )
+                  ? Math.min(Math.max(terminal.y, view.y + margin), view.y + viewHeight - margin)
                   : terminal.y;
 
                 return (
@@ -1298,8 +1312,8 @@ export function Workbench({
                     />
                   </g>
                 );
-              })
-            ))}
+              }),
+            )}
         </g>
       )}
 
@@ -1386,7 +1400,14 @@ export function Workbench({
           );
         })}
         {hovered && hoverLabel && (
-          <PinTag label={hoverLabel} x={hovered.x} y={hovered.y} scale={scale} view={view} viewHeight={viewHeight} />
+          <PinTag
+            label={hoverLabel}
+            x={hovered.x}
+            y={hovered.y}
+            scale={scale}
+            view={view}
+            viewHeight={viewHeight}
+          />
         )}
       </g>
     </svg>
@@ -1398,11 +1419,7 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 /** Nearest terminal within picking range, or null. */
-function nearestHole(
-  bench: Bench,
-  x: number,
-  y: number,
-): Terminal | null {
+function nearestHole(bench: Bench, x: number, y: number): Terminal | null {
   let best: Terminal | null = null;
   let bestDistance = HOLE_PICK_RADIUS_MM;
   for (const terminal of bench.terminals) {

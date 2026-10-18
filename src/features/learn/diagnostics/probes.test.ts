@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH, convergeGlass, liveProbe, type ProbeSim } from './probes';
+import {
+  FIVE_GLYPH,
+  ONE_GLYPH,
+  ZERO_GLYPH,
+  convergeGlass,
+  liveProbe,
+  type ProbeSim,
+} from './probes';
 import { boardOption } from '../boardRegistry';
 import { firmwareForBuild, galleryById } from '../gallery';
 import { Simulation } from '@/features/bench';
@@ -28,7 +35,12 @@ describe('probes', () => {
   it('matches the Wokwi values rendering bit for bit', () => {
     const simulation = tinyAlarmSim();
     const seg = simulation.bench.parts.find((p) => p.definition.id === '7segment-4digit')!;
-    const probe = { values: [] as number[], digits: 0, colon: false, colonValue: false } as unknown as HTMLElement;
+    const probe = {
+      values: [] as number[],
+      digits: 0,
+      colon: false,
+      colonValue: false,
+    } as unknown as HTMLElement;
     pushWokwiState(probe, seg.definition, seg, {
       pinVolts: simulation.pinVoltages(),
       displays: simulation.displayControllers(),
@@ -65,9 +77,9 @@ describe('probes', () => {
         cursor += 1;
       },
       readGlass: () => ({
-        glyphs: (frames[Math.min(Math.max(cursor, 0), frames.length - 1)] ?? [blank, blank, blank, blank]).map(
-          (glyph) => [...glyph],
-        ),
+        glyphs: (
+          frames[Math.min(Math.max(cursor, 0), frames.length - 1)] ?? [blank, blank, blank, blank]
+        ).map((glyph) => [...glyph]),
         colon: false,
         text: '',
       }),

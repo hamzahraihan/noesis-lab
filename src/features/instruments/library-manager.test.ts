@@ -44,10 +44,9 @@ describe('library manager ui helpers', () => {
   });
 
   it('lists distinct sorted categories for the filter', () => {
-    expect(indexCategories([indexLib('B', 'Other'), indexLib('A', 'Display'), indexLib('C', 'Display')])).toEqual([
-      'Display',
-      'Other',
-    ]);
+    expect(
+      indexCategories([indexLib('B', 'Other'), indexLib('A', 'Display'), indexLib('C', 'Display')]),
+    ).toEqual(['Display', 'Other']);
   });
 
   it('notes index license terms only when advertised', () => {
@@ -74,7 +73,10 @@ describe('library manager uninstall', () => {
     // validateLibraries(cleanedProject, { slots: [] }) is clean, and
     // resolveAngleInclude('Servo.h', { project: cleanedProject, slots: [], toolchainHeaders: new Set(['Servo.h']) })
     // falls back to { kind: 'toolchain' } — the cached objects are simply never referenced again.
-    const cleanedProject = { ...bare, libraries: bare.libraries.filter((entry) => entry.name !== 'Servo') };
+    const cleanedProject = {
+      ...bare,
+      libraries: bare.libraries.filter((entry) => entry.name !== 'Servo'),
+    };
     expect(validateLibraries(cleanedProject, { slots: [] })).toEqual([]);
     expect(
       resolveAngleInclude('Servo.h', {
@@ -124,11 +126,15 @@ describe('library manager archive fetch', () => {
     const controller = new AbortController();
     const bytes = await fetchIndexArchive(
       'http://example.invalid/lib.zip',
-      (async (url: string, init: { signal: AbortSignal }) => {
+      async (url: string, init: { signal: AbortSignal }) => {
         seen.init = init;
         expect(url).toBe('http://example.invalid/lib.zip');
-        return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([1, 2]).buffer as ArrayBuffer };
-      }),
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new Uint8Array([1, 2]).buffer as ArrayBuffer,
+        };
+      },
       controller.signal,
     );
     expect(seen.init?.signal).toBe(controller.signal);
@@ -140,7 +146,7 @@ describe('library manager archive fetch', () => {
     await expect(
       fetchIndexArchive(
         'http://example.invalid/missing.zip',
-        (async () => ({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) })),
+        async () => ({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) }),
         controller.signal,
       ),
     ).rejects.toThrow('library fetch failed for http://example.invalid/missing.zip: 404');

@@ -181,8 +181,7 @@ describe('SevSeg on the interpreter', () => {
         snapshots.push(new Map(levels));
       }
     }
-    const levelAt = (digit: number, pin: number): number | undefined =>
-      snapshots[digit]?.get(pin);
+    const levelAt = (digit: number, pin: number): number | undefined => snapshots[digit]?.get(pin);
     // 'o' renders as '0': A-F low, G (pin 12) high.
     expect(levelAt(1, 12), "'o' leaves G dark").toBe(1);
     expect(levelAt(1, 6), "'o' lights A").toBe(0);
@@ -231,7 +230,10 @@ describe('tone and noTone on the interpreter', () => {
     expect(drive.log.writes[drive.log.writes.length - 1]).toEqual({ pin: 9, level: 0 });
     // A blocking tone would have yielded its duration; every wait observed
     // is the loop quantum instead.
-    expect(seen.every((value) => value === 0), 'tone never blocks').toBe(true);
+    expect(
+      seen.every((value) => value === 0),
+      'tone never blocks',
+    ).toBe(true);
   });
 });
 

@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { FirmwareRunner, type FirmwareServices } from './interpreter';
 
-function stubServices(
-  pixels?: {
-    count: (pin: number) => number;
-    setColor: (pin: number, i: number, r: number, g: number, b: number) => void;
-  },
-): FirmwareServices {
+function stubServices(pixels?: {
+  count: (pin: number) => number;
+  setColor: (pin: number, i: number, r: number, g: number, b: number) => void;
+}): FirmwareServices {
   return {
     nowMs: () => 0,
     pinMode: () => {},

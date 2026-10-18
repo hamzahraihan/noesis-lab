@@ -48,11 +48,7 @@ export class I2CBus {
   /** The address a `requestFrom` is aimed at, and what is left of its answer. */
   private readBuffer: number[] = [];
 
-  private readonly deliver: (
-    address: number,
-    byte: number,
-    isControlPosition: boolean,
-  ) => boolean;
+  private readonly deliver: (address: number, byte: number, isControlPosition: boolean) => boolean;
 
   /** Asks the device at an address for `count` bytes, from its current pointer. */
   private readonly reader: (address: number, count: number) => readonly number[];
@@ -89,7 +85,7 @@ export class I2CBus {
    * Points the device's read pointer at a register and asks for `count` bytes.
    *
    * Returns how many are waiting, which is what `Wire.available()` reports and
- * what a sketch loops on.
+   * what a sketch loops on.
    */
   requestFrom(address: number, count: number): number {
     this.readBuffer = [...this.reader(address & 0x7f, Math.max(0, Math.floor(count)))];

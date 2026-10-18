@@ -7,7 +7,10 @@ describe('fromProject', () => {
       language: 'arduino-cpp',
       activeName: 'main.ino',
       files: [
-        { name: 'main.ino', content: '#include "helpers.h"\nvoid setup() { blinkOnce(); }\nvoid loop() {}\n' },
+        {
+          name: 'main.ino',
+          content: '#include "helpers.h"\nvoid setup() { blinkOnce(); }\nvoid loop() {}\n',
+        },
         { name: 'helpers.h', content: 'void blinkOnce() { digitalWrite(2, 1); }\n' },
       ],
     });
@@ -69,7 +72,9 @@ describe('fromProject', () => {
     const runtime = FirmwareRuntime.fromProject({
       language: 'arduino-cpp',
       activeName: 'main.ino',
-      files: [{ name: 'main.ino', content: '#include <Wire.h>\nvoid setup() {}\nvoid loop() {}\n' }],
+      files: [
+        { name: 'main.ino', content: '#include <Wire.h>\nvoid setup() {}\nvoid loop() {}\n' },
+      ],
     });
     expect(runtime.hasFunction('setup')).toBe(true);
   });

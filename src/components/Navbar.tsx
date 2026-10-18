@@ -83,8 +83,8 @@ export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
                 aria-pressed={theme === t}
                 className={
                   theme === t
-                    ? 'bg-[var(--hd-accent)] px-2.5 py-1 font-[\'JetBrains_Mono\'] text-xs uppercase tracking-[0.18em] text-[var(--hd-bg)]'
-                    : 'bg-[var(--hd-surface)] px-2.5 py-1 font-[\'JetBrains_Mono\'] text-xs uppercase tracking-[0.18em] text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]'
+                    ? "bg-[var(--hd-accent)] px-2.5 py-1 font-['JetBrains_Mono'] text-xs uppercase tracking-[0.18em] text-[var(--hd-bg)]"
+                    : "bg-[var(--hd-surface)] px-2.5 py-1 font-['JetBrains_Mono'] text-xs uppercase tracking-[0.18em] text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
                 }
               >
                 {t}

@@ -20,7 +20,9 @@ describe('fetch cache', () => {
   it('rejects a persistently corrupt origin after exactly one retry', async () => {
     const backend = new MemoryBackend();
     const fetchStub = vi.fn(async () => new Response(new Uint8Array([9]), { status: 200 }));
-    const cache = new FetchCache(backend, fetchStub, { 'a.bin': 'sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' });
+    const cache = new FetchCache(backend, fetchStub, {
+      'a.bin': 'sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    });
     await expect(cache.fetch('a.bin')).rejects.toThrow(/refetch failed/i);
     expect(await backend.get(`${CACHE_VERSION}:a.bin`)).toBeNull();
     expect(fetchStub).toHaveBeenCalledTimes(2);
@@ -54,7 +56,10 @@ interface FakeIDBRequest<T> {
 // objectStoreNames.contains + createObjectStore + transaction, and store
 // get/put/delete requests with onsuccess/onerror. No new dependencies.
 function createFakeIDB(): IDBFactory {
-  const databases = new Map<string, { version: number; stores: Map<string, Map<string, Uint8Array>> }>();
+  const databases = new Map<
+    string,
+    { version: number; stores: Map<string, Map<string, Uint8Array>> }
+  >();
   function complete<T>(value: T): FakeIDBRequest<T> {
     const request: FakeIDBRequest<T> = {
       onsuccess: null,
@@ -168,7 +173,9 @@ describe('corrupt-cache auto-recovery', () => {
     const backend = new MemoryBackend();
     await backend.put(`${CACHE_VERSION}:a.bin`, new Uint8Array([0]));
     const fetchStub = vi.fn(async () => new Response(new Uint8Array([9]), { status: 200 }));
-    const cache = new FetchCache(backend, fetchStub, { 'a.bin': sha384Pin(new Uint8Array([1, 2, 3])) });
+    const cache = new FetchCache(backend, fetchStub, {
+      'a.bin': sha384Pin(new Uint8Array([1, 2, 3])),
+    });
     await expect(cache.fetch('a.bin')).rejects.toThrow(/refetch failed/i);
     expect(fetchStub).toHaveBeenCalledTimes(2);
     expect(await backend.get(`${CACHE_VERSION}:a.bin`)).toBeNull();

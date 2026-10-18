@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { CPU, timer1Config } from 'avr8js';
 import { attachGpioBridge } from './gpio';
-import { attachTimer1, bindTimer1Outputs, captureSourceIsComparator, feedCaptureEdge } from './timer1';
+import {
+  attachTimer1,
+  bindTimer1Outputs,
+  captureSourceIsComparator,
+  feedCaptureEdge,
+} from './timer1';
 import { McuRuntime } from '../mcu';
 import { arduinoUnoR3 } from '@/features/parts/boards';
 
 function cpuWithTimer1(): { cpu: CPU; mcu: McuRuntime } {
   const cpu = new CPU(new Uint16Array(64));
   const mcu = new McuRuntime(arduinoUnoR3());
-  attachTimer1(cpu, mcu, () => 0, () => false);
+  attachTimer1(
+    cpu,
+    mcu,
+    () => 0,
+    () => false,
+  );
   return { cpu, mcu };
 }
 
@@ -61,7 +71,12 @@ describe('timer1 core', () => {
 function cpuWithOc(): { cpu: CPU; mcu: McuRuntime } {
   const cpu = new CPU(new Uint16Array(64));
   const mcu = new McuRuntime(arduinoUnoR3());
-  attachTimer1(cpu, mcu, () => 0, () => false);
+  attachTimer1(
+    cpu,
+    mcu,
+    () => 0,
+    () => false,
+  );
   bindTimer1Outputs(cpu, mcu, () => 0);
   return { cpu, mcu };
 }
@@ -169,8 +184,18 @@ describe('timer1 OC outputs', () => {
     // Bridge first: the OC routing chains onto its DDRB/PORTB hooks, and its
     // all-GPIO sync on any port write would clobber a duty stamped earlier,
     // so firmware order (GPIO first, analogWrite last) is load-bearing here.
-    attachGpioBridge(cpu, mcu, () => 0, () => false);
-    attachTimer1(cpu, mcu, () => 0, () => false);
+    attachGpioBridge(
+      cpu,
+      mcu,
+      () => 0,
+      () => false,
+    );
+    attachTimer1(
+      cpu,
+      mcu,
+      () => 0,
+      () => false,
+    );
     bindTimer1Outputs(cpu, mcu, () => 0);
     cpu.writeData(42, 0x20); // DDRD bit 5: D5 output (Timer0 path)
     cpu.writeData(43, 0x20); // PORTD bit 5: HIGH

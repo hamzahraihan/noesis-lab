@@ -9,7 +9,9 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
 
-function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
+function DropdownMenuPortal({
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
   return <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />;
 }
 
@@ -133,7 +135,10 @@ function DropdownMenuLabel({
     <DropdownMenuPrimitive.Label
       data-slot="dropdown-menu-label"
       data-inset={inset}
-      className={cn('text-muted-foreground px-2 py-1.5 text-xs font-medium data-[inset]:pl-8', className)}
+      className={cn(
+        'text-muted-foreground px-2 py-1.5 text-xs font-medium data-[inset]:pl-8',
+        className,
+      )}
       {...props}
     />
   );

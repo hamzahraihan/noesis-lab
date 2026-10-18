@@ -176,7 +176,10 @@ function towards(corner: Point, target: Point, distance: number): Point {
   const length = Math.hypot(corner.x - target.x, corner.y - target.y);
   if (length === 0) return corner;
   const scale = distance / length;
-  return { x: corner.x + (target.x - corner.x) * scale, y: corner.y + (target.y - corner.y) * scale };
+  return {
+    x: corner.x + (target.x - corner.x) * scale,
+    y: corner.y + (target.y - corner.y) * scale,
+  };
 }
 
 /**
@@ -186,11 +189,7 @@ function towards(corner: Point, target: Point, distance: number): Point {
  * in it: which axis a wire runs down, and where its lane sits. Rounding the
  * corners afterwards cannot change either.
  */
-export function routeWireCorners(
-  from: Point,
-  to: Point,
-  lane = 0,
-): readonly Point[] {
+export function routeWireCorners(from: Point, to: Point, lane = 0): readonly Point[] {
   // Already aligned: a straight run needs no corner and no lane.
   if (from.y === to.y || from.x === to.x) return [from, to];
 
@@ -214,12 +213,7 @@ export function routeWireCorners(
  * `radius` is in millimetres and exists so a preview at a different zoom keeps
  * the same shape as the wire on the bench.
  */
-export function routeWire(
-  from: Point,
-  to: Point,
-  lane = 0,
-  radius = CORNER_MM,
-): string {
+export function routeWire(from: Point, to: Point, lane = 0, radius = CORNER_MM): string {
   return roundedPath(routeWireCorners(from, to, lane), radius);
 }
 
@@ -235,9 +229,7 @@ function legCorners(from: Point, to: Point): readonly Point[] {
   if (from.x === to.x || from.y === to.y) return [from, to];
   const across = Math.abs(to.x - from.x);
   const down = Math.abs(to.y - from.y);
-  return across >= down
-    ? [from, { x: to.x, y: from.y }, to]
-    : [from, { x: from.x, y: to.y }, to];
+  return across >= down ? [from, { x: to.x, y: from.y }, to] : [from, { x: from.x, y: to.y }, to];
 }
 
 /**

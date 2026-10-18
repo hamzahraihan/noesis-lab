@@ -28,9 +28,7 @@ async function httpBytes(url: string): Promise<ArrayBuffer> {
  * Fetches both engine artifacts together. The default transport is HTTP; the
  * worker passes nothing and tests inject bytes from disk.
  */
-export async function fetchRp2040Assets(
-  fetchBytes: AssetFetch = httpBytes,
-): Promise<Rp2040Assets> {
+export async function fetchRp2040Assets(fetchBytes: AssetFetch = httpBytes): Promise<Rp2040Assets> {
   const [uf2, littlefsWasm] = await Promise.all([
     fetchBytes(RP2040_UF2_URL),
     fetchBytes(RP2040_LITTLEFS_WASM_URL),

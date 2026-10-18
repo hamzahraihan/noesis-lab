@@ -45,7 +45,12 @@ describe('dht pull-up', () => {
     join(dht, 'GND', esp32, 'L_GND');
     const netlist = buildNetlist(builder.build(), new DynamicState());
     const elements: Element[] = [
-      { kind: 'voltageSource', a: netlist.pinNode.get(`${esp32.id}:R_3V3`)!, b: GROUND, volts: 3.3 },
+      {
+        kind: 'voltageSource',
+        a: netlist.pinNode.get(`${esp32.id}:R_3V3`)!,
+        b: GROUND,
+        volts: 3.3,
+      },
       ...netlist.elements,
     ];
     const solution: Solution = solveCircuit(elements, { nodeCount: netlist.nodeCount });

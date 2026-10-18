@@ -651,16 +651,16 @@ void toneStop() {
         { name: 'SevSeg', source: 'provided' },
         { name: 'RTClib', source: 'provided' },
       ],
-  /*
-   * The block is laid out for the initial viewport (x -12..416): RTC and
-   * display share the top row below the breadboard, three buttons form a
-   * control row under them, and the buzzer closes the block. The display's
-   * fan-out and the button/buzzer runs are routed through the clear corridor
-   * left of the RTC (see the `bends` in `circuits/alarm-clock.json`).
-   */
-  circuit: CIRCUITS['alarm-clock'],
-  },
-  {
+      /*
+       * The block is laid out for the initial viewport (x -12..416): RTC and
+       * display share the top row below the breadboard, three buttons form a
+       * control row under them, and the buzzer closes the block. The display's
+       * fan-out and the button/buzzer runs are routed through the clear corridor
+       * left of the RTC (see the `bends` in `circuits/alarm-clock.json`).
+       */
+      circuit: CIRCUITS['alarm-clock'],
+    },
+    {
       board: 'uno',
       variant: 'library',
       execution: 'avr',
@@ -852,7 +852,9 @@ void loop() {
 }
 `,
       files: [
-    { name: 'config.h', content: `/**
+        {
+          name: 'config.h',
+          content: `/**
    Arduino Digital Alarm Clock
 
    Copyright (C) 2020, Uri Shaked.
@@ -899,8 +901,11 @@ const int SNOOZE_TIME = 9; /* minutes */
 */
 const int DEFAULT_ALARM_HOUR = 9;
 
-#endif /* __CONFIG_H__ */` },
-    { name: 'button.h', content: `/*
+#endif /* __CONFIG_H__ */`,
+        },
+        {
+          name: 'button.h',
+          content: `/*
 	Button - a small library for Arduino to handle button debouncing
 
 	MIT licensed.
@@ -939,8 +944,11 @@ class Button
 		int16_t  _repeat_ms;
 };
 
-#endif` },
-    { name: 'clock.h', content: `#ifndef __CLOCK_H__
+#endif`,
+        },
+        {
+          name: 'clock.h',
+          content: `#ifndef __CLOCK_H__
 #define __CLOCK_H__
 
 #include <RTClib.h>
@@ -989,8 +997,11 @@ protected:
   unsigned long _alarm_snooze_time;
 };
 
-#endif /* __CLOCK_H__ */` },
-    { name: 'alarmtone.h', content: `#ifndef __ALARM_TONE_H__
+#endif /* __CLOCK_H__ */`,
+        },
+        {
+          name: 'alarmtone.h',
+          content: `#ifndef __ALARM_TONE_H__
 #define __ALARM_TONE_H__
 
 class AlarmTone {
@@ -1007,8 +1018,11 @@ class AlarmTone {
     unsigned long _last_tone_time;
 };
 
-#endif /* __ALARM_TONE_H */` },
-    { name: 'button.cpp', content: `/*
+#endif /* __ALARM_TONE_H */`,
+        },
+        {
+          name: 'button.cpp',
+          content: `/*
 	Button - a small library for Arduino to handle button debouncing
 
 	MIT licensed.
@@ -1133,8 +1147,11 @@ uint16_t Button::repeats_since_press()
 
 	uint32_t press_time = millis() - _ignore_until;
 	return 1 + (press_time - _repeat_delay_ms) / _repeat_ms;
-}` },
-    { name: 'clock.cpp', content: `#include <Arduino.h>
+}`,
+        },
+        {
+          name: 'clock.cpp',
+          content: `#include <Arduino.h>
 #include "Clock.h"
 
 #define MINUTE 60 * 1000L /* ms */
@@ -1270,8 +1287,11 @@ void Clock::incrementAlarmMinute() {
 # if USE_RTC
   _rtc.writenvram(NVRAM_ADDR_ALARM_MINUTE, _alarm_minute);
 # endif
-}` },
-    { name: 'alarmtone.cpp', content: `#include <Arduino.h>
+}`,
+        },
+        {
+          name: 'alarmtone.cpp',
+          content: `#include <Arduino.h>
 #include "AlarmTone.h"
 
 #define TONE_TIME 500 /* ms */
@@ -1307,15 +1327,16 @@ void AlarmTone::stop() {
   noTone(_pin);
   _tone_index = 0;
   _playing = false;
-}` },
+}`,
+        },
       ],
       libraries: [
         { name: 'SevSeg', source: 'provided' },
         { name: 'RTClib', source: 'provided' },
       ],
-  // Same circuit as the first build; only the flavor of the sketch differs.
-  circuit: CIRCUITS['alarm-clock'],
-  },
+      // Same circuit as the first build; only the flavor of the sketch differs.
+      circuit: CIRCUITS['alarm-clock'],
+    },
   ],
   working: [
     'The 7-segment display shows HHMM from the RTC, with the colon blinking once a second.',
@@ -1462,8 +1483,8 @@ void loop() {
   }
 }
 `,
-  circuit: CIRCUITS['safe'],
-  },
+      circuit: CIRCUITS['safe'],
+    },
   ],
   working: [
     'The red LED is lit while locked; nothing else happens until three digits land.',
@@ -1527,8 +1548,8 @@ void loop() {
   delay(200);
 }
 `,
-  circuit: CIRCUITS['dashboard'],
-  },
+      circuit: CIRCUITS['dashboard'],
+    },
   ],
   working: [
     'The horn tracks the knob from end stop to end stop, never asked past 10–170.',
@@ -1606,8 +1627,8 @@ void loop() {
   }
 }
 `,
-  circuit: CIRCUITS['parking'],
-  },
+      circuit: CIRCUITS['parking'],
+    },
   ],
   working: [
     'The serial monitor reports centimetres that follow the distance knob.',
@@ -1670,8 +1691,8 @@ void loop() {
   delay(2000);
 }
 `,
-  circuit: CIRCUITS['weather'],
-  },
+      circuit: CIRCUITS['weather'],
+    },
   ],
   working: [
     'The LCD shows temperature on line one and humidity on line two.',
@@ -1868,7 +1889,6 @@ const NET_CLOCK: GalleryProject = {
   ],
 };
 
-
 /* ------------------------------------------------------------------ *
  * Sensor Feed — the network's sensor, received rather than fetched
  * ------------------------------------------------------------------ */
@@ -1958,13 +1978,26 @@ const SENSOR_FEED: GalleryProject = {
   ],
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER, REACTION, NET_CLOCK, SENSOR_FEED];
+export const GALLERY: readonly GalleryProject[] = [
+  ALARM_CLOCK,
+  SAFE,
+  DASHBOARD,
+  PARKING,
+  WEATHER,
+  REACTION,
+  NET_CLOCK,
+  SENSOR_FEED,
+];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
 }
 
-export function buildFor(project: GalleryProject, board: BoardId, variant?: string): GalleryBuild | null {
+export function buildFor(
+  project: GalleryProject,
+  board: BoardId,
+  variant?: string,
+): GalleryBuild | null {
   const onBoard = project.builds.filter((build) => build.board === board);
   if (variant === undefined) return onBoard[0] ?? null;
   return onBoard.find((build) => build.variant === variant) ?? onBoard[0] ?? null;

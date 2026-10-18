@@ -162,7 +162,11 @@ export class AvrBackend implements ExecutionBackend {
       // (state itself flows through the leaf helpers).
       void SREG_DATA_ADDR;
       pullWasmState(
-        wasm as unknown as { setReg(i: number, v: number): void; setPc(v: number): void; setSreg(v: number): void },
+        wasm as unknown as {
+          setReg(i: number, v: number): void;
+          setPc(v: number): void;
+          setSreg(v: number): void;
+        },
         readShadowState(this.cpu),
       );
     };
@@ -310,7 +314,13 @@ export class AvrBackend implements ExecutionBackend {
     // bridge chains onto the DDRB/PORTB/PINB hooks, so it must bind after the
     // GPIO bridge; both lines are load-bearing (counter alone never stamps
     // duty). Attach once: a second attachTimer1 would double-wrap cpu.tick.
-    attachTimer1(cpu, this.hooks.mcu, this.hooks.nowMs, this.hooks.readPin, this.hooks.readPinRaw ?? this.hooks.readPin);
+    attachTimer1(
+      cpu,
+      this.hooks.mcu,
+      this.hooks.nowMs,
+      this.hooks.readPin,
+      this.hooks.readPinRaw ?? this.hooks.readPin,
+    );
     bindTimer1Outputs(cpu, this.hooks.mcu, this.hooks.nowMs);
     attachUsartBridge(cpu, this.hooks.serial);
     attachTwiBridge(cpu, {

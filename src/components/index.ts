@@ -4,7 +4,14 @@ export { Input } from '@/components/ui/input';
 export { Label } from '@/components/ui/label';
 export { Badge } from '@/components/ui/badge';
 export { Separator } from '@/components/ui/separator';
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+export {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
 export {
   Dialog,
   DialogTrigger,

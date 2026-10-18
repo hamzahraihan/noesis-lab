@@ -68,13 +68,8 @@ describe.skipIf(!haveFirmware)('rp2040 attach', () => {
 
   it('lands a failed asset fetch in the fault text', async () => {
     const core = createSimCore(boardOption('rp2040').make());
-    core.rebuild(
-      EMPTY_BENCH,
-      pythonProject(),
-      'rp2040',
-      false,
-      undefined,
-      () => Promise.reject(new Error('assets offline')),
+    core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, () =>
+      Promise.reject(new Error('assets offline')),
     );
     await vi.waitFor(() => expect(core.fault).toBe('assets offline'));
     expect(core.rp2040Attached).toBe(false);

@@ -31,13 +31,24 @@ describe('validateCircuit', () => {
     expect(validateCircuit({ version: 1, parts: [] }).length).toBeGreaterThan(0);
   });
   it('rejects a part without id/type/x/y', () => {
-    expect(validateCircuit({ version: 1, parts: [{ type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] }).length).toBeGreaterThan(0);
+    expect(
+      validateCircuit({
+        version: 1,
+        parts: [{ type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+        wires: [],
+      }).length,
+    ).toBeGreaterThan(0);
   });
   it('rejects a wire without from/to/colour/gaugeAwg/bends', () => {
-    expect(validateCircuit({ version: 1, parts: minimalDoc.parts, wires: [{ id: 'w', from: 'a:x' }] }).length).toBeGreaterThan(0);
+    expect(
+      validateCircuit({ version: 1, parts: minimalDoc.parts, wires: [{ id: 'w', from: 'a:x' }] })
+        .length,
+    ).toBeGreaterThan(0);
   });
   it('rejects a non-number knob value', () => {
-    expect(validateCircuit({ ...minimalDoc, state: { knobs: { 'b:x': 'hi' } } }).length).toBeGreaterThan(0);
+    expect(
+      validateCircuit({ ...minimalDoc, state: { knobs: { 'b:x': 'hi' } } }).length,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -58,17 +69,25 @@ describe('compile', () => {
   });
 
   it('returns an error and skips an unknown part type', () => {
-    const doc: CircuitDocument = { version: 1, parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'x', type: 'no-such-part', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     const result = compile(doc);
     expect(result.errors.some((e) => e.includes('no-such-part'))).toBe(true);
     expect(result.bench!.parts).toHaveLength(0);
   });
 
   it('reports duplicate part ids', () => {
-    const doc: CircuitDocument = { version: 1, parts: [
-      { id: 'p', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 },
-      { id: 'p', type: 'arduino-uno-r3', x: 10, y: 10, rotation: 0 },
-    ], wires: [] };
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [
+        { id: 'p', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 },
+        { id: 'p', type: 'arduino-uno-r3', x: 10, y: 10, rotation: 0 },
+      ],
+      wires: [],
+    };
     const result = compile(doc);
     expect(result.errors.some((e) => e.includes('duplicate part id'))).toBe(true);
   });
@@ -86,7 +105,18 @@ describe('compile', () => {
   it('applies operator state (name, capColour, initialRtc)', () => {
     const doc: CircuitDocument = {
       version: 1,
-      parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0, name: 'Main', capColour: '#22c55e', initialRtc: { hours: 1, minutes: 2, seconds: 3 } }],
+      parts: [
+        {
+          id: 'u',
+          type: 'arduino-uno-r3',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          name: 'Main',
+          capColour: '#22c55e',
+          initialRtc: { hours: 1, minutes: 2, seconds: 3 },
+        },
+      ],
       wires: [],
     };
     const result = compile(doc);
@@ -148,7 +178,11 @@ describe('compile', () => {
   });
 
   it('partDefinitionById returns a definition whose id matches the entry id (Review Focus #1)', () => {
-    const result = compile({ version: 1, parts: [{ id: 'r', type: 'resistor-220', x: 0, y: 0, rotation: 0 }], wires: [] });
+    const result = compile({
+      version: 1,
+      parts: [{ id: 'r', type: 'resistor-220', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    });
     expect(result.bench!.parts[0].definition.id).toBe('resistor-220');
   });
 });
@@ -170,7 +204,16 @@ describe('decompile', () => {
         { id: 'led', type: 'led-red', x: 50, y: 0, rotation: 0 },
         { id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0, name: 'Main' },
       ],
-      wires: [{ id: 'w', from: 'u:D13', to: 'led:A', colour: '#f00', gaugeAwg: 26, bends: [{ x: 10, y: 5 }] }],
+      wires: [
+        {
+          id: 'w',
+          from: 'u:D13',
+          to: 'led:A',
+          colour: '#f00',
+          gaugeAwg: 26,
+          bends: [{ x: 10, y: 5 }],
+        },
+      ],
       state: { knobs: {} },
     };
     const compiled = compile(doc);
@@ -221,7 +264,11 @@ describe('decompile', () => {
   });
 
   it('is pure: the input bench is unchanged', () => {
-    const doc: CircuitDocument = { version: 1, parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }], wires: [] };
+    const doc: CircuitDocument = {
+      version: 1,
+      parts: [{ id: 'u', type: 'arduino-uno-r3', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+    };
     const compiled = compile(doc);
     const before = JSON.stringify(compiled.bench);
     decompile(compiled.bench!, compiled.dynamicState!);
@@ -289,6 +336,8 @@ describe('parseCircuit', () => {
   });
 
   it('rejects a version it cannot compile', () => {
-    expect(() => parseCircuit({ ...minimalDoc, version: 2 }, '5.1')).toThrow(/5\.1: unsupported circuit version: 2/);
+    expect(() => parseCircuit({ ...minimalDoc, version: 2 }, '5.1')).toThrow(
+      /5\.1: unsupported circuit version: 2/,
+    );
   });
 });

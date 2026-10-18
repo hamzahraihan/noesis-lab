@@ -118,10 +118,16 @@ export function loadLayoutSizes(read: (key: string) => string | null): LayoutSiz
     raw = null;
   }
   const saved =
-    typeof raw === 'object' && raw !== null ? (raw as Partial<Record<keyof LayoutSizes, unknown>>) : {};
+    typeof raw === 'object' && raw !== null
+      ? (raw as Partial<Record<keyof LayoutSizes, unknown>>)
+      : {};
   return clampLayoutSizes({
-    sidebarWidth: isFiniteNumber(saved.sidebarWidth) ? saved.sidebarWidth : DEFAULT_LAYOUT.sidebarWidth,
-    bottomHeight: isFiniteNumber(saved.bottomHeight) ? saved.bottomHeight : DEFAULT_LAYOUT.bottomHeight,
+    sidebarWidth: isFiniteNumber(saved.sidebarWidth)
+      ? saved.sidebarWidth
+      : DEFAULT_LAYOUT.sidebarWidth,
+    bottomHeight: isFiniteNumber(saved.bottomHeight)
+      ? saved.bottomHeight
+      : DEFAULT_LAYOUT.bottomHeight,
     railWidth: isFiniteNumber(saved.railWidth) ? saved.railWidth : DEFAULT_LAYOUT.railWidth,
   });
 }

@@ -21,7 +21,9 @@ export class FirmwareSyntaxError extends Error {
   public readonly location: SourceLocation;
   public readonly file: string;
   constructor(message: string, location: SourceLocation, file = 'main.ino') {
-    super(`${file}:${location.line}: ${message} (line ${location.line}, column ${location.column})`);
+    super(
+      `${file}:${location.line}: ${message} (line ${location.line}, column ${location.column})`,
+    );
     this.name = 'FirmwareSyntaxError';
     this.location = location;
     this.file = file;
@@ -50,22 +52,102 @@ export interface Token {
 }
 
 const KEYWORDS = new Set([
-  'void', 'int', 'float', 'double', 'bool', 'char', 'byte', 'long', 'short',
-  'unsigned', 'signed', 'const', 'static', 'volatile', 'true', 'false',
-  'if', 'else', 'while', 'do', 'for', 'return', 'break', 'continue',
-  'switch', 'case', 'default', 'HIGH', 'LOW', 'INPUT', 'OUTPUT',
-  'INPUT_PULLUP', 'true', 'false',
-  'class', 'public', 'private', 'protected',
-  'uint8_t', 'int8_t', 'uint16_t', 'int16_t', 'uint32_t', 'int32_t',
+  'void',
+  'int',
+  'float',
+  'double',
+  'bool',
+  'char',
+  'byte',
+  'long',
+  'short',
+  'unsigned',
+  'signed',
+  'const',
+  'static',
+  'volatile',
+  'true',
+  'false',
+  'if',
+  'else',
+  'while',
+  'do',
+  'for',
+  'return',
+  'break',
+  'continue',
+  'switch',
+  'case',
+  'default',
+  'HIGH',
+  'LOW',
+  'INPUT',
+  'OUTPUT',
+  'INPUT_PULLUP',
+  'true',
+  'false',
+  'class',
+  'public',
+  'private',
+  'protected',
+  'uint8_t',
+  'int8_t',
+  'uint16_t',
+  'int16_t',
+  'uint32_t',
+  'int32_t',
 ]);
 
 /** Longest-first so that `<=` never lexes as `<` then `=`. */
 const PUNCTUATION = [
-  '<<=', '>>=', '...',
-  '==', '!=', '<=', '>=', '&&', '||', '++', '--', '+=', '-=', '*=', '/=',
-  '%=', '&=', '|=', '^=', '<<', '>>', '->', '::',
-  '{', '}', '(', ')', '[', ']', ';', ',', '.', '+', '-', '*', '/', '%',
-  '=', '<', '>', '!', '~', '&', '|', '^', '?', ':', '#',
+  '<<=',
+  '>>=',
+  '...',
+  '==',
+  '!=',
+  '<=',
+  '>=',
+  '&&',
+  '||',
+  '++',
+  '--',
+  '+=',
+  '-=',
+  '*=',
+  '/=',
+  '%=',
+  '&=',
+  '|=',
+  '^=',
+  '<<',
+  '>>',
+  '->',
+  '::',
+  '{',
+  '}',
+  '(',
+  ')',
+  '[',
+  ']',
+  ';',
+  ',',
+  '.',
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '=',
+  '<',
+  '>',
+  '!',
+  '~',
+  '&',
+  '|',
+  '^',
+  '?',
+  ':',
+  '#',
 ];
 
 export function tokenize(source: string, file = 'main.ino'): Token[] {
@@ -116,7 +198,11 @@ export function tokenize(source: string, file = 'main.ino'): Token[] {
       // Preprocessor lines are kept as a single token; the parser reads the
       // directive name out of the text and only acts on #define.
       while (index < source.length && source[index] !== '\n') advance(1);
-      tokens.push({ kind: 'directive', text: source.slice(locationOffset(source, location), index), location });
+      tokens.push({
+        kind: 'directive',
+        text: source.slice(locationOffset(source, location), index),
+        location,
+      });
       continue;
     }
 
@@ -254,16 +340,29 @@ export type Stmt =
       args: Expr[];
       location: SourceLocation;
     }
-  | { kind: 'if'; condition: Expr; then: Stmt; otherwise: Stmt | null; location: SourceLocation }  | { kind: 'while'; condition: Expr; body: Stmt; location: SourceLocation }
+  | { kind: 'if'; condition: Expr; then: Stmt; otherwise: Stmt | null; location: SourceLocation }
+  | { kind: 'while'; condition: Expr; body: Stmt; location: SourceLocation }
   | { kind: 'doWhile'; body: Stmt; condition: Expr; location: SourceLocation }
-  | { kind: 'for'; init: Stmt | null; condition: Expr | null; update: Expr | null; body: Stmt; location: SourceLocation }
+  | {
+      kind: 'for';
+      init: Stmt | null;
+      condition: Expr | null;
+      update: Expr | null;
+      body: Stmt;
+      location: SourceLocation;
+    }
   /**
    * A `switch` with `case` labels and an optional `default`.
    *
    * A null test is `default`; bodies fall through to the next case the way C
    * runs them, and `break` leaves the switch rather than any enclosing loop.
    */
-  | { kind: 'switch'; value: Expr; cases: { test: Expr | null; body: Stmt[] }[]; location: SourceLocation }
+  | {
+      kind: 'switch';
+      value: Expr;
+      cases: { test: Expr | null; body: Stmt[] }[];
+      location: SourceLocation;
+    }
   | { kind: 'return'; value: Expr | null; location: SourceLocation }
   | { kind: 'break'; location: SourceLocation }
   | { kind: 'continue'; location: SourceLocation }
@@ -324,10 +423,28 @@ export interface Program {
  * spelling rather than over anything the VM does differently.
  */
 const TYPE_KEYWORDS = [
-  'unsigned long', 'unsigned', 'signed', 'long long', 'long', 'short',
-  'void', 'int', 'float', 'double', 'bool', 'char', 'byte',
-  'const', 'static', 'volatile',
-  'uint8_t', 'int8_t', 'uint16_t', 'int16_t', 'uint32_t', 'int32_t',
+  'unsigned long',
+  'unsigned',
+  'signed',
+  'long long',
+  'long',
+  'short',
+  'void',
+  'int',
+  'float',
+  'double',
+  'bool',
+  'char',
+  'byte',
+  'const',
+  'static',
+  'volatile',
+  'uint8_t',
+  'int8_t',
+  'uint16_t',
+  'int16_t',
+  'uint32_t',
+  'int32_t',
 ];
 
 class Parser {
@@ -368,7 +485,11 @@ class Parser {
        * ordinary constants. Explicit values (`A = 3`) hold; the rest count up
        * from zero or from the last explicit one, as C numbers them.
        */
-      if (this.peek().kind === 'identifier' && this.peek().text === 'enum' && this.peek(1).kind === 'identifier') {
+      if (
+        this.peek().kind === 'identifier' &&
+        this.peek().text === 'enum' &&
+        this.peek(1).kind === 'identifier'
+      ) {
         this.next();
         this.enumNames.add(this.next().text);
         this.expectPunctuation('{');
@@ -404,7 +525,12 @@ class Parser {
           if (this.at('eof')) {
             throw new FirmwareSyntaxError('unclosed class', classLocation, this.file);
           }
-          if (this.peek().kind === 'keyword' && (this.peek().text === 'public' || this.peek().text === 'private' || this.peek().text === 'protected')) {
+          if (
+            this.peek().kind === 'keyword' &&
+            (this.peek().text === 'public' ||
+              this.peek().text === 'private' ||
+              this.peek().text === 'protected')
+          ) {
             section = this.next().text;
             this.expectPunctuation(':');
             continue;
@@ -423,7 +549,11 @@ class Parser {
           // A constructor names the class and has no return type.
           let returnType = '';
           let memberName: string;
-          if (this.peek().kind === 'identifier' && this.peek().text === className && this.tokens[this.position + 1]?.text === '(') {
+          if (
+            this.peek().kind === 'identifier' &&
+            this.peek().text === className &&
+            this.tokens[this.position + 1]?.text === '('
+          ) {
             memberName = this.next().text;
           } else {
             returnType = this.readType();
@@ -438,7 +568,9 @@ class Parser {
                 // Default args (`uint16_t ms = 100`): kept so the runtime can
                 // bind them when the call site omits the argument.
                 const pname = this.expectIdentifier().text;
-                const defaultValue = this.acceptPunctuation('=') ? this.readExpression() : undefined;
+                const defaultValue = this.acceptPunctuation('=')
+                  ? this.readExpression()
+                  : undefined;
                 parameters.push({ name: pname, type: ptype, defaultValue });
               } while (this.acceptPunctuation(','));
             }
@@ -448,12 +580,26 @@ class Parser {
             const initList = this.readInitializerList();
             if (this.atPunctuation(';')) {
               this.next();
-              methods.set(memberName, { name: memberName, returnType, parameters, initList, body: { kind: 'block', statements: [], location: loc }, location: loc });
+              methods.set(memberName, {
+                name: memberName,
+                returnType,
+                parameters,
+                initList,
+                body: { kind: 'block', statements: [], location: loc },
+                location: loc,
+              });
               continue;
             }
             this.expectPunctuation('{');
             const body = this.readBlock();
-            methods.set(memberName, { name: memberName, returnType, parameters, initList, body, location: loc });
+            methods.set(memberName, {
+              name: memberName,
+              returnType,
+              parameters,
+              initList,
+              body,
+              location: loc,
+            });
           } else {
             // Field, possibly `static const bool PRESSED = LOW;` — the init
             // is kept so the runtime can seed static consts from it.
@@ -501,12 +647,26 @@ class Parser {
         const initList = this.readInitializerList();
         if (this.atPunctuation(';')) {
           this.next();
-          functions.set(qualified, { name: qualified, returnType: '', parameters, initList, body: { kind: 'block', statements: [], location: qualifiedLocation }, location: qualifiedLocation });
+          functions.set(qualified, {
+            name: qualified,
+            returnType: '',
+            parameters,
+            initList,
+            body: { kind: 'block', statements: [], location: qualifiedLocation },
+            location: qualifiedLocation,
+          });
           continue;
         }
         this.expectPunctuation('{');
         const body = this.readBlock();
-        functions.set(qualified, { name: qualified, returnType: '', parameters, initList, body, location: qualifiedLocation });
+        functions.set(qualified, {
+          name: qualified,
+          returnType: '',
+          parameters,
+          initList,
+          body,
+          location: qualifiedLocation,
+        });
         continue;
       }
 
@@ -540,7 +700,13 @@ class Parser {
           this.expectPunctuation(')');
           this.expectPunctuation('{');
           const body = this.readBlock();
-          functions.set(qualified, { name: qualified, returnType, parameters, body, location: qualifiedLocation });
+          functions.set(qualified, {
+            name: qualified,
+            returnType,
+            parameters,
+            body,
+            location: qualifiedLocation,
+          });
           continue;
         }
         /*
@@ -549,8 +715,10 @@ class Parser {
          * rather than building a class instance.
          */
         if (
-          this.peek().text === 'DateTime' || this.peek().text === 'TimeSpan' ||
-          this.peek().text === 'auto' || this.enumNames.has(this.peek().text)
+          this.peek().text === 'DateTime' ||
+          this.peek().text === 'TimeSpan' ||
+          this.peek().text === 'auto' ||
+          this.enumNames.has(this.peek().text)
         ) {
           globals.push(this.readValueBinding());
           continue;
@@ -568,7 +736,13 @@ class Parser {
           this.expectPunctuation(')');
         }
         this.expectPunctuation(';');
-        globals.push({ kind: 'instanceDecl', className, name: instanceName, args, location: instanceLocation });
+        globals.push({
+          kind: 'instanceDecl',
+          className,
+          name: instanceName,
+          args,
+          location: instanceLocation,
+        });
         continue;
       }
 
@@ -658,11 +832,21 @@ class Parser {
       init =
         sole !== undefined && typeName === 'auto'
           ? sole
-          : { kind: 'call', callee: { kind: 'identifier', name: typeName, location }, args, location };
+          : {
+              kind: 'call',
+              callee: { kind: 'identifier', name: typeName, location },
+              args,
+              location,
+            };
     } else if (this.acceptPunctuation('=')) {
       init = this.readExpression();
     } else if (typeName === 'DateTime' || typeName === 'TimeSpan') {
-      init = { kind: 'call', callee: { kind: 'identifier', name: typeName, location }, args: [], location };
+      init = {
+        kind: 'call',
+        callee: { kind: 'identifier', name: typeName, location },
+        args: [],
+        location,
+      };
     }
     this.expectPunctuation(';');
     return { kind: 'varDecl', name, init, location };
@@ -795,7 +979,11 @@ class Parser {
     if (first.kind === 'identifier' && this.peek(1).kind === 'identifier') {
       return this.next().text;
     }
-    throw new FirmwareSyntaxError(`expected a type, found '${first.text}'`, first.location, this.file);
+    throw new FirmwareSyntaxError(
+      `expected a type, found '${first.text}'`,
+      first.location,
+      this.file,
+    );
   }
 
   private readBlock(): Stmt {
@@ -885,7 +1073,9 @@ class Parser {
     if (this.peek().kind === 'identifier' && this.peek(1).kind === 'identifier') {
       const typeName = this.peek().text;
       if (
-        typeName === 'auto' || typeName === 'DateTime' || typeName === 'TimeSpan' ||
+        typeName === 'auto' ||
+        typeName === 'DateTime' ||
+        typeName === 'TimeSpan' ||
         this.enumNames.has(typeName)
       ) {
         return this.readValueBinding();
@@ -999,7 +1189,10 @@ class Parser {
       const body: Stmt[] = [];
       while (
         !this.atPunctuation('}') &&
-        !(this.peek().kind === 'keyword' && (this.peek().text === 'case' || this.peek().text === 'default'))
+        !(
+          this.peek().kind === 'keyword' &&
+          (this.peek().text === 'case' || this.peek().text === 'default')
+        )
       ) {
         if (this.at('eof')) throw new FirmwareSyntaxError('unclosed switch', location, this.file);
         body.push(this.readStatement());
@@ -1059,7 +1252,11 @@ class Parser {
   expression(): Expr {
     const value = this.readExpression();
     if (!this.at('eof')) {
-      throw new FirmwareSyntaxError(`unexpected '${this.peek().text}'`, this.peek().location, this.file);
+      throw new FirmwareSyntaxError(
+        `unexpected '${this.peek().text}'`,
+        this.peek().location,
+        this.file,
+      );
     }
     return value;
   }
@@ -1107,7 +1304,12 @@ class Parser {
     const token = this.peek();
     if (token.kind === 'punctuation' && ['-', '+', '!', '~', '*', '&'].includes(token.text)) {
       this.next();
-      return { kind: 'unary', operator: token.text, operand: this.readUnary(), location: token.location };
+      return {
+        kind: 'unary',
+        operator: token.text,
+        operand: this.readUnary(),
+        location: token.location,
+      };
     }
     if (token.kind === 'punctuation' && (token.text === '++' || token.text === '--')) {
       this.next();
@@ -1185,11 +1387,17 @@ class Parser {
     }
     if (token.kind === 'keyword') {
       if (token.text === 'true') return { kind: 'boolean', value: true, location: token.location };
-      if (token.text === 'false') return { kind: 'boolean', value: false, location: token.location };
+      if (token.text === 'false')
+        return { kind: 'boolean', value: false, location: token.location };
       // HIGH, LOW, INPUT, OUTPUT and INPUT_PULLUP lex as keywords but behave
       // exactly like named constants, which is how the interpreter binds them.
-      if (token.text === 'HIGH' || token.text === 'LOW' || token.text === 'INPUT' ||
-          token.text === 'OUTPUT' || token.text === 'INPUT_PULLUP') {
+      if (
+        token.text === 'HIGH' ||
+        token.text === 'LOW' ||
+        token.text === 'INPUT' ||
+        token.text === 'OUTPUT' ||
+        token.text === 'INPUT_PULLUP'
+      ) {
         return { kind: 'identifier', name: token.text, location: token.location };
       }
     }
@@ -1227,7 +1435,11 @@ class Parser {
   private expect(kind: TokenKind): Token {
     const token = this.next();
     if (token.kind !== kind) {
-      throw new FirmwareSyntaxError(`expected ${kind}, found '${token.text}'`, token.location, this.file);
+      throw new FirmwareSyntaxError(
+        `expected ${kind}, found '${token.text}'`,
+        token.location,
+        this.file,
+      );
     }
     return token;
   }
@@ -1238,7 +1450,11 @@ class Parser {
 
   private expectPunctuation(text: string): void {
     if (!this.acceptPunctuation(text)) {
-      throw new FirmwareSyntaxError(`expected '${text}', found '${this.peek().text}'`, this.peek().location, this.file);
+      throw new FirmwareSyntaxError(
+        `expected '${text}', found '${this.peek().text}'`,
+        this.peek().location,
+        this.file,
+      );
     }
   }
 
@@ -1258,11 +1474,19 @@ const BINARY_PRECEDENCE: Readonly<Record<string, number>> = {
   '|': 3,
   '^': 4,
   '&': 5,
-  '==': 6, '!=': 6,
-  '<': 7, '>': 7, '<=': 7, '>=': 7,
-  '<<': 8, '>>': 8,
-  '+': 9, '-': 9,
-  '*': 10, '/': 10, '%': 10,
+  '==': 6,
+  '!=': 6,
+  '<': 7,
+  '>': 7,
+  '<=': 7,
+  '>=': 7,
+  '<<': 8,
+  '>>': 8,
+  '+': 9,
+  '-': 9,
+  '*': 10,
+  '/': 10,
+  '%': 10,
 };
 
 export function parseFirmware(source: string, file = 'main.ino'): Program {

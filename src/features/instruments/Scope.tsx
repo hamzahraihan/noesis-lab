@@ -8,7 +8,12 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { decodeUart, measureDutyCycle, measureFrequency, type TraceSample } from '@/features/simulation';
+import {
+  decodeUart,
+  measureDutyCycle,
+  measureFrequency,
+  type TraceSample,
+} from '@/features/simulation';
 import type { BoardPin } from '@/features/parts';
 import { ActivityLogIcon, Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
 import {
@@ -93,7 +98,9 @@ export function ScopePanel({
   const frequency = measureFrequency(samples, logicVolts);
   const duty = measureDutyCycle(samples, logicVolts);
   const decoded = decodeUart(samples, baud, logicVolts);
-  const ascii = decoded.map(({ byte }) => (byte >= 32 && byte < 127 ? String.fromCharCode(byte) : '.')).join('');
+  const ascii = decoded
+    .map(({ byte }) => (byte >= 32 && byte < 127 ? String.fromCharCode(byte) : '.'))
+    .join('');
 
   return (
     <div className="flex flex-col gap-2 p-3">
@@ -102,7 +109,10 @@ export function ScopePanel({
           <ActivityLogIcon className="icon-sm text-slate-500" aria-hidden="true" />
           Oscilloscope
         </CardTitle>
-        <Select value={probePinId ?? 'none'} onValueChange={(next) => onProbe(next === 'none' ? null : next)}>
+        <Select
+          value={probePinId ?? 'none'}
+          onValueChange={(next) => onProbe(next === 'none' ? null : next)}
+        >
           <SelectTrigger className="h-6 max-w-28 text-[11px]" aria-label="Probe pin">
             <SelectValue />
           </SelectTrigger>

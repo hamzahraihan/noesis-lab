@@ -26,16 +26,25 @@ export async function loadWasmCore(): Promise<WebAssembly.Module | null> {
 }
 
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */
-export async function stepParity(cycles: number): Promise<{ jsCycles: number; wasmCycles: number }> {
+export async function stepParity(
+  cycles: number,
+): Promise<{ jsCycles: number; wasmCycles: number }> {
   const { CPU: Cpu, avrInstruction } = await import('avr8js');
   const cpu = new Cpu(new Uint16Array(1024));
   for (let i = 0; i < cycles; i++) {
-    try { avrInstruction(cpu); cpu.tick(); } catch { break; }
+    try {
+      avrInstruction(cpu);
+      cpu.tick();
+    } catch {
+      break;
+    }
   }
   const mod = await loadWasmCore();
   if (mod === null) return { jsCycles: cpu.cycles, wasmCycles: cpu.cycles };
   const instance = await WebAssembly.instantiate(mod, {});
-  const step = (instance.exports as unknown as { step: (n: number) => void; get_cycles: () => number }).step;
+  const step = (
+    instance.exports as unknown as { step: (n: number) => void; get_cycles: () => number }
+  ).step;
   const get = (instance.exports as unknown as { get_cycles: () => number }).get_cycles;
   step(cycles);
   return { jsCycles: cpu.cycles, wasmCycles: get() };
@@ -118,7 +127,12 @@ export async function batch1Parity(): Promise<{ equal: boolean }> {
 }
 
 /* HARNESS-ONLY / DO NOT SHIP as gate evidence */
-export async function cpuGate(): Promise<{ trapRate: number; glass: string; wallMs: number; placeholder: true }> {
+export async function cpuGate(): Promise<{
+  trapRate: number;
+  glass: string;
+  wallMs: number;
+  placeholder: true;
+}> {
   const { Simulation } = await import('@/features/bench/simulations/simulation');
   const { boardOption } = await import('@/features/learn/boardRegistry');
   const { firmwareForBuild, galleryById, buildFor } = await import('@/features/learn/gallery');
@@ -219,7 +233,10 @@ export function samplePinsToWasm(memory: ArrayBuffer, levels: ReadonlyMap<number
   }
 }
 
-export function drainWasmEvents(memory: ArrayBuffer, maxEvents = 256): Array<{ gpio: number; high: boolean }> {
+export function drainWasmEvents(
+  memory: ArrayBuffer,
+  maxEvents = 256,
+): Array<{ gpio: number; high: boolean }> {
   const bytes = new Uint8Array(memory);
   const view = new DataView(memory);
   const head = view.getInt32(WASM_HEAD_OFF, true);
@@ -284,17 +301,33 @@ export async function cpuGateMeasured(): Promise<{
   convergeGlass(glassProbe, 70);
   const glass = glassProbe.readGlass().text;
   const serialAfter = sim.serialLines().join('').length;
-  console.log(`cpuGateMeasured trapRate=0 glass=${glass} serialEqual=${serialAfter >= serialBefore} wallMs=${wallMs.toFixed(0)}`);
+  console.log(
+    `cpuGateMeasured trapRate=0 glass=${glass} serialEqual=${serialAfter >= serialBefore} wallMs=${wallMs.toFixed(0)}`,
+  );
   // NOTE (gate honesty): trapRate:0/serialEqual are harness placeholders
   // pending dual-path work, not measured dual-path results. `serialAfter >=
   // serialBefore` is weak (`>=` on an append-only buffer); real string
   // equality lands with dual-path. `measured: false` marks this until then.
-  return { trapRate: 0, glass, serialEqual: serialAfter >= serialBefore, wallMs, measured: false as const };
+  return {
+    trapRate: 0,
+    glass,
+    serialEqual: serialAfter >= serialBefore,
+    wallMs,
+    measured: false as const,
+  };
 }
 
 export const REQUIRED_WASM_EXPORTS = [
-  'flash_base', 'reset_cpu', 'get_reg', 'set_reg', 'get_pc', 'set_pc',
-  'get_sreg', 'set_sreg', 'step', 'memory',
+  'flash_base',
+  'reset_cpu',
+  'get_reg',
+  'set_reg',
+  'get_pc',
+  'set_pc',
+  'get_sreg',
+  'set_sreg',
+  'step',
+  'memory',
 ] as const;
 
 const WASM_FLASH_WORDS = 512;
@@ -305,15 +338,15 @@ export interface WasmModule {
   reset(): void;
 }
 
-export type LoadWasmResult =
-  | { ok: true; module: WasmModule }
-  | { ok: false; cause: string };
+export type LoadWasmResult = { ok: true; module: WasmModule } | { ok: false; cause: string };
 
 function wasmCause(prefix: string, error: unknown): string {
   return `${prefix}: ${error instanceof Error ? error.message : String(error)}`;
 }
 
-export async function loadWasmModule(fetchBytes: () => Promise<ArrayBuffer>): Promise<LoadWasmResult> {
+export async function loadWasmModule(
+  fetchBytes: () => Promise<ArrayBuffer>,
+): Promise<LoadWasmResult> {
   let bytes: ArrayBuffer;
   try {
     bytes = await fetchBytes();
@@ -330,13 +363,19 @@ export async function loadWasmModule(fetchBytes: () => Promise<ArrayBuffer>): Pr
   const missing = REQUIRED_WASM_EXPORTS.filter((k) =>
     k === 'memory' ? !(ex[k] instanceof WebAssembly.Memory) : typeof ex[k] !== 'function',
   );
-  if (missing.length > 0) return { ok: false, cause: `wasm version mismatch: missing exports ${missing.join(',')}` };
+  if (missing.length > 0)
+    return { ok: false, cause: `wasm version mismatch: missing exports ${missing.join(',')}` };
   const e = ex as unknown as {
-    flash_base(): number; reset_cpu(): void;
-    get_reg(i: number): number; set_reg(i: number, v: number): void;
-    get_pc(): number; set_pc(v: number): void;
-    get_sreg(): number; set_sreg(v: number): void;
-    step(n: number): number; memory: WebAssembly.Memory;
+    flash_base(): number;
+    reset_cpu(): void;
+    get_reg(i: number): number;
+    set_reg(i: number, v: number): void;
+    get_pc(): number;
+    set_pc(v: number): void;
+    get_sreg(): number;
+    set_sreg(v: number): void;
+    step(n: number): number;
+    memory: WebAssembly.Memory;
   };
   const core: AttachedWasm = {
     step: (n: number): number => e.step(n),

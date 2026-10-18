@@ -155,11 +155,18 @@ export class Ds1307 implements I2cDevice {
     const month = fromBcd(this.registers[MONTH] & 0x1f);
     const year = fromBcd(this.registers[YEAR]);
     if (
-      seconds === null || seconds > 59 ||
-      minutes === null || minutes > 59 ||
-      hours === null || hours > 23 ||
-      date === null || date < 1 || date > 31 ||
-      month === null || month < 1 || month > 12 ||
+      seconds === null ||
+      seconds > 59 ||
+      minutes === null ||
+      minutes > 59 ||
+      hours === null ||
+      hours > 23 ||
+      date === null ||
+      date < 1 ||
+      date > 31 ||
+      month === null ||
+      month < 1 ||
+      month > 12 ||
       year === null
     ) {
       return null;

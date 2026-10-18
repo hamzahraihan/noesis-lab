@@ -176,10 +176,7 @@ export function isRefusal(rgba: Uint8ClampedArray): boolean {
     if (rgba[i + 3] < 200) continue;
     opaque++;
     // Within a whisker of each other on all three channels is a flat colour.
-    if (
-      Math.abs(rgba[i] - rgba[i + 1]) <= 6 &&
-      Math.abs(rgba[i + 1] - rgba[i + 2]) <= 6
-    ) {
+    if (Math.abs(rgba[i] - rgba[i + 1]) <= 6 && Math.abs(rgba[i + 1] - rgba[i + 2]) <= 6) {
       flat++;
     }
   }

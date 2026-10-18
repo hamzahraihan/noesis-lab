@@ -14,13 +14,22 @@ export const circuitStorageKey = (boardId: string) => `noesis:circuit:${boardId}
 export const WRONG_BOARD_NOTICE =
   'That circuit is not wired for this board, so the bench opened a fresh one instead.';
 
-export function saveCircuit(boardId: string, doc: CircuitDocument, storage: Storage = localStorage): void {
+export function saveCircuit(
+  boardId: string,
+  doc: CircuitDocument,
+  storage: Storage = localStorage,
+): void {
   try {
     storage.setItem(circuitStorageKey(boardId), JSON.stringify(doc));
-  } catch { /* quota or private mode: bench stays session-local */ }
+  } catch {
+    /* quota or private mode: bench stays session-local */
+  }
 }
 
-export function loadCircuit(boardId: string, storage: Storage = localStorage): CircuitDocument | null {
+export function loadCircuit(
+  boardId: string,
+  storage: Storage = localStorage,
+): CircuitDocument | null {
   try {
     const raw = storage.getItem(circuitStorageKey(boardId));
     if (!raw) return null;

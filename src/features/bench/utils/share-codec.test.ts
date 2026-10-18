@@ -1,7 +1,13 @@
 // src/features/bench/share-codec.test.ts
 import { describe, expect, it } from 'vitest';
 import { compressToEncodedURIComponent } from 'lz-string';
-import { decodeShareToProject, encodeProjectToShare, isShareable, projectShareQuery, SHARE_URL_LIMIT } from './share-codec';
+import {
+  decodeShareToProject,
+  encodeProjectToShare,
+  isShareable,
+  projectShareQuery,
+  SHARE_URL_LIMIT,
+} from './share-codec';
 import { toSingleFileProject, validateProject, type FirmwareProject } from '@/features/simulation';
 
 describe('share codec', () => {
@@ -15,7 +21,10 @@ describe('share codec', () => {
    * premise (`+` is in there) and the round trip through a query read.
    */
   it('escapes the query pair so a payload survives being read back', () => {
-    const project = toSingleFileProject('#include "h.h"\nvoid setup() {}\nvoid loop() {}\n', 'arduino-cpp');
+    const project = toSingleFileProject(
+      '#include "h.h"\nvoid setup() {}\nvoid loop() {}\n',
+      'arduino-cpp',
+    );
     const payload = encodeProjectToShare(project);
     expect(payload, 'the alphabet this guards against').toContain('+');
 
@@ -70,7 +79,10 @@ describe('share codec', () => {
     };
     const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const filler = Array.from({ length: 6000 }, () => alphabet[next()]).join('');
-    const project = toSingleFileProject(`void setup() {}\nvoid loop() {}\n// ${filler}\n`, 'arduino-cpp');
+    const project = toSingleFileProject(
+      `void setup() {}\nvoid loop() {}\n// ${filler}\n`,
+      'arduino-cpp',
+    );
     expect(validateProject(project)).toEqual([]);
     expect(encodeProjectToShare(project).length).toBeGreaterThan(SHARE_URL_LIMIT);
     expect(isShareable(project)).toBe(false);
@@ -80,7 +92,13 @@ describe('share codec', () => {
     const project: FirmwareProject = {
       ...toSingleFileProject('void setup() {}\nvoid loop() {}\n', 'arduino-cpp'),
       libraries: [{ name: 'SevSeg', source: 'provided' }],
-      slots: [{ id: 'm', name: 'MyLib', files: [{ path: 'MyLib.h', content: 'int libAdd(int a, int b);\n' }] }],
+      slots: [
+        {
+          id: 'm',
+          name: 'MyLib',
+          files: [{ path: 'MyLib.h', content: 'int libAdd(int a, int b);\n' }],
+        },
+      ],
     };
     const encoded = encodeProjectToShare(project);
     expect(encoded.length).toBeLessThan(SHARE_URL_LIMIT);

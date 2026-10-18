@@ -126,8 +126,12 @@ function CatalogueCard({
           <PlusIcon className="icon-sm" />
         </span>
       </div>
-      <span className="text-xs font-medium text-slate-100 group-hover:text-sky-300">{entry.name}</span>
-      <span className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">{entry.note}</span>
+      <span className="text-xs font-medium text-slate-100 group-hover:text-sky-300">
+        {entry.name}
+      </span>
+      <span className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">
+        {entry.note}
+      </span>
     </button>
   );
 }

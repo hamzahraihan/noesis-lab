@@ -44,7 +44,10 @@ export function snapshotGlass(probe: ProbeSim): GlassFrame {
   return probe.readGlass();
 }
 
-export function convergeGlass(probe: ProbeSim, maxTicks: number): { glyphs: number[][]; converged: boolean } {
+export function convergeGlass(
+  probe: ProbeSim,
+  maxTicks: number,
+): { glyphs: number[][]; converged: boolean } {
   const lit: number[][] = [0, 1, 2, 3].map(() => [0, 0, 0, 0, 0, 0, 0, 0]);
   let stable = 0;
   let converged = false;

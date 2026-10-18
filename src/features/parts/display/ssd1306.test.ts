@@ -181,7 +181,7 @@ describe('SSD1306 control bytes', () => {
 
   it('keeps the command stream from writing pixels', () => {
     const display = new Ssd1306();
- initialise(display);
+    initialise(display);
     command(display, 0xb0, 0x00);
 
     // 0x81 is the contrast command, so it must reach the command decoder rather

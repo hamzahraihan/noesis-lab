@@ -134,8 +134,12 @@ describe('the artwork stays centred through a turn', () => {
     const painted = {
       x: Math.min(...corners.map((corner) => corner.x)) + tx,
       y: Math.min(...corners.map((corner) => corner.y)) + ty,
-      width: Math.max(...corners.map((corner) => corner.x)) - Math.min(...corners.map((corner) => corner.x)),
-      height: Math.max(...corners.map((corner) => corner.y)) - Math.min(...corners.map((corner) => corner.y)),
+      width:
+        Math.max(...corners.map((corner) => corner.x)) -
+        Math.min(...corners.map((corner) => corner.x)),
+      height:
+        Math.max(...corners.map((corner) => corner.y)) -
+        Math.min(...corners.map((corner) => corner.y)),
     };
     // The hit box is that painted box, and neither of them moved.
     const box = artworkBox(definition, placed.rotation);

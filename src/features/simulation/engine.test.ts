@@ -56,9 +56,7 @@ function ledBench() {
   const engine = new Engine({ bench: builder.build(), mcu });
   engine.rebuild();
 
-  const ledElement = engine.currentNetlist.elements.find(
-    (element) => element.kind === 'diode',
-  )!;
+  const ledElement = engine.currentNetlist.elements.find((element) => element.kind === 'diode')!;
   return { builder, esp32, mcu, engine, ledElement };
 }
 

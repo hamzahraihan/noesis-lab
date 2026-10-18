@@ -268,18 +268,56 @@ const POCKET_MAP: Exercise = {
   board: 'raspberry-pi',
   language: 'python',
   parts: [
-    { name: '2.4" TFT (ILI9341)', qty: 1, why: 'The thing the map is drawn on. 320×240 pixels of it.' },
-    { name: 'Tactile Button', qty: 1, why: 'How you move. A Pi cannot read a knob, so this is the input.' },
+    {
+      name: '2.4" TFT (ILI9341)',
+      qty: 1,
+      why: 'The thing the map is drawn on. 320×240 pixels of it.',
+    },
+    {
+      name: 'Tactile Button',
+      qty: 1,
+      why: 'How you move. A Pi cannot read a knob, so this is the input.',
+    },
   ],
   wiring: [
-    { pin: 'GPIO11', part: '2.4" TFT (ILI9341)', terminal: 'CLK', goesTo: "SPI0's clock, physical pin 23" },
-    { pin: 'GPIO10', part: '2.4" TFT (ILI9341)', terminal: 'DIN', goesTo: "SPI0's data line, physical pin 19" },
-    { pin: 'GPIO8', part: '2.4" TFT (ILI9341)', terminal: 'CS', goesTo: 'chip-select, physical pin 24 — a pin of its own' },
-    { pin: 'GPIO24', part: '2.4" TFT (ILI9341)', terminal: 'D/C', goesTo: 'data/command, physical pin 18 — an ordinary GPIO' },
-    { pin: '3V3', part: '2.4" TFT (ILI9341)', terminal: 'VCC', goesTo: "the Pi's 3.3 V, physical pin 1" },
+    {
+      pin: 'GPIO11',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'CLK',
+      goesTo: "SPI0's clock, physical pin 23",
+    },
+    {
+      pin: 'GPIO10',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'DIN',
+      goesTo: "SPI0's data line, physical pin 19",
+    },
+    {
+      pin: 'GPIO8',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'CS',
+      goesTo: 'chip-select, physical pin 24 — a pin of its own',
+    },
+    {
+      pin: 'GPIO24',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'D/C',
+      goesTo: 'data/command, physical pin 18 — an ordinary GPIO',
+    },
+    {
+      pin: '3V3',
+      part: '2.4" TFT (ILI9341)',
+      terminal: 'VCC',
+      goesTo: "the Pi's 3.3 V, physical pin 1",
+    },
     { pin: 'GND', part: '2.4" TFT (ILI9341)', terminal: 'GND', goesTo: 'any ground pin' },
     { pin: 'GPIO4', part: 'Tactile Button', terminal: 'a', goesTo: 'one leg of the button' },
-    { pin: 'GND', part: 'Tactile Button', terminal: 'b', goesTo: 'the other leg — a press pulls the line down' },
+    {
+      pin: 'GND',
+      part: 'Tactile Button',
+      terminal: 'b',
+      goesTo: 'the other leg — a press pulls the line down',
+    },
   ],
   steps: [
     'Read the wiring table twice before you pick anything up, because every number in ' +

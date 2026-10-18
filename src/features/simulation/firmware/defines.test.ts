@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseFirmware } from './parser';
 
 const definesOf = (source: string): ReadonlyMap<string, number> =>
-  parseFirmware(
-    `${source}\nvoid setup() { delay(1); }\nvoid loop() { delay(1); }`,
-  ).defines;
+  parseFirmware(`${source}\nvoid setup() { delay(1); }\nvoid loop() { delay(1); }`).defines;
 
 describe('#define', () => {
   it('reads decimal constants', () => {
