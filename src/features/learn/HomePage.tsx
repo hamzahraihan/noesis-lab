@@ -11,7 +11,7 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Navbar } from '@/components';
+import { Navbar, AnnouncementStrip } from '@/components';
 
 import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardRegistry';
 import { PartPreview } from '@/features/bench';
@@ -26,6 +26,13 @@ const FEATURED = 'uno';
 export function HomePage() {
   const featuredBoard = BOARDS.find((board) => board.id === DEFAULT_BOARD_ID) ?? BOARDS[0];
   const [selectedBoardId, setSelectedBoardId] = useState(featuredBoard.id);
+  const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'layout' | 'code' | 'serial'>('code');
+  const copyCommand = () => {
+    try { navigator.clipboard?.writeText(`noesis open ${FEATURED}`); } catch { /* ignore */ }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
   const selectedBoard = BOARDS.find((board) => board.id === selectedBoardId) ?? featuredBoard;
   const selectedSpecs = boardSpecs(selectedBoard.id);
   const boardCount = BOARDS.length;
@@ -33,28 +40,51 @@ export function HomePage() {
   const instrumentCount = 5;
 
   return (
-    <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+    <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
       <link
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap"
       />
 
-      <Navbar />
+      <a href="#main" className="skip-link">
+        Skip to content
+      </a>
 
-      {/* Hero */}
-      <header className="mx-auto max-w-6xl px-6 pt-10 pb-12">
+      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
+        <Navbar />
+        <AnnouncementStrip />
+
+        <main id="main">
+          {/* Hero */}
+      <header className="relative mx-auto max-w-6xl overflow-hidden px-6 pt-10 pb-12">
+        <svg
+          aria-hidden="true"
+          className="pointer-events-none absolute right-[-2rem] top-8 hidden h-64 w-64 opacity-[0.06] lg:block"
+          viewBox="0 0 200 200"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+          style={{ color: 'var(--hd-text)' }}
+        >
+          <path d="M10 30 H60 V80 H120 V40 H190" />
+          <path d="M10 100 H90 V160 H170 V120 H190" />
+          <path d="M30 10 V190" />
+          <circle cx="60" cy="80" r="3" fill="currentColor" />
+          <circle cx="120" cy="40" r="3" fill="currentColor" />
+          <circle cx="90" cy="160" r="3" fill="currentColor" />
+        </svg>
         <div className="mb-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[var(--hd-muted)]">
           <span className="h-px w-8 bg-[var(--hd-accent)]" aria-hidden="true" />
           the embedded workbench
         </div>
-        <h1 className="font-['Archivo'] text-[clamp(2.5rem,7vw,5.5rem)] font-black leading-[0.95] tracking-tight text-[var(--hd-text)]">
+        <h1 className="font-['Archivo'] text-[clamp(2.5rem,8vw,6rem)] font-black leading-[0.95] tracking-tight text-[var(--hd-text)]">
           Wire it. <em className="not-italic text-[var(--hd-accent)]">Run it.</em> Watch it move.
         </h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--hd-muted)]">
           Noesis is where your circuits live. Wire a board on a real footprint,
           write the firmware that drives it, and watch the voltage move while it
           runs. <b className="font-semibold text-[var(--hd-text)]">Close the tab and the
-          bench is still there at its own address — reopen it and pick up where
+          bench is still there at its own address â€” reopen it and pick up where
           you left off.</b>
         </p>
         <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -63,23 +93,24 @@ export function HomePage() {
             <span>noesis open {FEATURED}</span>
             <button
               type="button"
-              className="ml-2 text-xs text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
+              onClick={copyCommand}
+              className="ml-2 border-l border-[var(--hd-border)] pl-2 text-xs text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
               aria-label="Copy command"
             >
-              copy
+              {copied ? 'copied' : 'copy'}
             </button>
           </div>
           <Link
             to="/learn"
             className="text-sm font-medium text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
           >
-            New here? Start with the guided exercises →
+            New here? Start with the guided exercises â†’
           </Link>
         </div>
         <div className="mt-6 text-xs text-[var(--hd-faint)]">
-          {boardCount} boards · {exerciseCount} exercises · {instrumentCount} instruments &nbsp;—&nbsp;{' '}
+          {boardCount} boards · {exerciseCount} exercises · {instrumentCount} instruments &nbsp;â€”&nbsp;{' '}
           <a href="/learn/references" className="transition-colors hover:text-[var(--hd-muted)]">
-            references and glossary →
+            references and glossary â†’
           </a>
         </div>
       </header>
@@ -169,8 +200,27 @@ export function HomePage() {
                 >
                   <BoardArt board={selectedBoard} className="h-full w-full" />
                 </div>
-                <div className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)] p-3 font-['JetBrains_Mono'] text-xs leading-relaxed">
-                  <div className="text-[var(--hd-faint)]">// blink.ino</div>
+                <div className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)] font-['JetBrains_Mono'] text-xs leading-relaxed">
+                  <div className="flex border-b border-[var(--hd-border)]">
+                    {(['layout', 'code', 'serial'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setActiveTab(t)}
+                        className={
+                          activeTab === t
+                            ? 'border-r border-[var(--hd-border)] bg-[var(--hd-border)] px-3 py-1.5 text-[var(--hd-text)]'
+                            : 'border-r border-[var(--hd-border)] px-3 py-1.5 text-[var(--hd-faint)] transition-colors hover:text-[var(--hd-muted)]'
+                        }
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="p-3">
+                    {activeTab === 'code' && (
+                      <>
+                        <div className="text-[var(--hd-faint)]">// blink.ino</div>
                   <div className="text-[var(--hd-text)]">void setup() {'{'}</div>
                   <div className="pl-4 text-[var(--hd-text)]">pinMode(13, OUTPUT);</div>
                   <div className="text-[var(--hd-text)]">{'}'}</div>
@@ -182,6 +232,23 @@ export function HomePage() {
                   <div className="text-[var(--hd-text)]">{'}'}</div>
                   <div className="mt-3 border-t border-[var(--hd-border)] pt-2 text-[var(--hd-success)]">
                     serial: LED on pin 13 toggling @ 1 Hz
+                  </div>
+                      </>
+                    )}
+                    {activeTab === 'serial' && (
+                      <div className="text-[var(--hd-success)]">
+                        serial: LED on pin 13 toggling @ 1 Hz
+                        <div className="mt-2 text-[var(--hd-faint)]">baud 9600 · 8N1 · no flow control</div>
+                      </div>
+                    )}
+                    {activeTab === 'layout' && (
+                      <div className="text-[var(--hd-muted)]">
+                        board: {selectedBoard.name}
+                        <div className="mt-2 text-[var(--hd-faint)]">
+                          {selectedSpecs.logicVolts}V · {selectedSpecs.adcBits}-bit ADC · {selectedSpecs.gpioCount} GPIO
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -212,7 +279,7 @@ export function HomePage() {
               n: '01',
               title: 'Always solving.',
               body: 'Every part is solved as a resistive network each frame. Change a resistor and the current changes with it, exactly as it would on the bench.',
-              ev: 'R1 10kΩ · I 0.42mA',
+              ev: 'R1 10kÎ© · I 0.42mA',
             },
             {
               n: '02',
@@ -223,7 +290,7 @@ export function HomePage() {
             {
               n: '03',
               title: 'Firmware that runs.',
-              body: 'Arduino sketches with millis(), the I²C and SPI libraries, and interrupts where the board has them — against the simulated hardware.',
+              body: 'Arduino sketches with millis(), the IÂ²C and SPI libraries, and interrupts where the board has them â€” against the simulated hardware.',
               ev: 'Wire.begin() · 0x3C ok',
             },
             {
@@ -235,7 +302,7 @@ export function HomePage() {
             {
               n: '05',
               title: 'One bench, one address.',
-              body: 'Every bench has its own URL. Bookmark it, send it to a student, or reopen it tomorrow — the wiring and the code are where you left them.',
+              body: 'Every bench has its own URL. Bookmark it, send it to a student, or reopen it tomorrow â€” the wiring and the code are where you left them.',
               ev: 'noesis.app/#/bench/uno',
             },
           ].map((cap) => (
@@ -247,7 +314,7 @@ export function HomePage() {
               <div className="font-['JetBrains_Mono'] text-xs text-[var(--hd-faint)]">{cap.n}</div>
               <div>
                 <h3 className="font-['Archivo'] text-xl font-bold tracking-tight text-[var(--hd-text)]">
-                  {cap.title} <span className="text-[var(--hd-accent)]">→</span>
+                  {cap.title} <span className="text-[var(--hd-accent)]">â†’</span>
                 </h3>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--hd-muted)]">
                   {cap.body}
@@ -268,7 +335,7 @@ export function HomePage() {
             Give your circuit somewhere to live.
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--hd-muted)]">
-            One click, and nothing else about your setup changes — the boards you
+            One click, and nothing else about your setup changes â€” the boards you
             already know keep working exactly as they do, except now there is no
             risk of a burnt LED.
           </p>
@@ -283,7 +350,7 @@ export function HomePage() {
               to="/learn"
               className="text-sm font-medium text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
             >
-              or start with exercise 0.1 →
+              or start with exercise 0.1 â†’
             </Link>
           </div>
         </div>
@@ -300,6 +367,8 @@ export function HomePage() {
           <span className="md:ml-auto">built in the browser · v0.0.0 · Apache 2.0</span>
         </div>
       </footer>
+        </main>
+      </div>
     </div>
   );
 }

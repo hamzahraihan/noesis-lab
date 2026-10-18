@@ -256,3 +256,49 @@
   --hd-success: #3a7d0a;
   --hd-warn: #8a6a00;
 }
+
+/* Herdr-style frame + grid + a11y utilities for non-bench surfaces. */
+.hd-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--hd-border) 30%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--hd-border) 30%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+[data-theme="paper"] .hd-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--hd-border) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--hd-border) 10%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.5rem 0.75rem;
+  background: var(--hd-accent);
+  color: var(--hd-bg);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--hd-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
