@@ -5,7 +5,12 @@ import {
   type BenchSnapshot,
   type PartInstance,
 } from './bench';
-import { DynamicState, partDefinitionById, rotateOffset } from '@/features/parts';
+import {
+  DynamicState,
+  partDefinitionById,
+  rotateOffset,
+  type PartDefinition,
+} from '@/features/parts';
 
 export interface CircuitPart {
   readonly id: string;
@@ -130,7 +135,7 @@ export function parseCircuit(raw: unknown, label: string): CircuitDocument {
 }
 
 /**
- * Resolves a pin reference against a part's definition.
+ * Resolves a pin reference against a part definition.
  *
  * Exact id matches win outright (ids are unique within a part). The suffix
  * (text after the last underscore) and label fallbacks are deliberately
@@ -138,9 +143,16 @@ export function parseCircuit(raw: unknown, label: string): CircuitDocument {
  * *exactly one* pin matches — an ambiguous ref such as bare `GND` on a board
  * that carries several grounds is treated as unknown rather than silently
  * picking the first in array order.
+ *
+ * Exported because the document's editors (adding a wire, moving one end)
+ * must resolve a reference by the same rule the compiler does; two rules
+ * would let an edit save a pin the compiler then refuses.
  */
-function findPin(part: PartInstance, ref: string) {
-  const pins = part.definition.pins;
+export function resolvePin(
+  definition: PartDefinition,
+  ref: string,
+): PartDefinition['pins'][number] | undefined {
+  const pins = definition.pins;
   const exact = pins.find((pin) => pin.id === ref);
   if (exact) return exact;
   const suffixMatches = pins.filter((pin) => pin.id.split('_').pop() === ref);
@@ -227,8 +239,8 @@ export function compile(doc: unknown): {
       errors.push(`wire ${w.id} references unknown part`);
       continue;
     }
-    const fromPin = findPin(fromPart, fromMatch[2]);
-    const toPin = findPin(toPart, toMatch[2]);
+    const fromPin = resolvePin(fromPart.definition, fromMatch[2]);
+    const toPin = resolvePin(toPart.definition, toMatch[2]);
     if (!fromPin || !toPin) {
       errors.push(`wire ${w.id} references unknown pin`);
       continue;
@@ -266,14 +278,18 @@ export function compile(doc: unknown): {
 }
 
 /**
- * Picks a pin reference string for `pinId` on `part` that (a) resolves back
- * to the same pin through `findPin`, and (b) is as short/human as possible.
- * Preferring the label or suffix keeps round-trips stable for hand-authored
- * documents that use short forms like `D13` or `A`; falling back to the full id
- * keeps ambiguous pins (e.g. multiple GNDs) unambiguous.
+ * Picks a pin reference string for `pinId` that (a) resolves back to the same
+ * pin through `resolvePin`, and (b) is as short/human as possible. Preferring
+ * the label or suffix keeps round-trips stable for hand-authored documents
+ * that use short forms like `D13` or `A`; falling back to the full id keeps
+ * ambiguous pins (e.g. multiple GNDs) unambiguous.
+ *
+ * Exported for the same reason `resolvePin` is: an edit writes the reference
+ * the decompiler and the compiler agree on, so no document ever carries two
+ * spellings of the same pin.
  */
-function pinRef(part: PartInstance, pinId: string): string {
-  const pin = part.definition.pins.find((p) => p.id === pinId);
+export function pinRefFor(definition: PartDefinition, pinId: string): string {
+  const pin = definition.pins.find((p) => p.id === pinId);
   if (!pin) return pinId;
   // Parts with prefixed pin ids (e.g. Arduino headers `J1_D13`) expose the
   // silkscreen name as the suffix; simple parts (e.g. LEDs) expose it as the
@@ -281,9 +297,9 @@ function pinRef(part: PartInstance, pinId: string): string {
   // references round-trip.
   if (pin.id.includes('_')) {
     const suffix = pin.id.split('_').pop() ?? '';
-    if (suffix !== '' && findPin(part, suffix)?.id === pinId) return suffix;
+    if (suffix !== '' && resolvePin(definition, suffix)?.id === pinId) return suffix;
   }
-  if (pin.label !== '' && findPin(part, pin.label)?.id === pinId) return pin.label;
+  if (pin.label !== '' && resolvePin(definition, pin.label)?.id === pinId) return pin.label;
   return pinId;
 }
 
@@ -334,8 +350,8 @@ export function decompile(
     const toPart = bench.parts.find((p) => p.id === to.partId)!;
     wires.push({
       id: wire.id,
-      from: `${from.partId}:${pinRef(fromPart, from.pinId)}`,
-      to: `${to.partId}:${pinRef(toPart, to.pinId)}`,
+      from: `${from.partId}:${pinRefFor(fromPart.definition, from.pinId)}`,
+      to: `${to.partId}:${pinRefFor(toPart.definition, to.pinId)}`,
       colour: wire.colour,
       gaugeAwg: wire.gaugeAwg,
       bends: wire.bends.map((b) => ({ x: b.x, y: b.y })),
