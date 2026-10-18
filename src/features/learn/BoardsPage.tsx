@@ -57,12 +57,12 @@ export function BoardsPage() {
   }, [query, sort, filter]);
 
   return (
-    <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid">
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@400;500;600;700&display=swap" />
       <SkipLink />
-      <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
+      <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
       <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
-      <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-6 py-12">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-7xl px-6 py-12">
         <header className="mb-10">
           <div className="mb-4 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[var(--hd-muted)]">
             <span className="h-px w-8 bg-[var(--hd-accent)]" aria-hidden="true" />
