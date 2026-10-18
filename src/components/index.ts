@@ -57,3 +57,4 @@ export {
   DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu';
 export { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+export { Navbar } from '@/components/Navbar';
