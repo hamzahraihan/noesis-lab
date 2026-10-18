@@ -101,8 +101,8 @@ const ALARM_CLOCK: GalleryProject = {
 // Alarm Clock with RTC — main tab.
 //
 // A multi-file port of urish's Wokwi "alarm-clock.ino" project
-// (https://wokwi.com/projects/297787059514376717 — see
-// docs/wokwi-alarm-clock-reference.md), rewritten for what this bench models:
+// (https://wokwi.com/projects/297787059514376717), rewritten for what this
+// bench models:
 //
 // - No classes or structs: one module per tab as plain functions + globals.
 // - No SevSeg library: the raw GPIO multiplex below, on the README pin

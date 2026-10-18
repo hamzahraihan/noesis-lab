@@ -29,5 +29,11 @@ dist-ssr
 # Local-only planning workspace: specs and plans that stay uncommitted
 .superpowers/plans/
 
+# Agent/tool workspaces: plans, reports and design-tool state stay local
+docs/superpowers/
+docs/wokwi-*.md
+task-*-report.md
+.impeccable/
+
 # Wasm build temp files (scripts/build-avr-wasm.mjs)
 src/features/simulation/avr/wasm/.build-tmp-*
