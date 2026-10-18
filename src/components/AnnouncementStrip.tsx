@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 const STORAGE_KEY = 'noesis-announcement-dismissed';
 
-export function AnnouncementStrip() {
-  const [dismissed, setDismissed] = useState(false);
+/** Whether the operator has already dismissed it; a storage failure is a no. */
+function readDismissed(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(STORAGE_KEY) === '1') setDismissed(true);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+export function AnnouncementStrip() {
+  const [dismissed, setDismissed] = useState(readDismissed);
 
   if (dismissed) return null;
 

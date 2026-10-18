@@ -10,6 +10,15 @@ function applyTheme(theme: 'ink' | 'paper') {
   }
 }
 
+/** The theme the operator last chose, or the default when nothing is stored. */
+function storedTheme(): 'ink' | 'paper' {
+  try {
+    return localStorage.getItem('noesis-theme') === 'paper' ? 'paper' : 'ink';
+  } catch {
+    return 'ink';
+  }
+}
+
 /**
  * The site-wide nav.
  *
@@ -19,25 +28,16 @@ function applyTheme(theme: 'ink' | 'paper') {
  * needs rather than letting it import them.
  */
 export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
-  const [theme, setTheme] = useState<'ink' | 'paper'>('ink');
+  const [theme, setTheme] = useState<'ink' | 'paper'>(storedTheme);
   const [open, setOpen] = useState(false);
 
+  /*
+   * Applying is the effect's job rather than the click's: the document
+   * attribute and the stored choice follow the state, wherever it came from.
+   */
   useEffect(() => {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem('noesis-theme');
-    } catch {
-      stored = null;
-    }
-    const initial = stored === 'paper' ? 'paper' : 'ink';
-    setTheme(initial);
-    applyTheme(initial);
-  }, []);
-
-  const toggle = (next: 'ink' | 'paper') => {
-    setTheme(next);
-    applyTheme(next);
-  };
+    applyTheme(theme);
+  }, [theme]);
 
   const links = [
     { to: '/learn', label: 'Learn' },
@@ -79,7 +79,7 @@ export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
               <button
                 key={t}
                 type="button"
-                onClick={() => toggle(t)}
+                onClick={() => setTheme(t)}
                 aria-pressed={theme === t}
                 className={
                   theme === t
