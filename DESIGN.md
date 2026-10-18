@@ -20,12 +20,12 @@ colors:
   neutral-100: "#f1f5f9"
 typography:
   body:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    fontFamily: "'Noto Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    fontFamily: "'Noto Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.25
@@ -133,8 +133,8 @@ The palette is a dark slate console with one interactive accent and three reserv
 
 ## Typography
 
-**Display Font:** System UI sans-serif (Tailwind default stack: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial).
-**Body Font:** Same system UI sans-serif stack.
+**Display Font:** Archivo (headings); Noto Sans (body) with system UI fallback (ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial).
+**Body Font:** Noto Sans with system UI fallback (ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial).
 **Label/Mono Font:** JetBrains Mono / Cascadia Code / Consolas (instruments and code); DejaVu Sans Mono / Consolas (hardware silkscreen).
 
 **Character:** Small, dense, instrument-grade. Controls and readouts sit at 0.75–0.875 rem; the largest page title is 1.5 rem. Nothing shouts. Monospace is reserved for values, code, and silkscreen.
