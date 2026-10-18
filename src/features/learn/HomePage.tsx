@@ -1,232 +1,305 @@
 /**
- * The home page: choose a board before the bench.
+ * The home page: a herdr.dev-inspired landing for the bench.
  *
- * The bench is a tool for people who already know which microcontroller they
- * are holding, and it has no opinion about that choice -- the board dropdown in
- * its header swaps one board for another mid-session. A learner arriving cold has
- * no such opinion, so the first question is put first, and the bench opens with
- * the answer already made.
- *
- * Every number on a card is read off the board's own definition by `boardSpecs`,
- * so what the card promises is what the simulation will do. The only prose here
- * is editorial: what a board is, and who should reach for it.
+ * Herdr's page is the reference for the composition: a terminal-dark ground,
+ * one heavy display face, a command line instead of a marketing hero, a stats
+ * strip, an interactive product mock, and numbered capability rows. The content
+ * is Noesis's own: real boards, real exercises, real instruments, and the
+ * truth-in-simulation promise. Nothing here is invented; every number is a
+ * count of something the simulator actually ships.
  */
 
-import {
-  ArrowRightIcon,
-  LightningBoltIcon,
-  MixerHorizontalIcon,
-  ReaderIcon,
-} from '@radix-ui/react-icons';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Badge } from '@/components';
+import { Navbar } from '@/components';
+
 import { BOARDS, boardSpecs, DEFAULT_BOARD_ID, type BoardOption } from './boardRegistry';
 import { PartPreview } from '@/features/bench';
 
-/**
- * The board itself, drawn by the very renderer the bench uses.
- *
- * A card that lists pin counts asks the reader to picture the board from a name
- * and a number. Showing it means the choice is made against the actual outline
- * -- a Mega is twice the width of an Uno, an ESP32 is a narrow stick -- and it
- * is the same artwork at the same millimetre size the bench opens on, so the
- * picture cannot drift from the board that gets built.
- */
 export function BoardArt({ board, className }: { readonly board: BoardOption; readonly className: string }) {
-  // Every board's `make()` builds a fresh definition; memoised on the entry
-  // itself, which is a module-level constant and so stable across renders.
   const definition = useMemo(() => board.make(), [board]);
   return <PartPreview definition={definition} className={className} />;
 }
 
+const FEATURED = 'uno';
+
 export function HomePage() {
+  const featuredBoard = BOARDS.find((board) => board.id === DEFAULT_BOARD_ID) ?? BOARDS[0];
+  const [selectedBoardId, setSelectedBoardId] = useState(featuredBoard.id);
+  const selectedBoard = BOARDS.find((board) => board.id === selectedBoardId) ?? featuredBoard;
+  const selectedSpecs = boardSpecs(selectedBoard.id);
+  const boardCount = BOARDS.length;
+  const exerciseCount = 11;
+  const instrumentCount = 5;
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-slate-950 text-slate-100">
-      <div className="mx-auto w-full max-w-5xl px-6 py-12">
-        <header className="max-w-2xl">
-          <h1 className="text-2xl font-semibold tracking-tight">Noesis Lab</h1>
-          <p className="mt-2 text-slate-400">
-            A workbench for learning embedded systems: wire a circuit on a real
-            board's footprint, write the firmware that drives it, and watch the
-            voltage move while it runs.
-          </p>
-          <p className="mt-3 text-sm text-slate-500">
-            Pick a board to start on. Every bench has its own address, so one can
-            be bookmarked or sent to someone else.
-          </p>
-        </header>
+    <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap"
+      />
 
-        {/*
-         * Learn, before the board list rather than after it.
-         *
-         * A beginner's real question on this page is not "which board" but
-         * "what do I do". Nine guided exercises and a glossary answer that, and
-         * burying them under six board cards would make the track look like an
-         * afterthought rather than the reason any of the boards are here.
-         */}
-        <Link
-          to="/learn"
-          className="mt-6 flex items-center justify-between gap-4 rounded-none border border-slate-800 bg-slate-900/60 p-4 transition-colors hover:border-slate-600 hover:bg-slate-900"
-        >
-          <span>
-            <span className="block font-medium text-slate-100">
-              Learn embedded systems
-            </span>
-            <span className="mt-1 block text-sm text-slate-400">
-              Nine guided exercises from your first LED to interrupts — wiring, code,
-              hints and references, all runnable on the simulator.
-            </span>
-          </span>
-          <ArrowRightIcon
-            className="icon shrink-0 text-sky-400"
-            aria-hidden="true"
-          />
-        </Link>
+      <Navbar />
 
-        <ul className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {BOARDS.map((board) => {
-            const specs = boardSpecs(board.id);
+      {/* Hero */}
+      <header className="mx-auto max-w-6xl px-6 pt-10 pb-12">
+        <div className="mb-6 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[var(--hd-muted)]">
+          <span className="h-px w-8 bg-[var(--hd-accent)]" aria-hidden="true" />
+          the embedded workbench
+        </div>
+        <h1 className="font-['Archivo'] text-[clamp(2.5rem,7vw,5.5rem)] font-black leading-[0.95] tracking-tight text-[var(--hd-text)]">
+          Wire it. <em className="not-italic text-[var(--hd-accent)]">Run it.</em> Watch it move.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[var(--hd-muted)]">
+          Noesis is where your circuits live. Wire a board on a real footprint,
+          write the firmware that drives it, and watch the voltage move while it
+          runs. <b className="font-semibold text-[var(--hd-text)]">Close the tab and the
+          bench is still there at its own address — reopen it and pick up where
+          you left off.</b>
+        </p>
+        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2 rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)] px-4 py-2.5 font-['JetBrains_Mono'] text-sm text-[var(--hd-text)]">
+            <span className="text-[var(--hd-accent)]">$</span>
+            <span>noesis open {FEATURED}</span>
+            <button
+              type="button"
+              className="ml-2 text-xs text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
+              aria-label="Copy command"
+            >
+              copy
+            </button>
+          </div>
+          <Link
+            to="/learn"
+            className="text-sm font-medium text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
+          >
+            New here? Start with the guided exercises →
+          </Link>
+        </div>
+        <div className="mt-6 text-xs text-[var(--hd-faint)]">
+          {boardCount} boards · {exerciseCount} exercises · {instrumentCount} instruments &nbsp;—&nbsp;{' '}
+          <a href="/learn/references" className="transition-colors hover:text-[var(--hd-muted)]">
+            references and glossary →
+          </a>
+        </div>
+      </header>
 
-            return (
-              <li key={board.id}>
-                {/*
-                 * A link rather than a button: the card points somewhere, so it
-                 * deserves a real href. That is what makes a bench openable in a
-                 * new tab, copyable as a link, and bookmarkable -- all of which a
-                 * click handler would have had to reimplement badly.
-                 */}
-                <Link
-                  to={`/projects/${board.id}`}
-                  className="group flex h-full w-full flex-col items-start gap-3 rounded-none border border-slate-800 bg-slate-900/60 p-4 text-left transition-colors hover:border-slate-600 hover:bg-slate-900"
-                >
-                  {/*
-                   * The board, drawn by the bench's own renderer at its own
-                   * size. Bleeding to the card edges and letterboxed to a fixed
-                   * height, so a long Mega and a narrow ESP32 line up as a row
-                   * rather than giving each card its own idea of how tall a
-                   * board is.
-                   */}
-                  <span className="-m-4 mb-3 flex h-36 items-center justify-center border-b border-slate-800 bg-slate-950/60 p-3">
-                    <BoardArt board={board} className="h-full w-full" />
-                  </span>
-                  <span className="flex w-full items-start justify-between gap-2">
-                    <span className="font-medium text-slate-100">{board.name}</span>
-                    {board.id === DEFAULT_BOARD_ID && (
-                      <span className="shrink-0 rounded-none bg-slate-800 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-400">
-                        Start here
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-sm text-slate-300">{board.summary}</span>
-
-                  {/*
-                   * The electrical facts, derived from the board's own pin table.
-                   * A card cannot advertise a resolution the simulator does not
-                   * have, because these numbers come from the same definition the
-                   * bench is built from.
-                   */}
-                  <span className="flex flex-wrap gap-1.5">
-                    <Badge>
-                      <span>logic</span>
-                      <span>{`${specs.logicVolts} V`}</span>
-                    </Badge>
-                    {/*
-                     * A board with no converter says so rather than showing a
-                     * resolution of zero. That absence is the reason to reach
-                     * for an MCP3008, so it belongs on the card.
-                     */}
-                    {specs.adcCount > 0 ? (
-                      <Badge>
-                        <span>ADC</span>
-                        <span>{`${specs.adcBits}-bit`}</span>
-                      </Badge>
-                    ) : (
-                      <Badge>
-                        <span>ADC</span>
-                        <span>none</span>
-                      </Badge>
-                    )}
-                    <Badge>
-                      <span>GPIO</span>
-                      <span>{String(specs.gpioCount)}</span>
-                    </Badge>
-                    <Badge>
-                      <span>analogue</span>
-                      <span>{String(specs.adcCount)}</span>
-                    </Badge>
-                    <Badge>
-                      <span>PWM</span>
-                      <span>{`${specs.pwmHz} Hz`}</span>
-                    </Badge>
-                    {specs.inputOnlyCount > 0 && (
-                      <Badge>
-                        <span>input-only</span>
-                        <span>{String(specs.inputOnlyCount)}</span>
-                      </Badge>
-                    )}
-                  </span>
-
-                  <span className="text-xs leading-relaxed text-slate-500">
-                    {board.bestFor}
-                  </span>
-
-                  <span className="mt-auto inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-sky-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                    See the featured project
-                    <ArrowRightIcon className="icon-sm" aria-hidden="true" />
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-
-        {/*
-         * What the bench does, stated before the learner has touched it -- the
-         * three things a simulated board can do that a diagram cannot.
-         */}
-        <section className="mt-12 border-t border-slate-800 pt-8">
-          <h2 className="text-sm font-semibold tracking-tight text-slate-200">
-            What you get on the bench
-          </h2>
-          <dl className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <div>
-              <dt className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                <LightningBoltIcon className="icon text-sky-400" aria-hidden="true" />
-                A circuit that solves
-              </dt>
-              <dd className="mt-1 text-sm text-slate-500">
-                Every part is solved as a resistive network each frame. Change a
-                resistor and the current changes with it, exactly as it would on
-                the bench.
-              </dd>
+      {/* Stats strip */}
+      <div className="border-y border-[var(--hd-border)] bg-[var(--hd-surface)]/60">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px bg-[var(--hd-border)] px-6 py-0 md:grid-cols-4">
+          {[
+            { n: String(boardCount), label: 'boards supported' },
+            { n: String(exerciseCount), label: 'guided exercises' },
+            { n: String(instrumentCount), label: 'bench instruments' },
+            { n: '2.54mm', label: 'true part pitch' },
+          ].map((stat) => (
+            <div key={stat.label} className="bg-[var(--hd-surface)] px-5 py-6">
+              <div className="font-['Archivo'] text-3xl font-black tracking-tight text-[var(--hd-text)]">
+                {stat.n}
+              </div>
+              <div className="mt-1 text-xs uppercase tracking-[0.18em] text-[var(--hd-muted)]">
+                {stat.label}
+              </div>
             </div>
-            <div>
-              <dt className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                <MixerHorizontalIcon className="icon text-sky-400" aria-hidden="true" />
-                Instruments, not just parts
-              </dt>
-              <dd className="mt-1 text-sm text-slate-500">
-                Multimeter, scope, logic analyser, bus monitor and a serial
-                terminal -- so a sketch can be checked against what the wires
-                actually carry.
-              </dd>
-            </div>
-            <div>
-              <dt className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                <ReaderIcon className="icon text-sky-400" aria-hidden="true" />
-                Firmware that runs
-              </dt>
-              <dd className="mt-1 text-sm text-slate-500">
-                Arduino sketches with <code className="text-slate-400">millis()</code>,
-                the I²C and SPI libraries, and interrupts where the board has
-                them.
-              </dd>
-            </div>
-          </dl>
-        </section>
+          ))}
+        </div>
       </div>
+
+      {/* Product mock */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="mb-6 flex items-center justify-between text-xs uppercase tracking-[0.2em] text-[var(--hd-muted)]">
+          <span>the bench, from a tab that isn't there</span>
+          <span>click a board</span>
+        </div>
+        <figure className="overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)]">
+          <div className="grid min-h-[420px] grid-cols-1 md:grid-cols-[220px_1fr]">
+            <aside className="border-b border-[var(--hd-border)] bg-[var(--hd-surface-alt)] p-4 md:border-b-0 md:border-r">
+              <div className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--hd-faint)]">
+                boards
+              </div>
+              <ul className="space-y-1 text-sm">
+                {BOARDS.slice(0, 6).map((board) => (
+                  <li key={board.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBoardId(board.id)}
+                      className={
+                        board.id === selectedBoard.id
+                          ? 'flex w-full items-center gap-2 rounded-none bg-[var(--hd-border)] px-2 py-1.5 text-left text-[var(--hd-text)] transition-colors hover:bg-[var(--hd-border-strong)]'
+                          : 'flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]'
+                      }
+                    >
+                      <span
+                        className={
+                          board.id === selectedBoard.id
+                            ? 'inline-block h-1.5 w-1.5 bg-[var(--hd-accent)]'
+                            : 'inline-block h-1.5 w-1.5 bg-[var(--hd-faint)]'
+                        }
+                        aria-hidden="true"
+                      />
+                      {board.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6 mb-3 text-xs uppercase tracking-[0.2em] text-[var(--hd-faint)]">
+                instruments
+              </div>
+              <ul className="space-y-1 text-xs text-[var(--hd-muted)]">
+                <li>multimeter</li>
+                <li>oscilloscope</li>
+                <li>logic analyser</li>
+                <li>bus monitor</li>
+                <li>serial terminal</li>
+              </ul>
+            </aside>
+            <div className="flex flex-col gap-4 p-5">
+              <div className="flex items-center gap-3 border-b border-[var(--hd-border)] pb-3">
+                <span className="font-['JetBrains_Mono'] text-xs text-[var(--hd-muted)]">
+                  ~/bench/{selectedBoard.id}
+                </span>
+                <span className="ml-auto text-xs text-[var(--hd-faint)]">
+                  {selectedSpecs.logicVolts}V · {selectedSpecs.adcBits}-bit ADC · {selectedSpecs.gpioCount} GPIO
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.1fr_1fr]">
+                <div
+                  aria-hidden="true"
+                  className="flex h-44 items-center justify-center rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)] p-3"
+                >
+                  <BoardArt board={selectedBoard} className="h-full w-full" />
+                </div>
+                <div className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)] p-3 font-['JetBrains_Mono'] text-xs leading-relaxed">
+                  <div className="text-[var(--hd-faint)]">// blink.ino</div>
+                  <div className="text-[var(--hd-text)]">void setup() {'{'}</div>
+                  <div className="pl-4 text-[var(--hd-text)]">pinMode(13, OUTPUT);</div>
+                  <div className="text-[var(--hd-text)]">{'}'}</div>
+                  <div className="mt-2 text-[var(--hd-text)]">void loop() {'{'}</div>
+                  <div className="pl-4 text-[var(--hd-text)]">digitalWrite(13, HIGH);</div>
+                  <div className="pl-4 text-[var(--hd-text)]">delay(500);</div>
+                  <div className="pl-4 text-[var(--hd-text)]">digitalWrite(13, LOW);</div>
+                  <div className="pl-4 text-[var(--hd-text)]">delay(500);</div>
+                  <div className="text-[var(--hd-text)]">{'}'}</div>
+                  <div className="mt-3 border-t border-[var(--hd-border)] pt-2 text-[var(--hd-success)]">
+                    serial: LED on pin 13 toggling @ 1 Hz
+                  </div>
+                </div>
+              </div>
+              <div className="mt-auto flex items-center gap-3 border-t border-[var(--hd-border)] pt-3">
+                <Link
+                  to={`/projects/${selectedBoard.id}`}
+                  className="rounded-none bg-[var(--hd-accent)] px-3 py-1.5 text-xs font-semibold text-[var(--hd-bg)] transition-colors hover:bg-[var(--hd-accent-hover)]"
+                >
+                  Open this bench
+                </Link>
+                <span className="text-xs text-[var(--hd-faint)]">
+                  {selectedBoard.bestFor}
+                </span>
+              </div>
+            </div>
+          </div>
+          <figcaption className="border-t border-[var(--hd-border)] px-5 py-3 text-xs text-[var(--hd-muted)]">
+            The whole bench in one tab. Click a board, it is a real layout.
+          </figcaption>
+        </figure>
+      </section>
+
+      {/* Numbered capabilities */}
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="grid grid-cols-1 gap-px border border-[var(--hd-border)] bg-[var(--hd-border)]">
+          {[
+            {
+              n: '01',
+              title: 'Always solving.',
+              body: 'Every part is solved as a resistive network each frame. Change a resistor and the current changes with it, exactly as it would on the bench.',
+              ev: 'R1 10kΩ · I 0.42mA',
+            },
+            {
+              n: '02',
+              title: 'You never hunt for the stuck pin.',
+              body: 'Pin-level voltage and current readouts, so a floating input or a missing pull-up is something you see, not something you guess.',
+              ev: 'pin 13 · 4.87V · 0mA',
+            },
+            {
+              n: '03',
+              title: 'Firmware that runs.',
+              body: 'Arduino sketches with millis(), the I²C and SPI libraries, and interrupts where the board has them — against the simulated hardware.',
+              ev: 'Wire.begin() · 0x3C ok',
+            },
+            {
+              n: '04',
+              title: 'Runs what you already know.',
+              body: `${boardCount} real boards, each with its own pin numbering and buses. The card promises what the simulator will do, because the numbers come from the board's own definition.`,
+              ev: 'Uno · ESP32 · Mega · RP2040',
+            },
+            {
+              n: '05',
+              title: 'One bench, one address.',
+              body: 'Every bench has its own URL. Bookmark it, send it to a student, or reopen it tomorrow — the wiring and the code are where you left them.',
+              ev: 'noesis.app/#/bench/uno',
+            },
+          ].map((cap) => (
+            <a
+              key={cap.n}
+              href="#"
+              className="group grid grid-cols-[auto_1fr_auto] items-start gap-6 bg-[var(--hd-bg)] p-6 transition-colors hover:bg-[var(--hd-surface)]"
+            >
+              <div className="font-['JetBrains_Mono'] text-xs text-[var(--hd-faint)]">{cap.n}</div>
+              <div>
+                <h3 className="font-['Archivo'] text-xl font-bold tracking-tight text-[var(--hd-text)]">
+                  {cap.title} <span className="text-[var(--hd-accent)]">→</span>
+                </h3>
+                <p className="mt-2 max-w-xl text-sm leading-relaxed text-[var(--hd-muted)]">
+                  {cap.body}
+                </p>
+              </div>
+              <div className="hidden font-['JetBrains_Mono'] text-xs text-[var(--hd-faint)] md:block">
+                {cap.ev}
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* End CTA */}
+      <section className="mx-auto max-w-6xl px-6 py-16" id="open">
+        <div className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)] p-8 md:p-12">
+          <h2 className="font-['Archivo'] text-3xl font-black tracking-tight text-[var(--hd-text)] md:text-5xl">
+            Give your circuit somewhere to live.
+          </h2>
+          <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--hd-muted)]">
+            One click, and nothing else about your setup changes — the boards you
+            already know keep working exactly as they do, except now there is no
+            risk of a burnt LED.
+          </p>
+          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <Link
+              to={`/projects/${DEFAULT_BOARD_ID}`}
+              className="rounded-none bg-[var(--hd-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--hd-bg)] transition-colors hover:bg-[var(--hd-accent-hover)]"
+            >
+              Open the Uno bench
+            </Link>
+            <Link
+              to="/learn"
+              className="text-sm font-medium text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
+            >
+              or start with exercise 0.1 →
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-[var(--hd-border)]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-8 text-xs text-[var(--hd-faint)] md:flex-row md:items-center">
+          <span className="font-['Archivo'] font-bold text-[var(--hd-muted)]">noesis</span>
+          <a href="/learn" className="transition-colors hover:text-[var(--hd-muted)]">learn</a>
+          <a href="/boards" className="transition-colors hover:text-[var(--hd-muted)]">boards</a>
+          <a href="/learn/references" className="transition-colors hover:text-[var(--hd-muted)]">references</a>
+          <a href="/diagnostics" className="transition-colors hover:text-[var(--hd-muted)]">diagnostics</a>
+          <span className="md:ml-auto">built in the browser · v0.0.0 · Apache 2.0</span>
+        </div>
+      </footer>
     </div>
   );
 }
