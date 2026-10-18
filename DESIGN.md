@@ -31,7 +31,7 @@ typography:
     lineHeight: 1.25
     letterSpacing: "0.02em"
   display:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    fontFamily: "'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 600
     lineHeight: 1.1
