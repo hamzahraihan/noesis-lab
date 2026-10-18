@@ -411,6 +411,14 @@ export interface LiquidCrystalPort {
  */
 export interface TftPort {
   /**
+   * Powers the panel on, the way a library's `begin()` does before it draws.
+   *
+   * A real controller ignores pixels until its display-on command has arrived,
+   * so a convenience layer that drew without this would leave the glass
+   * modelled as off while the framebuffer filled up.
+   */
+  begin(): number;
+  /**
    * Turns the panel to orientation `rotation`, 0 to 3, and reports the
    * orientation it ended up in.
    *
@@ -2480,6 +2488,8 @@ export class FirmwareRuntime {
     if (!tft) return 0;
 
     switch (member) {
+      case 'begin':
+        return tft.begin();
       case 'setRotation':
         return tft.setRotation(asNumber(args[0] ?? 0));
       case 'width':

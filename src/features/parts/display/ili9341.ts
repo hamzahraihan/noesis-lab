@@ -222,6 +222,17 @@ export class Ili9341 {
   }
 
   /**
+   * Powers the glass on or off, as the display-on command does.
+   *
+   * Exposed because the bench's `tft.*` convenience layer is a library, and a
+   * library's `begin()` powers the panel on before it draws. Reached through
+   * `executeCommand` for the raw-byte path, so both routes leave one state.
+   */
+  setDisplayOn(on: boolean): void {
+    this.displayOn = on;
+  }
+
+  /**
    * Whether the panel is being read back to front.
    *
    * Kept because it was the one orientation fact the panel exposed before
@@ -463,11 +474,11 @@ export class Ili9341 {
       return; // sleep out
     }
     if (command === 0x29) {
-      this.displayOn = true;
+      this.setDisplayOn(true);
       return;
     }
     if (command === 0x28) {
-      this.displayOn = false;
+      this.setDisplayOn(false);
       return;
     }
 

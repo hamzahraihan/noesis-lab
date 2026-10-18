@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CIRCUITS } from '@/features/learn/circuits';
 import {
@@ -28,8 +28,15 @@ describe('circuitFileText', () => {
    * opened on the bench, without either side being rewritten first.
    */
   it('writes every shipped circuit exactly as the repository stores it', () => {
-    const ids = Object.keys(CIRCUITS);
-    expect(ids.length).toBe(17);
+    // The ids come from the directory, not a literal count: a new circuit must
+    // be registered *and* written in the canonical form, and a file nobody
+    // registered is as wrong as a registration with no file.
+    const onDisk = readdirSync(join(__dirname, '..', '..', 'learn', 'circuits'))
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => name.slice(0, -'.json'.length))
+      .sort();
+    const ids = Object.keys(CIRCUITS).sort();
+    expect(ids).toEqual(onDisk);
     for (const id of ids) {
       expect(circuitFileText(CIRCUITS[id as keyof typeof CIRCUITS]), `${id}.json`).toBe(
         shippedCircuitText(id),

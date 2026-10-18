@@ -666,6 +666,57 @@ const reactionChecks: CheckDef[] = [
   },
 ];
 
+/* ------------------------------------------------------------------ *
+ * net-clock on esp32: join the bench network, ask it the time, repeat.
+ *
+ * The only project whose data does not come from the board, so its checks
+ * follow the serial: the join prints the address the network handed out, and
+ * the loop prints the bench clock once per second -- which is also proof that
+ * it kept asking rather than reading once.
+ * ------------------------------------------------------------------ */
+
+const netClockChecks: CheckDef[] = [
+  {
+    name: 'joins the bench network',
+    run: (sim) => {
+      const started = performance.now();
+      const name = 'joins the bench network';
+      for (let frame = 0; frame < 40; frame++) sim.tick(0.05);
+      if (!sim.serialText().includes('joined 192.168.4.10')) {
+        return verdict(name, started, 'fail', 'no join line');
+      }
+      return verdict(name, started, 'pass');
+    },
+  },
+  {
+    name: 'fetches the time from the network',
+    run: (sim) => {
+      const started = performance.now();
+      const name = 'fetches the time from the network';
+      // The join check already spent its frames; the request needs its latency
+      // and a poll or two on top.
+      for (let frame = 0; frame < 40; frame++) sim.tick(0.05);
+      if (!/2026-10-17T12:00:0\dZ/.test(sim.serialText())) {
+        return verdict(name, started, 'fail', 'no time line');
+      }
+      return verdict(name, started, 'pass');
+    },
+  },
+  {
+    name: 'keeps asking once a second',
+    run: (sim) => {
+      const started = performance.now();
+      const name = 'keeps asking once a second';
+      for (let frame = 0; frame < 80; frame++) sim.tick(0.05);
+      // A later second, so the loop asked again rather than printing once.
+      if (!/2026-10-17T12:00:1\dZ/.test(sim.serialText())) {
+        return verdict(name, started, 'fail', 'the clock did not advance');
+      }
+      return verdict(name, started, 'pass');
+    },
+  },
+];
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -675,6 +726,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'parking') return parkingChecks;
   if (projectId === 'weather') return weatherChecks;
   if (projectId === 'reaction') return reactionChecks;
+  if (projectId === 'net-clock') return netClockChecks;
   return [];
 }
 

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from './simulation';
-import { esp32DevKitV1 } from '@/features/parts';
-import { NET_LOCAL_IP, NET_LATENCY_MS } from '@/features/simulation';
+import { esp32DevKitV1, type Ili9341 } from '@/features/parts';
+import { NET_LATENCY_MS, NET_LOCAL_IP } from '@/features/simulation';
+import { buildFor, galleryById } from '@/features/learn';
 
 /**
  * The bench network, driven by a real sketch.
  *
  * The unit tests beside the network pin what it answers; these pin that a
  * sketch can *reach* it -- that `WiFi.begin`/`status`/`localIP` and `net.get`/
- * `read`/`failed` are wired to it at all, and that a request which never
- * arrives is reported rather than waited on forever.
+ * `read`/`failed` are wired to it at all, that a request which never arrives is
+ * reported rather than waited on forever, and that the shipped project works
+ * end to end.
  */
 
 /** Joins, reports its address, and fetches the clock from the network. */
@@ -131,5 +133,40 @@ void loop() { delay(500); }
       200,
     );
     expect(simulation.serialLines().join('')).toContain('settled');
+  });
+
+  /*
+   * The shipped project, end to end: the circuit as a document, the sketch as
+   * the gallery carries it, the answer on the panel. This is what makes the
+   * capability a feature rather than an API -- a reader can open it, press Run
+   * and see the time come from somewhere other than the board.
+   */
+  it('runs the shipped network-clock project', () => {
+    const build = buildFor(galleryById('net-clock')!, 'esp32')!;
+    const simulation = new Simulation(esp32DevKitV1());
+    expect(simulation.loadCircuit(build.circuit)).toEqual([]);
+    simulation.loadFirmware(build.sketch);
+    simulation.start();
+    for (let frame = 0; frame < 200; frame++) {
+      simulation.tick(0.05);
+      if (/2026-10-17T12:00:0\dZ/.test(simulation.serialLines().join(''))) break;
+    }
+
+    expect(simulation.firmwareError).toBeNull();
+    const serial = simulation.serialLines().join('');
+    expect(serial).toContain(`joined ${NET_LOCAL_IP}`);
+    expect(serial).toMatch(/2026-10-17T12:00:0\dZ/);
+
+    // The time reached the glass, not just the serial port: the panel was
+    // cleared to black and the fetched clock drawn onto it.
+    const panel = [...simulation.displayControllers().values()][0] as Ili9341;
+    expect(panel.isOn(), 'the panel was told to light').toBe(true);
+    let drawn = false;
+    for (let y = 120; y < 160 && !drawn; y++) {
+      for (let x = 20; x < 300 && !drawn; x++) {
+        if (panel.pixelAt(x, y) !== 0) drawn = true;
+      }
+    }
+    expect(drawn, 'the fetched time was drawn').toBe(true);
   });
 });

@@ -915,6 +915,10 @@ class SimCore implements CoreHandle {
   private services(): FirmwareServices {
     return {
       tft: {
+        begin: () => {
+          this.tft()?.setDisplayOn(true);
+          return 0;
+        },
         setRotation: (rotation) => {
           const panel = this.tft();
           if (!panel) return 0;

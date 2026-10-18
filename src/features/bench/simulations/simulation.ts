@@ -1876,6 +1876,10 @@ export class Simulation {
    * 320x240 would be quietly wrong on a rotated one.
    */
   private readonly tftPort: TftPort = {
+    begin: () => {
+      this.tft()?.setDisplayOn(true);
+      return 0;
+    },
     setRotation: (rotation) => {
       const panel = this.tft();
       if (!panel) return 0;

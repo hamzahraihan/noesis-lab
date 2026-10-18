@@ -1771,7 +1771,104 @@ void loop() {
   ],
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER, REACTION];
+/* ------------------------------------------------------------------ *
+ * Network Clock — the bench's network, read onto the TFT
+ * ------------------------------------------------------------------ */
+
+/*
+ * The first project whose data does not come from the board.
+ *
+ * The network here is the bench's, not the internet's: the gateway, the name
+ * and the answer all live in the simulator, which is what lets it work offline
+ * and lets a test know exactly what the answer will be. What is real is the
+ * *shape* of the code -- join, poll until connected, ask, poll until the answer
+ * arrives -- because that shape is what a board with a radio has, whether the
+ * radio is real or not.
+ */
+const NET_CLOCK_SKETCH = `#include <WiFi.h>
+
+#define BLACK 0x0000
+#define WHITE 0xFFFF
+#define GREEN 0x07E0
+#define SKY   0x867D
+
+/*
+ * The board keeps time only as well as it can count milliseconds, and that
+ * counter starts at zero every time it resets. A clock that says 4,000 ms is
+ * not telling the time; it is telling you how long it has been running. So the
+ * time comes from the network, and the sketch's job is to ask for it.
+ */
+void setup() {
+  Serial.begin(115200);
+  tft.begin();
+  tft.setRotation(1);
+  tft.clear();
+  tft.print("NOESIS BENCH NETWORK", 20, 20, SKY);
+
+  /*
+   * Joining is not instant, and it is not guaranteed: a real board spends
+   * seconds here and a wrong password spends them for nothing. Polling the
+   * status is the loop every ESP32 sketch in the world starts with.
+   */
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(50);
+  }
+
+  Serial.print("joined ");
+  Serial.println(WiFi.localIP());
+  tft.print("ip", 20, 60, SKY);
+  tft.print(WiFi.localIP(), 90, 60, WHITE);
+}
+
+void loop() {
+  /*
+   * One request at a time, and none of them instant.
+   *
+   * net.get() says whether the answer has arrived; it does not wait for it,
+   * because the firmware cannot wait for anything without stopping the rest of
+   * the sketch. This loop is the difference between code that uses a network
+   * and code that draws a picture, and it is the same loop the map lesson
+   * teaches.
+   */
+  net.reset();
+  while (net.get("http://api.noesis/time") == 0) {
+    delay(20);
+  }
+
+  tft.fillRect(20, 120, 440, 40, BLACK);
+  if (net.failed()) {
+    Serial.println("network failed");
+    tft.print("no answer from the network", 20, 120, 0xF800);
+  } else {
+    Serial.println(net.read());
+    tft.print(net.read(), 20, 120, GREEN);
+  }
+  delay(1000);
+}
+`;
+
+const NET_CLOCK: GalleryProject = {
+  id: 'net-clock',
+  title: 'Network Clock',
+  blurb:
+    'The board has no clock of its own, so it asks the network for the time and puts the answer on the screen. Join, ask, wait, read: the waiting is the part that makes it a network program.',
+  parts: [{ name: '3.2" TFT (ILI9341)', qty: 1 }],
+  builds: [
+    {
+      board: 'esp32',
+      circuit: CIRCUITS['net-clock'],
+      sketch: NET_CLOCK_SKETCH,
+    },
+  ],
+  working: [
+    'The serial monitor reports the address the bench network handed out.',
+    'The panel shows that address, then the time it fetched, once a second.',
+    'Stop the network and the loop reports "network failed" rather than freezing.',
+  ],
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER, REACTION, NET_CLOCK];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;
