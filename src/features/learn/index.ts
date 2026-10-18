@@ -3,6 +3,7 @@
 // (EXERCISES + the value/type surface below serve the composition layer and
 // BenchProps; everything else stays reachable only through this seam.)
 export { HomePage } from './HomePage';
+export { BoardsPage } from './BoardsPage';
 export { ExercisesPage, ExercisePage, ReferencesPage } from './ExercisePages';
 export { ProjectPage } from './ProjectPages';
 export { ExerciseGuide } from './ExerciseGuide';
