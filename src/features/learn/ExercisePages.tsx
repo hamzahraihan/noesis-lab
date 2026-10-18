@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { CheckIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { Link, useParams } from 'react-router';
 import { Button, Navbar } from '@/components';
+import { DEFAULT_BOARD_ID } from './boardRegistry';
 import {
   EXERCISES,
   EXERCISE_BOARD,
@@ -53,7 +54,7 @@ export function ExercisesPage() {
   return (
     <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
-      <Navbar />
+      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
         <h2 className="font-['Archivo'] text-2xl font-black tracking-tight text-balance text-[var(--hd-text)]">
@@ -205,7 +206,7 @@ function ExerciseShell({
   return (
     <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
-      <Navbar />
+      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
       <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
         <Link to="/learn" className="transition-colors hover:text-[var(--hd-muted)]">Learn</Link>
         {crumb !== undefined && (

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { DEFAULT_BOARD_ID } from '@/features/learn';
 
 function applyTheme(theme: 'ink' | 'paper') {
   document.documentElement.setAttribute('data-theme', theme);
@@ -11,7 +10,15 @@ function applyTheme(theme: 'ink' | 'paper') {
   }
 }
 
-export function Navbar() {
+/**
+ * The site-wide nav.
+ *
+ * `defaultBoardId` arrives as a prop because this component is shared: a
+ * `components/` file may not take a value edge into a feature, which is the
+ * same rule `BenchRoute` honours by handing `Bench` the learn constants it
+ * needs rather than letting it import them.
+ */
+export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
   const [theme, setTheme] = useState<'ink' | 'paper'>('ink');
   const [open, setOpen] = useState(false);
 
@@ -35,7 +42,7 @@ export function Navbar() {
   const links = [
     { to: '/learn', label: 'Learn' },
     { to: '/boards', label: 'Boards' },
-    { to: `/projects/${DEFAULT_BOARD_ID}`, label: 'Bench' },
+    { to: `/projects/${defaultBoardId}`, label: 'Bench' },
     { to: '/learn/references', label: 'References' },
   ];
 
@@ -96,7 +103,7 @@ export function Navbar() {
           </button>
 
           <Link
-            to={`/projects/${DEFAULT_BOARD_ID}`}
+            to={`/projects/${defaultBoardId}`}
             className="hidden rounded-none bg-[var(--hd-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--hd-bg)] transition-colors hover:bg-[var(--hd-accent-hover)] sm:inline-block"
           >
             Open bench
@@ -120,7 +127,7 @@ export function Navbar() {
             ))}
             <li>
               <Link
-                to={`/projects/${DEFAULT_BOARD_ID}`}
+                to={`/projects/${defaultBoardId}`}
                 onClick={() => setOpen(false)}
                 className="block font-['JetBrains_Mono'] text-xs uppercase tracking-[0.18em] text-[var(--hd-accent)]"
               >

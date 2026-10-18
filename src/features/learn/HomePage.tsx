@@ -51,7 +51,7 @@ export function HomePage() {
       </a>
 
       <div className="mx-auto min-h-screen max-w-6xl border-x border-[var(--hd-border)]">
-        <Navbar />
+        <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
         <AnnouncementStrip />
 
         <main id="main">

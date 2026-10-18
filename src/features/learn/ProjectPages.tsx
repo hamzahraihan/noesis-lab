@@ -10,7 +10,7 @@
 import { Link, useParams } from 'react-router';
 import { ArrowRightIcon } from '@radix-ui/react-icons';
 import { Badge, Button, Navbar } from '@/components';
-import { boardOption, boardSpecs, isBoardId } from './boardRegistry';
+import { boardOption, boardSpecs, DEFAULT_BOARD_ID, isBoardId } from './boardRegistry';
 import { EXAMPLES } from './examples';
 import { GALLERY, buildFor } from './gallery';
 import { BoardArt } from './HomePage';
@@ -207,7 +207,7 @@ function ProjectShell({
   return (
     <div className="min-h-screen bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
-      <Navbar />
+      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
       <div className="mx-auto max-w-3xl px-6 py-3 text-xs text-[var(--hd-faint)]">
         <Link to="/boards" className="transition-colors hover:text-[var(--hd-muted)]">Boards</Link>
         <span className="mx-2">/</span>

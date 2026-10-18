@@ -59,7 +59,7 @@ export function BoardsPage() {
   return (
     <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased">
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
-      <Navbar />
+      <Navbar defaultBoardId={DEFAULT_BOARD_ID} />
       <div className="mx-auto max-w-6xl px-6 py-12">
         <header className="mb-10">
           <div className="mb-4 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[var(--hd-muted)]">
