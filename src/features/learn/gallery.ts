@@ -1911,6 +1911,15 @@ void setup() {
    */
   Serial.print("subscribed ");
   Serial.println(net.subscribe("readings/temp"));
+
+  /*
+   * A network program is usually both directions: this one listens for the
+   * feed, and tells the sensor how often it wants it. Publishing has no
+   * audience on a bench with one board, so the network's own sensor takes the
+   * order -- ask for two seconds and the feed slows to one reading every two.
+   */
+  Serial.print("asked for 2s ");
+  Serial.println(net.publish("commands/interval", "2"));
 }
 
 void loop() {
@@ -1933,7 +1942,7 @@ const SENSOR_FEED: GalleryProject = {
   id: 'sensor-feed',
   title: 'Sensor Feed',
   blurb:
-    'A sensor on the network publishes a temperature once a second. The board subscribes, asks whether there is news, and keeps the screen alive in between — the receive loop, which never blocks.',
+    'A sensor on the network publishes a temperature. The board subscribes, reads it without ever blocking, and tells the sensor how often it wants the next one — both directions of a network program.',
   parts: [{ name: '3.2" TFT (ILI9341)', qty: 1 }],
   builds: [
     {
@@ -1943,9 +1952,9 @@ const SENSOR_FEED: GalleryProject = {
     },
   ],
   working: [
-    'The serial monitor reports the subscription and then one temperature a second.',
-    'The panel shows the latest reading as it arrives.',
-    'The bench stays responsive: the loop never waits for the sensor.',
+    'The serial monitor reports the subscription and the order it placed with the sensor.',
+    'Then it logs a temperature every two seconds — the cadence the board asked for.',
+    'The panel shows the latest reading as it arrives, and the bench stays responsive: the loop never waits.',
   ],
 };
 

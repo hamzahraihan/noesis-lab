@@ -753,12 +753,26 @@ const sensorFeedChecks: CheckDef[] = [
     },
   },
   {
+    name: 'tells the sensor how often to publish',
+    run: (sim) => {
+      const started = performance.now();
+      const name = 'tells the sensor how often to publish';
+      for (let frame = 0; frame < 4; frame++) sim.tick(0.05);
+      if (!sim.serialText().includes('asked for 2s 1')) {
+        return verdict(name, started, 'fail', 'the order was not accepted');
+      }
+      return verdict(name, started, 'pass');
+    },
+  },
+  {
     name: 'receives later readings as they are published',
     run: (sim) => {
       const started = performance.now();
       const name = 'receives later readings as they are published';
-      for (let frame = 0; frame < 60; frame++) sim.tick(0.05);
-      if (!/temp 2[0-9]\.[05]/.test(sim.serialText()) || !/temp 20\.5|temp 21\.0/.test(sim.serialText())) {
+      // Two seconds per reading: by now the feed must have advanced at least
+      // twice (20.5 at two seconds, 21.0 at four).
+      for (let frame = 0; frame < 80; frame++) sim.tick(0.05);
+      if (!/temp 20\.5/.test(sim.serialText()) || !/temp 21\.0/.test(sim.serialText())) {
         return verdict(name, started, 'fail', 'the feed did not advance');
       }
       return verdict(name, started, 'pass');

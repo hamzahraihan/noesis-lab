@@ -9,6 +9,7 @@ import {
   WL_CONNECTED,
   WL_DISCONNECTED,
   WL_IDLE_STATUS,
+  NET_COMMAND_TOPIC,
   NET_READING_MS,
   NET_READING_TOPIC,
   WL_NO_SSID_AVAIL,
@@ -250,5 +251,69 @@ describe('messages from the network\'s sensor', () => {
   it('publishes a reading that reads as a temperature and wraps by design', () => {
     // The payload is deterministic, so a lesson and a test can both name it.
     expect([0, 1, 7, 8].map(netReadingPayload)).toEqual(['20.0', '20.5', '23.5', '20.0']);
+  });
+});
+
+describe('sending a message to the sensor', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('refuses to publish before it has joined, or with nothing to say', () => {
+    const { network } = bench();
+    expect(network.publish(NET_COMMAND_TOPIC, '2')).toBe(0);
+    const { network: joinedNet } = joined();
+    expect(joinedNet.publish('', '2')).toBe(0);
+    expect(joinedNet.publish(NET_COMMAND_TOPIC, '')).toBe(0);
+  });
+
+  it('accepts a topic nothing listens on, as a broker does', () => {
+    const { network } = joined();
+    expect(network.publish('nobody/listens', 'hello')).toBe(1);
+  });
+
+  it('refuses a command that is not a number', () => {
+    const { network } = joined();
+    expect(network.publish(NET_COMMAND_TOPIC, 'soon')).toBe(0);
+  });
+
+  /*
+   * The observable effect: asking for a reading every two seconds means the
+   * second reading does not arrive at the first second, and does at the second.
+   */
+  it('slows the sensor down when told to', () => {
+    const { network, advance } = joined();
+    network.subscribe(NET_READING_TOPIC);
+    expect(network.available()).toBe(1);
+    expect(network.message()).toBe('20.0');
+
+    expect(network.publish(NET_COMMAND_TOPIC, '2')).toBe(1);
+
+    // One second later: the old cadence would have published; the new one has not.
+    advance(NET_READING_MS - NET_LATENCY_MS);
+    expect(network.available()).toBe(0);
+
+    // Two seconds after the last reading (t = 0) it does.
+    advance(NET_READING_MS);
+    expect(network.available()).toBe(1);
+    expect(network.message()).toBe('20.5');
+  });
+
+  it('clamps a cadence to what a sensor could be asked for', () => {
+    const { network, advance } = joined();
+    network.subscribe(NET_READING_TOPIC);
+    network.available();
+
+    expect(network.publish(NET_COMMAND_TOPIC, '0')).toBe(1);
+    advance(1000);
+    expect(network.available(), 'zero seconds becomes the fastest cadence').toBe(1);
+    network.available();
+
+    expect(network.publish(NET_COMMAND_TOPIC, '999')).toBe(1);
+    advance(60_000);
+    expect(network.available(), 'a minute is the slowest').toBe(1);
   });
 });

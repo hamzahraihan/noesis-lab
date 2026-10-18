@@ -47,6 +47,18 @@ export const NET_EPOCH_MS = Date.UTC(2026, 9, 17, 12, 0, 0);
 export const NET_READING_TOPIC = 'readings/temp';
 export const NET_READING_MS = 1000;
 
+/**
+ * Where the sensor takes orders: a payload of whole seconds per reading.
+ *
+ * Publishing has to *do* something or it teaches nothing, and the bench has no
+ * second board to receive it. So the network's own sensor listens: tell it "2"
+ * and it reports every two seconds instead of every one, which the serial
+ * monitor shows without any extra machinery.
+ */
+export const NET_COMMAND_TOPIC = 'commands/interval';
+export const NET_READING_MIN_S = 1;
+export const NET_READING_MAX_S = 60;
+
 /** The payload the sensor publishes at a given reading, derived from its index. */
 export function netReadingPayload(index: number): string {
   return (20 + (index % 8) * 0.5).toFixed(1);
@@ -87,6 +99,7 @@ export function createNetPort(network: VirtualNetwork): NetPort {
     subscribe: (topic) => network.subscribe(topic),
     available: () => network.available(),
     message: () => network.message(),
+    publish: (topic, payload) => network.publish(topic, payload),
     reset: () => network.reset(),
   };
 }
@@ -119,6 +132,13 @@ export class VirtualNetwork {
 
   /** The reading last reported to the sketch, or -1 before the first. */
   private lastReading = -1;
+
+  /** The sensor's current cadence, and when it last published. */
+  private intervalMs = NET_READING_MS;
+  private lastReadAt = 0;
+
+  /** How many readings the sensor has published; one at boot, before anyone asks. */
+  private readings = 1;
 
   private readonly nowMs: () => number;
 
@@ -213,7 +233,8 @@ export class VirtualNetwork {
    */
   available(): number {
     if (this.status() !== WL_CONNECTED) return 0;
-    const index = this.readingIndex();
+    this.advanceSensor();
+    const index = this.readings - 1;
     const fresh = this.subscribed.some(
       (topic) => topic === NET_READING_TOPIC && index > (this.seen.get(topic) ?? -1),
     );
@@ -225,13 +246,37 @@ export class VirtualNetwork {
     return 1;
   }
 
+  /**
+   * Sends a message to the network.
+   *
+   * Every non-empty topic is accepted while connected -- a broker does not
+   * refuse a name it has no subscriber for. The one that does something here is
+   * the sensor's command topic, whose payload is whole seconds per reading,
+   * clamped to what a sensor could plausibly be asked for.
+   */
+  publish(topic: string, payload: string): number {
+    if (this.status() !== WL_CONNECTED || topic === '' || payload === '') return 0;
+    if (topic === NET_COMMAND_TOPIC) {
+      const seconds = Number(payload);
+      if (!Number.isFinite(seconds)) return 0;
+      const clamped = Math.min(NET_READING_MAX_S, Math.max(NET_READING_MIN_S, Math.round(seconds)));
+      this.intervalMs = clamped * 1000;
+    }
+    return 1;
+  }
+
+  /** Publishes any readings the clock has passed, from the last one forward. */
+  private advanceSensor(): void {
+    const due = this.nowMs() - this.lastReadAt;
+    if (due < this.intervalMs) return;
+    const missed = Math.floor(due / this.intervalMs);
+    this.lastReadAt += missed * this.intervalMs;
+    this.readings += missed;
+  }
+
   /** The last reading reported, or "" before the first one. Re-readable. */
   message(): string {
     return this.lastReading < 0 ? '' : netReadingPayload(this.lastReading);
-  }
-
-  private readingIndex(): number {
-    return Math.floor(this.nowMs() / NET_READING_MS);
   }
 
   private resolve(url: string): NetAnswer {

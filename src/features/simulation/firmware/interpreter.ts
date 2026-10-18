@@ -333,6 +333,8 @@ export interface NetPort {
   available(): number;
   /** The waiting payload, handed over once. "" when nothing is waiting. */
   message(): string;
+  /** Sends a message to the network; 1 when it was accepted. */
+  publish(topic: string, payload: string): number;
   /** Forgets the last request, so a new one starts from nothing. */
   reset(): void;
 }
@@ -2434,6 +2436,8 @@ export class FirmwareRuntime {
         return net.available();
       case 'message':
         return net.message();
+      case 'publish':
+        return net.publish(formatValue(args[0] ?? ''), formatValue(args[1] ?? ''));
       case 'reset':
         net.reset();
         return 0;
