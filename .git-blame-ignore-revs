@@ -1,0 +1,8 @@
+# Commits whose only purpose is formatting. `git blame` skips them so the
+# lines keep pointing at the change that wrote them.
+#
+# Enable locally once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub honours this file in the repository root without any setup.
+221f26c style: format the tree with oxfmt, one commit to end the hand-wrapping
