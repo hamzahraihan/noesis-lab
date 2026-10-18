@@ -9,8 +9,11 @@ import {
   WL_CONNECTED,
   WL_DISCONNECTED,
   WL_IDLE_STATUS,
+  NET_READING_MS,
+  NET_READING_TOPIC,
   WL_NO_SSID_AVAIL,
   createNetPort,
+  netReadingPayload,
 } from './network';
 
 /** A network on a clock the test owns, in simulated milliseconds. */
@@ -186,5 +189,66 @@ describe('the port a sketch talks to', () => {
     expect(port.failed()).toBe(0);
     port.reset();
     expect(port.read()).toBe('');
+  });
+});
+
+describe('messages from the network\'s sensor', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('refuses to subscribe before it has joined', () => {
+    const { network } = bench();
+    expect(network.subscribe(NET_READING_TOPIC)).toBe(0);
+    expect(network.available()).toBe(0);
+  });
+
+  it('has the sensor\'s latest reading waiting on the turn it subscribes', () => {
+    const { network } = joined();
+    expect(network.subscribe(NET_READING_TOPIC)).toBe(1);
+    // A retained value, as a broker hands one over: the first second's reading.
+    expect(network.available()).toBe(1);
+    expect(network.message()).toBe('20.0');
+    // The news is consumed by asking; the value stays readable for this turn,
+    // because a sketch has no string variable to hold it in.
+    expect(network.available()).toBe(0);
+    expect(network.message()).toBe('20.0');
+  });
+
+  it('delivers the next reading a second later, not before', () => {
+    const { network, advance } = joined();
+    network.subscribe(NET_READING_TOPIC);
+    // The retained first reading is the one already waiting; consume it so this
+    // test is about the *next* one.
+    expect(network.available()).toBe(1);
+    expect(network.message()).toBe('20.0');
+
+    /*
+     * Readings land on absolute seconds, not on a second since subscribing:
+     * the join spent `NET_LATENCY_MS`, so the next boundary is one second from
+     * zero. Just short of it, nothing is available; on it, the next reading is.
+     */
+    advance(NET_READING_MS - NET_LATENCY_MS - 1);
+    expect(network.available()).toBe(0);
+    expect(network.message(), 'the last value is still readable').toBe('20.0');
+    advance(1);
+    expect(network.available()).toBe(1);
+    expect(network.message()).toBe('20.5');
+  });
+
+  it('accepts a topic nobody publishes, and stays quiet about it', () => {
+    const { network, advance } = joined();
+    expect(network.subscribe('readings/nobody')).toBe(1);
+    expect(network.available()).toBe(0);
+    advance(NET_READING_MS * 3);
+    expect(network.available()).toBe(0);
+  });
+
+  it('publishes a reading that reads as a temperature and wraps by design', () => {
+    // The payload is deterministic, so a lesson and a test can both name it.
+    expect([0, 1, 7, 8].map(netReadingPayload)).toEqual(['20.0', '20.5', '23.5', '20.0']);
   });
 });

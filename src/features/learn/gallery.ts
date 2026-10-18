@@ -1857,7 +1857,7 @@ const NET_CLOCK: GalleryProject = {
   builds: [
     {
       board: 'esp32',
-      circuit: CIRCUITS['net-clock'],
+      circuit: CIRCUITS['esp32-tft'],
       sketch: NET_CLOCK_SKETCH,
     },
   ],
@@ -1868,7 +1868,88 @@ const NET_CLOCK: GalleryProject = {
   ],
 };
 
-export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER, REACTION, NET_CLOCK];
+
+/* ------------------------------------------------------------------ *
+ * Sensor Feed — the network's sensor, received rather than fetched
+ * ------------------------------------------------------------------ */
+
+/*
+ * The other half of a network program.
+ *
+ * The clock asks for something and waits; this one does not wait at all. The
+ * sensor publishes once a second whether or not anyone is listening, and the
+ * loop asks `available()` and carries on in between -- which is what a program
+ * with more than one job has to look like. `message()` reads the same value as
+ * often as the turn needs it, because a sketch here has no string variable to
+ * hold a payload in.
+ */
+const SENSOR_FEED_SKETCH = `#include <WiFi.h>
+
+#define BLACK 0x0000
+#define WHITE 0xFFFF
+#define GREEN 0x07E0
+#define SKY   0x867D
+
+void setup() {
+  Serial.begin(115200);
+  tft.begin();
+  tft.setRotation(1);
+  tft.clear();
+  tft.print("SENSOR FEED", 20, 20, SKY);
+
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(50);
+  }
+  Serial.print("joined ");
+  Serial.println(WiFi.localIP());
+
+  /*
+   * A subscription is to a name, not to a device: the sensor keeps publishing
+   * whether or not this sketch is listening, and the broker hands over the
+   * latest reading straight away (it is retained).
+   */
+  Serial.print("subscribed ");
+  Serial.println(net.subscribe("readings/temp"));
+}
+
+void loop() {
+  /*
+   * No waiting: asking whether there is news and carrying on is what lets a
+   * program do two things at once. The clock's loop could afford to block
+   * because it had one job; this one has a screen to keep alive.
+   */
+  if (net.available()) {
+    tft.fillRect(20, 100, 440, 60, BLACK);
+    tft.print(net.message(), 20, 100, GREEN);
+    Serial.print("temp ");
+    Serial.println(net.message());
+  }
+  delay(100);
+}
+`;
+
+const SENSOR_FEED: GalleryProject = {
+  id: 'sensor-feed',
+  title: 'Sensor Feed',
+  blurb:
+    'A sensor on the network publishes a temperature once a second. The board subscribes, asks whether there is news, and keeps the screen alive in between — the receive loop, which never blocks.',
+  parts: [{ name: '3.2" TFT (ILI9341)', qty: 1 }],
+  builds: [
+    {
+      board: 'esp32',
+      circuit: CIRCUITS['esp32-tft'],
+      sketch: SENSOR_FEED_SKETCH,
+    },
+  ],
+  working: [
+    'The serial monitor reports the subscription and then one temperature a second.',
+    'The panel shows the latest reading as it arrives.',
+    'The bench stays responsive: the loop never waits for the sensor.',
+  ],
+};
+
+export const GALLERY: readonly GalleryProject[] = [ALARM_CLOCK, SAFE, DASHBOARD, PARKING, WEATHER, REACTION, NET_CLOCK, SENSOR_FEED];
 
 export function galleryById(id: string): GalleryProject | null {
   return GALLERY.find((entry) => entry.id === id) ?? null;

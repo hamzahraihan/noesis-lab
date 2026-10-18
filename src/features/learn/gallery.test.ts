@@ -306,6 +306,7 @@ describe('the project gallery', () => {
       weather: 12,
       reaction: 5,
       'net-clock': 6,
+      'sensor-feed': 6,
     };
     for (const entry of GALLERY) {
       for (const build of entry.builds) {

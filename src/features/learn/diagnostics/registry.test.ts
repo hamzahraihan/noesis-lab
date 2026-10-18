@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GALLERY } from '../gallery';
 import { buildRegistry } from './registry';
+import { runHarness } from './harness';
 import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH } from './probes';
 
 describe('registry', () => {
@@ -14,6 +15,21 @@ describe('registry', () => {
       expect(entry.checks.length, `${entry.projectId} checks`).toBeGreaterThan(0);
     }
   });
+
+  /*
+   * The checks are live-acceptance code, so at least the fast ones are run
+   * here: a check that cannot pass is worse than no check, and the registry's
+   * coverage test cannot see the difference.
+   */
+  it('passes its live checks for the network projects', async () => {
+    for (const id of ['net-clock', 'sensor-feed'] as const) {
+      const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
+      const report = await runHarness(entry.checks, entry.makeSim);
+      const failed = report.results.filter((result) => result.status === 'fail');
+      expect(failed, `${id}: ${failed.map((result) => result.detail).join('; ')}`).toEqual([]);
+      expect(report.results.every((result) => result.status === 'pass'), id).toBe(true);
+    }
+  }, 30_000);
 
   it('shows 15:00 on the driven alarm glass', () => {
     const entry = buildRegistry().find(

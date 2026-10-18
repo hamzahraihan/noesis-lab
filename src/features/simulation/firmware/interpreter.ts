@@ -327,6 +327,12 @@ export interface NetPort {
   read(): string;
   /** 1 when the ready answer is a failure rather than a body. */
   failed(): number;
+  /** Joins a topic on the network's sensor; 1 when it was accepted. */
+  subscribe(topic: string): number;
+  /** 1 when a message is waiting for a subscribed topic. */
+  available(): number;
+  /** The waiting payload, handed over once. "" when nothing is waiting. */
+  message(): string;
   /** Forgets the last request, so a new one starts from nothing. */
   reset(): void;
 }
@@ -2422,6 +2428,12 @@ export class FirmwareRuntime {
         return net.read();
       case 'failed':
         return net.failed();
+      case 'subscribe':
+        return net.subscribe(formatValue(args[0] ?? ''));
+      case 'available':
+        return net.available();
+      case 'message':
+        return net.message();
       case 'reset':
         net.reset();
         return 0;

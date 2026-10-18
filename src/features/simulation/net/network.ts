@@ -35,6 +35,23 @@ export const NET_LATENCY_MS = 35;
  */
 export const NET_EPOCH_MS = Date.UTC(2026, 9, 17, 12, 0, 0);
 
+/**
+ * A sensor on the network, and how often it publishes.
+ *
+ * The bench has no second board to act as the publisher, so the network itself
+ * plays one: a device that reports a temperature once a second, on a retained
+ * topic. A subscriber therefore has something to receive on the turn it
+ * subscribes — which is also how a real broker behaves with a retained value --
+ * and a later message arrives on the next second, never sooner.
+ */
+export const NET_READING_TOPIC = 'readings/temp';
+export const NET_READING_MS = 1000;
+
+/** The payload the sensor publishes at a given reading, derived from its index. */
+export function netReadingPayload(index: number): string {
+  return (20 + (index % 8) * 0.5).toFixed(1);
+}
+
 /* The status codes Arduino's WiFi library uses, kept at their real values so a
  * sketch that compares against them reads the way it does on a real board. */
 export const WL_IDLE_STATUS = 0;
@@ -67,6 +84,9 @@ export function createNetPort(network: VirtualNetwork): NetPort {
     get: (url) => network.get(url),
     read: () => network.read(),
     failed: () => network.failed(),
+    subscribe: (topic) => network.subscribe(topic),
+    available: () => network.available(),
+    message: () => network.message(),
     reset: () => network.reset(),
   };
 }
@@ -90,6 +110,15 @@ export class VirtualNetwork {
   private joinState: JoinState = { kind: 'idle' };
 
   private request: RequestState = { kind: 'idle' };
+
+  /** Topics the sketch has asked to receive, in the order it asked. */
+  private readonly subscribed: string[] = [];
+
+  /** The reading index the sketch has already been told about, per topic. */
+  private readonly seen = new Map<string, number>();
+
+  /** The reading last reported to the sketch, or -1 before the first. */
+  private lastReading = -1;
 
   private readonly nowMs: () => number;
 
@@ -157,6 +186,52 @@ export class VirtualNetwork {
 
   reset(): void {
     this.request = { kind: 'idle' };
+  }
+
+  /**
+   * Joins a topic on the network's sensor.
+   *
+   * A connection is required, as it is on a real broker. The topic is accepted
+   * whether or not anything publishes to it: subscribing to a name nobody uses
+   * is quiet rather than an error, and that quiet is worth meeting once.
+   */
+  subscribe(topic: string): number {
+    if (this.status() !== WL_CONNECTED || topic === '') return 0;
+    if (!this.subscribed.includes(topic)) this.subscribed.push(topic);
+    return 1;
+  }
+
+  /**
+   * Whether a reading has arrived since the sketch last asked.
+   *
+   * This is the poll, and it is the only thing that consumes news: a sketch
+   * asks, and on a yes can read the value as often as it likes (draw it *and*
+   * print it) until the next reading lands. That split is not an accident of
+   * this API -- the sketch language here has no string variables to hold a
+   * payload in, so a value that could only be read once could not be used
+   * twice.
+   */
+  available(): number {
+    if (this.status() !== WL_CONNECTED) return 0;
+    const index = this.readingIndex();
+    const fresh = this.subscribed.some(
+      (topic) => topic === NET_READING_TOPIC && index > (this.seen.get(topic) ?? -1),
+    );
+    if (!fresh) return 0;
+    for (const topic of this.subscribed) {
+      if (topic === NET_READING_TOPIC) this.seen.set(topic, index);
+    }
+    this.lastReading = index;
+    return 1;
+  }
+
+  /** The last reading reported, or "" before the first one. Re-readable. */
+  message(): string {
+    return this.lastReading < 0 ? '' : netReadingPayload(this.lastReading);
+  }
+
+  private readingIndex(): number {
+    return Math.floor(this.nowMs() / NET_READING_MS);
   }
 
   private resolve(url: string): NetAnswer {

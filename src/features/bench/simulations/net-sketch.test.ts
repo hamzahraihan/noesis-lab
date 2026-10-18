@@ -136,6 +136,42 @@ void loop() { delay(500); }
   });
 
   /*
+   * The receive loop: a subscription that never blocks, and a payload that can
+   * be read twice in one turn (this sketch language has no string variable to
+   * hold it in, so the API is what makes print-and-draw possible).
+   */
+  it('receives what the network\'s sensor publishes, without waiting', () => {
+    const simulation = run(
+      `
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) { delay(20); }
+  net.subscribe("readings/temp");
+}
+
+void loop() {
+  if (net.available()) {
+    Serial.print("temp ");
+    Serial.println(net.message());
+    Serial.print("again ");
+    Serial.println(net.message());
+  }
+  delay(50);
+}
+`,
+      (serial) => (serial.match(/temp /g) ?? []).length >= 3,
+    );
+    expect(simulation.firmwareError).toBeNull();
+    const serial = simulation.serialLines().join('');
+    // The retained reading, then the next ones a second apart, each readable
+    // twice: 20.0, 20.5, 21.0 over the first seconds.
+    expect(serial).toMatch(/temp 20\.0\nagain 20\.0/);
+    expect(serial).toMatch(/temp 20\.5\nagain 20\.5/);
+    expect(serial).toMatch(/temp 21\.0\nagain 21\.0/);
+  });
+
+  /*
    * The shipped project, end to end: the circuit as a document, the sketch as
    * the gallery carries it, the answer on the panel. This is what makes the
    * capability a feature rather than an API -- a reader can open it, press Run
