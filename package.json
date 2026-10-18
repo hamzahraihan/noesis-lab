@@ -11,6 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "oxlint",
+    "format": "oxfmt src scripts",
+    "format:check": "oxfmt --check src scripts",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "preview": "vite preview"
   },
@@ -55,6 +57,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "assemblyscript": "0.27.0",
     "babel-plugin-react-compiler": "^1.0.0",
+    "oxfmt": "^0.73.0",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
