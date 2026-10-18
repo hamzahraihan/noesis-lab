@@ -41,11 +41,6 @@ export function HomePage() {
 
   return (
     <div className="min-h-full bg-[var(--hd-bg)] text-[var(--hd-text)] antialiased hd-grid font-['Noto_Sans']">
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@400;500;600;700&display=swap"
-      />
-
       <SkipLink />
 
       <div className="mx-auto min-h-screen max-w-7xl border-x border-[var(--hd-border)] bg-[var(--hd-bg)]">
