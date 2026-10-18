@@ -41,6 +41,8 @@ import { ResizeHandle } from '../ide/ResizeHandle';
 import { WokwiLibrary } from '../wokwi/WokwiLibrary';
 import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from '../store/shell-state';
 import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from '../store/bench-store';
+import { useWorkbenchStore } from '../store/workbench-store';
+import { benchBounds } from '../wiring/bounds';
 import type {
   BoardId,
   BoardOption,
@@ -629,6 +631,22 @@ export default function Bench(props: BenchProps) {
     firmwareForBuild,
     circuitSeedParam,
   ]);
+
+  /*
+   * Frame the circuit when it arrives.
+   *
+   * The view box used to be a fixed window around the origin, sized for a
+   * blink on a breadboard. Projects that put a panel beside the board
+   * (`net-clock`, `sensor-feed`, the map lesson) opened with part of the
+   * circuit off-screen, which reads as a broken project rather than a camera
+   * that wants a drag. A load is the moment the extent is knowable and the
+   * operator has no view worth preserving; every pan and zoom after that is
+   * theirs, so this keys on the simulation (board or seed change) and never on
+   * an edit.
+   */
+  useEffect(() => {
+    useWorkbenchStore.getState().fitTo(benchBounds(simulation.bench));
+  }, [simulation]);
 
   /*
    * Autosave: every 500 ms decompile the live bench and persist the circuit
@@ -1248,6 +1266,8 @@ export default function Bench(props: BenchProps) {
       const example = EXAMPLES.find((candidate) => candidate.id === id);
       if (!example) return;
       simulation.replaceBench((bench) => example.wire(bench));
+      // An example is a fresh bench, so it gets framed like any other load.
+      useWorkbenchStore.getState().fitTo(benchBounds(simulation.bench));
       const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
       setProject(next);
       setExampleId(example.id);
@@ -1475,6 +1495,7 @@ export default function Bench(props: BenchProps) {
         const refused = simulation.loadCircuit(doc);
         if (refused.length > 0) throw new Error(`${file.name}: ${refused.join('; ')}`);
         setShareError(null);
+        useWorkbenchStore.getState().fitTo(benchBounds(simulation.bench));
         // A load replaces every part and terminal under the renderer, so the
         // bench has to be repainted the way any other edit repaints it.
         forceRender((n) => n + 1);

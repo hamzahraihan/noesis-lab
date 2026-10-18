@@ -24,7 +24,12 @@ import {
 import { artworkBox } from '../wokwi/wokwi';
 import { partTransform } from '../wiring/part-transform';
 import { hoverPinLabel, pressHitsOwnPin, rotatedPartAt, wireClickAction } from '../wiring/hit-test';
-import { useWorkbenchStore, type ViewBox } from '../store/workbench-store';
+import {
+  MAX_VIEW_WIDTH_MM,
+  MIN_VIEW_WIDTH_MM,
+  useWorkbenchStore,
+  type ViewBox,
+} from '../store/workbench-store';
 
 /**
  * Name for the jumper that is only half drawn. It lives in a map of its own
@@ -70,8 +75,6 @@ export interface WorkbenchProps {
   locked?: boolean;
 }
 
-const MIN_VIEW_WIDTH_MM = 24;
-const MAX_VIEW_WIDTH_MM = 900;
 /**
  * How far, in CSS pixels, the pointer must travel before a press counts as a
  * drag rather than a click.

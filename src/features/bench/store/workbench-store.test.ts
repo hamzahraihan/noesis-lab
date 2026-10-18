@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_ASPECT, useWorkbenchStore } from './workbench-store';
+import { DEFAULT_ASPECT, MAX_VIEW_WIDTH_MM, useWorkbenchStore } from './workbench-store';
 
 const initialView = { x: -12, y: -10, width: 428 };
 
@@ -34,5 +34,42 @@ describe('useWorkbenchStore', () => {
     expect(useWorkbenchStore.getState().aspect).toBe(before.aspect);
     useWorkbenchStore.getState().setAspect(2);
     expect(useWorkbenchStore.getState().aspect).toBe(2);
+  });
+});
+
+describe('fitting the view to a circuit', () => {
+  // A landscape canvas, so the width and the height can be reasoned about.
+  beforeEach(() => {
+    useWorkbenchStore.setState({ aspect: 2 });
+  });
+
+  it('centres on the circuit with room to spare on every side', () => {
+    useWorkbenchStore.getState().fitTo({ x: 100, y: 50, width: 200, height: 100 });
+    const { view } = useWorkbenchStore.getState();
+    const height = view.width / 2;
+    expect(view.x + view.width / 2).toBeCloseTo(200);
+    expect(view.y + height / 2).toBeCloseTo(100);
+    // Both dimensions fit with the margin, not just the wider one.
+    expect(view.width).toBeGreaterThan(200);
+    expect(height).toBeGreaterThan(100);
+  });
+
+  it('widens for a tall circuit instead of clipping it', () => {
+    useWorkbenchStore.getState().fitTo({ x: 0, y: 0, width: 10, height: 400 });
+    const { view } = useWorkbenchStore.getState();
+    expect(view.width).toBeGreaterThanOrEqual(800);
+    expect(view.width / 2).toBeGreaterThanOrEqual(400);
+  });
+
+  it('shrinks a circuit wider than the bench rather than following it off-world', () => {
+    useWorkbenchStore.getState().fitTo({ x: 0, y: 0, width: 5000, height: 10 });
+    const { view } = useWorkbenchStore.getState();
+    expect(view.width).toBe(MAX_VIEW_WIDTH_MM);
+  });
+
+  it('leaves the view exactly where it was when there is nothing to frame', () => {
+    const before = useWorkbenchStore.getState().view;
+    useWorkbenchStore.getState().fitTo(null);
+    expect(useWorkbenchStore.getState().view).toBe(before);
   });
 });
