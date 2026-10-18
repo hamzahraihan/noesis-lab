@@ -642,7 +642,14 @@ export default function Bench(props: BenchProps) {
       setWorkerClient(null);
       setWorkerLive(false);
     };
-  }, [simulation]);
+    /*
+     * The execution mode belongs in the deps even though the client is built
+     * per simulation: `wasm` is decided once, here, and nothing later updates
+     * it -- without this a project that flipped to AVR would keep a client
+     * told to interpret. Re-attaching costs one worker start, which is what
+     * the flip costs anyway.
+     */
+  }, [simulation, projectBuild?.execution]);
 
   /*
    * The speed multiplier belongs to the run, not to either backend: push it

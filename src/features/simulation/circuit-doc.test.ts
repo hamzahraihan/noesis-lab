@@ -20,7 +20,7 @@ describe('validateCircuit', () => {
     expect(validateCircuit(minimalDoc)).toEqual([]);
   });
   it('rejects a missing version', () => {
-    const { version, ...rest } = minimalDoc;
+    const { version: _version, ...rest } = minimalDoc;
     expect(validateCircuit(rest).length).toBeGreaterThan(0);
   });
   it('rejects a non-integer version', () => {

@@ -1,8 +1,8 @@
 // Public seam for components.
-export { Button, buttonVariants } from '@/components/ui/button';
+export { Button } from '@/components/ui/button';
 export { Input } from '@/components/ui/input';
 export { Label } from '@/components/ui/label';
-export { Badge, badgeVariants } from '@/components/ui/badge';
+export { Badge } from '@/components/ui/badge';
 export { Separator } from '@/components/ui/separator';
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 export {
