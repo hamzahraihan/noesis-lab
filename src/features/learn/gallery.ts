@@ -25,7 +25,7 @@ export interface GalleryBuild {
   /** Build flavor on one board (`'library'`); absent means the default build. */
   readonly variant?: string;
   /** Backend this build needs; default `'interpreter'`. */
-  readonly execution?: 'interpreter' | 'avr';
+  readonly execution?: 'interpreter' | 'avr' | 'rp2040';
   /** The circuit this build needs, as a document (see `circuits/`). */
   readonly circuit: CircuitDocument;
   /** The entry file's source (`main.ino` on Arduino builds). */

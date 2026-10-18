@@ -110,7 +110,11 @@ import {
   circuitFileText,
   readCircuitFile,
 } from '../utils/circuit-file';
-import { avrAvailableFor, resolveBackendSelection } from '../simulations/avr-mode';
+import {
+  avrAvailableFor,
+  resolveBackendSelection,
+  rp2040AvailableFor,
+} from '../simulations/avr-mode';
 import { canResumeRun, type RunSession } from '../simulations/run-session';
 
 /** Left of this the palette opens rightwards, so it stays on screen. */
@@ -473,11 +477,13 @@ export default function Bench(props: BenchProps) {
   const [frameTick, forceRender] = useState(0);
   const [exampleId, setExampleId] = useState<string | null>(null);
   /*
-   * Which backend the next Run executes on. Uno-only: the AVR option
-   * disables with its reason everywhere else, and switching boards drops
-   * back to the interpreter, so a Mega can never inherit the Uno's mode.
+   * Which backend the next Run executes on. AVR is Uno-only and RP2040 needs
+   * the Nano RP2040 Connect plus the simulation worker; each option disables
+   * with its reason everywhere else, and switching boards drops back to the
+   * interpreter, so a Mega can never inherit another board's mode.
    */
   const [avrMode, setAvrMode] = useState(projectBuild?.execution === 'avr');
+  const [rp2040Mode, setRp2040Mode] = useState(projectBuild?.execution === 'rp2040');
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
   /*
@@ -519,15 +525,19 @@ export default function Bench(props: BenchProps) {
     setProject(loadBenchProject(boardId) ?? starterFor(boardId));
     setExampleId(null);
     setShareError(null);
-    // AVR mode belongs to the Uno alone: a board switch drops back to the
-    // interpreter rather than carrying the mode onto a board that refuses it.
+    // AVR mode belongs to the Uno alone and RP2040 to the Nano: a board
+    // switch drops back to the interpreter rather than carrying a mode onto a
+    // board that refuses it.
     setAvrMode(false);
+    setRp2040Mode(false);
   }, [boardId, starterFor]);
 
-  /* AVR-only builds pin the backend: the interpreter option is disabled
-   * while one is loaded, so the slow path cannot be selected by accident. */
+  /* Execution-pinned builds pin the backend: the interpreter option is
+   * disabled while one is loaded, so the slow path cannot be selected by
+   * accident. */
   useEffect(() => {
     if (projectBuild?.execution === 'avr') setAvrMode(true);
+    if (projectBuild?.execution === 'rp2040') setRp2040Mode(true);
   }, [projectBuild]);
 
   /* The exercise guide auto-opens on arrival unless dismissed for this exercise. */
@@ -1305,11 +1315,20 @@ export default function Bench(props: BenchProps) {
   };
 
   /*
-   * Whether this board can run the AVR backend, recomputed per render so the
-   * selector and the Run path track board switches together.
+   * Whether this board can run each real backend, recomputed per render so the
+   * selector and the Run path track board switches and the worker's arrival
+   * together. The RP2040 engine lives in the worker, so the worker is part of
+   * its availability.
    */
   const avr = avrAvailableFor(boardId);
-  const backend = resolveBackendSelection({ execution: projectBuild?.execution, avr, avrMode });
+  const rp2040 = rp2040AvailableFor(boardId, workerClient !== null);
+  const backend = resolveBackendSelection({
+    execution: projectBuild?.execution,
+    avr,
+    rp2040,
+    avrMode,
+    rp2040Mode,
+  });
 
   /*
    * Run loads the whole project, then opens the tab the error names: the bar
@@ -1334,7 +1353,7 @@ export default function Bench(props: BenchProps) {
      */
     const session: RunSession = {
       project,
-      backend: avrMode && avr.ok ? 'avr' : 'interpreter',
+      backend: backend.value,
       benchRevision,
       owner: workerClient ? 'worker' : 'in-page',
     };
@@ -1344,7 +1363,18 @@ export default function Bench(props: BenchProps) {
       forceRender((n) => n + 1);
       return;
     }
-    if (session.backend === 'avr') {
+    if (session.backend === 'rp2040' && workerClient !== null) {
+      /*
+       * Live code: the worker rebuilds the LittleFS image from the project as
+       * it stands and boots a fresh machine. `loadFirmware` posts `init`, which
+       * is that rebuild -- MicroPython has no compile step, so there is nothing
+       * to stage. Nothing executes until the machine attaches; the worker holds
+       * the clock for it rather than running the interpreter in the meantime.
+       */
+      workerClient.setExecution('rp2040');
+      workerClient.loadFirmware(project);
+    } else if (session.backend === 'avr') {
+      workerClient?.setExecution('avr');
       // A second Run supersedes the first: the new build aborts the previous
       // one inside compileAndRun, and only the latest run clears progress or
       // lands a verdict.
@@ -1366,6 +1396,7 @@ export default function Bench(props: BenchProps) {
         return;
       }
     } else if (workerClient) {
+      workerClient.setExecution('interpreter');
       workerClient.loadFirmware(project);
     } else {
       simulation.loadFirmware(project);
@@ -1629,16 +1660,24 @@ export default function Bench(props: BenchProps) {
            */}
           <label className="flex items-center gap-1.5">
             <span className="sr-only">Execution backend</span>
-            <Select value={backend.value} onValueChange={(next) => setAvrMode(next === 'avr')}>
+            <Select
+              value={backend.value}
+              onValueChange={(next) => {
+                setAvrMode(next === 'avr');
+                setRp2040Mode(next === 'rp2040');
+              }}
+            >
               <SelectTrigger
                 className="h-7 text-xs"
                 aria-label="Execution backend"
                 title={
-                  avr.ok
+                  avr.ok && rp2040.ok
                     ? 'Which backend the next Run executes on'
-                    : avrMode
-                      ? avr.reason
-                      : 'Which backend the next Run executes on'
+                    : rp2040Mode && !rp2040.ok
+                      ? rp2040.reason
+                      : avrMode && !avr.ok
+                        ? avr.reason
+                        : 'Which backend the next Run executes on'
                 }
               >
                 <SelectValue />
@@ -1657,6 +1696,15 @@ export default function Bench(props: BenchProps) {
                   title={avr.ok ? 'Compile in the worker, run on the AVR core' : avr.reason}
                 >
                   AVR (Uno)
+                </SelectItem>
+                <SelectItem
+                  value="rp2040"
+                  disabled={!rp2040.ok}
+                  title={
+                    rp2040.ok ? 'Boot the pinned MicroPython on the RP2040 engine' : rp2040.reason
+                  }
+                >
+                  RP2040 (Nano)
                 </SelectItem>
               </SelectContent>
             </Select>

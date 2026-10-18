@@ -57,6 +57,82 @@ describe.skipIf(!haveFirmware)('rp2040 attach', () => {
     expect(core.fault).toBeNull();
   }, 90_000);
 
+  it('runs nothing until the machine has attached', async () => {
+    let release!: (assets: Rp2040Assets) => void;
+    const gate = new Promise<Rp2040Assets>((resolve) => {
+      release = resolve;
+    });
+    const core = createSimCore(boardOption('rp2040').make());
+    core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, () => gate);
+
+    // Frames before the boot lands advance the clock but execute nothing:
+    // running the interpreter first would be a second program on the bench,
+    // and its output would vanish the moment the machine attached.
+    for (let frame = 0; frame < 10; frame++) core.step(16);
+    expect(core.rp2040Attached).toBe(false);
+    expect(textOf(serialRing(core.snapshot()).drain())).toBe('');
+
+    release(await realAssets());
+    await vi.waitFor(() => expect(core.rp2040Attached).toBe(true), { timeout: 15000 });
+    let serial = '';
+    for (let frame = 0; frame < 60 && !serial.includes('NOESIS-RP2040-WORKER'); frame++) {
+      core.step(16);
+      serial += textOf(serialRing(core.snapshot()).drain());
+    }
+    expect(serial).toContain('NOESIS-RP2040-WORKER');
+  }, 90_000);
+
+  it('runs the files as they are at each rebuild (live code)', async () => {
+    const core = createSimCore(boardOption('rp2040').make());
+    core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, realAssets);
+    await vi.waitFor(() => expect(core.rp2040Attached).toBe(true), { timeout: 15000 });
+    let serial = '';
+    for (let frame = 0; frame < 60 && !serial.includes('NOESIS-RP2040-WORKER'); frame++) {
+      core.step(16);
+      serial += textOf(serialRing(core.snapshot()).drain());
+    }
+    expect(serial).toContain('NOESIS-RP2040-WORKER');
+
+    // The project changed: the next rebuild mounts the new file and boots.
+    const changed = `import time
+print('NOESIS-RP2040-LIVE')
+while True:
+    time.sleep_ms(10)
+`;
+    core.rebuild(EMPTY_BENCH, pythonProject(changed), 'rp2040', false, undefined, realAssets);
+    await vi.waitFor(() => expect(core.rp2040Attached).toBe(true), { timeout: 15000 });
+    let next = '';
+    for (let frame = 0; frame < 60 && !next.includes('NOESIS-RP2040-LIVE'); frame++) {
+      core.step(16);
+      next += textOf(serialRing(core.snapshot()).drain());
+    }
+    expect(next).toContain('NOESIS-RP2040-LIVE');
+    expect(next).not.toContain('NOESIS-RP2040-WORKER');
+  }, 120_000);
+
+  it('boots clean on a rebuild, which is what Reset is', async () => {
+    const core = createSimCore(boardOption('rp2040').make());
+    core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, realAssets);
+    await vi.waitFor(() => expect(core.rp2040Attached).toBe(true), { timeout: 15000 });
+    let serial = '';
+    for (let frame = 0; frame < 60 && !serial.includes('NOESIS-RP2040-WORKER'); frame++) {
+      core.step(16);
+      serial += textOf(serialRing(core.snapshot()).drain());
+    }
+    expect(serial).toContain('NOESIS-RP2040-WORKER');
+
+    core.rebuild(EMPTY_BENCH, pythonProject(), 'rp2040', false, undefined, realAssets);
+    // Reset is a fresh machine: nothing of the old run survives the rebuild.
+    expect(textOf(serialRing(core.snapshot()).drain())).toBe('');
+    await vi.waitFor(() => expect(core.rp2040Attached).toBe(true), { timeout: 15000 });
+    let again = '';
+    for (let frame = 0; frame < 60 && !again.includes('NOESIS-RP2040-WORKER'); frame++) {
+      core.step(16);
+      again += textOf(serialRing(core.snapshot()).drain());
+    }
+    expect(again).toContain('NOESIS-RP2040-WORKER');
+  }, 120_000);
+
   it('ignores an rp2040 execution on boards that cannot run it', () => {
     const fetcher = vi.fn(realAssets);
     const core = createSimCore(boardOption('uno').make());

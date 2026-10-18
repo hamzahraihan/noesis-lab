@@ -86,6 +86,14 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
   return () => {
     const board = boardOption(build.board).make();
     const sim = new Simulation(board);
+    /*
+     * The RP2040 engine lives in the simulation worker; this harness runs a
+     * bench in-page. Running an rp2040 build on the interpreter here would be
+     * the silently-wrong engine, so it refuses instead of pretending.
+     */
+    if (build.execution === 'rp2040') {
+      throw new Error('rp2040 builds run in the simulation worker, not in-page');
+    }
     sim.execution = build.execution ?? 'interpreter';
     sim.loadCircuit(build.circuit);
     sim.loadFirmware(project);

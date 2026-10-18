@@ -476,6 +476,8 @@ export interface WorkerClient {
   setKnob(partId: string, spec: KnobSpec, value: number): void;
   /** Fast-forward multiplier for the self-paced tick: 1 is real time. */
   setSpeed(scale: number): void;
+  /** Chooses the backend the next init runs on. */
+  setExecution(execution: 'interpreter' | 'avr' | 'rp2040'): void;
   loadFirmware(project: FirmwareProject): void;
   compileAndRun(project: FirmwareProject): Promise<void>;
   cancelCompile(): void;
@@ -632,6 +634,17 @@ class WorkerClientImpl implements WorkerClient {
    */
   setSpeed(scale: number): void {
     this.post('speed', { scale });
+  }
+
+  /**
+   * Chooses the backend the next init runs on.
+   *
+   * The client is built once per simulation, so the mode has to be settable:
+   * the worker core takes the execution with its `init`, and a Run posts a
+   * fresh one anyway.
+   */
+  setExecution(execution: 'interpreter' | 'avr' | 'rp2040'): void {
+    this.execution = execution;
   }
 
   loadFirmware(project: FirmwareProject): void {

@@ -192,6 +192,15 @@ class SimCore implements CoreHandle {
   private wasmAttachedTo: AvrBackend | null = null;
   private wasmFetch: () => Promise<ArrayBuffer> = defaultFetchWasmBytes;
   private rp2040Backend: Rp2040Backend | null = null;
+  /**
+   * True from an rp2040 rebuild until its machine has attached (or failed).
+   *
+   * The engine needs fetched artifacts, so the boot is asynchronous. Nothing
+   * else may run in the meantime: stepping the interpreter would be a second
+   * program on the same bench, and its output would vanish the moment the
+   * machine attached.
+   */
+  private rp2040Pending = false;
   /** Bumped by every rebuild; an attach whose generation is stale never lands. */
   private rp2040Generation = 0;
   private pendingDelayMs = 0;
@@ -301,6 +310,7 @@ class SimCore implements CoreHandle {
     this.avrSettledRevision = -1;
     this.rp2040Backend = null;
     this.rp2040Generation += 1;
+    this.rp2040Pending = execution === 'rp2040';
     if (execution === 'avr') this.tryFlashAvr(firmware);
     if (execution === 'rp2040')
       void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
@@ -339,6 +349,17 @@ class SimCore implements CoreHandle {
           this.faultText = this.rp2040Backend.fault;
           this.rp2040Backend = null;
         }
+        this.advanceBy(frameEnd - this.engine.timeMs);
+        return;
+      }
+      /*
+       * An rp2040 machine boots asynchronously (artifacts, then the image).
+       * Until it lands nothing executes: time still advances, so Run, Reset and
+       * the clock read the same way they will once the boot completes, but the
+       * interpreter is not run as a stand-in for a mode that explicitly asked
+       * for real firmware.
+       */
+      if (this.rp2040Pending) {
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
       }
@@ -640,9 +661,15 @@ class SimCore implements CoreHandle {
         { uf2: new Uint8Array(assets.uf2), image },
         this.rp2040Hooks(),
       );
+      this.rp2040Pending = false;
     } catch (error) {
       if (generation !== this.rp2040Generation) return;
+      this.rp2040Pending = false;
       this.faultText = error instanceof Error ? error.message : String(error);
+      // An explicit RP2040 mode does not silently fall back to the
+      // interpreter: the mode asked for the pinned firmware, and a Python
+      // front end that happens to accept the files is a different engine.
+      this.runner = null;
     }
   }
 
