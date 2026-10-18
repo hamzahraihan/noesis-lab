@@ -10,7 +10,7 @@ import {
 } from './boardRegistry';
 
 import { Simulation } from '@/features/bench/simulations/simulation';
-import { BLINK_SKETCH, PI_BLINK_SKETCH } from './examples';
+import { BLINK_SKETCH } from './examples';
 import { breadboardDefinition, columnX, railRowY, stripRowY } from '@/features/parts';
 import { ledDefinition, resistorDefinition } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
@@ -255,7 +255,17 @@ describe('board registry', () => {
         // single-board computer would fail before it reached a pin, which says
         // nothing about whether the wiring is right.
         const language = boardOption(board.id).language;
-        simulation.loadFirmware(language === 'python' ? PI_BLINK_SKETCH : BLINK_SKETCH, language);
+        /*
+         * The probe is written from the wiring table rather than borrowed from
+         * a board's starter: the two must agree on the pin, and a starter in
+         * another idiom (MicroPython's `machine` on the Nano RP2040) would not
+         * run on the interpreter at all. gpiozero drives any GPIO number.
+         */
+        const probe =
+          language === 'python'
+            ? `from gpiozero import LED\nimport time\nled = LED(${STARTER_WIRING[board.id].ledPin})\nwhile True:\n    led.on()\n    time.sleep(0.5)\n    led.off()\n    time.sleep(0.5)\n`
+            : BLINK_SKETCH;
+        simulation.loadFirmware(probe, language);
         simulation.start();
 
         const anodeKey = `${led.id}:anode`;

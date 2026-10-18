@@ -85,7 +85,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     id: 'rp2040',
     name: 'Nano RP2040 Connect',
     make: nanoRp2040Connect,
-    language: 'arduino-cpp',
+    language: 'python',
     summary: '3.3 V logic with a 12-bit ADC on a Nano-sized board.',
     bestFor:
       'Modern practice. The analogue block silkscreens A0-A3 on the pins its ADC samples, which surprises anyone coming from an AVR.',

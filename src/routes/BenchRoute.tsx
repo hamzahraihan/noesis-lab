@@ -9,7 +9,6 @@
 // direction at zero — the boundary gate forbids it.
 import Bench from '@/features/bench/components/Bench';
 import {
-  BLINK_EXAMPLE,
   BOARDS,
   boardOption,
   buildFor,
@@ -23,16 +22,15 @@ import {
   galleryById,
   isBoardId,
   isGuideDismissed,
-  PI_BLINK_SKETCH,
+  starterSketchFor,
   STARTER_WIRING,
 } from '@/features/learn';
 
 export default function BenchRoute() {
   return (
     <Bench
-      BLINK_EXAMPLE={BLINK_EXAMPLE}
       EXAMPLES={EXAMPLES}
-      PI_BLINK_SKETCH={PI_BLINK_SKETCH}
+      starterSketchFor={starterSketchFor}
       BOARDS={BOARDS}
       boardOption={boardOption}
       DEFAULT_BOARD_ID={DEFAULT_BOARD_ID}

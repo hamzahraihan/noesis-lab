@@ -15,6 +15,8 @@ import type { PartDefinition } from '@/features/parts';
 import { ds1307Definition } from '@/features/parts';
 import { lcd1602Definition } from '@/features/parts';
 import { servoDefinition } from '@/features/parts';
+import { boardOption, type BoardId } from './boardRegistry';
+import type { FirmwareLanguage } from '@/features/simulation';
 import type { Simulation } from '@/features/bench';
 
 /** The parts an example can put on the bench for itself. */
@@ -373,3 +375,42 @@ while True:
     led.off()
     time.sleep(0.5)
 `;
+
+/**
+ * The Nano RP2040 Connect's starter, in the language its firmware speaks.
+ *
+ * The engine boots the pinned MicroPython, so the library is `machine` and the
+ * mounted entry is `main.py` -- gpiozero is a Raspberry Pi OS module and does
+ * not exist on this firmware. The LED is GPIO 2, the pin `STARTER_WIRING` wires
+ * to the starter LED for this board, and the print is the boot's proof in the
+ * serial monitor: a console program shows its work there, not on the glass.
+ */
+export const PICO_BLINK_SKETCH = `from machine import Pin
+import time
+
+led = Pin(2, Pin.OUT)
+print('pico online')
+
+while True:
+    led.value(1)
+    time.sleep(0.5)
+    led.value(0)
+    time.sleep(0.5)
+`;
+
+/**
+ * The sketch a bench opens with: the board's own language and idiom.
+ *
+ * One rule for the three places that seed a project -- mount, board switch and
+ * language switch -- because a board that speaks MicroPython and a board that
+ * speaks gpiozero both answer to `python`, and handing either the other's
+ * sketch fails on the first line for a reason that has nothing to do with the
+ * wiring.
+ */
+export function starterSketchFor(
+  boardId: BoardId,
+  language: FirmwareLanguage = boardOption(boardId).language,
+): string {
+  if (language !== 'python') return BLINK_SKETCH;
+  return boardId === 'rp2040' ? PICO_BLINK_SKETCH : PI_BLINK_SKETCH;
+}

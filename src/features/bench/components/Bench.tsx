@@ -264,9 +264,14 @@ function offsetOfFirstPin(definition: PartDefinition): [x: number, y: number] {
  * untouched; only the source of the names changed from import to argument.
  */
 export interface BenchProps {
-  readonly BLINK_EXAMPLE: Example;
   readonly EXAMPLES: readonly Example[];
-  readonly PI_BLINK_SKETCH: string;
+  /**
+   * The board's own opening sketch, handed in because the bench may not reach
+   * into `learn` for it. One helper rather than two constants: MicroPython
+   * (Nano RP2040) and gpiozero (Pi) are both `python`, and each needs its own
+   * idiom.
+   */
+  readonly starterSketchFor: (boardId: BoardId, language?: FirmwareLanguage) => string;
   readonly BOARDS: ReadonlyArray<BoardOption>;
   readonly boardOption: (boardId: BoardId) => BoardOption;
   readonly DEFAULT_BOARD_ID: BoardId;
@@ -292,9 +297,8 @@ export interface BenchProps {
 
 export default function Bench(props: BenchProps) {
   const {
-    BLINK_EXAMPLE,
     EXAMPLES,
-    PI_BLINK_SKETCH,
+    starterSketchFor,
     BOARDS,
     boardOption,
     DEFAULT_BOARD_ID,
@@ -388,14 +392,8 @@ export default function Bench(props: BenchProps) {
    * node-testable; this only folds the exercise/build sketch into the starter.
    */
   const starterFor = useCallback(
-    (id: BoardId) => {
-      const language = boardOption(id).language;
-      return toSingleFileProject(
-        language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
-        language,
-      );
-    },
-    [boardOption, BLINK_EXAMPLE, PI_BLINK_SKETCH],
+    (id: BoardId) => toSingleFileProject(starterSketchFor(id), boardOption(id).language),
+    [boardOption, starterSketchFor],
   );
   const [seed] = useState(() => {
     const starter =
@@ -483,7 +481,13 @@ export default function Bench(props: BenchProps) {
    * interpreter, so a Mega can never inherit another board's mode.
    */
   const [avrMode, setAvrMode] = useState(projectBuild?.execution === 'avr');
-  const [rp2040Mode, setRp2040Mode] = useState(projectBuild?.execution === 'rp2040');
+  // The Nano RP2040 Connect's opening mode is its engine: the board's language
+  // is the MicroPython its firmware runs, and the interpreter has no `machine`
+  // module to run it with. Availability still decides -- no worker means the
+  // selector falls back with its reason.
+  const [rp2040Mode, setRp2040Mode] = useState(
+    projectBuild?.execution === 'rp2040' || boardId === 'rp2040',
+  );
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
   /*
@@ -529,7 +533,7 @@ export default function Bench(props: BenchProps) {
     // switch drops back to the interpreter rather than carrying a mode onto a
     // board that refuses it.
     setAvrMode(false);
-    setRp2040Mode(false);
+    setRp2040Mode(boardId === 'rp2040');
   }, [boardId, starterFor]);
 
   /* Execution-pinned builds pin the backend: the interpreter option is
@@ -608,10 +612,7 @@ export default function Bench(props: BenchProps) {
         buildStartingBench(created, STARTER_WIRING[boardId]);
         circuitSeedErrorRef.current = circuitSeed.error;
       }
-      created.loadFirmware(
-        boardOption(boardId).language === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
-        boardOption(boardId).language,
-      );
+      created.loadFirmware(starterSketchFor(boardId), boardOption(boardId).language);
     }
     /*
      * Deliberately left stopped. The bench opens on a loaded sketch at
@@ -634,9 +635,8 @@ export default function Bench(props: BenchProps) {
     projectBuild,
     boardOption,
     STARTER_WIRING,
-    PI_BLINK_SKETCH,
+    starterSketchFor,
     exerciseLanguage,
-    BLINK_EXAMPLE,
     firmwareForBuild,
     circuitSeedParam,
   ]);
@@ -1304,12 +1304,7 @@ export default function Bench(props: BenchProps) {
     ) {
       return;
     }
-    setProject(
-      toSingleFileProject(
-        nextLanguage === 'python' ? PI_BLINK_SKETCH : BLINK_EXAMPLE.sketch,
-        nextLanguage,
-      ),
-    );
+    setProject(toSingleFileProject(starterSketchFor(boardId, nextLanguage), nextLanguage));
     // A fresh blink in a new grammar is not the example that was highlighted.
     setExampleId(null);
   };
