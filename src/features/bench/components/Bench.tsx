@@ -40,6 +40,7 @@ import { WokwiLibrary } from '../wokwi/WokwiLibrary';
 import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from '../store/shell-state';
 import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from '../store/bench-store';
 import { useWorkbenchStore } from '../store/workbench-store';
+import { applyTheme, storedTheme, watchSystemTheme, type ThemeChoice } from '@/lib/theme';
 import { benchBounds } from '../wiring/bounds';
 import type {
   BoardId,
@@ -660,6 +661,7 @@ export default function Bench(props: BenchProps) {
    * stepping only after its first live `ok` frame lands (handshake success);
    * until then the in-page simulation keeps ticking underneath.
    */
+  const [theme, setTheme] = useState<ThemeChoice>(storedTheme);
   const [workerClient, setWorkerClient] = useState<WorkerClient | null>(null);
   const [workerFallback, setWorkerFallback] = useState<string | null>(null);
   const [workerLive, setWorkerLive] = useState(false);
@@ -677,6 +679,13 @@ export default function Bench(props: BenchProps) {
       localStorage.setItem('noesis-no-worker', forceNoWorker ? '1' : '0');
     }
   }, [forceNoWorker]);
+
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme !== 'system') return;
+    const unsub = watchSystemTheme(() => applyTheme('system'));
+    return unsub;
+  }, [theme]);
   useEffect(() => {
     // A fresh simulation has nothing loaded to resume.
     runSession.current = null;
@@ -1936,6 +1945,12 @@ export default function Bench(props: BenchProps) {
               >
                 {forceNoWorker ? 'Enable sim worker' : 'Disable sim worker'}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {(['system', 'ink', 'paper'] as const).map((t) => (
+                <DropdownMenuItem key={t} onSelect={() => setTheme(t)}>
+                  {theme === t ? '✓ ' : ''}Theme: {t}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
           <input

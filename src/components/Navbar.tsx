@@ -1,23 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { applyTheme, storedTheme, watchSystemTheme, type ThemeChoice } from '@/lib/theme';
 
-function applyTheme(theme: 'ink' | 'paper') {
-  document.documentElement.setAttribute('data-theme', theme);
-  try {
-    localStorage.setItem('noesis-theme', theme);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** The theme the operator last chose, or the default when nothing is stored. */
-function storedTheme(): 'ink' | 'paper' {
-  try {
-    return localStorage.getItem('noesis-theme') === 'paper' ? 'paper' : 'ink';
-  } catch {
-    return 'ink';
-  }
-}
+// Theme helpers now live in @/lib/theme.
 
 /**
  * The site-wide nav.
@@ -28,7 +13,7 @@ function storedTheme(): 'ink' | 'paper' {
  * needs rather than letting it import them.
  */
 export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
-  const [theme, setTheme] = useState<'ink' | 'paper'>(storedTheme);
+  const [theme, setTheme] = useState<ThemeChoice>(storedTheme);
   const [open, setOpen] = useState(false);
 
   /*
@@ -37,6 +22,9 @@ export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
    */
   useEffect(() => {
     applyTheme(theme);
+    if (theme !== 'system') return;
+    const unsub = watchSystemTheme(() => applyTheme('system'));
+    return unsub;
   }, [theme]);
 
   const links = [
@@ -75,7 +63,7 @@ export function Navbar({ defaultBoardId }: { defaultBoardId: string }) {
             aria-label="Theme"
             className="flex overflow-hidden border border-[var(--hd-border)]"
           >
-            {(['ink', 'paper'] as const).map((t) => (
+            {(['system', 'ink', 'paper'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
