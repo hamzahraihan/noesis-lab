@@ -106,6 +106,12 @@ export type ComponentSpec =
   | { readonly kind: 'i2c-sensor'; readonly device: I2cSensorVariant }
   | { readonly kind: 'lcd'; readonly variant: LcdVariant }
   | { readonly kind: 'servo' }
+  /*
+   * A part whose behaviour is a script (`simulation/scripted/`): the host has no
+   * model for it, so the answer comes from the part's own source. The bus is
+   * what the script must provide -- an analog fraction or a digital level.
+   */
+  | { readonly kind: 'scripted'; readonly bus: 'analog' | 'digital' }
   | { readonly kind: '7segment'; readonly digits: 1 | 2 | 3 | 4 };
 
 /**

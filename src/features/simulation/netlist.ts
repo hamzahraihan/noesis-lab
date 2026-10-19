@@ -209,6 +209,7 @@ function elementsForPart(
   relayEnergized: ReadonlyMap<string, boolean> = new Map(),
   sonarMeasuring: ReadonlyMap<string, boolean> = new Map(),
   irTransmitting = false,
+  scriptedValues: ReadonlyMap<string, number> = new Map(),
 ): Element[] {
   const nodeAt = (pinId: string): number => pinNode.get(`${part.id}:${pinId}`) ?? GROUND;
   const component = part.definition.component;
@@ -310,6 +311,43 @@ function elementsForPart(
      */
     case 'slide-potentiometer':
       return [...potLegs('endA', 'wiper', 'endB', component.ohms, state.knob(part.id, WIPER_KNOB))];
+
+    /*
+     * A scripted sensor (`simulation/scripted/`): the host has no model for it,
+     * so the reading comes from the part's own script -- sampled by whoever owns
+     * the runtime and handed in as a fraction of the supply. No reading is the
+     * safe state the design chose: an analog part at 0 V, a digital one at 0 --
+     * never a floating pin, never a plausible mid-rail number.
+     */
+    case 'scripted': {
+      const fraction = Math.min(1, Math.max(0, scriptedValues.get(part.id) ?? 0));
+      if (component.bus === 'digital') {
+        // A push-pull output, modelled as the strong leg it is: to the rail for
+        // a high, to ground for a low.
+        return [
+          {
+            kind: 'resistor',
+            a: nodeAt('DOUT'),
+            b: fraction >= 0.5 ? nodeAt('VCC') : nodeAt('GND'),
+            ohms: 1_000,
+            label: 'scripted level',
+          },
+        ];
+      }
+      /*
+       * Ratios, not volts. The script answers a fraction of *its own* supply, so
+       * the two legs sit between the part's VCC and GND pins exactly as the
+       * bench's own module sensors do and the operator's wiring decides the rail.
+       * The extreme fractions are the legs' limits rather than infinities.
+       */
+      const top = 10_000;
+      const bottom =
+        fraction <= 0.001 ? 1e-3 : fraction >= 0.999 ? 1e9 : (top * fraction) / (1 - fraction);
+      return [
+        { kind: 'resistor', a: nodeAt('VCC'), b: nodeAt('AOUT'), ohms: top, label: 'sensor' },
+        { kind: 'resistor', a: nodeAt('AOUT'), b: nodeAt('GND'), ohms: bottom, label: 'divider' },
+      ];
+    }
 
     case 'photoresistor': {
       const light = state.knob(part.id, LIGHT_KNOB) / LIGHT_KNOB.max;
@@ -827,6 +865,7 @@ export function buildNetlist(
   relayEnergized: ReadonlyMap<string, boolean> = new Map(),
   sonarMeasuring: ReadonlyMap<string, boolean> = new Map(),
   irTransmitting = false,
+  scriptedValues: ReadonlyMap<string, number> = new Map(),
 ): Netlist {
   const sets = new DisjointSet(bench.terminals.length);
 
@@ -891,6 +930,7 @@ export function buildNetlist(
       relayEnergized,
       sonarMeasuring,
       irTransmitting,
+      scriptedValues,
     )) {
       if (!isDegenerate(element)) elements.push(element);
     }

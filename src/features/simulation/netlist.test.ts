@@ -15,6 +15,7 @@ import { GROUND, type Element } from './elements';
 import { DIODE_PROFILES } from '@/features/parts';
 import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from './netlist';
+import type { PartDefinition } from '@/features/parts';
 import { elementCurrent, solveCircuit } from './circuit';
 
 /** Breadboard origin, kept clear of the board so the two never overlap. */
@@ -223,5 +224,92 @@ describe('end to end: an LED driven from an ESP32 pin', () => {
 
     const ledElement = netlist.elements.find((element) => element.kind === 'diode')!;
     expect(elementCurrent(ledElement, solution)).toBeLessThan(1e-6);
+  });
+});
+
+/*
+ * A scripted part asks the host for nothing it has a model for: the reading is
+ * handed in, and the netlist turns a fraction into the same two-leg divider the
+ * bench's own module sensors are made of -- so the answer is ratiometric to the
+ * rail the operator wired, not a voltage this file invented.
+ */
+describe('a scripted part', () => {
+  const probe = (bus: 'analog' | 'digital'): PartDefinition => ({
+    id: 'scripted-probe',
+    name: 'Scripted probe',
+    category: 'input',
+    widthMm: 20,
+    heightMm: 12,
+    bodyColour: '#5b6b4a',
+    legendColour: '#f2f2ee',
+    component: { kind: 'scripted', bus },
+    pins: [
+      { id: bus === 'analog' ? 'AOUT' : 'DOUT', label: 'OUT', x: 0, y: 6 },
+      { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+      { id: 'GND', label: 'GND', x: 20, y: 6 },
+    ],
+  });
+
+  const bench = (bus: 'analog' | 'digital') => {
+    const builder = new BenchBuilder();
+    const part = builder.addPart(probe(bus), 0, 0);
+    return { part, built: builder.build() };
+  };
+
+  const build = (bus: 'analog' | 'digital', fraction?: number) => {
+    const { part, built } = bench(bus);
+    const values = new Map<string, number>();
+    if (fraction !== undefined) values.set(part.id, fraction);
+    const netlist = buildNetlist(built, NO_DYNAMIC_STATE, undefined, undefined, false, values);
+    const node = (pin: string) => netlist.pinNode.get(`${part.id}:${pin}`);
+    return { netlist, node };
+  };
+
+  it('turns a fraction into the divider that produces it', () => {
+    const { netlist, node } = build('analog', 0.25);
+    const divider = netlist.elements.find(
+      (element) => element.kind === 'resistor' && element.label === 'divider',
+    );
+    if (divider?.kind !== 'resistor') throw new Error('no divider');
+    // 10k over 3.33k is 0.25 of the rail, which is the fraction the script said.
+    expect(divider.ohms).toBeCloseTo(10_000 / 3, 6);
+    expect(divider.a).toBe(node('AOUT'));
+    expect(divider.b).toBe(node('GND'));
+  });
+
+  it('keeps the extremes at the rails instead of dividing by zero', () => {
+    const low = build('analog', 0).netlist.elements.find(
+      (e) => e.kind === 'resistor' && e.label === 'divider',
+    );
+    const high = build('analog', 1).netlist.elements.find(
+      (e) => e.kind === 'resistor' && e.label === 'divider',
+    );
+    if (low?.kind !== 'resistor' || high?.kind !== 'resistor') throw new Error('no divider');
+    expect(low.ohms).toBeLessThan(1);
+    expect(high.ohms).toBeGreaterThan(1e8);
+  });
+
+  it('reads as nothing at all when no reading arrived', () => {
+    const { netlist } = build('analog');
+    const divider = netlist.elements.find(
+      (element) => element.kind === 'resistor' && element.label === 'divider',
+    );
+    if (divider?.kind !== 'resistor') throw new Error('no divider');
+    // A faulted or unsampled part is pulled to ground, never left mid-rail.
+    expect(divider.ohms).toBeLessThan(1);
+  });
+
+  it('drives a digital line to the rail it says', () => {
+    const high = build('digital', 1);
+    const low = build('digital', 0);
+    const leg = (built: ReturnType<typeof build>) =>
+      built.netlist.elements.find(
+        (element) => element.kind === 'resistor' && element.label === 'scripted level',
+      );
+    const highLeg = leg(high);
+    const lowLeg = leg(low);
+    if (highLeg?.kind !== 'resistor' || lowLeg?.kind !== 'resistor') throw new Error('no leg');
+    expect(highLeg.b).toBe(high.node('VCC'));
+    expect(lowLeg.b).toBe(low.node('GND'));
   });
 });
