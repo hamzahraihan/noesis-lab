@@ -1084,7 +1084,7 @@ export function Workbench({
   return (
     <svg
       ref={svgRef}
-      className="h-full w-full touch-none select-none bg-slate-950"
+      className="h-full w-full touch-none select-none bg-[var(--hd-bg-deep)]"
       viewBox={`${view.x} ${view.y} ${view.width} ${viewHeight}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
