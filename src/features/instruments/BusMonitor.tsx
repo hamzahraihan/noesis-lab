@@ -44,10 +44,10 @@ export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMoni
   }, [entries]);
 
   return (
-    <section className="border-b border-slate-800">
+    <section className="border-b border-[var(--hd-border)]">
       <div className="flex items-center gap-2 px-3 py-2">
         <CardTitle className="flex flex-1 items-center gap-2">
-          <SewingPinIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <SewingPinIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
           Bus monitor
         </CardTitle>
         <Button
@@ -64,29 +64,29 @@ export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMoni
 
       <ul
         ref={listRef}
-        className="max-h-48 overflow-y-auto px-3 pb-3 font-mono text-[11px] leading-relaxed"
+        className="max-h-48 overflow-y-auto px-3 pb-3 font-mono text-xs leading-relaxed"
       >
         {entries.length === 0 ? (
-          <li className="font-sans text-slate-600">
+          <li className="font-sans text-[var(--hd-faint)]">
             Nothing yet. Wire.beginTransmission and SPI.transfer land here as the sketch makes them.
           </li>
         ) : (
           entries.slice(-VISIBLE_ENTRIES).map((entry, index) => (
             <li key={`${entry.timeMs}-${index}`} className="flex gap-2 whitespace-pre">
-              <span className="num shrink-0 text-slate-600">{formatTime(entry.timeMs)}</span>
+              <span className="num shrink-0 text-[var(--hd-faint)]">{formatTime(entry.timeMs)}</span>
               <span
                 className={
-                  entry.bus === 'i2c' ? 'shrink-0 text-amber-400' : 'shrink-0 text-sky-400'
+                  entry.bus === 'i2c' ? 'shrink-0 text-[var(--hd-warn)]' : 'shrink-0 text-[var(--hd-accent)]'
                 }
               >
                 {entry.bus === 'i2c' ? 'I2C' : 'SPI'}
               </span>
               {entry.address !== null && (
-                <span className="shrink-0 text-slate-500">
+                <span className="shrink-0 text-[var(--hd-muted)]">
                   0x{entry.address.toString(16).padStart(2, '0')}
                 </span>
               )}
-              <span className="truncate text-slate-300">{formatBytes(entry.bytes)}</span>
+              <span className="truncate text-[var(--hd-text)]">{formatBytes(entry.bytes)}</span>
               <span
                 className={
                   entry.acknowledged ? 'shrink-0 text-emerald-500' : 'shrink-0 text-rose-500'
@@ -94,7 +94,7 @@ export const BusMonitor = memo(function BusMonitor({ entries, onClear }: BusMoni
               >
                 {entry.acknowledged ? 'ACK' : 'NACK'}
               </span>
-              <span className="num shrink-0 text-slate-600">{formatMicros(entry.micros)}</span>
+              <span className="num shrink-0 text-[var(--hd-faint)]">{formatMicros(entry.micros)}</span>
             </li>
           ))
         )}
