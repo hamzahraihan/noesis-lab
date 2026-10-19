@@ -28,9 +28,9 @@ export function Sidebar({
   return (
     <aside
       style={{ width }}
-      className="flex shrink-0 flex-col border-r border-slate-800 bg-slate-900"
+      className="flex shrink-0 flex-col border-r border-[var(--hd-border)] bg-[var(--hd-surface)]"
     >
-      <div className="flex h-9 shrink-0 items-center border-b border-slate-800 px-3 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase">
+      <div className="flex h-9 shrink-0 items-center border-b border-[var(--hd-border)] px-3 text-xs font-semibold tracking-[0.08em] text-[var(--hd-muted)] uppercase">
         {activity === 'files' ? 'Explorer' : activity === 'components' ? 'Components' : 'Library'}
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -43,7 +43,7 @@ export function Sidebar({
                 <li key={file.name}>
                   <div
                     className={`flex items-center rounded-none font-mono text-xs ${
-                      selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                      selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
                     }`}
                   >
                     <button
@@ -62,7 +62,7 @@ export function Sidebar({
                       title={
                         isEntry ? `${file.name} (entry)` : `${file.name} — double-click to rename`
                       }
-                      className="flex-1 truncate rounded-none px-2 py-1.5 text-left transition-colors hover:text-slate-100"
+                      className="flex-1 truncate rounded-none px-2 py-1.5 text-left transition-colors hover:text-[var(--hd-text)]"
                     >
                       {file.name}
                     </button>
@@ -77,7 +77,7 @@ export function Sidebar({
                           }
                         }}
                         aria-label={`Remove ${file.name}`}
-                        className="rounded-none px-2 py-1 text-slate-500 transition-colors hover:text-red-300"
+                        className="rounded-none px-2 py-1 text-[var(--hd-muted)] transition-colors hover:text-red-300"
                       >
                         ×
                       </button>
@@ -89,7 +89,7 @@ export function Sidebar({
           </ul>
         )}
         {activity === 'files' && (
-          <div className="shrink-0 border-t border-slate-800 p-2">
+          <div className="shrink-0 border-t border-[var(--hd-border)] p-2">
             <Button
               type="button"
               variant="secondary"
