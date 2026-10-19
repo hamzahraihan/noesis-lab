@@ -93,7 +93,7 @@ export function ExercisesPage() {
                   <li key={exercise.id}>
                     <Link
                       to={`/learn/${exercise.id}`}
-                      className="group block overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-[var(--hd-surface)] hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+                      className="group block overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-[var(--hd-border-strong)] hover:bg-[var(--hd-surface)] hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.8)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
                     >
                       {/*
                        * The destination, up front: the finished wiring each
