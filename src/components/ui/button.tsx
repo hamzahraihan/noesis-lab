@@ -12,14 +12,14 @@ const buttonVariants = cva(
         // Old .ctl-accent: the one action a panel exists to offer.
         default: 'bg-primary text-primary-foreground hover:bg-[var(--color-accent)]',
         // Old .ctl-quiet: the default thing you press.
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-slate-700',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-[var(--hd-border-strong)]',
         // Old .ctl-outline: a secondary commitment.
         outline:
-          'bg-transparent text-slate-300 shadow-[inset_0_0_0_1px_var(--color-slate-700)] hover:bg-slate-800 hover:text-slate-100',
+          'bg-transparent text-[var(--hd-text)] shadow-[inset_0_0_0_1px_var(--color-slate-700)] hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]',
         // Old .ctl-danger: destructive and nothing else.
         destructive:
           'bg-transparent text-red-300 shadow-[inset_0_0_0_1px_var(--color-red-900)] hover:bg-red-950 hover:text-red-200',
-        ghost: 'hover:bg-slate-800 hover:text-slate-100',
+        ghost: 'hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]',
       },
       size: {
         sm: 'h-7 px-2.5',
