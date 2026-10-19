@@ -13,9 +13,10 @@
  * routings report what they allocated in `partId` / `wireId`.
  */
 
-import { partDefinitionById, type PartDefinition } from '@/features/parts';
+import { isShippedPart, type PartDefinition } from '@/features/parts';
 import { BUTTON_CAP_COLOURS } from './bench';
 import {
+  definitionFor,
   pinRefFor,
   resolvePin,
   type CircuitDocument,
@@ -87,7 +88,7 @@ function resolveRef(
   if (!split) return { error: `invalid pin reference: ${ref}` };
   const part = findPart(doc, split.partId);
   if (!part) return { error: `unknown part: ${split.partId}` };
-  const definition = partDefinitionById(part.type);
+  const definition = definitionFor(doc, part.type);
   if (!definition) return { error: `unknown part type: ${part.type}` };
   const pin = resolvePin(definition, split.pin);
   if (!pin) return { error: `unknown pin: ${ref}` };
@@ -105,6 +106,22 @@ function withPart(
 }
 
 /** Places a part and reports the id it took. */
+/**
+ * Records a non-shipped part's definition in the document that places it.
+ *
+ * This is the moment a circuit takes responsibility for a part: a shipped part
+ * needs nothing (the build has it), while an imported one has to travel with the
+ * circuit or the wiring arrives somewhere the part does not. Replacing an entry
+ * for the same id is deliberate: a type names one definition, so re-importing an
+ * edited part and placing it updates what every instance of that type means --
+ * which is the honest reading, not a silent split between two versions.
+ */
+export function carryDefinition(doc: CircuitDocument, definition: PartDefinition): CircuitDocument {
+  if (isShippedPart(definition.id)) return doc;
+  const others = (doc.definitions ?? []).filter((entry) => entry.id !== definition.id);
+  return { ...doc, definitions: [...others, definition] };
+}
+
 export function addPart(
   doc: CircuitDocument,
   type: string,
@@ -112,13 +129,14 @@ export function addPart(
   y: number,
   rotation: PartRotation = 0,
 ): EditResult {
-  if (!partDefinitionById(type)) return refused(doc, `unknown part type: ${type}`);
+  const definition = definitionFor(doc, type);
+  if (!definition) return refused(doc, `unknown part type: ${type}`);
   const partId = nextSerial(
     doc.parts.map((part) => part.id),
     'p',
   );
   const part: CircuitPart = { id: partId, type, x, y, rotation };
-  return { doc: { ...doc, parts: [...doc.parts, part] }, partId };
+  return { doc: carryDefinition({ ...doc, parts: [...doc.parts, part] }, definition), partId };
 }
 
 export function movePart(doc: CircuitDocument, partId: string, x: number, y: number): EditResult {
@@ -269,7 +287,7 @@ export function setKnob(doc: CircuitDocument, key: string, value: number): EditR
   const knobId = key.slice(colon + 1);
   const part = findPart(doc, partId);
   if (!part) return refused(doc, `unknown part: ${partId}`);
-  const definition = partDefinitionById(part.type);
+  const definition = definitionFor(doc, part.type);
   if (!definition) return refused(doc, `unknown part type: ${part.type}`);
   const spec = definition.knobs?.find((knob) => knob.id === knobId);
   if (!spec) return refused(doc, `unknown knob: ${key}`);
