@@ -114,21 +114,21 @@ export function DiagnosticsPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <header className="border-b border-slate-800">
+    <div className="min-h-screen bg-[var(--hd-bg-deep)] text-[var(--hd-text)]">
+      <header className="border-b border-[var(--hd-border)]">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-6 py-4">
           <Button asChild variant="secondary" size="sm">
             <Link to="/">Boards</Link>
           </Button>
-          <span className="text-slate-600">/</span>
-          <span className="text-sm text-slate-400">Gallery diagnostics</span>
+          <span className="text-[var(--hd-faint)]">/</span>
+          <span className="text-sm text-[var(--hd-muted)]">Gallery diagnostics</span>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance text-slate-100">
+        <h1 className="text-2xl font-semibold tracking-tight text-balance text-[var(--hd-text)]">
           Smoke-test the gallery
         </h1>
-        <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-slate-400">
+        <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-[var(--hd-muted)]">
           Runs every finished build through its scripted checks on a live sim. Manual ticks are
           session-only and survive re-runs.
         </p>
@@ -140,15 +140,15 @@ export function DiagnosticsPanel() {
             Cancel
           </Button>
           {running && activeKey !== null && progress !== null ? (
-            <span className="text-sm text-slate-400" role="status">
+            <span className="text-sm text-[var(--hd-muted)]" role="status">
               Running {activeKey}: {String(progress.done)}/{String(progress.total)}
             </span>
           ) : null}
         </div>
-        <div className="mt-6 overflow-x-auto rounded-none border border-slate-800">
+        <div className="mt-6 overflow-x-auto rounded-none border border-[var(--hd-border)]">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-800 text-xs text-slate-500">
+              <tr className="border-b border-[var(--hd-border)] text-xs text-[var(--hd-muted)]">
                 <th scope="col" className="px-4 py-2.5 font-medium">
                   Project
                 </th>
@@ -174,11 +174,11 @@ export function DiagnosticsPanel() {
                 const key = entryKey(entry);
                 const isActive = running && activeKey === key;
                 return (
-                  <tr key={key} className="border-b border-slate-800 last:border-0">
-                    <td className="px-4 py-2.5 text-slate-200">{entry.projectId}</td>
-                    <td className="px-4 py-2.5 text-slate-400">{entry.buildLabel}</td>
-                    <td className="px-4 py-2.5 text-slate-400">{String(entry.checks.length)}</td>
-                    <td className="px-4 py-2.5 text-slate-400">{summary[key] ?? '—'}</td>
+                  <tr key={key} className="border-b border-[var(--hd-border)] last:border-0">
+                    <td className="px-4 py-2.5 text-[var(--hd-text)]">{entry.projectId}</td>
+                    <td className="px-4 py-2.5 text-[var(--hd-muted)]">{entry.buildLabel}</td>
+                    <td className="px-4 py-2.5 text-[var(--hd-muted)]">{String(entry.checks.length)}</td>
+                    <td className="px-4 py-2.5 text-[var(--hd-muted)]">{summary[key] ?? '—'}</td>
                     <td className="px-4 py-2.5">
                       <input
                         type="checkbox"
@@ -214,7 +214,7 @@ export function DiagnosticsPanel() {
         <div className="mt-6">
           <label
             htmlFor="diagnostics-report"
-            className="text-sm font-semibold tracking-tight text-slate-100"
+            className="text-sm font-semibold tracking-tight text-[var(--hd-text)]"
           >
             Report
           </label>
@@ -225,7 +225,7 @@ export function DiagnosticsPanel() {
             onFocus={(event) => event.currentTarget.select()}
             rows={20}
             placeholder="No runs yet — Run all or Run a single build."
-            className="mt-2 w-full rounded-none border border-slate-800 bg-slate-900/60 px-4 py-3 font-mono text-xs leading-relaxed text-slate-300"
+            className="mt-2 w-full rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 px-4 py-3 font-mono text-xs leading-relaxed text-[var(--hd-text)]"
           />
         </div>
       </main>
