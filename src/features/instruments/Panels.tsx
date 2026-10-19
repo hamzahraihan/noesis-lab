@@ -137,13 +137,13 @@ export function Inspector({
     // to click and shows the glyph for the thing they'd click.
     return (
       <div className="flex flex-1 flex-col">
-        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--hd-border)] px-3">
           <CardTitle className="flex items-center gap-2">
-            <CubeIcon className="icon-sm text-slate-500" aria-hidden="true" />
+            <CubeIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
             Inspector
           </CardTitle>
         </div>
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6 text-center text-xs text-slate-500">
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6 text-center text-xs text-[var(--hd-muted)]">
           <TargetIcon className="icon text-slate-700" aria-hidden="true" />
           <p>Select a part on the bench to read its pins and drive it.</p>
         </div>
@@ -159,17 +159,17 @@ export function Inspector({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--hd-border)] px-3">
         <CardTitle className="flex items-center gap-2">
-          <CubeIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <CubeIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
           Inspector
         </CardTitle>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">{part.name ?? definition.name}</h2>
-          <p className="mt-0.5 font-mono text-[11px] text-slate-500">{definition.id}</p>
+          <h2 className="text-sm font-semibold text-[var(--hd-text)]">{part.name ?? definition.name}</h2>
+          <p className="mt-0.5 font-mono text-xs text-[var(--hd-muted)]">{definition.id}</p>
           <Input
             key={part.id}
             defaultValue={part.name ?? ''}
@@ -204,8 +204,8 @@ export function Inspector({
             <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
               {labelledPins.map((pin) => (
                 <li key={pin.id} className="flex justify-between gap-2">
-                  <span className="truncate text-slate-500">{pin.label}</span>
-                  <span className="num text-slate-200">
+                  <span className="truncate text-[var(--hd-muted)]">{pin.label}</span>
+                  <span className="num text-[var(--hd-text)]">
                     {formatVolts(pinVoltages.get(`${part.id}:${pin.id}`) ?? 0)}
                   </span>
                 </li>
@@ -216,7 +216,7 @@ export function Inspector({
 
         {definition.component.kind === 'button' && (
           <div>
-            <p className="mb-1.5 text-xs text-slate-500">Cap colour</p>
+            <p className="mb-1.5 text-xs text-[var(--hd-muted)]">Cap colour</p>
             <div className="flex gap-1.5" role="group" aria-label="Button cap colour">
               {BUTTON_CAP_COLOURS.map((colour) => {
                 const active = (part.capColour ?? '#111111') === colour;
@@ -228,7 +228,7 @@ export function Inspector({
                     aria-label={`Cap colour ${colour}`}
                     aria-pressed={active}
                     onClick={() => onSetCapColour(colour)}
-                    className="h-6 w-6 rounded-none border border-slate-700"
+                    className="h-6 w-6 rounded-none border border-[var(--hd-border-strong)]"
                     style={{
                       backgroundColor: colour,
                       outline: active ? '2px solid #38bdf8' : 'none',
@@ -250,7 +250,7 @@ export function Inspector({
             variant={controls.isPressed(part.id) ? 'default' : 'secondary'}
             className={
               controls.isPressed(part.id)
-                ? 'h-8 w-full !bg-amber-400 !text-slate-900'
+                ? 'h-8 w-full !bg-[var(--hd-warn)] !text-slate-900'
                 : 'h-8 w-full'
             }
           >
@@ -299,12 +299,12 @@ export function Inspector({
           >
             <RotateIcon className="icon" aria-hidden="true" />
             Turn part
-            <span className="num ml-auto text-slate-400">{rotation}°</span>
+            <span className="num ml-auto text-[var(--hd-muted)]">{rotation}°</span>
           </Button>
           {panelSize && (
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Screen</span>
-              <span className="num text-slate-200">{panelSize}</span>
+              <span className="text-[var(--hd-muted)]">Screen</span>
+              <span className="num text-[var(--hd-text)]">{panelSize}</span>
             </div>
           )}
         </div>
@@ -344,7 +344,7 @@ function KnobControl({
   if (spec.toggle) {
     return (
       <label className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-slate-400">{spec.label}</span>
+        <span className="text-[var(--hd-muted)]">{spec.label}</span>
         <input
           type="checkbox"
           className="size-4 accent-amber-400"
@@ -357,8 +357,8 @@ function KnobControl({
   return (
     <label className="flex flex-col gap-1.5 text-xs">
       <span className="flex items-center justify-between">
-        <span className="text-slate-400">{spec.label}</span>
-        <span className="num text-slate-200">{formatKnobValue(spec, value)}</span>
+        <span className="text-[var(--hd-muted)]">{spec.label}</span>
+        <span className="num text-[var(--hd-text)]">{formatKnobValue(spec, value)}</span>
       </span>
       <input
         type="range"
@@ -392,8 +392,8 @@ function trimNumber(value: number): number {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-slate-200 tabular-nums">{value}</dd>
+      <dt className="text-[var(--hd-muted)]">{label}</dt>
+      <dd className="text-[var(--hd-text)] tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -421,17 +421,17 @@ export const SerialMonitor = memo(function SerialMonitor({ lines }: { lines: rea
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--hd-border)] px-3">
         <CardTitle className="flex items-center gap-2">
-          <ReaderIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <ReaderIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
           Serial Monitor
         </CardTitle>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap text-emerald-300">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed whitespace-pre-wrap text-[var(--hd-success)]">
         {lines.length === 0 ? (
           // Dim prose here read as a stalled instrument rather than an idle
           // one, so it names what would make the sketch start printing.
-          <span className="font-sans text-slate-600">
+          <span className="font-sans text-[var(--hd-faint)]">
             Serial.print and Serial.println output lands here.
           </span>
         ) : (
@@ -1119,19 +1119,19 @@ export function FirmwareEditor({
   }, [libsPopupOpen, setLibsPopupOpen]);
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--hd-border)] px-3">
         {!headerHidden && (
           <button
             type="button"
             onClick={onToggle}
             aria-expanded={expanded}
-            className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase transition-colors hover:text-slate-200"
+            className="flex items-center gap-2 text-xs font-semibold tracking-[0.08em] text-[var(--hd-muted)] uppercase transition-colors hover:text-[var(--hd-text)]"
           >
             <CaretRightIcon
               className={`icon-sm transition-transform ${expanded ? 'rotate-90' : ''}`}
               aria-hidden="true"
             />
-            <span className="text-slate-500">
+            <span className="text-[var(--hd-muted)]">
               <CodeIcon className="icon-sm" aria-hidden="true" />
             </span>
             Firmware
@@ -1206,7 +1206,7 @@ export function FirmwareEditor({
           >
             Libraries
             {declarations.length > 0 && (
-              <span className="num text-slate-400">{declarations.length}</span>
+              <span className="num text-[var(--hd-muted)]">{declarations.length}</span>
             )}
           </Button>
         </div>
@@ -1243,7 +1243,7 @@ export function FirmwareEditor({
               <div
                 role="tablist"
                 aria-label="Firmware files"
-                className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
+                className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--hd-border)] px-2 py-1"
               >
                 {project.files.map((file) => {
                   const selected = file.name === active?.name;
@@ -1254,7 +1254,7 @@ export function FirmwareEditor({
                       role="tab"
                       aria-selected={selected}
                       className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                        selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                        selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
                       }`}
                     >
                       <button
@@ -1262,7 +1262,7 @@ export function FirmwareEditor({
                         onClick={() => selectFile(file.name)}
                         onDoubleClick={() => handleRenameFile(file.name)}
                         title={isEntry ? file.name : `${file.name} — double-click to rename`}
-                        className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
+                        className="rounded-none px-2 py-1 transition-colors hover:text-[var(--hd-text)]"
                       >
                         {file.name}
                       </button>
@@ -1272,7 +1272,7 @@ export function FirmwareEditor({
                           onClick={() => handleRemoveFile(file.name)}
                           aria-label={`Remove ${file.name}`}
                           title={`Remove ${file.name}`}
-                          className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                          className="rounded-none px-1 py-1 text-[var(--hd-muted)] transition-colors hover:text-red-300"
                         >
                           ×
                         </button>
@@ -1334,14 +1334,14 @@ export function FirmwareEditor({
               ref={libsPopupRef}
               role="dialog"
               aria-label="Libraries"
-              className="absolute top-11 right-2 bottom-12 z-50 flex w-[min(94vw,38rem)] flex-col overflow-hidden rounded-none border border-slate-700 bg-slate-900 shadow-xl"
+              className="absolute top-11 right-2 bottom-12 z-50 flex w-[min(94vw,38rem)] flex-col overflow-hidden rounded-none border border-[var(--hd-border-strong)] bg-[var(--hd-surface)] shadow-xl"
             >
-              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-800 px-3">
-                <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-400 uppercase">
+              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-[var(--hd-border)] px-3">
+                <span className="text-xs font-semibold tracking-[0.08em] text-[var(--hd-muted)] uppercase">
                   Libraries
                 </span>
                 {declarations.length > 0 && (
-                  <span className="num text-[11px] text-slate-500">{declarations.length}</span>
+                  <span className="num text-xs text-[var(--hd-muted)]">{declarations.length}</span>
                 )}
                 <span className="flex-1" />
                 <button
@@ -1349,7 +1349,7 @@ export function FirmwareEditor({
                   onClick={() => setLibsPopupOpen(false)}
                   aria-label="Close libraries"
                   title="Close (Esc)"
-                  className="flex size-6 items-center justify-center rounded-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                  className="flex size-6 items-center justify-center rounded-none text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
                 >
                   <Cross2Icon className="icon-sm" aria-hidden="true" />
                 </button>
@@ -1361,7 +1361,7 @@ export function FirmwareEditor({
                  * and pinned installs. The index loads on first open only.
                  */}
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">
+                  <span className="text-xs font-semibold tracking-[0.08em] text-[var(--hd-muted)] uppercase">
                     Index
                   </span>
                   <span className="flex-1" />
@@ -1407,20 +1407,20 @@ export function FirmwareEditor({
                       </label>
                     </div>
                     {indexLoading ? (
-                      <p className="py-1 text-xs text-slate-600" role="status">
+                      <p className="py-1 text-xs text-[var(--hd-faint)]" role="status">
                         Loading the library index…
                       </p>
                     ) : indexLibs === null ? (
-                      <p className="py-1 text-xs text-slate-600">
+                      <p className="py-1 text-xs text-[var(--hd-faint)]">
                         The index loads when Browse opens, and never before.
                       </p>
                     ) : browseResults.length === 0 ? (
-                      <p className="py-1 text-xs text-slate-600">
+                      <p className="py-1 text-xs text-[var(--hd-faint)]">
                         No libraries match “{debouncedQuery.trim()}”.
                       </p>
                     ) : (
                       <>
-                        <p className="text-[11px] text-slate-600">
+                        <p className="text-xs text-[var(--hd-faint)]">
                           {browseResults.length} match{browseResults.length === 1 ? '' : 'es'}
                           {browseResults.length >= 50 ? ' — first 50, refine the search' : ''}
                         </p>
@@ -1433,7 +1433,7 @@ export function FirmwareEditor({
                               <div
                                 key={lib.name}
                                 className={`flex shrink-0 items-center gap-2 rounded-none text-xs ${
-                                  selected ? 'bg-slate-800 text-slate-100' : ''
+                                  selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : ''
                                 }`}
                               >
                                 <button
@@ -1443,15 +1443,15 @@ export function FirmwareEditor({
                                     setPinnedVersion(null);
                                   }}
                                   title={lib.sentence}
-                                  className="truncate rounded-none px-2 py-1 font-mono text-slate-200 transition-colors hover:text-slate-100"
+                                  className="truncate rounded-none px-2 py-1 font-mono text-[var(--hd-text)] transition-colors hover:text-[var(--hd-text)]"
                                 >
                                   {lib.name}
                                 </button>
-                                <span className="truncate text-[11px] text-slate-500">
+                                <span className="truncate text-xs text-[var(--hd-muted)]">
                                   {lib.sentence}
                                 </span>
                                 <span className="flex-1" />
-                                <span className="shrink-0 text-[11px] text-slate-500">
+                                <span className="shrink-0 text-xs text-[var(--hd-muted)]">
                                   {latest === null
                                     ? 'no releases'
                                     : badgeFor({ installed, latest })}
@@ -1463,9 +1463,9 @@ export function FirmwareEditor({
                       </>
                     )}
                     {selectedLib !== null && (
-                      <div className="rounded-none border border-slate-800 p-2">
+                      <div className="rounded-none border border-[var(--hd-border)] p-2">
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="font-mono text-slate-100">{selectedLib.name}</span>
+                          <span className="font-mono text-[var(--hd-text)]">{selectedLib.name}</span>
                           <span className="flex-1" />
                           <button
                             type="button"
@@ -1475,13 +1475,13 @@ export function FirmwareEditor({
                             }}
                             aria-label={`Close ${selectedLib.name} details`}
                             title="Close details"
-                            className="rounded-none px-1 py-0.5 text-slate-500 transition-colors hover:text-slate-100"
+                            className="rounded-none px-1 py-0.5 text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
                           >
                             ×
                           </button>
                         </div>
-                        <p className="mt-0.5 text-xs text-slate-400">{selectedLib.sentence}</p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="mt-0.5 text-xs text-[var(--hd-muted)]">{selectedLib.sentence}</p>
+                        <p className="text-xs text-[var(--hd-muted)]">
                           by {selectedLib.author} · {selectedLib.category} ·{' '}
                           {selectedLib.architectures.join(', ')}
                         </p>
@@ -1515,7 +1515,7 @@ export function FirmwareEditor({
                              * it, in the same dressing as the bench header.
                              */
                             <span
-                              className="flex items-center gap-1.5 text-xs text-slate-400"
+                              className="flex items-center gap-1.5 text-xs text-[var(--hd-muted)]"
                               role="status"
                             >
                               Installing {installing.name}@{installing.version}…
@@ -1567,10 +1567,10 @@ export function FirmwareEditor({
                     );
                     return (
                       <div key={name} className="flex items-center gap-2 text-xs">
-                        <span className="font-mono text-slate-200">{name}</span>
+                        <span className="font-mono text-[var(--hd-text)]">{name}</span>
                         {tier === 'fetch' && (
                           <span
-                            className="text-[11px] text-slate-500"
+                            className="text-xs text-[var(--hd-muted)]"
                             title="Tier-2 libraries download once, then cache"
                           >
                             {NOT_FETCHED_NOTE}
@@ -1583,7 +1583,7 @@ export function FirmwareEditor({
                             onClick={() => handleUndeclare(name)}
                             aria-label={`Remove ${name}`}
                             title={`Remove ${name}`}
-                            className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                            className="rounded-none px-1.5 py-0.5 text-xs text-[var(--hd-muted)] transition-colors hover:text-red-300"
                           >
                             Remove
                           </button>
@@ -1593,7 +1593,7 @@ export function FirmwareEditor({
                             onClick={() => handleAddProvided(name)}
                             aria-label={`Add ${name}`}
                             title={`Add ${name}`}
-                            className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                            className="rounded-none px-1.5 py-0.5 text-xs text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
                           >
                             Add
                           </button>
@@ -1610,10 +1610,10 @@ export function FirmwareEditor({
                     .map((entry) => (
                       <div
                         key={entry.name}
-                        className="flex items-center gap-2 text-xs text-slate-500"
+                        className="flex items-center gap-2 text-xs text-[var(--hd-muted)]"
                       >
                         <span className="font-mono">{entry.name}</span>
-                        <span className="text-[11px]">
+                        <span className="text-xs">
                           {reasonFor(entry.name, libraryProblems) ?? 'unknown provided library'}
                         </span>
                         <span className="flex-1" />
@@ -1622,7 +1622,7 @@ export function FirmwareEditor({
                           onClick={() => handleUndeclare(entry.name)}
                           aria-label={`Remove ${entry.name}`}
                           title={`Remove ${entry.name}`}
-                          className="rounded-none px-1.5 py-0.5 text-[11px] transition-colors hover:text-red-300"
+                          className="rounded-none px-1.5 py-0.5 text-xs transition-colors hover:text-red-300"
                         >
                           Remove
                         </button>
@@ -1641,11 +1641,11 @@ export function FirmwareEditor({
                         <div
                           key={entry.name}
                           className={`flex items-center gap-2 text-xs ${
-                            slot === undefined ? 'text-slate-500' : 'text-slate-200'
+                            slot === undefined ? 'text-[var(--hd-muted)]' : 'text-[var(--hd-text)]'
                           }`}
                         >
                           <span className="font-mono">{entry.name}</span>
-                          <span className="text-[11px] text-slate-500">
+                          <span className="text-xs text-[var(--hd-muted)]">
                             {slot === undefined ? (reason ?? 'library slot is empty') : 'custom'}
                           </span>
                           <span className="flex-1" />
@@ -1654,7 +1654,7 @@ export function FirmwareEditor({
                             onClick={() => handleUndeclare(entry.name)}
                             aria-label={`Remove ${entry.name}`}
                             title={`Remove ${entry.name}`}
-                            className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                            className="rounded-none px-1.5 py-0.5 text-xs text-[var(--hd-muted)] transition-colors hover:text-red-300"
                           >
                             Remove
                           </button>
@@ -1672,7 +1672,7 @@ export function FirmwareEditor({
                 {installedIndexEntries.length > 0 && (
                   <>
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">
+                      <span className="text-xs font-semibold tracking-[0.08em] text-[var(--hd-muted)] uppercase">
                         Installed
                       </span>
                     </div>
@@ -1685,19 +1685,19 @@ export function FirmwareEditor({
                           <div
                             key={entry.name}
                             className={`flex items-center gap-2 text-xs ${
-                              built === undefined ? 'text-slate-500' : ''
+                              built === undefined ? 'text-[var(--hd-muted)]' : ''
                             }`}
                           >
-                            <span className="font-mono text-slate-200">
+                            <span className="font-mono text-[var(--hd-text)]">
                               {version === null ? entry.name : buildRowLabel(entry.name, version)}
                             </span>
                             {built === undefined ? (
-                              <span className="text-[11px]">
+                              <span className="text-xs">
                                 {reasonFor(entry.name, libraryProblems) ?? 'unknown index library'}
                               </span>
                             ) : (
                               latest !== null && (
-                                <span className="text-[11px] text-slate-500">
+                                <span className="text-xs text-[var(--hd-muted)]">
                                   {badgeFor({ installed: built.version, latest })}
                                 </span>
                               )
@@ -1709,7 +1709,7 @@ export function FirmwareEditor({
                                 onClick={() => void handleInstallIndex(entry.name, version, true)}
                                 aria-label={`Rebuild ${entry.name}`}
                                 title={`Rebuild ${entry.name}@${version}`}
-                                className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                                className="rounded-none px-1.5 py-0.5 text-xs text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
                               >
                                 Reinstall
                               </button>
@@ -1719,7 +1719,7 @@ export function FirmwareEditor({
                               onClick={() => handleUninstallIndex(entry.name)}
                               aria-label={`Remove ${entry.name}`}
                               title={`Remove ${entry.name}`}
-                              className="rounded-none px-1.5 py-0.5 text-[11px] text-slate-500 transition-colors hover:text-red-300"
+                              className="rounded-none px-1.5 py-0.5 text-xs text-[var(--hd-muted)] transition-colors hover:text-red-300"
                             >
                               Remove
                             </button>
@@ -1733,13 +1733,13 @@ export function FirmwareEditor({
                      * line at all rather than a guess.
                      */}
                     {indexFootnote !== null && (
-                      <p className="mt-1 text-[11px] text-slate-500">{indexFootnote}</p>
+                      <p className="mt-1 text-xs text-[var(--hd-muted)]">{indexFootnote}</p>
                     )}
                   </>
                 )}
 
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-500 uppercase">
+                  <span className="text-xs font-semibold tracking-[0.08em] text-[var(--hd-muted)] uppercase">
                     Custom
                   </span>
                   <span className="flex-1" />
@@ -1756,7 +1756,7 @@ export function FirmwareEditor({
                   </Button>
                 </div>
                 {slots.length === 0 ? (
-                  <p className="py-1 text-xs text-slate-600">
+                  <p className="py-1 text-xs text-[var(--hd-faint)]">
                     No custom libraries. A new one starts empty — add headers and sources, then
                     include them from the sketch.
                   </p>
@@ -1770,18 +1770,18 @@ export function FirmwareEditor({
                         <div
                           key={slot.id}
                           className={`flex shrink-0 items-center gap-2 rounded-none font-mono text-xs ${
-                            selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                            selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
                           }`}
                         >
                           <button
                             type="button"
                             onClick={() => selectSlotFile(slot.id, slot.files[0]?.path ?? null)}
                             title={`${slot.name} — ${slot.files.length} files`}
-                            className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
+                            className="rounded-none px-2 py-1 transition-colors hover:text-[var(--hd-text)]"
                           >
                             {slot.name}
                           </button>
-                          <span className="num text-[11px] text-slate-500">
+                          <span className="num text-xs text-[var(--hd-muted)]">
                             {slot.files.length}
                           </span>
                           {!isDeclared && (
@@ -1790,7 +1790,7 @@ export function FirmwareEditor({
                               onClick={() => handleDeclareSlot(slot.id)}
                               aria-label={`Declare ${slot.name}`}
                               title={`Declare ${slot.name}`}
-                              className="rounded-none px-1.5 py-0.5 font-sans text-[11px] text-slate-400 transition-colors hover:text-slate-100"
+                              className="rounded-none px-1.5 py-0.5 font-sans text-xs text-[var(--hd-muted)] transition-colors hover:text-[var(--hd-text)]"
                             >
                               Declare
                             </button>
@@ -1800,7 +1800,7 @@ export function FirmwareEditor({
                             onClick={() => handleRemoveSlot(slot.id)}
                             aria-label={`Remove ${slot.name}`}
                             title={`Remove ${slot.name}`}
-                            className="rounded-none px-1 py-1 font-sans text-slate-500 transition-colors hover:text-red-300"
+                            className="rounded-none px-1 py-1 font-sans text-[var(--hd-muted)] transition-colors hover:text-red-300"
                           >
                             ×
                           </button>
@@ -1813,12 +1813,12 @@ export function FirmwareEditor({
             </div>
           )}
           {selectedSlot && (
-            <div className="shrink-0 border-t border-slate-800">
+            <div className="shrink-0 border-t border-[var(--hd-border)]">
               <>
                 <div
                   role="tablist"
                   aria-label="Library files"
-                  className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 px-2 py-1"
+                  className="mt-1 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--hd-border)] px-2 py-1"
                 >
                   {selectedSlot.files.map((file) => {
                     const selected = file.path === activeSlotPath;
@@ -1828,7 +1828,7 @@ export function FirmwareEditor({
                         role="tab"
                         aria-selected={selected}
                         className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                          selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                          selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
                         }`}
                       >
                         <button
@@ -1836,7 +1836,7 @@ export function FirmwareEditor({
                           onClick={() => selectSlotFile(selectedSlot.id, file.path)}
                           onDoubleClick={() => handleRenameSlotFile(selectedSlot.id, file.path)}
                           title={`${file.path} — double-click to rename`}
-                          className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
+                          className="rounded-none px-2 py-1 transition-colors hover:text-[var(--hd-text)]"
                         >
                           {file.path}
                         </button>
@@ -1845,7 +1845,7 @@ export function FirmwareEditor({
                           onClick={() => handleRemoveSlotFile(selectedSlot.id, file.path)}
                           aria-label={`Remove ${file.path}`}
                           title={`Remove ${file.path}`}
-                          className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                          className="rounded-none px-1 py-1 text-[var(--hd-muted)] transition-colors hover:text-red-300"
                         >
                           ×
                         </button>
@@ -1890,7 +1890,7 @@ export function FirmwareEditor({
                     }}
                   />
                 ) : (
-                  <p className="px-1 py-2 text-xs text-slate-600">
+                  <p className="px-1 py-2 text-xs text-[var(--hd-faint)]">
                     Empty library: add a header and its sources from the Libraries popup.
                   </p>
                 )}
@@ -1922,7 +1922,7 @@ export function StatusBar({
   netCount: number;
 }) {
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-slate-800 bg-slate-900 px-3 text-xs text-slate-400">
+    <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-[var(--hd-border)] bg-[var(--hd-surface)] px-3 text-xs text-[var(--hd-muted)]">
       <span className="flex items-center gap-1.5">
         {/*
          * The lamp is the fastest read on the whole bench: it is the only
@@ -1931,17 +1931,17 @@ export function StatusBar({
          */}
         <span className="relative flex size-2">
           {running && (
-            <span className="absolute inline-flex size-full animate-ping rounded-none bg-emerald-400 opacity-60" />
+            <span className="absolute inline-flex size-full animate-ping rounded-none bg-[var(--hd-success)] opacity-60" />
           )}
           <span
-            className={`relative inline-block size-2 rounded-none ${running ? 'bg-emerald-400' : 'bg-slate-600'}`}
+            className={`relative inline-block size-2 rounded-none ${running ? 'bg-[var(--hd-success)]' : 'bg-slate-600'}`}
           />
         </span>
-        <span className={running ? 'text-slate-200' : ''}>{running ? 'Running' : 'Stopped'}</span>
+        <span className={running ? 'text-[var(--hd-text)]' : ''}>{running ? 'Running' : 'Stopped'}</span>
       </span>
       <span className="num">t = {timeMs.toFixed(0)} ms</span>
       <span className="num">{netCount} nets</span>
-      <span className="ml-auto hidden truncate text-slate-600 md:inline">
+      <span className="ml-auto hidden truncate text-[var(--hd-faint)] md:inline">
         Drag to move · wheel to zoom · shift-drag to pan
       </span>
     </footer>
