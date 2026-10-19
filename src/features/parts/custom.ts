@@ -25,8 +25,9 @@
  */
 
 import type { ComponentSpec, PartDefinition } from './catalog';
-import { PART_CATALOGUE } from './catalogue';
+import { BENCH_PART_IDS, PART_CATALOGUE } from './catalogue';
 import { DIODE_PROFILES } from './passives';
+import type { DiodeProfile } from '@/features/simulation/elements';
 
 /** The file format's version. Bumped only when the shape changes. */
 export const PART_FILE_VERSION = 1;
@@ -185,6 +186,67 @@ export function pinIdsForComponent(component: ComponentSpec): readonly string[] 
   return shape === undefined ? null : shape.definition.pins.map((pin) => pin.id);
 }
 
+/**
+ * The knob ids a kind's behaviour reads, for the given parameters.
+ *
+ * Derived like the pin ids, and for the same reason: the behaviour looks knob
+ * values up by id (`DynamicState.knob`), so a knob with an id the behaviour does
+ * not ask for would sit in the inspector doing nothing at all -- an imported
+ * potentiometer that cannot be turned. The shipped part of that kind is the list.
+ */
+function knobIdsFor(kind: string, layout: string): readonly string[] {
+  const ids: string[] = [];
+  for (const shape of shapesOf(kind, layout)) {
+    for (const knob of shape.definition.knobs ?? []) {
+      if (!ids.includes(knob.id)) ids.push(knob.id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * The `net` names the shipped leads of a kind use.
+ *
+ * A pin's `net` joins it to a named rail without a wire, which is how the
+ * shipped modules that carry their own supply do it (an LCD's VSS on ground).
+ * Only the names the bench's own parts of that kind use are allowed: anything
+ * else would let a file wire itself to a rail the operator never drew.
+ */
+function netNamesFor(kind: string, layout: string): readonly string[] {
+  const names: string[] = [];
+  for (const shape of shapesOf(kind, layout)) {
+    for (const pin of shape.definition.pins) {
+      if (pin.net !== undefined && !names.includes(pin.net)) names.push(pin.net);
+    }
+  }
+  return names;
+}
+
+/** Whether every shipped definition of a kind and layout carries a field. */
+function shippedAlwaysHas(kind: string, layout: string, key: keyof PartDefinition): boolean {
+  const found = shapesOf(kind, layout);
+  return found.length > 0 && found.every((shape) => shape.definition[key] !== undefined);
+}
+
+/** The same question about a field of the component rather than the part. */
+function componentAlwaysHas(kind: string, layout: string, key: string): boolean {
+  const found = shapesOf(kind, layout);
+  return (
+    found.length > 0 &&
+    found.every(
+      (shape) =>
+        (shape.definition.component as unknown as Record<string, unknown>)[key] !== undefined,
+    )
+  );
+}
+
+/** The bench's own diode whose numbers are these, or null. */
+function benchDiodeFor(value: unknown): DiodeProfile | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const text = JSON.stringify(value);
+  return Object.values(DIODE_PROFILES).find((profile) => JSON.stringify(profile) === text) ?? null;
+}
+
 /** The values a layout parameter accepts, taken from the shipped parts. */
 export function layoutValuesFor(kind: string): readonly string[] {
   const param = layoutParam(kind);
@@ -236,9 +298,7 @@ function isDiodeName(value: unknown): value is keyof typeof DIODE_PROFILES {
  * accepted is a profile that resembles no diode the bench has.
  */
 function isBenchDiode(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  const text = JSON.stringify(value);
-  return Object.values(DIODE_PROFILES).some((profile) => JSON.stringify(profile) === text);
+  return benchDiodeFor(value) !== null;
 }
 
 type ComponentVerdict =
@@ -347,13 +407,17 @@ function checkComponent(value: unknown): ComponentVerdict {
   // A named diode becomes the bench's own diode here: that is the one
   // transformation the validator makes, because the file says *which* diode and
   // the bench is the only thing that knows the numbers.
+  // A named diode becomes the bench's own diode here, and so does a set of
+  // numbers equal to one of them: the artwork picks an LED's colour by identity
+  // (`ledColour`), so a definition that arrived as JSON has to be rebound to the
+  // bench's object rather than left as a copy that looks the same.
   const resolved =
     kind === 'led'
       ? {
           ...component,
           profile: isDiodeName(component.profile)
             ? DIODE_PROFILES[component.profile as keyof typeof DIODE_PROFILES]
-            : component.profile,
+            : (benchDiodeFor(component.profile) ?? component.profile),
         }
       : component;
   return { ok: true, component: resolved as unknown as ComponentSpec };
@@ -379,8 +443,12 @@ function checkPins(
     if (ids.has(pin.id)) return `two pins are called "${pin.id}"`;
     ids.add(pin.id);
     if (typeof pin.label !== 'string') return `pins[${index}].label must be text`;
-    if (pin.net !== undefined && typeof pin.net !== 'string') {
-      return `pins[${index}].net must be a name`;
+    if (pin.net !== undefined) {
+      if (typeof pin.net !== 'string') return `pins[${index}].net must be a name`;
+      const nets = netNamesFor(component.kind, layoutKey(component));
+      if (!nets.includes(pin.net)) {
+        return `pins[${index}].net "${pin.net}" is not one this kind's own leads join (${nets.join(', ') || 'none'})`;
+      }
     }
     if (!isFiniteNumber(pin.x) || !isFiniteNumber(pin.y)) {
       return `pins[${index}] must have finite x and y`;
@@ -402,13 +470,37 @@ function checkPins(
       ? 'this kind has no pins, so the part must declare none'
       : `this kind's behaviour reads these pins: ${want}`;
   }
+  /*
+   * A display's order is part of the drawing: the footprint lays the header row
+   * out from the pin list itself (`definition.pins[0]?.y` and the silkscreen that
+   * walks it), so the same leads in another order are a panel whose header is
+   * drawn in the wrong place. Every other kind draws pins by position, so this is
+   * the one that has to be a sequence rather than a set.
+   */
+  if (component.kind === 'display') {
+    const declared = value.map((entry) => String((entry as { id: unknown }).id)).join(', ');
+    if (declared !== [...expected].join(', ')) {
+      return `a display's pins are drawn in the order they are declared: ${[...expected].join(', ')}`;
+    }
+  }
   return null;
 }
 
-/** The reason a knob list cannot be driven, or null. */
-function checkKnobs(value: unknown): string | null {
+/**
+ * The reason a knob list cannot be driven, or null.
+ *
+ * The ids are the behaviour's, not the author's: `DynamicState.knob` looks a
+ * value up by id, so a knob called anything else is a control that turns and
+ * changes nothing. There is no cap on how many -- the kind's own list is the
+ * bound (a 4x4 keypad has sixteen).
+ */
+function checkKnobs(value: unknown, component: ComponentSpec): string | null {
   if (!Array.isArray(value)) return 'knobs must be an array';
-  if (value.length > 8) return 'a part may have at most 8 knobs';
+  // None at all is always legal: the behaviour then reads the value its own
+  // constants default to. What is not legal is a control nothing asks for.
+  if (value.length === 0) return null;
+  const allowed = knobIdsFor(component.kind, layoutKey(component));
+  if (allowed.length === 0) return `this kind's behaviour reads no knobs`;
   const ids = new Set<string>();
   for (const [index, entry] of value.entries()) {
     if (!isPlainObject(entry)) return `knobs[${index}] must be an object`;
@@ -418,6 +510,9 @@ function checkKnobs(value: unknown): string | null {
     }
     if (typeof knob.id !== 'string' || knob.id === '') return `knobs[${index}].id must be a name`;
     if (ids.has(knob.id)) return `two knobs are called "${knob.id}"`;
+    if (!allowed.includes(knob.id)) {
+      return `knobs[${index}].id "${knob.id}" is not one this kind's behaviour reads (${allowed.join(', ')})`;
+    }
     ids.add(knob.id);
     if (typeof knob.label !== 'string') return `knobs[${index}].label must be text`;
     const { min, max, step, defaultValue } = knob;
@@ -476,7 +571,7 @@ export function validatePartDefinition(value: unknown): PartVerdict {
     return refuse('id must be lower-case letters, digits and dashes');
   }
   if (part.id.length > 40) return refuse('id must be at most 40 characters');
-  if (PART_CATALOGUE.some((entry) => entry.id === part.id)) {
+  if (BENCH_PART_IDS.has(part.id)) {
     return refuse(`id "${part.id}" is already a bench part`);
   }
   if (typeof part.name !== 'string' || part.name === '') return refuse('name must be text');
@@ -513,28 +608,51 @@ export function validatePartDefinition(value: unknown): PartVerdict {
   const componentVerdict = checkComponent(part.component);
   if (!componentVerdict.ok) return refuse(componentVerdict.reason);
   const component = componentVerdict.component;
+  const layout = layoutKey(component);
 
   // A display's own geometry is the controller's, not the author's: a panel
   // claiming pixels nothing can address would be drawn stretched and read back
   // wrong.
   if (component.kind === 'display') {
-    const shipped = shapesOf(component.kind, layoutKey(component))[0]?.definition as unknown as
-      | Record<string, unknown>
-      | undefined;
+    // One controller, several panels: the ILI9341 is sold at 320x240 and at
+    // 480x320, and both are shapes it answers, so the rule is "a panel this
+    // controller has", not "the first one in the catalogue".
+    const controller = String((component as unknown as Record<string, unknown>).controller);
+    const panels = shapesOf(component.kind, layout).map((shape) => shape.definition);
     for (const key of ['displayPixels', 'ramPixels', 'glassMm'] as const) {
+      const theirs = panels.map((panel) => panel[key]);
+      const known = theirs.filter((value) => value !== undefined);
       const mine = part[key];
-      if (mine === undefined) continue;
-      if (shipped?.[key] === undefined || JSON.stringify(mine) !== JSON.stringify(shipped[key])) {
-        return refuse(
-          `${key} must be the ${String((component as unknown as Record<string, unknown>).controller)}'s own geometry (${JSON.stringify(shipped?.[key] ?? null)})`,
-        );
+      if (mine === undefined) {
+        // Omitting one would silently take a default, and a default is a
+        // different panel from the one the operator drew.
+        if (known.length > 0 && known.length === theirs.length) {
+          return refuse(`${key} is the ${controller}'s own geometry and has to be given`);
+        }
+        continue;
+      }
+      const text = JSON.stringify(mine);
+      if (!known.some((value) => JSON.stringify(value) === text)) {
+        const options = [...new Set(known.map((value) => JSON.stringify(value)))].join(' or ');
+        return refuse(`${key} must be a ${controller}'s own geometry (${options || 'none'})`);
       }
     }
   }
 
+  // Fields the kind's own parts all carry, because the behaviour reads them: an
+  // LED's diode, a button's momentary contact.
+  const profile = (component as unknown as Record<string, unknown>).profile;
+  if (componentAlwaysHas(component.kind, layout, 'profile') && profile === undefined) {
+    return refuse(`${component.kind} must name a diode in component.profile`);
+  }
+  if (shippedAlwaysHas(component.kind, layout, 'momentary') && part.momentary !== true) {
+    return refuse(
+      `this kind is a momentary contact, so momentary must be true -- otherwise nothing can press it`,
+    );
+  }
   const pinReason = checkPins(part.pins, component, width, height);
   if (pinReason !== null) return refuse(pinReason);
-  const knobReason = checkKnobs(part.knobs ?? []);
+  const knobReason = checkKnobs(part.knobs ?? [], component);
   if (knobReason !== null) return refuse(knobReason);
 
   // Every field has been checked against the allowlist above, so the shape is

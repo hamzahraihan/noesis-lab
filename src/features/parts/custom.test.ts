@@ -9,6 +9,7 @@ import {
   validatePartDefinition,
 } from './custom';
 import type { ComponentSpec } from './catalog';
+import { PART_CATALOGUE } from './catalogue';
 import { DIODE_PROFILES } from './passives';
 
 /**
@@ -120,6 +121,8 @@ describe('a part a file may carry', () => {
       widthMm: 20,
       heightMm: 12,
       component: { kind: 'display', controller: 'ili9341', address: 0 },
+      displayPixels: { width: 320, height: 240 },
+      glassMm: { width: 53, height: 39.8 },
       pins: [
         { id: 'VCC', label: 'VCC', x: 0, y: 0 },
         { id: 'GND', label: 'GND', x: 0, y: 2.54 },
@@ -164,18 +167,13 @@ describe('a part a file may carry', () => {
   });
 
   it("refuses a display geometry that is not its controller's, and accepts the two addresses an SSD1306 has", () => {
+    // Built from the shipped panel so the pins are its own, in its own order:
+    // only the address and the pixel count are being varied here.
     const oled = (address: number, pixels: unknown) => ({
-      ...goodResistor(),
-      widthMm: 20,
-      heightMm: 12,
+      ...PART_CATALOGUE.find((entry) => entry.id === 'ssd1306-128x64-3c')!.make(),
+      id: 'imported-oled',
       component: { kind: 'display', controller: 'ssd1306', address },
       displayPixels: pixels,
-      pins: [
-        { id: 'VCC', label: 'VCC', x: 0, y: 0 },
-        { id: 'GND', label: 'GND', x: 0, y: 2.54 },
-        { id: 'SDA', label: 'SDA', x: 0, y: 5.08 },
-        { id: 'SCL', label: 'SCL', x: 0, y: 7.62 },
-      ],
     });
     expect(reasonFor(oled(0x3c, { width: 200, height: 100 }))).toContain('own geometry');
     expect(reasonFor(oled(0x99, { width: 128, height: 64 }))).toContain('address');
@@ -199,20 +197,24 @@ describe('a part a file may carry', () => {
   });
 
   it('refuses knobs that cannot be driven', () => {
-    const withKnobs = (knobs: unknown) => ({ ...goodResistor(), knobs });
+    const pot = () => ({
+      ...PART_CATALOGUE.find((entry) => entry.id === 'potentiometer-10000')!.make(),
+      id: 'imported-turn',
+    });
+    const withKnobs = (knobs: unknown) => ({ ...pot(), knobs });
     expect(
       reasonFor(
-        withKnobs([{ id: 'w', label: 'Wiper', min: 0, max: 10, step: 1, defaultValue: 42 }]),
+        withKnobs([{ id: 'turn', label: 'Wiper', min: 0, max: 10, step: 1, defaultValue: 42 }]),
       ),
     ).toContain('between min and max');
     expect(
       reasonFor(
-        withKnobs([{ id: 'w', label: 'Wiper', min: 0, max: 10, step: 0, defaultValue: 5 }]),
+        withKnobs([{ id: 'turn', label: 'Wiper', min: 0, max: 10, step: 0, defaultValue: 5 }]),
       ),
     ).toContain('step must be positive');
     expect(
       reasonFor(
-        withKnobs([{ id: 'w', label: 'Wiper', min: 10, max: 0, step: 1, defaultValue: 5 }]),
+        withKnobs([{ id: 'turn', label: 'Wiper', min: 10, max: 0, step: 1, defaultValue: 5 }]),
       ),
     ).toContain('no range');
   });
@@ -279,5 +281,121 @@ describe('the validator and the catalogue agree', () => {
       pins: pins.map((id, index) => ({ id, label: String(index + 1), x: index * 10, y: 2 })),
     });
     expect(verdict.ok).toBe(true);
+  });
+});
+
+/*
+ * The catalogue is the format's specification, so every part the app ships in an
+ * importable kind has to be expressible as a file. A shipped definition the
+ * validator refuses is a rule that does not describe the bench -- and it would be
+ * a part the operator cannot save and open again.
+ *
+ * The id is the one field that must differ: an imported id may not collide with a
+ * shipped one, which is the point of the rule.
+ */
+describe('the shipped catalogue', () => {
+  const importable = new Set<string>(importableKinds());
+
+  it.each(
+    PART_CATALOGUE.filter((entry) => importable.has(entry.make().component.kind)).map(
+      (entry) => [entry.id, entry] as const,
+    ),
+  )('%s is expressible as a part file', (_id, entry) => {
+    const slug = entry.id.replace(/[^a-z0-9-]+/g, '-');
+    const definition = { ...entry.make(), id: `imported-${slug}` };
+    const { definitions, refused } = readPartFile(
+      partFileText(definition),
+      `${entry.id}.part.json`,
+    );
+    expect(refused.map((r) => r.reason)).toEqual([]);
+    expect(definitions.length).toBe(1);
+  });
+
+  it('covers every importable kind', () => {
+    const covered = new Set<string>(
+      PART_CATALOGUE.filter((entry) => importable.has(entry.make().component.kind)).map(
+        (entry) => entry.make().component.kind,
+      ),
+    );
+    // A kind with no shipped part would have no pin ids to derive and no
+    // parameters to copy, so the format could not describe it at all.
+    expect([...importable].filter((kind) => !covered.has(kind))).toEqual([]);
+  });
+});
+
+/*
+ * Rules the behaviour, not the catalogue alone, decides.
+ *
+ * Each of these was found by asking what the *consumer* reads: `DynamicState.knob`
+ * looks a value up by id, the artwork picks an LED's colour by identity, the
+ * solver dereferences an LED's diode, the iOS-style press goes through
+ * `definition.momentary`, and a pin's `net` joins it to a rail without a wire.
+ * A part that breaks one of them imports cleanly and then does nothing, or does
+ * something the operator never asked for -- which is worse than a refusal.
+ */
+describe('rules the behaviour decides', () => {
+  const shipped = (id: string) => ({
+    ...PART_CATALOGUE.find((entry) => entry.id === id)!.make(),
+    id: 'imported-copy',
+  });
+
+  it('refuses a display whose pins are the right ones in the wrong order', () => {
+    const panel = shipped('ili9341-320x240');
+    panel.pins = [...panel.pins].reverse();
+    expect(reasonFor(panel)).toContain('order');
+  });
+
+  it('refuses a knob whose id the behaviour does not read', () => {
+    const part = { ...shipped('potentiometer-10000') };
+    part.knobs = [{ id: 'wiper', label: 'Wiper', min: 0, max: 1, step: 0.01, defaultValue: 0.5 }];
+    const reason = reasonFor(part);
+    expect(reason).toContain('turn');
+    expect(reason).toContain('behaviour reads');
+  });
+
+  it('accepts every knob a 4x4 keypad has, sixteen of them', () => {
+    const verdict = validatePartDefinition(shipped('membrane-keypad'));
+    expect(verdict.ok ? null : verdict.reason).toBeNull();
+  });
+
+  it('refuses a momentary kind that would never be pressed', () => {
+    const button = { ...shipped('button-tactile') };
+    delete (button as { momentary?: boolean }).momentary;
+    expect(reasonFor(button)).toContain('momentary');
+  });
+
+  it('refuses an LED with no diode at all', () => {
+    const led = shipped('led-red');
+    const component = { ...led.component } as Record<string, unknown>;
+    delete component.profile;
+    expect(reasonFor({ ...led, component })).toContain('diode');
+  });
+
+  it("rebinds a diode that arrived as numbers to the bench's own", () => {
+    // The artwork compares by identity (`ledColour`), so a copy that looks the
+    // same draws red. A stored part comes back with the numbers, not the name.
+    const led = shipped('led-red');
+    // Through the file reader, which is how a stored part comes back.
+    const { definitions } = readPartFile(partFileText(led), 'led.part.json');
+    expect(definitions.length).toBe(1);
+    const verdict = validatePartDefinition(JSON.parse(JSON.stringify(definitions[0])) as unknown);
+    expect(verdict.ok).toBe(true);
+    if (verdict.ok) {
+      expect(verdict.definition.component).toMatchObject({ profile: DIODE_PROFILES.red });
+    }
+  });
+
+  it('refuses a pin joined to a rail this kind does not use', () => {
+    const part = shipped('resistor-220');
+    part.pins = part.pins.map((pin, index) => (index === 0 ? { ...pin, net: 'GND' } : pin));
+    expect(reasonFor(part)).toContain('net');
+  });
+
+  it('refuses an id the bench already answers to', () => {
+    expect(reasonFor({ ...goodResistor(), id: 'esp32-devkit-v1' })).toContain(
+      'already a bench part',
+    );
+    const free = validatePartDefinition({ ...goodResistor(), id: 'resistor-4k7' });
+    expect(free.ok ? null : free.reason).toBeNull();
   });
 });

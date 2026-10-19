@@ -510,6 +510,19 @@ const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
   'raspberry-pi-4': raspberryPi4,
 };
 
+/**
+ * Every id the bench already answers to: the catalogue's parts and its boards.
+ *
+ * `partDefinitionById` resolves those before it looks at anything a session
+ * imported, so an imported part that claimed one of these ids would resolve to
+ * the bench's own part instead -- the file would import cleanly and then not be
+ * the thing that got placed.
+ */
+export const BENCH_PART_IDS: ReadonlySet<string> = new Set([
+  ...PART_CATALOGUE.map((entry) => entry.id),
+  ...Object.keys(BOARD_FACTORIES),
+]);
+
 export function partDefinitionById(id: string): PartDefinition | undefined {
   const entry = PART_CATALOGUE.find((e) => e.id === id);
   if (entry) return entry.make();
