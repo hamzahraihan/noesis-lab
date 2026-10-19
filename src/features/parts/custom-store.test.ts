@@ -147,6 +147,37 @@ describe('custom parts between visits', () => {
     expect(partDefinitionById('led-violet')).toBeDefined();
     expect(isLargePart('led-violet')).toBe(true);
   });
+
+  it('keeps a scripted part’s source across a reload, since the source is the truth', () => {
+    const storage = fakeStorage();
+    const verdict = validatePartDefinition({
+      id: 'soil-probe',
+      name: 'Soil moisture probe',
+      category: 'input',
+      widthMm: 20,
+      heightMm: 12,
+      bodyColour: '#5b6b4a',
+      legendColour: '#f2f2ee',
+      component: { kind: 'scripted', bus: 'analog' },
+      script: '({ analog: ({ knobs }) => knobs.moisture / 100 })',
+      knobs: [{ id: 'moisture', label: 'Moisture', min: 0, max: 100, step: 1, defaultValue: 40 }],
+      pins: [
+        { id: 'AOUT', label: 'OUT', x: 0, y: 6 },
+        { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+        { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+      ],
+    });
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    saveCustomParts([verdict.definition], storage);
+    useCustomPartsStore.getState().rehydrate(storage);
+
+    // The bench starts clean (a script's captured state does not travel), which
+    // is the design's rule: what is stored is the source, not the memory.
+    const back = partDefinitionById('soil-probe');
+    expect(back?.script).toContain('knobs.moisture');
+    expect(back?.knobs?.[0]?.id).toBe('moisture');
+  });
 });
 
 // The file writer is the reader's inverse, which is what makes a part portable.
