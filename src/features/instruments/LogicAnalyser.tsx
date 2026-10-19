@@ -123,13 +123,13 @@ export function LogicAnalyser({
   });
 
   return (
-    <section className="border-b border-slate-800">
+    <section className="border-b border-[var(--hd-border)]">
       <div className="flex items-center gap-2 px-3 pt-2">
         <CardTitle className="flex flex-1 items-center gap-2">
-          <StopwatchIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <StopwatchIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
           Logic analyser
         </CardTitle>
-        <span className="num text-[10px] text-slate-600">{WINDOW_MS} ms</span>
+        <span className="num text-xs text-[var(--hd-faint)]">{WINDOW_MS} ms</span>
       </div>
 
       <div className="relative px-3">
@@ -137,11 +137,11 @@ export function LogicAnalyser({
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={Math.max(LANE_PX, capturing.length * LANE_PX)}
-          className="w-full rounded-none border border-slate-800 bg-slate-950"
+          className="w-full rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)]"
           style={{ height: Math.max(LANE_PX, capturing.length * LANE_PX) }}
         />
         {capturing.length === 0 && (
-          <p className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 px-3 text-center text-[11px] text-slate-600">
+          <p className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 px-3 text-center text-xs text-[var(--hd-faint)]">
             <Crosshair1Icon className="icon-sm shrink-0" aria-hidden="true" />
             Pick a pin below to capture its level.
           </p>
@@ -161,7 +161,7 @@ export function LogicAnalyser({
               aria-pressed={on}
               size="sm"
               variant={on ? 'default' : 'secondary'}
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
               title={
                 full ? `Capture is full: ${MAX_LANES} lanes is as many as stay readable` : undefined
               }
