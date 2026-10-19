@@ -722,7 +722,7 @@ class SimCore implements CoreHandle {
     generation: number,
     fetcher: () => Promise<Rp2040Assets>,
   ): Promise<void> {
-    if (this.mcu.board.id !== 'rp2040') return;
+    if (this.mcu.board.id !== 'rp2040' && this.mcu.board.id !== 'pico') return;
     try {
       const assets = await fetcher();
       if (generation !== this.rp2040Generation) return;

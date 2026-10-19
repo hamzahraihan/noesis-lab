@@ -352,5 +352,5 @@ export function starterSketchFor(
   language: FirmwareLanguage = boardOption(boardId).language,
 ): string {
   if (language !== 'python') return BLINK_SKETCH;
-  return boardId === 'rp2040' ? PICO_BLINK_SKETCH : PI_BLINK_SKETCH;
+  return boardId === 'rp2040' || boardId === 'pico' ? PICO_BLINK_SKETCH : PI_BLINK_SKETCH;
 }

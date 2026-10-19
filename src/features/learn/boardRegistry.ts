@@ -21,9 +21,10 @@ import {
   franzininhoBoard,
   nanoRp2040Connect,
   raspberryPi4,
+  raspberryPiPico,
 } from '@/features/parts';
 
-export type BoardId = 'esp32' | 'uno' | 'mega' | 'nano' | 'rp2040' | 'franzininho' | 'raspberry-pi';
+export type BoardId = 'esp32' | 'uno' | 'mega' | 'nano' | 'rp2040' | 'franzininho' | 'raspberry-pi' | 'pico';
 
 export interface BoardOption {
   readonly id: BoardId;
@@ -119,6 +120,15 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     summary: 'An ATtiny85 on a small carrier: six I/O pins and no digital header.',
     bestFor:
       'Understanding the limits. Two general GPIO and four analogue pins is not many, the buses sit on the port bits rather than a digital header, and the silkscreen disagrees with the firmware numbers -- PB5 is pin 4 and PB4 is pin 5. Pin 2 is also its SDA, so a sketch cannot own it outright.',
+  },
+  {
+    id: 'pico',
+    name: 'Raspberry Pi Pico',
+    make: raspberryPiPico,
+    language: 'python',
+    summary: 'A small RP2040 board with 26 GPIO pins and no analogue input beyond three ADC channels.',
+    bestFor:
+      'Modern embedded Python on a cheap board. Same RP2040 as the Nano RP2040 Connect, so the MicroPython backend transfers; the header is a 2x20 DIP block rather than a Nano footprint.',
   },
 ];
 

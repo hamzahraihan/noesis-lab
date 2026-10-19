@@ -141,8 +141,11 @@ export function buttonDefinition(): PartDefinition {
     heightMm: 6,
     component: { kind: 'button' },
     pins: [
-      { id: 'a', label: '', x: 0, y: 3, net: 'side-a' },
-      { id: 'b', label: '', x: 5.08, y: 3, net: 'side-b' },
+      // Aligned with the Wokwi pushbutton-6mm element's own pins, which sit at
+      // the top of each side rather than mid-body: the artwork is 7.413 mm wide
+      // centred on a 6 mm box, so the holes land just outside the box edges.
+      { id: 'a', label: '', x: -0.71, y: 0.58, net: 'side-a' },
+      { id: 'b', label: '', x: 6.71, y: 0.58, net: 'side-b' },
     ],
     momentary: true,
     bodyColour: '#111111',

@@ -21,6 +21,7 @@ import starterFranzininho from './starter-franzininho.json';
 import starterMega from './starter-mega.json';
 import starterNano from './starter-nano.json';
 import starterRaspberryPi from './starter-raspberry-pi.json';
+import starterPico from './starter-pico.json';
 import starterRp2040 from './starter-rp2040.json';
 import starterUno from './starter-uno.json';
 
@@ -54,6 +55,7 @@ export const STARTER_CIRCUITS: Readonly<Record<BoardId, CircuitDocument>> = {
   rp2040: parseCircuit(starterRp2040, 'starter-rp2040'),
   franzininho: parseCircuit(starterFranzininho, 'starter-franzininho'),
   'raspberry-pi': parseCircuit(starterRaspberryPi, 'starter-raspberry-pi'),
+  pico: parseCircuit(starterPico, 'starter-pico'),
 };
 
 /** The bench each example sketch assumes, per board. */

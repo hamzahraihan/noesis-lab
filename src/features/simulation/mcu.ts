@@ -61,6 +61,7 @@ const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
   nano: [18, 19],
   mega: [20, 21],
   rp2040: [26, 27],
+  pico: [0, 1],
   /*
    * A single-board computer's I2C is the pair its bus sits on by default: data
    * on GPIO2 and clock on GPIO3, which are physical pins 3 and 5. Those two
@@ -85,6 +86,7 @@ const SPI_PINS: Readonly<Record<string, readonly number[]>> = {
   nano: [10, 9, 13, 11],
   mega: [53, 9, 52, 51],
   rp2040: [10, 9, 13, 11],
+  pico: [17, 20, 18, 19],
   /*
    * The Pi's SPI0, in the same shape as the rows above: chip-select, the
    * data/command line, the clock, and MOSI.

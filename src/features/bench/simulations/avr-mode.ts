@@ -25,8 +25,8 @@ export function avrAvailableFor(boardId: BoardId): BackendAvailability {
  * therefore refuses the mode rather than pretending to run it.
  */
 export function rp2040AvailableFor(boardId: BoardId, worker: boolean): BackendAvailability {
-  if (boardId !== 'rp2040') {
-    return { ok: false, reason: 'RP2040 mode needs the Nano RP2040 Connect' };
+  if (boardId !== 'rp2040' && boardId !== 'pico') {
+    return { ok: false, reason: 'RP2040 mode needs an RP2040 board' };
   }
   if (!worker) return { ok: false, reason: 'RP2040 mode needs the simulation worker' };
   return { ok: true };

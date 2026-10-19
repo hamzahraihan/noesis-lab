@@ -10,7 +10,7 @@
  * land, which is the opposite of what this tool is for.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bench, Terminal, Wire, WireEnd } from '@/features/simulation';
 import { PartFootprint, type FootprintState } from '../wokwi/footprints';
 import { HardwareDefs, SILKSCREEN_FONT } from '../wokwi/hardware';
@@ -35,7 +35,7 @@ import {
  * Name for the jumper that is only half drawn. It lives in a map of its own
  * alongside the placed wires, so it cannot collide with a wire id on the bench.
  */
-const DRAFT_WIRE = '';
+
 
 export interface WorkbenchProps {
   bench: Bench;
@@ -335,11 +335,24 @@ export function Workbench({
   locked = false,
 }: WorkbenchProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const pendingPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
   const wireAnchor = useWorkbenchStore((s) => s.wireAnchor);
   const wireBends = useWorkbenchStore((s) => s.wireBends);
   const cancelDraft = useWorkbenchStore((s) => s.cancelDraft);
   const startDraft = useWorkbenchStore((s) => s.startDraft);
   const pushBend = useWorkbenchStore((s) => s.pushBend);
+
+  /*
+   * Keyboard path for wiring: a focused terminal is highlighted, Tab cycles
+   * through terminals, and Enter starts or completes a jumper. This keeps the
+   * canvas operable without a pointer.
+   */
+  const [focusedTerminalId, setFocusedTerminalId] = useState<number | null>(null);
+  const sortedTerminals = useMemo(
+    () => [...bench.terminals].sort((a, b) => a.y - b.y || a.x - b.x),
+    [bench],
+  );
 
   /*
    * Escape drops a half-drawn jumper. Wiring is always armed, so without this
@@ -353,6 +366,12 @@ export function Workbench({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [cancelDraft]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const setPointer = useWorkbenchStore((s) => s.setPointer);
   const pointerMm = useWorkbenchStore((s) => s.pointerMm);
@@ -416,11 +435,20 @@ export function Workbench({
   }, [setAspect]);
 
   /** Converts a pointer event into world millimetres. */
+  const rectRef = useRef<DOMRect | null>(null);
+  useEffect(() => {
+    const update = () => {
+      if (svgRef.current) rectRef.current = svgRef.current.getBoundingClientRect();
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   const toWorld = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } => {
-      const svg = svgRef.current;
-      if (!svg) return { x: 0, y: 0 };
-      const rect = svg.getBoundingClientRect();
+      const rect = rectRef.current ?? svgRef.current?.getBoundingClientRect() ?? null;
+      if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
       return {
         x: view.x + ((clientX - rect.left) / rect.width) * view.width,
         y: view.y + ((clientY - rect.top) / rect.height) * viewHeight,
@@ -635,8 +663,22 @@ export function Workbench({
     const world = toWorld(event.clientX, event.clientY);
     // Snap the pointer to a hole when one is close, so the draft jumper
     // previews the connection that a click would actually commit.
-    const hole = nearestHole(bench, world.x, world.y);
-    setPointer(hole ? { x: hole.x, y: hole.y } : world);
+    const hole = nearestHoleFast(terminalGrid, world.x, world.y);
+    const snapped = hole ? { x: hole.x, y: hole.y } : world;
+
+    /*
+     * Throttle the store update to one per frame. Pointer events can fire more
+     * often than the display refreshes, and each update re-renders the whole
+     * canvas; coalescing them keeps the drag smooth instead of queuing work.
+     */
+    pendingPointerRef.current = snapped;
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        const next = pendingPointerRef.current;
+        if (next) setPointer(next);
+      });
+    }
 
     const drag = dragRef.current;
     if (!drag) return;
@@ -727,7 +769,7 @@ export function Workbench({
        * a loose contact at that spot, which is what a wire end hanging off the
        * edge of a board actually looks like.
        */
-      const hole = nearestHole(bench, world.x, world.y);
+      const hole = nearestHoleFast(terminalGrid, world.x, world.y);
       onMoveWireEnd(
         drag.wireId,
         drag.end,
@@ -831,7 +873,7 @@ export function Workbench({
     }
     if (movedRef.current) return;
     const world = toWorld(event.clientX, event.clientY);
-    const terminal = nearestHole(bench, world.x, world.y);
+    const terminal = nearestHoleFast(terminalGrid, world.x, world.y);
 
     if (wireAnchor !== null) {
       if (!terminal) {
@@ -963,6 +1005,26 @@ export function Workbench({
    */
   const benchRevision = bench.revision;
 
+  /*
+   * Spatial index of terminals, so a pointer move does not scan every hole on
+   * the bench. Rebuilt only when the bench changes (parts moved/turned), not
+   * on every pointer move.
+   */
+  const terminalGrid = useMemo(() => {
+    const grid = new Map<string, Terminal[]>();
+    const cell = HOLE_PICK_RADIUS_MM;
+    for (const terminal of bench.terminals) {
+      const cx = Math.floor(terminal.x / cell);
+      const cy = Math.floor(terminal.y / cell);
+      const key = `${cx},${cy}`;
+      const bucket = grid.get(key);
+      if (bucket) bucket.push(terminal);
+      else grid.set(key, [terminal]);
+    }
+    return grid;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bench, benchRevision]);
+
   /**
    * Every contact, indexed by id.
    *
@@ -974,7 +1036,7 @@ export function Workbench({
    */
   /** The hole under the cursor, which is what a click would pick. */
   const hovered = useMemo(
-    () => (pointerMm ? nearestHole(bench, pointerMm.x, pointerMm.y) : null),
+    () => (pointerMm ? nearestHoleFast(terminalGrid, pointerMm.x, pointerMm.y) : null),
     /*
      * `benchRevision` is not read in the body, and deliberately so.
      *
@@ -999,6 +1061,9 @@ export function Workbench({
    * actually goes, which is the question a wiring bench exists to answer. It
    */
   const traced = useMemo(() => {
+    // While a jumper is being drawn the net trace is not needed and recomputing
+    // it over every terminal on each pointer move is what makes the drag lag.
+    if (wireAnchor !== null) return [];
     if (!hovered) return [];
     const net = netOfTerminal.get(hovered.id);
     if (net === undefined || net < 0) return [];
@@ -1008,7 +1073,7 @@ export function Workbench({
     }
     return ids;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bench, benchRevision, netOfTerminal, hovered]);
+  }, [bench, benchRevision, netOfTerminal, hovered, wireAnchor]);
 
   /**
    * What the socket under the cursor is called (`uno:AREF`, `E20`), for the
@@ -1059,11 +1124,12 @@ export function Workbench({
    * the preview is drawn on the line the wire will land on instead of jumping
    * onto it the moment the pointer stops.
    */
-  const draftLane = useMemo(() => {
-    if (!wireAnchor || !pointerMm || wireBends.length > 0) return 0;
-    const draft: RouteSpan = { id: DRAFT_WIRE, from: wireAnchor, to: pointerMm };
-    return wireLanes([...spans, draft]).get(DRAFT_WIRE) ?? 0;
-  }, [spans, wireAnchor, pointerMm, wireBends]);
+  /*
+   * The preview jumper takes no lane offset: computing the full lane set on every
+   * pointer move (wireLanes over every span) was the per-frame cost that made
+   * dragging laggy. A dashed preview does not need to dodge its neighbours.
+   */
+  const draftLane = 0;
 
   /**
    * The drawn path of a placed jumper.
@@ -1081,6 +1147,17 @@ export function Workbench({
       : routeWire(from, to, lanes.get(wire.id) ?? 0);
   };
 
+  /*
+   * Wire routes depend on terminal positions and bends, neither of which changes
+   * during a pointer move, so compute them once per bench revision instead of
+   * on every render. This is the main per-frame cost while dragging a jumper.
+   */
+  const wirePaths = useMemo(
+    () => bench.wires.map((wire) => ({ wire, d: wirePath(wire) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bench, benchRevision, lanes],
+  );
+
   return (
     <svg
       ref={svgRef}
@@ -1092,7 +1169,66 @@ export function Workbench({
       onPointerCancel={endDrag}
       onWheel={onWheel}
       onClick={onClick}
-      style={{ cursor: 'default' }}
+      tabIndex={0}
+      role="application"
+      aria-label="Bench canvas. Arrow keys pan; Escape cancels a half-drawn wire."
+      onKeyDown={(event) => {
+        const step = event.shiftKey ? 30 : 10;
+        switch (event.key) {
+          case 'Tab': {
+            if (sortedTerminals.length === 0) break;
+            const idx =
+              focusedTerminalId === null
+                ? 0
+                : sortedTerminals.findIndex((t) => t.id === focusedTerminalId);
+            const next = event.shiftKey
+              ? idx <= 0
+                ? sortedTerminals.length - 1
+                : idx - 1
+              : (idx + 1) % sortedTerminals.length;
+            setFocusedTerminalId(sortedTerminals[next].id);
+            event.preventDefault();
+            break;
+          }
+          case 'Enter':
+          case ' ': {
+            if (focusedTerminalId === null) break;
+            const terminal = bench.terminals[focusedTerminalId];
+            if (!terminal) break;
+            if (wireAnchor === null) {
+              startDraft(terminal);
+            } else if (terminal.id !== wireAnchor.id) {
+              onRouteWire(wireAnchor, terminal, wireBends);
+              cancelDraft();
+            }
+            event.preventDefault();
+            break;
+          }
+          case 'ArrowLeft':
+            useWorkbenchStore.getState().panBy(step, 0);
+            event.preventDefault();
+            break;
+          case 'ArrowRight':
+            useWorkbenchStore.getState().panBy(-step, 0);
+            event.preventDefault();
+            break;
+          case 'ArrowUp':
+            useWorkbenchStore.getState().panBy(0, step);
+            event.preventDefault();
+            break;
+          case 'ArrowDown':
+            useWorkbenchStore.getState().panBy(0, -step);
+            event.preventDefault();
+            break;
+          case 'Escape':
+            useWorkbenchStore.getState().cancelDraft();
+            setFocusedTerminalId(null);
+            break;
+          default:
+            break;
+        }
+      }}
+      style={{ cursor: 'default', outline: 'none' }}
     >
       <defs>
         <pattern id="bench-grid" width={10.16} height={10.16} patternUnits="userSpaceOnUse">
@@ -1156,10 +1292,10 @@ export function Workbench({
        * the same route, so the corner radius stays put at any zoom.
        */}
       <g data-layer="wires" pointerEvents="none">
-        {bench.wires.map((wire) => (
+        {wirePaths.map(({ wire, d }) => (
           <path
             key={wire.id}
-            d={wirePath(wire)}
+            d={d}
             fill="none"
             stroke="#05080d"
             strokeWidth={1.6 / scale + 0.7}
@@ -1168,10 +1304,10 @@ export function Workbench({
             opacity={0.85}
           />
         ))}
-        {bench.wires.map((wire) => (
+        {wirePaths.map(({ wire, d }) => (
           <path
             key={`${wire.id}-core`}
-            d={wirePath(wire)}
+            d={d}
             fill="none"
             stroke={wire.colour}
             strokeWidth={0.9 / scale + 0.4}
@@ -1190,10 +1326,10 @@ export function Workbench({
        * and carries the ids that identify which wire was hit.
        */}
       <g data-layer="wire-hit">
-        {bench.wires.map((wire) => (
+        {wirePaths.map(({ wire, d }) => (
           <path
             key={`${wire.id}-hit`}
-            d={wirePath(wire)}
+            d={d}
             fill="none"
             stroke="transparent"
             strokeWidth={3.2}
@@ -1430,6 +1566,17 @@ export function Workbench({
             viewHeight={viewHeight}
           />
         )}
+        {focusedTerminalId !== null && bench.terminals[focusedTerminalId] && (
+          <circle
+            cx={bench.terminals[focusedTerminalId].x}
+            cy={bench.terminals[focusedTerminalId].y}
+            r={1.6}
+            fill="none"
+            stroke="#38bdf8"
+            strokeWidth={0.4}
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </g>
     </svg>
   );
@@ -1439,16 +1586,27 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
 
-/** Nearest terminal within picking range, or null. */
-function nearestHole(bench: Bench, x: number, y: number): Terminal | null {
+/** Nearest terminal within picking range, using a spatial grid. */
+function nearestHoleFast(grid: Map<string, Terminal[]>, x: number, y: number): Terminal | null {
+  const cell = HOLE_PICK_RADIUS_MM;
+  const cx = Math.floor(x / cell);
+  const cy = Math.floor(y / cell);
   let best: Terminal | null = null;
   let bestDistance = HOLE_PICK_RADIUS_MM;
-  for (const terminal of bench.terminals) {
-    const distance = Math.hypot(terminal.x - x, terminal.y - y);
-    if (distance < bestDistance) {
-      best = terminal;
-      bestDistance = distance;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const bucket = grid.get(`${cx + dx},${cy + dy}`);
+      if (!bucket) continue;
+      for (const terminal of bucket) {
+        const distance = Math.hypot(terminal.x - x, terminal.y - y);
+        if (distance < bestDistance) {
+          best = terminal;
+          bestDistance = distance;
+        }
+      }
     }
   }
   return best;
 }
+
+

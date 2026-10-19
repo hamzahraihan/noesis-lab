@@ -52,11 +52,10 @@ import type {
 import type { CircuitDocument, FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import {
   ENTRY_BY_LANGUAGE,
-  removeFile,
   renameFile,
   toSingleFileProject,
 } from '@/features/simulation';
-import { FirmwareEditor, Inspector, SerialMonitor, StatusBar } from '@/features/instruments';
+import { FirmwareEditor, Inspector, SerialMonitor } from '@/features/instruments';
 import { WIRE_COLOURS } from '../wiring/wire-colours';
 import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
@@ -73,10 +72,7 @@ import {
   PauseIcon,
   PlayIcon,
   PlusIcon,
-  Link2Icon,
   ReaderIcon,
-  DownloadIcon,
-  UploadIcon,
 } from '@radix-ui/react-icons';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
@@ -86,6 +82,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components';
 import { decodeShareToProject, isShareable, projectShareQuery } from '../utils/share-codec';
 import {
@@ -329,6 +330,14 @@ export default function Bench(props: BenchProps) {
     });
   });
   const [project, setProject] = useState<FirmwareProject>(seed.project);
+  /*
+   * Which files the user has explicitly closed in the editor. A closed file
+   * stays in the project (and in the explorer); it just leaves the tab strip,
+   * the way closing a buffer does not delete the file in VS Code. Reopening is
+   * one click in the explorer.
+   */
+  const [closedFiles, setClosedFiles] = useState<Set<string>>(() => new Set());
+  const openFiles = project.files.filter((file) => !closedFiles.has(file.name));
 
   /*
    * A sketch that asks a live host on a bench that cannot reach one.
@@ -418,7 +427,7 @@ export default function Bench(props: BenchProps) {
   // module to run it with. Availability still decides -- no worker means the
   // selector falls back with its reason.
   const [rp2040Mode, setRp2040Mode] = useState(
-    projectBuild?.execution === 'rp2040' || boardId === 'rp2040',
+    projectBuild?.execution === 'rp2040' || boardId === 'rp2040' || boardId === 'pico',
   );
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
@@ -465,7 +474,7 @@ export default function Bench(props: BenchProps) {
     // switch drops back to the interpreter rather than carrying a mode onto a
     // board that refuses it.
     setAvrMode(false);
-    setRp2040Mode(boardId === 'rp2040');
+    setRp2040Mode(boardId === 'rp2040' || boardId === 'pico');
   }, [boardId, starterFor]);
 
   /* Execution-pinned builds pin the backend: the interpreter option is
@@ -654,6 +663,20 @@ export default function Bench(props: BenchProps) {
   const [workerClient, setWorkerClient] = useState<WorkerClient | null>(null);
   const [workerFallback, setWorkerFallback] = useState<string | null>(null);
   const [workerLive, setWorkerLive] = useState(false);
+  /*
+   * The worker offloads stepping to a Web Worker over shared memory. It is an
+   * optimisation, not a feature: the bench runs identically in-page. Some
+   * hosts (or users) prefer to keep everything on the main thread, so this
+   * flag opts out. Persisted so the choice survives a reload.
+   */
+  const [forceNoWorker, setForceNoWorker] = useState<boolean>(
+    () => (typeof localStorage !== 'undefined' && localStorage.getItem('noesis-no-worker') === '1'),
+  );
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('noesis-no-worker', forceNoWorker ? '1' : '0');
+    }
+  }, [forceNoWorker]);
   useEffect(() => {
     // A fresh simulation has nothing loaded to resume.
     runSession.current = null;
@@ -663,6 +686,7 @@ export default function Bench(props: BenchProps) {
       bench: simulation.bench,
       wasm: projectBuild?.execution === 'avr',
       liveNetwork,
+      forceNoWorker,
       onFallback: (reason) => {
         setWorkerFallback(reason);
         setWorkerClient(null);
@@ -682,7 +706,7 @@ export default function Bench(props: BenchProps) {
      * told to interpret. Re-attaching costs one worker start, which is what
      * the flip costs anyway.
      */
-  }, [simulation, projectBuild?.execution, liveNetwork]);
+  }, [simulation, projectBuild?.execution, liveNetwork, forceNoWorker]);
 
   /*
    * The speed multiplier belongs to the run, not to either backend: push it
@@ -887,7 +911,9 @@ export default function Bench(props: BenchProps) {
           break;
         case 'Escape':
           if (paletteFor) closePalette();
-          else if (selectedId) selectPart(null);
+          else if (useWorkbenchStore.getState().wireAnchor !== null) {
+            useWorkbenchStore.getState().cancelDraft();
+          } else if (selectedId) selectPart(null);
           break;
         default:
           break;
@@ -1713,7 +1739,7 @@ export default function Bench(props: BenchProps) {
            */}
           {workerStatus !== null ? (
             <span
-              className="rounded-none border border-emerald-800 bg-emerald-950 px-1.5 py-0.5 text-xs text-[var(--hd-success)]"
+              className="rounded-none border border-[var(--hd-success)]/40 bg-[var(--hd-success)]/10 px-1.5 py-0.5 text-xs text-[var(--hd-success)]"
               title="Stepping in the sim worker"
               role="status"
             >
@@ -1856,82 +1882,71 @@ export default function Bench(props: BenchProps) {
             })}
           </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={copyShareLink}
-            disabled={shareTooLarge}
-            title={
-              shareTooLarge
-                ? 'Too large to share by link — files stay local'
-                : 'Copy a link carrying this project'
-            }
-          >
-            <Link2Icon className="icon" aria-hidden="true" />
-            Copy link
-          </Button>
-
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!circuitShareable}
-            onClick={copyCircuitLink}
-            title={
-              circuitShareable
-                ? 'Copy a link carrying this circuit'
-                : 'Too large to share by link — save it as a file instead'
-            }
-          >
-            Copy circuit link
-          </Button>
-
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={saveCircuitFile}
-            title={`Write this circuit as ${circuitFileName(boardId)}`}
-          >
-            <DownloadIcon className="icon" aria-hidden="true" />
-            Save circuit
-          </Button>
-
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={selectedCustomPart === undefined}
-            onClick={() =>
-              selectedCustomPart &&
-              downloadJson(partFileText(selectedCustomPart), `${selectedCustomPart.id}.part.json`)
-            }
-            title={
-              selectedCustomPart
-                ? `Write ${selectedCustomPart.name} as a part file`
-                : 'Select an imported part on the bench to write it out as a file'
-            }
-          >
-            <DownloadIcon className="icon" aria-hidden="true" />
-            Save part
-          </Button>
-
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={layoutLocked}
-            title={
-              layoutLocked
-                ? LAYOUT_LOCK_HINT
-                : 'Open a circuit file, replacing the circuit on the bench'
-            }
-          >
-            <UploadIcon className="icon" aria-hidden="true" />
-            Open circuit…
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                title="More actions: share, save, open"
+              >
+                More
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={shareTooLarge}
+                onSelect={() => {
+                  if (!shareTooLarge) copyShareLink();
+                }}
+              >
+                Copy link
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!circuitShareable}
+                onSelect={() => {
+                  if (circuitShareable) copyCircuitLink();
+                }}
+              >
+                Copy circuit link
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => saveCircuitFile()}>
+                Save circuit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={selectedCustomPart === undefined}
+                onSelect={() => {
+                  if (selectedCustomPart) {
+                    downloadJson(
+                      partFileText(selectedCustomPart),
+                      `${selectedCustomPart.id}.part.json`,
+                    );
+                  }
+                }}
+              >
+                Save part
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={layoutLocked}
+                onSelect={() => {
+                  if (!layoutLocked) fileInputRef.current?.click();
+                }}
+              >
+                Open circuit…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => partInputRef.current?.click()}>
+                Open part…
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => setForceNoWorker((v) => !v)}
+              >
+                {forceNoWorker ? 'Enable sim worker' : 'Disable sim worker'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <input
             ref={fileInputRef}
             type="file"
@@ -1940,22 +1955,10 @@ export default function Bench(props: BenchProps) {
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              // Cleared first, so choosing the same file twice fires again.
               event.target.value = '';
               if (file) openCircuitFile(file);
             }}
           />
-
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => partInputRef.current?.click()}
-            title="Open a part file, adding its parts to the palette"
-          >
-            <UploadIcon className="icon" aria-hidden="true" />
-            Open part…
-          </Button>
           <input
             ref={partInputRef}
             type="file"
@@ -2030,6 +2033,13 @@ export default function Bench(props: BenchProps) {
             activeName={project.activeName}
             width={layout.sidebarWidth}
             onSelectFile={(name) => {
+              // Reopen a closed buffer when its file is picked in the explorer.
+              setClosedFiles((previous) => {
+                if (!previous.has(name)) return previous;
+                const next = new Set(previous);
+                next.delete(name);
+                return next;
+              });
               setActiveCenter(centerKeyForFile(name));
               setProject((previous) => ({ ...previous, activeName: name }));
             }}
@@ -2058,7 +2068,7 @@ export default function Bench(props: BenchProps) {
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <CenterTabs
             active={activeCenter}
-            files={project.files}
+            files={openFiles}
             entryName={ENTRY_BY_LANGUAGE[project.language]}
             onSelect={(key) => {
               if (key === 'circuit') {
@@ -2069,12 +2079,20 @@ export default function Bench(props: BenchProps) {
               setProject((previous) => ({ ...previous, activeName: key }));
             }}
             onCloseFile={(name) => {
-              try {
-                setProject((previous) => removeFile(previous, name));
-              } catch {
-                // Editor notice surface owns errors.
+              // Close the buffer, not the file: drop it from the tab strip only.
+              setClosedFiles((previous) => {
+                const next = new Set(previous);
+                next.add(name);
+                return next;
+              });
+              if (activeCenter === name) {
+                const remaining = project.files.filter(
+                  (file) => file.name !== name && !closedFiles.has(file.name),
+                );
+                setActiveCenter(
+                  remaining.length > 0 ? centerKeyForFile(remaining[0].name) : 'circuit',
+                );
               }
-              setActiveCenter('circuit');
             }}
             onRenameFile={(name) => {
               const next = window.prompt('Rename file', name);
@@ -2171,6 +2189,19 @@ export default function Bench(props: BenchProps) {
                     </button>
                   </div>
                 )}
+              <div
+                className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-2 rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/80 px-2 py-1 font-mono text-[10px] text-[var(--hd-muted)] backdrop-blur"
+                role="status"
+                aria-label="Simulation status"
+              >
+                <span className={isRunning ? 'text-[var(--hd-success)]' : ''}>
+                  {isRunning ? 'running' : 'stopped'}
+                </span>
+                <span className="tabular-nums">
+                  {((workerClient !== null && workerLive ? workerClient.timeMs : simulation.engine.timeMs) / 1000).toFixed(3)}s
+                </span>
+                <span className="tabular-nums">{simulation.engine.currentNetlist.nodeCount} nodes</span>
+              </div>
               </div>
             }
             editor={
@@ -2384,13 +2415,6 @@ export default function Bench(props: BenchProps) {
         )}
       </div>
 
-      <StatusBar
-        timeMs={
-          workerClient !== null && workerLive ? workerClient.timeMs : simulation.engine.timeMs
-        }
-        running={isRunning}
-        netCount={simulation.engine.currentNetlist.nodeCount}
-      />
     </div>
   );
 }

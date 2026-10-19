@@ -78,7 +78,8 @@ export function CenterTabs({
                 <button
                   type="button"
                   onClick={() => onCloseFile(file.name)}
-                  aria-label={`Remove ${file.name}`}
+                  title={`Close ${file.name}`}
+                aria-label={`Close ${file.name}`}
                   className="rounded-none px-1 py-1 text-[var(--hd-muted)] transition-colors hover:text-red-300"
                 >
                   ×

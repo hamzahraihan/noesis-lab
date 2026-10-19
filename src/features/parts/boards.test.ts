@@ -5,6 +5,7 @@ import {
   arduinoUnoR3,
   esp32DevKitV1,
   nanoRp2040Connect,
+  raspberryPiPico,
 } from './boards';
 import { McuRuntime } from '@/features/simulation';
 import type { PartDefinition } from './catalog';
@@ -15,6 +16,7 @@ const BOARDS: ReadonlyArray<readonly [string, () => PartDefinition]> = [
   ['mega', arduinoMega2560],
   ['nano', arduinoNano],
   ['rp2040', nanoRp2040Connect],
+  ['pico', raspberryPiPico],
 ];
 
 describe('board definitions', () => {

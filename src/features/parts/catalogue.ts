@@ -18,6 +18,7 @@ import {
   esp32DevKitV1,
   franzininhoBoard,
   raspberryPi4,
+  raspberryPiPico,
 } from './boards';
 import { breadboardDefinition } from './breadboard';
 import {
@@ -508,6 +509,7 @@ const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
   'arduino-nano-rp2040-connect': nanoRp2040Connect,
   franzininho: franzininhoBoard,
   'raspberry-pi-4': raspberryPi4,
+  'raspberry-pi-pico': raspberryPiPico,
 };
 
 /**

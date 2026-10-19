@@ -92,7 +92,7 @@ function staticBody<P extends object>(render: (props: P) => React.ReactNode) {
   return memo(render);
 }
 
-export function PartFootprint({
+export const PartFootprint = memo(function PartFootprint({
   part,
   state,
   onTogglePressed,
@@ -133,7 +133,7 @@ export function PartFootprint({
       )}
     </g>
   );
-}
+});
 
 function shapeFor(
   definition: PartDefinition,
@@ -515,6 +515,13 @@ const BOARD_DRESSING: Readonly<Record<string, BoardDressing>> = {
    * card. A real Pi 4 shields its SoC under a metal can; there is no part here
    * for one, so the chip is drawn bare and named rather than invented.
    */
+  'raspberry-pi-pico': {
+    usb: 'micro-b',
+    barrelJack: false,
+    buttons: [{ label: 'BOOTSEL', x: 20, y: 9 }],
+    indicators: [],
+    chips: [{ x: 18, y: 6, width: 14, height: 8, legs: 6, text: 'RP2040' }],
+  },
   'raspberry-pi-4': {
     usb: 'none',
     barrelJack: false,
@@ -524,7 +531,14 @@ const BOARD_DRESSING: Readonly<Record<string, BoardDressing>> = {
     chips: [
       { x: 40, y: 20, width: 8, height: 8, legs: 7, text: 'BCM2711' },
       { x: 53, y: 21, width: 6, height: 6, legs: 6, text: 'RAM' },
-      { x: 62, y: 22, width: 6, height: 5, legs: 6, text: '' },
+      { x: 62, y: 22, width: 6, height: 5, legs: 6, text: 'PMIC' },
+      { x: 2, y: 30, width: 12, height: 4, legs: 4, text: 'USB-C' },
+      { x: 2, y: 36, width: 12, height: 4, legs: 4, text: 'USB 3' },
+      { x: 2, y: 42, width: 12, height: 4, legs: 4, text: 'ETH' },
+      { x: 70, y: 12, width: 10, height: 4, legs: 4, text: 'HDMI' },
+      { x: 70, y: 18, width: 10, height: 4, legs: 4, text: 'HDMI' },
+      { x: 70, y: 40, width: 12, height: 3, legs: 3, text: 'SD' },
+      { x: 30, y: 44, width: 16, height: 6, legs: 5, text: 'WiFi' },
     ],
   },
 };

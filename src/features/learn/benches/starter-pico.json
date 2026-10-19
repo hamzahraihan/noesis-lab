@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "raspberry-pi-pico",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "resistor-330",
+      "x": 60,
+      "y": 10,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "led-red",
+      "x": 80,
+      "y": 10,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:L_3",
+      "to": "p3:a",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p3:b",
+      "to": "p4:anode",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p4:cathode",
+      "to": "p1:L_2",
+      "colour": "#6b7280",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

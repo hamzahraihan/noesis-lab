@@ -23,7 +23,7 @@ export function ActivityBar({
   return (
     <nav
       aria-label="Activity"
-      className="flex w-12 shrink-0 flex-col items-stretch border-r border-[var(--hd-border)] bg-[var(--hd-surface)] py-1"
+      className="flex w-14 shrink-0 flex-col items-stretch border-r border-[var(--hd-border)] bg-[var(--hd-surface)] py-1"
     >
       {ITEMS.map(({ id, label, title, Icon }) => (
         <button
@@ -33,11 +33,12 @@ export function ActivityBar({
           aria-pressed={activity === id}
           aria-label={label}
           title={title}
-          className={`flex h-10 items-center justify-center transition-colors ${
+          className={`flex flex-col items-center justify-center gap-0.5 py-2 transition-colors ${
             activity === id ? 'text-[var(--hd-text)]' : 'text-[var(--hd-muted)] hover:text-[var(--hd-text)]'
           }`}
         >
           <Icon className="icon" aria-hidden="true" />
+          <span className="text-[9px] font-medium leading-none">{label}</span>
         </button>
       ))}
     </nav>

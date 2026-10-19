@@ -1364,3 +1364,135 @@ export function franzininhoBoard(): PartDefinition {
 export function raspberryPi4(): PartDefinition {
   return (raspberryPi ??= raspberryPiDefinition());
 }
+
+/*
+ * Raspberry Pi Pico, the RP2040-based board. Same chip as the Nano RP2040
+ * Connect, so the firmware backend and the pin model transfer unchanged; only
+ * the header layout and the artwork differ. GPIO numbering is the Pico's own,
+ * which is the reason a sketch ported between the two boards has to be
+ * re-pinned even though the chip is identical.
+ */
+const PICO_LEFT: ReadonlyArray<readonly [string, number | -1]> = [
+  ['GP0', 0],
+  ['GP1', 1],
+  ['GND', -1],
+  ['GP2', 2],
+  ['GP3', 3],
+  ['GP4', 4],
+  ['GP5', 5],
+  ['GND', -1],
+  ['GP6', 6],
+  ['GP7', 7],
+  ['GP8', 8],
+  ['GP9', 9],
+  ['GND', -1],
+  ['GP10', 10],
+  ['GP11', 11],
+  ['GP12', 12],
+  ['GP13', 13],
+  ['GND', -1],
+  ['GP14', 14],
+  ['GP15', 15],
+];
+
+const PICO_RIGHT: ReadonlyArray<readonly [string, number | -1]> = [
+  ['GP16', 16],
+  ['GP17', 17],
+  ['GND', -1],
+  ['GP18', 18],
+  ['GP19', 19],
+  ['GP20', 20],
+  ['GP21', 21],
+  ['GND', -1],
+  ['GP22', 22],
+  ['RUN', -1],
+  ['GP26', 26],
+  ['GP27', 27],
+  ['GND', -1],
+  ['GP28', 28],
+  ['ADC_VREF', -1],
+  ['3V3', -1],
+  ['3V3_EN', -1],
+  ['GND', -1],
+  ['VSYS', -1],
+  ['VBUS', -1],
+];
+
+const PICO_PITCH = 2.54;
+const PICO_HEADER_X_LEFT = 2.54;
+const PICO_HEADER_X_RIGHT = 48.26 - 2.54;
+const PICO_HEADER_Y = 2.54;
+
+function picoBoardPin(id: string, label: string, gpio: number | -1): BoardPin {
+  const isGround = label === 'GND';
+  const isPower =
+    label === '3V3' || label === 'VSYS' || label === 'VBUS' || label === 'ADC_VREF' || label === '3V3_EN';
+  const analog = label === 'GP26' || label === 'GP27' || label === 'GP28';
+  return {
+    id,
+    label,
+    role: isGround ? 'ground' : isPower ? 'power' : analog ? 'adc' : 'gpio',
+    gpio: gpio >= 0 ? gpio : undefined,
+    adc: analog ? gpio - 26 : undefined,
+    canDrive: !(label === 'RUN' || label === 'ADC_VREF' || label === '3V3_EN'),
+  };
+}
+
+function picoDefinition(): PartDefinition {
+  const pins: PinSpec[] = [];
+  const boardPins: BoardPin[] = [];
+
+  const addColumn = (column: readonly (readonly [string, number | -1])[], x: number, prefix: string) => {
+    column.forEach(([label, gpio], index) => {
+      const id = `${prefix}_${index}`;
+      pins.push({
+        id,
+        label,
+        x,
+        y: PICO_HEADER_Y + index * PICO_PITCH,
+        net:
+          label === 'GND'
+            ? 'GND'
+            : label === '3V3' || label === '3V3_EN'
+              ? '3V3'
+              : label === '5V' || label === 'VSYS' || label === 'VBUS'
+                ? '5V'
+                : undefined,
+      });
+      boardPins.push(picoBoardPin(id, label, gpio));
+    });
+  };
+
+  addColumn(PICO_LEFT, PICO_HEADER_X_LEFT, 'L');
+  addColumn(PICO_RIGHT, PICO_HEADER_X_RIGHT, 'R');
+
+  return {
+    id: 'raspberry-pi-pico',
+    name: 'Raspberry Pi Pico',
+    category: 'board',
+    widthMm: 51,
+    heightMm: 21,
+    component: {
+      kind: 'mcu',
+      board: {
+        id: 'pico',
+        name: 'Raspberry Pi Pico',
+        logicVolts: 3.3,
+        serialPrefix: 'Raspberry Pi Pico',
+        sourceOhms: 40,
+        sinkOhms: 40,
+        pwmHz: 1000,
+        adcBits: 12,
+      },
+    },
+    pins,
+    boardPins,
+    bodyColour: '#2c7a3f',
+    legendColour: '#ffffff',
+  };
+}
+
+let pico: PartDefinition | null = null;
+export function raspberryPiPico(): PartDefinition {
+  return (pico ??= picoDefinition());
+}
