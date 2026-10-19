@@ -122,4 +122,35 @@ describe('circuit codec', () => {
     const encoded = encodeCircuitToShare(doc);
     expect(decodeShareToCircuit(encoded)).toEqual(doc);
   });
+  it('carries a circuit’s own part through a shared link, like any other field', () => {
+    const doc = {
+      version: 1,
+      parts: [{ id: 'probe', type: 'soil-probe', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+      definitions: [
+        {
+          id: 'soil-probe',
+          name: 'Soil moisture probe',
+          category: 'input',
+          widthMm: 20,
+          heightMm: 12,
+          bodyColour: '#5b6b4a',
+          legendColour: '#f2f2ee',
+          component: { kind: 'scripted', bus: 'analog' },
+          script: '({ analog: () => 0.5 })',
+          pins: [
+            { id: 'AOUT', label: 'OUT', x: 0, y: 6 },
+            { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+            { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+          ],
+        },
+      ],
+    };
+    // The link is the document, so a part travels in it exactly as a wire does --
+    // and a script too big for a url simply makes the circuit unshareable, which
+    // `isCircuitShareable` already answers.
+    const back = decodeShareToCircuit(encodeCircuitToShare(doc as never));
+    expect(back?.definitions?.[0]?.id).toBe('soil-probe');
+    expect(back?.parts[0]?.type).toBe('soil-probe');
+  });
 });
