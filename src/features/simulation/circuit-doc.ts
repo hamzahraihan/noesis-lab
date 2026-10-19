@@ -9,6 +9,7 @@ import {
   DynamicState,
   partDefinitionById,
   rotateOffset,
+  validatePartDefinition,
   type PartDefinition,
 } from '@/features/parts';
 
@@ -46,6 +47,19 @@ export interface CircuitDocument {
   readonly parts: readonly CircuitPart[];
   readonly wires: readonly CircuitWire[];
   readonly state?: CircuitState;
+  /*
+   * The parts this circuit brings with it.
+   *
+   * A shipped part is described by the build, so a document that used only those
+   * needs nothing here -- which is every circuit in `learn/circuits/`. A part
+   * imported from a part file is not, and a document that named one without
+   * carrying it would open only on the machine that happened to import it: the
+   * wiring would be there and the part would not. So the definition travels with
+   * the circuit, resolved **before** the imported parts, which makes a file
+   * behave the same wherever it is opened -- the property that makes a shared
+   * example worth sharing.
+   */
+  readonly definitions?: readonly PartDefinition[];
 }
 
 export function validateCircuit(doc: unknown): string[] {
@@ -99,6 +113,25 @@ export function validateCircuit(doc: unknown): string[] {
       if (!Array.isArray(ww.bends)) errors.push(`wires[${i}].bends must be an array`);
     }
   }
+  if (d.definitions !== undefined) {
+    if (!Array.isArray(d.definitions)) {
+      errors.push('definitions must be an array');
+    } else {
+      const carried = new Set<string>();
+      for (const [i, entry] of d.definitions.entries()) {
+        const verdict = validatePartDefinition(entry);
+        if (!verdict.ok) {
+          errors.push(`definitions[${i}] is not a part: ${verdict.reason}`);
+          continue;
+        }
+        if (carried.has(verdict.definition.id)) {
+          errors.push(`duplicate definition: ${verdict.definition.id}`);
+          continue;
+        }
+        carried.add(verdict.definition.id);
+      }
+    }
+  }
   if (d.state !== undefined) {
     const s = d.state as Record<string, unknown>;
     if (typeof s !== 'object' || s === null) {
@@ -132,6 +165,44 @@ export function parseCircuit(raw: unknown, label: string): CircuitDocument {
   if (errors.length === 0) errors.push(...compile(raw).errors);
   if (errors.length > 0) throw new Error(`${label}: ${errors.join('; ')}`);
   return raw as CircuitDocument;
+}
+
+/**
+ * The definition a part type refers to, for a given document.
+ *
+ * The order is the point: **the circuit's own definitions come first**, then the
+ * parts this session imported, then the build's catalogue. A shared circuit is
+ * therefore exactly what its author had -- a local import cannot quietly change
+ * what a file means -- while a stray id still resolves against the catalogue for
+ * every document that was written before any of this existed.
+ *
+ * Exported because the edits that add a wire or a part resolve a type the same
+ * way the compiler does; two rules would let an edit name a part the compiler
+ * then refuses.
+ */
+export function definitionFor(
+  doc: CircuitDocument,
+  type: string,
+): PartDefinition | undefined {
+  return doc.definitions?.find((definition) => definition.id === type) ?? partDefinitionById(type);
+}
+
+/**
+ * A document as it should be written to a file.
+ *
+ * Definitions the circuit no longer uses are dropped, and a document that needs
+ * none omits the field entirely -- which keeps every shipped circuit's bytes
+ * exactly as they were, and keeps a saved file honest about what it needs.
+ */
+export function documentForFile(doc: CircuitDocument): CircuitDocument {
+  const used = new Set(doc.parts.map((part) => part.type));
+  const definitions = (doc.definitions ?? []).filter((definition) => used.has(definition.id));
+  if (definitions.length === (doc.definitions ?? []).length) return doc;
+  if (definitions.length === 0) {
+    const { definitions: _unused, ...rest } = doc;
+    return rest;
+  }
+  return { ...doc, definitions };
 }
 
 /**
@@ -188,9 +259,11 @@ export function compile(doc: unknown): {
       continue;
     }
     seenIds.add(p.id);
-    const definition = partDefinitionById(p.type);
+    const definition = definitionFor(d, p.type);
     if (!definition) {
-      errors.push(`unknown part type: ${p.type}`);
+      errors.push(
+        `unknown part type: ${p.type} (not shipped, not imported, and this circuit carries no definition for it)`,
+      );
       continue;
     }
     const part = builder.addPartWithId(p.id, definition, p.x, p.y, p.rotation ?? 0);
