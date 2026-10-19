@@ -58,13 +58,13 @@ export function MultimeterPanel({
   const ranges = mode === 'amps' ? AMP_RANGES : mode === 'ohms' ? OHM_RANGES : [];
 
   return (
-    <div className="flex flex-col gap-2 border-t border-slate-800 p-3">
+    <div className="flex flex-col gap-2 border-t border-[var(--hd-border)] p-3">
       <div className="flex items-center gap-2">
         <CardTitle className="flex flex-1 items-center gap-2">
-          <MixerHorizontalIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <MixerHorizontalIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
           Multimeter
         </CardTitle>
-        <div className="flex gap-0.5 rounded-none border border-slate-800 bg-slate-950 p-0.5">
+        <div className="flex gap-0.5 rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)] p-0.5">
           {(Object.keys(MODE_LABELS) as MeterMode[]).map((candidate) => (
             <Button
               key={candidate}
@@ -75,8 +75,8 @@ export function MultimeterPanel({
               variant={mode === candidate ? 'default' : 'secondary'}
               className={
                 mode === candidate
-                  ? 'h-6 px-1.5 text-[11px] !bg-amber-400 !text-slate-900'
-                  : 'h-6 px-1.5 text-[11px]'
+                  ? 'h-6 px-1.5 text-xs !bg-[var(--hd-warn)] !text-slate-900'
+                  : 'h-6 px-1.5 text-xs'
               }
               title={`Measure ${MODE_LABELS[candidate] === 'V' ? 'voltage' : MODE_LABELS[candidate] === 'A' ? 'current' : 'resistance'}`}
             >
@@ -92,17 +92,17 @@ export function MultimeterPanel({
        * goes amber when the reading is not to be trusted.
        */}
       <div
-        className={`rounded-none border bg-slate-950 px-3 py-2 text-center ${
-          reading.valid ? 'border-slate-800' : 'border-amber-900/60'
+        className={`rounded-none border bg-[var(--hd-bg-deep)] px-3 py-2 text-center ${
+          reading.valid ? 'border-[var(--hd-border)]' : 'border-amber-900/60'
         }`}
       >
-        <span className="num font-mono text-2xl leading-none text-slate-100">
+        <span className="num font-mono text-2xl leading-none text-[var(--hd-text)]">
           {reading.valid ? formatReading(reading) : '--'}
         </span>
       </div>
 
       {reading.note && (
-        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-300">
+        <p className="flex items-start gap-1.5 text-xs leading-snug text-amber-300">
           <ExclamationTriangleIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
           {reading.note}
         </p>
@@ -110,9 +110,9 @@ export function MultimeterPanel({
 
       {ranges.length > 0 && (
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-500">Range</span>
+          <span className="text-xs text-[var(--hd-muted)]">Range</span>
           <Select value={rangeId} onValueChange={onRange}>
-            <SelectTrigger className="h-6 flex-1 text-[11px]" aria-label="Meter range">
+            <SelectTrigger className="h-6 flex-1 text-xs" aria-label="Meter range">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -126,17 +126,17 @@ export function MultimeterPanel({
         </div>
       )}
 
-      <p className="text-[11px] text-slate-500">
+      <p className="text-xs text-[var(--hd-muted)]">
         <span className="text-red-400">+</span> {redLabel}
-        <span className="mx-1 text-slate-600">/</span>
-        <span className="text-slate-300">−</span> {blackLabel}
+        <span className="mx-1 text-[var(--hd-faint)]">/</span>
+        <span className="text-[var(--hd-text)]">−</span> {blackLabel}
       </p>
-      <div className="flex items-center gap-1 text-[11px]">
+      <div className="flex items-center gap-1 text-xs">
         <Select
           value={redPinId ?? 'none'}
           onValueChange={(next) => onRedPin(next === 'none' ? null : next)}
         >
-          <SelectTrigger className="h-6 min-w-0 flex-1 text-[11px]" aria-label="Red probe pin">
+          <SelectTrigger className="h-6 min-w-0 flex-1 text-xs" aria-label="Red probe pin">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -152,7 +152,7 @@ export function MultimeterPanel({
           value={blackPinId ?? 'none'}
           onValueChange={(next) => onBlackPin(next === 'none' ? null : next)}
         >
-          <SelectTrigger className="h-6 min-w-0 flex-1 text-[11px]" aria-label="Black probe pin">
+          <SelectTrigger className="h-6 min-w-0 flex-1 text-xs" aria-label="Black probe pin">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -167,13 +167,13 @@ export function MultimeterPanel({
       </div>
 
       {mode === 'amps' && (
-        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-slate-600">
+        <p className="flex items-start gap-1.5 text-xs leading-snug text-[var(--hd-faint)]">
           <ExclamationTriangleIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
           In series only. Across a rail this is a short circuit.
         </p>
       )}
       {mode === 'ohms' && (
-        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-slate-600">
+        <p className="flex items-start gap-1.5 text-xs leading-snug text-[var(--hd-faint)]">
           <ExclamationTriangleIcon className="icon-sm mt-px shrink-0" aria-hidden="true" />
           Power the circuit down first, or the reading is meaningless.
         </p>
