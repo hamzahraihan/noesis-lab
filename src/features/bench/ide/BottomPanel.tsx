@@ -54,7 +54,7 @@ export function BottomPanel({
   return (
     <section
       style={open ? { height } : undefined}
-      className={`flex shrink-0 flex-col border-t border-slate-800 bg-slate-900 ${open ? '' : 'h-9'}`}
+      className={`flex shrink-0 flex-col border-t border-[var(--hd-border)] bg-[var(--hd-surface)] ${open ? '' : 'h-9'}`}
     >
       <div
         role="tablist"
@@ -67,7 +67,7 @@ export function BottomPanel({
           aria-expanded={open}
           aria-label={open ? 'Collapse bottom panel' : 'Expand bottom panel'}
           title="Toggle bottom panel (J)"
-          className="flex size-6 shrink-0 items-center justify-center rounded-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          className="flex size-6 shrink-0 items-center justify-center rounded-none text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
         >
           <CaretRightIcon
             className={`icon-sm transition-transform ${open ? 'rotate-90' : ''}`}
@@ -83,8 +83,8 @@ export function BottomPanel({
             onClick={() => {
               onTab(id);
             }}
-            className={`flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-[11px] font-semibold tracking-[0.08em] uppercase ${
-              tab === id ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-200'
+            className={`flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-xs font-semibold tracking-[0.08em] uppercase ${
+              tab === id ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)] hover:text-[var(--hd-text)]'
             }`}
           >
             {label}
@@ -94,7 +94,7 @@ export function BottomPanel({
           </button>
         ))}
       </div>
-      {open && <div className="min-h-0 flex-1 overflow-auto border-t border-slate-800">{body}</div>}
+      {open && <div className="min-h-0 flex-1 overflow-auto border-t border-[var(--hd-border)]">{body}</div>}
     </section>
   );
 }
