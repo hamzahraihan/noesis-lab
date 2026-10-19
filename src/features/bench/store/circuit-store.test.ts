@@ -4,6 +4,7 @@ import {
   circuitStorageKey,
   hasCircuit,
   loadCircuit,
+  readSavedCircuit,
   resolveCircuitSeed,
   saveCircuit,
 } from './circuit-store';
@@ -182,7 +183,13 @@ describe('resolveCircuitSeed', () => {
       decode: decodeBad,
     });
     expect(seed.circuit).toBeNull();
+    /*
+     * Both halves, and the second one is the point: a link that named a part the
+     * recipient has not imported has to say which part, or the operator's only
+     * move is to guess.
+     */
     expect(seed.error).toMatch(/share link/);
+    expect(seed.error).toContain('unknown part type: no-such-part');
   });
 
   /*
@@ -267,7 +274,8 @@ describe('resolveCircuitSeed', () => {
       decode,
     });
     expect(seed.circuit).toBeNull();
-    expect(seed.error).toMatch(/saved project/);
+    expect(seed.error).toMatch(/saved circuit/);
+    expect(seed.error).toContain('unknown part type: no-such-part');
   });
 
   it('opens empty quietly with nothing to load', () => {
@@ -280,5 +288,75 @@ describe('resolveCircuitSeed', () => {
       decode,
     });
     expect(seed).toEqual({ circuit: null, error: null });
+  });
+
+  /*
+   * A saved circuit naming a part this build does not have is the one refusal an
+   * operator can act on -- after a part file was removed, say -- so the seed
+   * carries the compiler's sentence rather than the generic one.
+   */
+  describe('a saved circuit the bench cannot compile', () => {
+    it('says which part is missing', () => {
+      const doc = {
+        version: 1,
+        parts: [
+          { id: 'p1', type: 'esp32-devkit-v1', x: 0, y: 0, rotation: 0 },
+          { id: 'p2', type: 'resistor-4k7', x: 40, y: 40, rotation: 0 },
+        ],
+        wires: [],
+      };
+      const seed = resolveCircuitSeed({
+        boardDefinitionId: 'esp32-devkit-v1',
+        pinned: false,
+        sharedPayload: null,
+        saved: doc as never,
+        hadUnreadableSave: false,
+        decode: () => null,
+      });
+      expect(seed.circuit).toBeNull();
+      expect(seed.error).toContain('unknown part type: resistor-4k7');
+    });
+  });
+
+  /*
+   * What the slot holds, and what the bench can use, are two different questions.
+   *
+   * A stored circuit that names an unknown part is a *readable* file with an
+   * actionable reason; only `loadCircuit` refuses it, and the seed needs the
+   * document so it can report the reason instead of a shrug.
+   */
+  describe('reading a saved circuit', () => {
+    it('returns the document when it is a circuit, compiled or not', () => {
+      const storage = {
+        getItem: () =>
+          JSON.stringify({
+            version: 1,
+            parts: [{ id: 'p1', type: 'no-such-part', x: 0, y: 0, rotation: 0 }],
+            wires: [],
+          }),
+        setItem: () => undefined,
+        removeItem: () => undefined,
+        clear: () => undefined,
+        key: () => null,
+        length: 0,
+      } as unknown as Storage;
+
+      expect(readSavedCircuit('esp32', storage)).not.toBeNull();
+      // The bench's own answer stays what it was: it cannot use this one.
+      expect(loadCircuit('esp32', storage)).toBeNull();
+    });
+
+    it('returns null for a slot that is not a circuit at all', () => {
+      const storage = {
+        getItem: () => '{"version": 9, "nope": true}',
+        setItem: () => undefined,
+        removeItem: () => undefined,
+        clear: () => undefined,
+        key: () => null,
+        length: 0,
+      } as unknown as Storage;
+      expect(readSavedCircuit('esp32', storage)).toBeNull();
+      expect(loadCircuit('esp32', storage)).toBeNull();
+    });
   });
 });

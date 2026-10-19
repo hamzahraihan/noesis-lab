@@ -32,3 +32,14 @@ export * from './stepper';
 // Last: the catalogue aggregates every definition above, so it evaluates
 // after them (import-cycle order).
 export * from './catalogue';
+
+/*
+ * Custom parts, last for the same reason the catalogue is: the validator's
+ * derivation reads `PART_CATALOGUE`. The store's own module load registers it as
+ * the catalogue's source, so importing this barrel anywhere is what makes an
+ * imported part resolvable -- which is why the store is exported from it rather
+ * than only from the screen that shows the palette.
+ */
+export * from './custom';
+export * from './custom-registry';
+export * from './custom-store';

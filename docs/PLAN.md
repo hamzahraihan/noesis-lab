@@ -100,6 +100,14 @@ An interactive simulation platform designed to bridge the gap between software c
 - **Simulation Engine:** SPICE-like fast transient circuit simulation combined with cycle-accurate micro-controller emulation (e.g., AVR/ARM instruction execution).
 - **Asset Rendering:** Low-poly 3D / high-DPI Vector 2D models using WebGL/Canvas to ensure smooth web/desktop rendering while preserving component labels and pin pitch detail.
 - **Extensibility:** Moddable component framework allowing users to define custom sensor behavior using JS/Lua scripting or JSON specs.
+  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 35
+  component kinds the simulator implements — geometry, parameters, pins, knobs and
+  colours, validated at import and resolvable by the compiler like any shipped
+  part. No new behaviour, by construction: an imported part cannot introduce a
+  kind the host has no model for. **Scripting/Wasm half deferred**, deliberately:
+  it needs an ABI over the solver's `Element[]`, a sandbox that cannot touch the
+  DOM, worker-safe evaluation, and a story for a user module that throws mid-solve
+  — its own spec, after the data half has settled.
 
 ---
 

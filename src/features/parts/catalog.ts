@@ -180,6 +180,14 @@ export interface PartDefinition {
   readonly glassMm?: { readonly width: number; readonly height: number };
   /** Silkscreen / legend colour for the SVG renderer. */
   readonly legendColour: string;
+  /**
+   * True for a part the bench lays out as a large one.
+   *
+   * Only custom parts set it (`custom-store.ts`): the shipped large parts are
+   * named in `catalogue.ts`, and a part that arrives as data has to be able to
+   * say the same thing about itself.
+   */
+  readonly large?: boolean;
 }
 
 /**

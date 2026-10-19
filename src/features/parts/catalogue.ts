@@ -9,6 +9,7 @@
  */
 
 import type { PartDefinition, SensorVariant } from './catalog';
+import { customPartsSource } from './custom-registry';
 import {
   arduinoMega2560,
   arduinoNano,
@@ -485,8 +486,18 @@ const LARGE_PARTS: Readonly<Record<string, true>> = {
   '7segment-4digit': true,
 };
 
+/**
+ * Whether the bench lays a part out as a large one.
+ *
+ * The shipped set is a curation, not a measurement: measured on 2026-10-18 the
+ * large parts run from a 22 mm span (the slide potentiometer) to 84 mm (the IR
+ * remote) while the small ones reach 58 mm, so no size rule separates them --
+ * what they share is that they take a lot of the bench. An imported part says so
+ * itself (`large: true` in its file), which is the same judgement in data.
+ */
 export function isLargePart(id: string): boolean {
-  return LARGE_PARTS[id] === true;
+  if (LARGE_PARTS[id] === true) return true;
+  return customPartsSource()?.isLarge(id) === true;
 }
 
 const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
@@ -503,7 +514,14 @@ export function partDefinitionById(id: string): PartDefinition | undefined {
   const entry = PART_CATALOGUE.find((e) => e.id === id);
   if (entry) return entry.make();
   const factory = BOARD_FACTORIES[id];
-  return factory ? factory() : undefined;
+  if (factory) return factory();
+  /*
+   * And the parts a session imported (`custom-store.ts`), which is how a circuit
+   * that names one compiles: the idiomatic path goes through the catalogue, so a
+   * custom part is a part, not a second kind of thing the compiler has to know
+   * about. Nothing registered -- the usual case -- costs one null check.
+   */
+  return customPartsSource()?.definition(id) ?? undefined;
 }
 
 /** Group headings, in the order the browser shows them. */

@@ -94,7 +94,12 @@ import {
   resolveBenchSeed,
   saveBenchProject,
 } from '../store/project-store';
-import { resolveCircuitSeed, loadCircuit, hasCircuit, saveCircuit } from '../store/circuit-store';
+import {
+  resolveCircuitSeed,
+  readSavedCircuit,
+  hasCircuit,
+  saveCircuit,
+} from '../store/circuit-store';
 import {
   circuitShareQuery,
   decodeShareToCircuit,
@@ -107,6 +112,7 @@ import {
   circuitFileText,
   readCircuitFile,
 } from '../utils/circuit-file';
+import { partFileText, useCustomPartsStore } from '@/features/parts';
 import {
   avrAvailableFor,
   resolveBackendSelection,
@@ -124,6 +130,18 @@ const PALETTE_FLIP_Y = 60;
  * button says why it is dead and what revives it.
  */
 const LAYOUT_LOCK_HINT = 'Pause the run to edit the bench';
+
+/**
+ * Adds the one thing a refusal cannot know to the compiler's own message.
+ *
+ * `compile` says `unknown part type: resistor-4k7`, which is exactly what
+ * is wrong; what to do about it is the bench's to say, because the bench is what
+ * has an `Open part…` button.
+ */
+function missingPartHint(refusal: string): string {
+  if (!refusal.includes('unknown part type:')) return refusal;
+  return `${refusal} (import its .part.json with Open part…)`;
+}
 
 /**
  * Where dropped parts land.
@@ -502,8 +520,12 @@ export default function Bench(props: BenchProps) {
         boardDefinitionId: boardDefinition.id,
         pinned: false,
         sharedPayload: circuitSeedParam,
-        saved: loadCircuit(boardId),
-        hadUnreadableSave: hasCircuit(boardId),
+        // The document as written, not as validated: an autosave naming a part
+        // this build does not have is exactly the case whose reason has to reach
+        // the operator, and `loadCircuit` answers null for it (it answers for
+        // the bench, and the bench cannot use it).
+        saved: readSavedCircuit(boardId),
+        hadUnreadableSave: hasCircuit(boardId) && readSavedCircuit(boardId) === null,
         decode: decodeShareToCircuit,
       });
       if (circuitSeed.circuit !== null) {
@@ -551,6 +573,20 @@ export default function Bench(props: BenchProps) {
     liveNetwork,
   ]);
 
+  /**
+   * What the bench was seeded with, so an untouched fallback never gets saved.
+   *
+   * A circuit the bench could not open leaves the operator looking at a fresh
+   * one, and the autosave below would then write that fresh one over the file it
+   * failed to open -- losing the very thing the notice is about. Comparing the
+   * live document with the seeded one is the whole rule: the first edit makes
+   * the bench theirs again, and from then on it saves as usual.
+   */
+  const seededDocRef = useRef<string | null>(null);
+  useEffect(() => {
+    seededDocRef.current = JSON.stringify(simulation.document);
+  }, [simulation]);
+
   /*
    * Frame the circuit when it arrives.
    *
@@ -590,6 +626,7 @@ export default function Bench(props: BenchProps) {
       const doc = simulation.document;
       const serialized = JSON.stringify(doc);
       if (serialized === lastSavedCircuitRef.current) return;
+      if (serialized === seededDocRef.current) return;
       lastSavedCircuitRef.current = serialized;
       saveCircuit(boardId, doc);
     }, 500);
@@ -602,7 +639,7 @@ export default function Bench(props: BenchProps) {
    */
   useEffect(() => {
     if (circuitSeedErrorRef.current) {
-      setShareError(circuitSeedErrorRef.current);
+      setShareError(missingPartHint(circuitSeedErrorRef.current));
     }
   }, [simulation]);
 
@@ -1424,12 +1461,15 @@ export default function Bench(props: BenchProps) {
    * file leaves the bench as it was and says so.
    */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const saveCircuitFile = () => {
-    const blob = new Blob([circuitFileText(currentCircuitDoc)], { type: 'application/json' });
+  const partInputRef = useRef<HTMLInputElement | null>(null);
+
+  /** Hands text to the browser as a download, one way for both file kinds. */
+  const downloadJson = (text: string, name: string) => {
+    const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = circuitFileName(boardId);
+    anchor.download = name;
     // In the document, because Firefox ignores a click on a detached anchor.
     document.body.append(anchor);
     anchor.click();
@@ -1438,11 +1478,47 @@ export default function Bench(props: BenchProps) {
     // and Firefox cancels a download whose URL is revoked under it.
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const saveCircuitFile = () => {
+    downloadJson(circuitFileText(currentCircuitDoc), circuitFileName(boardId));
+  };
+
+  /*
+   * The other half of the part file flow: a part the operator imported (or built
+   * on the bench by hand) leaves as the same JSON it arrived in, so it can be
+   * carried to another machine, or committed under `parts/` for a lesson.
+   */
+  const selectedCustomPart = useCustomPartsStore((state) =>
+    selectedId === null ? undefined : state.parts.find((part) => part.id === selectedId),
+  );
+  const openPartFile = async (file: File) => {
+    const text = await file.text();
+    const outcome = useCustomPartsStore.getState().import(text, file.name);
+    if (outcome.refused.length > 0) {
+      setShareError(
+        `${file.name}: ${outcome.refused.map((entry) => `part ${entry.index + 1}: ${entry.reason}`).join('; ')}`,
+      );
+      return;
+    }
+    /*
+     * The parts arrive, not the circuit: an imported part sits in the palette
+     * until it is placed like any other, so a file cannot rearrange the bench by
+     * being opened.
+     */
+    showActivity('components');
+    setShareError(
+      outcome.added.length === 1
+        ? `${outcome.added[0]!.name} is in the palette under Custom.`
+        : `${outcome.added.length} parts are in the palette under Custom.`,
+    );
+  };
+
   const openCircuitFile = (file: File) => {
     // Rewiring the bench mid-run leaves the firmware driving a circuit nobody
     // wired, which is why every layout edit refuses while one is live; opening
     // a file replaces the whole circuit, so it refuses too.
     if (layoutLocked) return;
+    if (bench.parts.length > 0 && !window.confirm('Replace the current bench with this circuit file?')) return;
     void (async () => {
       try {
         if (file.size > CIRCUIT_FILE_MAX_BYTES)
@@ -1476,7 +1552,7 @@ export default function Bench(props: BenchProps) {
    * rebuild the simulation.
    */
   return (
-    <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
+    <div className="flex h-screen flex-col bg-[var(--hd-surface)] text-[var(--hd-text)]">
       {/*
        * Three groups, left to right: what bench you are on, what the simulation
        * is doing, then what you can reach. The old header ran them together as
@@ -1500,11 +1576,12 @@ export default function Bench(props: BenchProps) {
           </Link>
         </Button>
 
-        <div className="flex items-center gap-1.5 border-l border-slate-800 pl-3">
-          <span className="text-slate-500" aria-hidden="true">
+        <div className="flex items-center gap-1.5 border-l border-[var(--hd-border)] pl-3">
+          <span className="text-[var(--hd-muted)]" aria-hidden="true">
             <Component1Icon className="icon" />
           </span>
           <Select
+            name="board"
             value={boardId}
             onValueChange={(next) => {
               // Guarded rather than cast: the select is the one place a board
@@ -1534,7 +1611,7 @@ export default function Bench(props: BenchProps) {
         <div className="flex items-center gap-1">
           <Button
             type="button"
-            variant="secondary"
+            variant="default"
             size="sm"
             onClick={() => {
               if (isRunning) activeStop();
@@ -1579,6 +1656,7 @@ export default function Bench(props: BenchProps) {
           <label className="flex items-center gap-1.5">
             <span className="sr-only">Execution backend</span>
             <Select
+              name="backend"
               value={backend.value}
               onValueChange={(next) => {
                 setAvrMode(next === 'avr');
@@ -1635,14 +1713,14 @@ export default function Bench(props: BenchProps) {
            */}
           {workerStatus !== null ? (
             <span
-              className="rounded-none border border-emerald-800 bg-emerald-950 px-1.5 py-0.5 text-xs text-emerald-300"
+              className="rounded-none border border-emerald-800 bg-emerald-950 px-1.5 py-0.5 text-xs text-[var(--hd-success)]"
               title="Stepping in the sim worker"
               role="status"
             >
               {`worker · ${workerStatus.fps}fps · ${workerStatus.ratio.toFixed(2)}×`}
             </span>
           ) : (
-            <span className="text-xs text-slate-500" title={workerFallback ?? 'In-page simulation'}>
+            <span className="text-xs text-[var(--hd-muted)]" title={workerFallback ?? 'In-page simulation'}>
               in-page
             </span>
           )}
@@ -1655,7 +1733,7 @@ export default function Bench(props: BenchProps) {
            */}
           {liveNetwork && (
             <span
-              className="rounded-none border border-sky-800 bg-sky-950 px-1.5 py-0.5 text-xs text-sky-300"
+              className="rounded-none border border-[var(--hd-accent)]/40 bg-[var(--hd-accent)]/10 px-1.5 py-0.5 text-xs text-[var(--hd-accent)]"
               title="This build bridges to real hosts: a net.get() on a live name is a real GET with no credentials"
               role="status"
             >
@@ -1664,7 +1742,7 @@ export default function Bench(props: BenchProps) {
           )}
           {offlineLiveHost !== null && (
             <span
-              className="text-xs text-amber-400"
+              className="text-xs text-[var(--hd-warn)]"
               title="That name is a live host, which only a build that opted into the live network can reach. This bench answers it the way it answers any unknown host."
               role="status"
             >
@@ -1678,7 +1756,7 @@ export default function Bench(props: BenchProps) {
            * awaiting Run lands 'compile cancelled' and stays stopped.
            */}
           {compiling && (
-            <span className="flex items-center gap-1.5 text-xs text-slate-400" role="status">
+            <span className="flex items-center gap-1.5 text-xs text-[var(--hd-muted)]" role="status">
               Compiling for Uno…
               <Button
                 type="button"
@@ -1742,7 +1820,7 @@ export default function Bench(props: BenchProps) {
            * "held" state everywhere else.
            */}
           <div
-            className="flex items-center gap-0.5 border-l border-slate-800 pl-2"
+            className="flex items-center gap-0.5 border-l border-[var(--hd-border)] pl-2"
             role="group"
             aria-label={
               selectedWireId === null
@@ -1766,8 +1844,8 @@ export default function Bench(props: BenchProps) {
                   aria-pressed={selected}
                   aria-label={`Wire colour ${colour.label}`}
                   title={colour.label}
-                  className={`h-5 w-5 rounded-none transition-transform ${
-                    selected ? 'scale-110 ring-2 ring-sky-400' : 'hover:scale-105'
+                  className={`h-6 w-6 rounded-none transition-transform ${
+                    selected ? 'scale-110 ring-2 ring-[var(--hd-accent)]' : 'hover:scale-105'
                   }`}
                   style={{
                     backgroundColor: colour.hex,
@@ -1824,6 +1902,25 @@ export default function Bench(props: BenchProps) {
             type="button"
             variant="secondary"
             size="sm"
+            disabled={selectedCustomPart === undefined}
+            onClick={() =>
+              selectedCustomPart &&
+              downloadJson(partFileText(selectedCustomPart), `${selectedCustomPart.id}.part.json`)
+            }
+            title={
+              selectedCustomPart
+                ? `Write ${selectedCustomPart.name} as a part file`
+                : 'Select an imported part on the bench to write it out as a file'
+            }
+          >
+            <DownloadIcon className="icon" aria-hidden="true" />
+            Save part
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => fileInputRef.current?.click()}
             disabled={layoutLocked}
             title={
@@ -1839,12 +1936,36 @@ export default function Bench(props: BenchProps) {
             ref={fileInputRef}
             type="file"
             accept=".json,application/json"
+            aria-label="Open a circuit file"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
               // Cleared first, so choosing the same file twice fires again.
               event.target.value = '';
               if (file) openCircuitFile(file);
+            }}
+          />
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => partInputRef.current?.click()}
+            title="Open a part file, adding its parts to the palette"
+          >
+            <UploadIcon className="icon" aria-hidden="true" />
+            Open part…
+          </Button>
+          <input
+            ref={partInputRef}
+            type="file"
+            accept=".json,application/json"
+            aria-label="Open a part file"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void openPartFile(file);
             }}
           />
 
@@ -1875,15 +1996,15 @@ export default function Bench(props: BenchProps) {
       </TopBar>
 
       {projectBuild !== null && foundProject !== null && projectBannerOpen && (
-        <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 bg-slate-950/80 px-4 py-1.5 text-sm">
-          <span className="truncate text-slate-300">
-            <span className="font-medium text-slate-100">{foundProject.title}</span>
-            <span className="text-slate-500"> — wired and loaded, press Run to see it live.</span>
+        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--hd-border)] bg-[var(--hd-bg-deep)]/80 px-4 py-1.5 text-sm">
+          <span className="truncate text-[var(--hd-text)]">
+            <span className="font-medium text-[var(--hd-text)]">{foundProject.title}</span>
+            <span className="text-[var(--hd-muted)]"> — wired and loaded, press Run to see it live.</span>
           </span>
           <span className="flex-1" />
           <Link
             to={`/projects/${boardId}`}
-            className="shrink-0 text-xs text-sky-400 underline underline-offset-2"
+            className="shrink-0 text-xs text-[var(--hd-accent)] underline underline-offset-2"
           >
             Back to project
           </Link>
@@ -1892,7 +2013,7 @@ export default function Bench(props: BenchProps) {
             onClick={() => setProjectBannerOpen(false)}
             aria-label="Dismiss the project banner"
             title="Dismiss"
-            className="flex size-6 shrink-0 items-center justify-center rounded-none text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            className="flex size-6 shrink-0 items-center justify-center rounded-none text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
           >
             <Cross2Icon className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -2006,7 +2127,7 @@ export default function Bench(props: BenchProps) {
                   <div
                     role="group"
                     aria-label="Colour of the picked jumper"
-                    className="fixed z-20 flex items-center gap-0.5 rounded-none border border-slate-700 bg-slate-900/95 p-1 shadow-lg"
+                    className="fixed z-20 flex items-center gap-0.5 rounded-none border border-[var(--hd-border-strong)] bg-[var(--hd-surface)]/95 p-1 shadow-lg"
                     style={{
                       left: paletteFor.x,
                       top: paletteFor.y,
@@ -2032,7 +2153,7 @@ export default function Bench(props: BenchProps) {
                         }}
                         aria-label={`Wire colour ${colour.label}`}
                         title={colour.label}
-                        className="h-5 w-5 rounded-none transition-transform hover:scale-110"
+                        className="h-6 w-6 rounded-none transition-transform hover:scale-110"
                         style={{
                           backgroundColor: colour.hex,
                           boxShadow: `inset 0 0 0 1px ${colour.border}`,
@@ -2044,7 +2165,7 @@ export default function Bench(props: BenchProps) {
                       onClick={() => closePalette()}
                       aria-label="Close the colour palette"
                       title="Close (Esc)"
-                      className="ml-1 flex h-5 w-5 items-center justify-center rounded-none text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+                      className="ml-1 flex h-5 w-5 items-center justify-center rounded-none text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
                     >
                       <Cross2Icon className="h-3 w-3" aria-hidden="true" />
                     </button>
@@ -2098,7 +2219,7 @@ export default function Bench(props: BenchProps) {
            * below rather than left silent.
            */}
           {workerActive && (
-            <p className="shrink-0 border-t border-slate-800 px-3 py-1 text-[11px] text-slate-500">
+            <p className="shrink-0 border-t border-[var(--hd-border)] px-3 py-1 text-xs text-[var(--hd-muted)]">
               Worker mode: scope, bus monitor, and meter stay in-page and are frozen while the
               worker steps.
             </p>
@@ -2174,7 +2295,7 @@ export default function Bench(props: BenchProps) {
         )}
         <aside
           style={instrumentsOpen ? { width: layout.railWidth } : undefined}
-          className={`shrink-0 flex-col border-l border-slate-800 bg-slate-900 ${
+          className={`shrink-0 flex-col border-l border-[var(--hd-border)] bg-[var(--hd-surface)] ${
             instrumentsOpen ? 'hidden lg:flex' : 'hidden'
           }`}
         >
@@ -2184,7 +2305,7 @@ export default function Bench(props: BenchProps) {
             aria-expanded={true}
             aria-label="Collapse the instruments sidebar"
             title="Collapse instruments (I)"
-            className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            className="flex h-9 shrink-0 items-center justify-center border-b border-[var(--hd-border)] text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
           >
             <CaretRightIcon className="icon" aria-hidden="true" />
           </button>
@@ -2239,14 +2360,14 @@ export default function Bench(props: BenchProps) {
         </aside>
 
         {!instrumentsOpen && (
-          <aside className="hidden w-9 shrink-0 flex-col border-l border-slate-800 bg-slate-900 lg:flex">
+          <aside className="hidden w-9 shrink-0 flex-col border-l border-[var(--hd-border)] bg-[var(--hd-surface)] lg:flex">
             <button
               type="button"
               onClick={() => setInstrumentsOpen(true)}
               aria-expanded={false}
               aria-label="Expand the instruments sidebar"
               title="Expand instruments (I)"
-              className="flex h-9 shrink-0 items-center justify-center border-b border-slate-800 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              className="flex h-9 shrink-0 items-center justify-center border-b border-[var(--hd-border)] text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
             >
               <CaretLeftIcon className="icon" aria-hidden="true" />
             </button>
