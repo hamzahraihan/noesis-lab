@@ -181,7 +181,19 @@ export function importableKinds(): readonly string[] {
 const SCRIPTED_BUSES: Readonly<Record<string, readonly string[]>> = {
   analog: ['AOUT', 'VCC', 'GND'],
   digital: ['DOUT', 'VCC', 'GND'],
+  // A slave needs both lines and a rail; which pins of the board they land on is
+  // the operator's business, exactly as it is for a real module.
+  i2c: ['SDA', 'SCL', 'VCC', 'GND'],
 };
+
+/**
+ * The addresses an I2C part may claim.
+ *
+ * Seven bits, minus what the standard reserves: 0x00-0x07 are the general-call
+ * and high-speed codes and 0x78-0x7F are the ten-bit prefixes, so a part at one
+ * of those would be a part nothing can talk to.
+ */
+const SCRIPTED_ADDRESS_RANGE = { min: 0x08, max: 0x77 } as const;
 
 /** The rails a scripted part's own leads may join, as the bench's modules do. */
 const SCRIPTED_NETS: readonly string[] = ['GND', 'VCC'];
@@ -352,7 +364,11 @@ function checkComponent(value: unknown): ComponentVerdict {
   if (layout !== null) allowed.add(layout);
   // The diode, which is a name in the file rather than the bench's numbers.
   if (kind === 'led') allowed.add('profile');
-  if (kind === 'scripted') allowed.add('bus');
+  if (kind === 'scripted') {
+    allowed.add('bus');
+    const bus = (component as { bus?: unknown }).bus;
+    if (bus === 'i2c') allowed.add('address');
+  }
   if (OHM_KINDS.has(kind)) allowed.add('ohms');
   if (kind === 'capacitor') allowed.add('farads');
   if (kind === 'display') allowed.add('address');
@@ -418,6 +434,19 @@ function checkComponent(value: unknown): ComponentVerdict {
     ) {
       return bad(
         `component.${integer.param} must be a whole number of ${integer.min} to ${integer.max}`,
+      );
+    }
+  }
+  if (kind === 'scripted' && (component as { bus?: unknown }).bus === 'i2c') {
+    const address = (component as { address?: unknown }).address;
+    if (
+      !isFiniteNumber(address) ||
+      !Number.isInteger(address) ||
+      address < SCRIPTED_ADDRESS_RANGE.min ||
+      address > SCRIPTED_ADDRESS_RANGE.max
+    ) {
+      return bad(
+        `a scripted i2c part needs component.address between 0x${SCRIPTED_ADDRESS_RANGE.min.toString(16)} and 0x${SCRIPTED_ADDRESS_RANGE.max.toString(16)}`,
       );
     }
   }

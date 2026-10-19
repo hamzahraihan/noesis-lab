@@ -13,6 +13,7 @@
  */
 
 import type { DynamicState, PartDefinition } from '@/features/parts';
+import { reportFault } from './diagnostics';
 import type { ScriptedRuntime } from './runtime';
 
 /**
@@ -31,8 +32,13 @@ export type ScriptedSampler = (timeMs: number, state: DynamicState) => ReadonlyM
  */
 export const SCRIPTED_SAMPLE_MS = 10;
 
-/** The knobs a part declares, with the values the operator currently holds. */
-function knobValues(
+/**
+ * The knobs a part declares, with the values the operator currently holds.
+ *
+ * Shared with the I2C half, which asks scripts for the same thing at a different
+ * moment: one rule about what a knob means, expressed once.
+ */
+export function knobValues(
   definition: PartDefinition,
   partId: string,
   state: DynamicState,
@@ -46,7 +52,7 @@ function knobValues(
  * The slice of a placed part this needs: its id and its definition. Typed
  * structurally so the sampler does not reach across features for `PartInstance`.
  */
-interface PlacedPart {
+export interface PlacedPart {
   readonly id: string;
   readonly definition: PartDefinition;
 }
@@ -67,6 +73,7 @@ export function createScriptedSampler(
         timeMs,
         knobValues(part.definition, part.id, state),
       );
+      if (reading.fault !== null) reportFault(part.id, reading.fault);
       if (reading.value !== undefined) values.set(part.id, reading.value);
     }
     return values;

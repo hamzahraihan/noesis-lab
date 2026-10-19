@@ -39,6 +39,7 @@ import { GROUND, type Element } from './elements';
 import { buildNetlist, type Netlist } from './netlist';
 import type { Bench, PartInstance } from './bench';
 import { NO_DYNAMIC_STATE, type DynamicState } from '@/features/parts';
+import type { ScriptedI2c } from './scripted/i2c';
 import { SCRIPTED_SAMPLE_MS, type ScriptedSampler } from './scripted/sampler';
 import {
   INTERNAL_PULLUP_OHMS,
@@ -145,6 +146,7 @@ export class Engine {
    */
   private scriptedValues: ReadonlyMap<string, number> = new Map();
   private scriptedSampler: ScriptedSampler | null = null;
+  private scriptedI2c: ScriptedI2c | null = null;
   private scriptedSampledAtMs = Number.NEGATIVE_INFINITY;
   /** Topology generations: bumped on every netlist (re)assignment. */
   private topoRevision = 0;
@@ -449,7 +451,20 @@ export class Engine {
       let device: I2cDevice | null | undefined =
         controller && isI2cDevice(controller) ? controller : previousDevices.get(part.id);
       if (!device) {
-        device = createI2cDevice(part.definition);
+        /*
+         * A scripted slave is built with two closures rather than a reference to
+         * the host: the part keeps its device across rebuilds (its register
+         * pointer is state, like a display's frame), while the runtime that
+         * answers it is installed -- or replaced -- whenever the backend says.
+         */
+        device = createI2cDevice(part.definition, {
+          read: (register, count) =>
+            this.scriptedI2c?.read(part.id, register, count, this.timeMs, this.dynamicState) ??
+            null,
+          write: (register, bytes) =>
+            this.scriptedI2c?.write(part.id, register, bytes, this.timeMs, this.dynamicState) ??
+            false,
+        });
       }
       if (device instanceof Ds1307 && part.initialRtc && !this.seededRtcParts.has(part.id)) {
         const seed = part.initialRtc;
@@ -1294,6 +1309,18 @@ export class Engine {
    * Rebuilds, because a bench that had no sampler may have been built with every
    * scripted part reading zero, and the first sample is the correction.
    */
+  /**
+   * Installs the I2C half of the scripting bridge, or clears it.
+   *
+   * Two seams rather than one because the two halves are asked different
+   * questions: the sampler answers "what does every part read now" for the
+   * netlist, while a slave is asked one register question at the moment the bus
+   * asks it. Both are reached the same way -- a closure the backend owns.
+   */
+  setScriptedI2c(scripted: ScriptedI2c | null): void {
+    this.scriptedI2c = scripted;
+  }
+
   /**
    * A control moved: the next solve re-reads the scripts, cadence or not.
    *

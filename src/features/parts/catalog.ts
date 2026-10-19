@@ -112,6 +112,11 @@ export type ComponentSpec =
    * what the script must provide -- an analog fraction or a digital level.
    */
   | { readonly kind: 'scripted'; readonly bus: 'analog' | 'digital' }
+  /*
+   * An I2C part needs an address as well as a script: the bus finds a slave by
+   * address, and the script answers whatever that address is asked.
+   */
+  | { readonly kind: 'scripted'; readonly bus: 'i2c'; readonly address: number }
   | { readonly kind: '7segment'; readonly digits: 1 | 2 | 3 | 4 };
 
 /**

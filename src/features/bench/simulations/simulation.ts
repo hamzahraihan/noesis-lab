@@ -15,7 +15,12 @@ import {
   type Terminal,
   type WireEnd,
 } from '@/features/simulation';
-import { createScriptedSampler, Engine, loadScriptedRuntime } from '@/features/simulation';
+import {
+  createScriptedI2c,
+  createScriptedSampler,
+  Engine,
+  loadScriptedRuntime,
+} from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { compile } from '@/features/simulation';
 import { pinRefFor } from '@/features/simulation';
@@ -317,6 +322,7 @@ export class Simulation {
   private async startScriptedRuntime(): Promise<void> {
     const runtime = await loadScriptedRuntime();
     this.engine.setScriptedSampler(createScriptedSampler(runtime, () => this.bench.parts));
+    this.engine.setScriptedI2c(createScriptedI2c(runtime, () => this.bench.parts));
   }
 
   constructor(board: PartDefinition, deps?: SimulationDeps) {

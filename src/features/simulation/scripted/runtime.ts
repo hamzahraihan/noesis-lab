@@ -37,8 +37,8 @@ import {
   type QuickJSWASMModule,
 } from 'quickjs-emscripten-core';
 
-/** The surfaces a scripted part may expose. I2C is the next slice. */
-export type ScriptedBus = 'analog' | 'digital';
+/** The surfaces a scripted part may expose. */
+export type ScriptedBus = 'analog' | 'digital' | 'i2c';
 
 export interface ScriptedPart {
   /** The part's id, used for the diagnostic and for its context's lifetime. */
@@ -59,6 +59,25 @@ export interface ScriptedReading {
   readonly fault: string | null;
 }
 
+export interface ScriptedBytes {
+  /** What the device answered; empty when it faulted, which the bus reads as a NACK. */
+  readonly bytes: readonly number[];
+  /** The one problem that stopped this part, or null while it is healthy. */
+  readonly fault: string | null;
+}
+
+export interface ScriptedWrite {
+  /**
+   * False when the device did not take the write.
+   *
+   * A script's `write` returning `false` is how a device says "not that": the
+   * bus answers NACK and the firmware sees a device that refused, which is a
+   * real thing a sketch has to cope with. A fault is a NACK too.
+   */
+  readonly ok: boolean;
+  readonly fault: string | null;
+}
+
 export interface ScriptedRuntime {
   /**
    * The part's answer at `timeMs`, with the operator's knob values.
@@ -71,13 +90,36 @@ export interface ScriptedRuntime {
     timeMs: number,
     knobs: Readonly<Record<string, number>>,
   ): ScriptedReading;
+  /**
+   * The bytes a slave at the part's address answers, starting at `register`.
+   *
+   * The register comes from the bus, because that is where I2C keeps it: the
+   * first byte a master writes is the pointer, and everything after is data.
+   * `count` is what the firmware asked for; a slave may answer fewer bytes,
+   * which the bus repeats rather than refusing (see `repeatLast`).
+   */
+  readI2c(
+    part: ScriptedPart,
+    register: number,
+    count: number,
+    timeMs: number,
+    knobs: Readonly<Record<string, number>>,
+  ): ScriptedBytes;
+  /** Hands one write to the slave; false when it refused, which the bus NACKs. */
+  writeI2c(
+    part: ScriptedPart,
+    register: number,
+    bytes: readonly number[],
+    timeMs: number,
+    knobs: Readonly<Record<string, number>>,
+  ): ScriptedWrite;
   dispose(): void;
 }
 
 /** Per-call wall-clock budget. Measured calls take ~11 us; this is ~180x that. */
 export const SCRIPT_BUDGET_MS = 2;
 
-const ENTRY: Readonly<Record<ScriptedBus, string>> = {
+const ENTRY: Readonly<Record<'analog' | 'digital', string>> = {
   analog: 'analog',
   digital: 'digital',
 };
@@ -86,9 +128,20 @@ interface Compiled {
   /** The source this context was compiled from, so an edited script reloads. */
   readonly script: string;
   readonly context: QuickJSContext;
-  /** The ABI function, owned by the context. */
-  readonly entry: QuickJSHandle;
+  /** Function buses: the entry point. Null for i2c, whose entry is an object. */
+  readonly entry: QuickJSHandle | null;
+  /** i2c: the slave's two halves. `read` is required, `write` may be absent. */
+  readonly readEntry: QuickJSHandle | null;
+  readonly writeEntry: QuickJSHandle | null;
   fault: string | null;
+}
+
+/** Frees a compiled part's handles and its context, in that order. */
+function release(state: Compiled): void {
+  state.entry?.dispose();
+  state.readEntry?.dispose();
+  state.writeEntry?.dispose();
+  state.context.dispose();
 }
 
 /** A QuickJS error, as one line a person can act on. */
@@ -183,95 +236,210 @@ export async function createScriptedRuntime(
       `(() => { const module = (${source}); return Object.freeze(module); })()`,
       `${part.id}.js`,
     );
+    const shell: Compiled = {
+      script: part.script,
+      context,
+      entry: null,
+      readEntry: null,
+      writeEntry: null,
+      fault: null,
+    };
     if (result.error) {
       const fault = `the script did not load: ${describeError(context, result.error)}`;
       result.error.dispose();
-      return { script: part.script, context, entry: context.undefined, fault };
+      return { ...shell, fault };
     }
-    const entry = context.getProp(result.value, ENTRY[part.bus]);
-    result.value.dispose();
-    const type = context.typeof(entry);
-    if (type !== 'function') {
-      const fault = `the script has no ${ENTRY[part.bus]} function for a ${part.bus} part`;
+    const module = result.value;
+    /*
+     * An i2c part's entry is the slave object rather than a function: `read` is
+     * what a master asks for, `write` is what it hands over. A device that never
+     * answers is not a device, so `read` is required; an output-only device is a
+     * real thing, so `write` is not.
+     */
+    if (part.bus === 'i2c') {
+      const slave = context.getProp(module, 'i2c');
+      module.dispose();
+      if (context.typeof(slave) !== 'object') {
+        slave.dispose();
+        return { ...shell, fault: 'the script has no i2c object for an i2c part' };
+      }
+      const readEntry = context.getProp(slave, 'read');
+      const writeProp = context.getProp(slave, 'write');
+      slave.dispose();
+      if (context.typeof(readEntry) !== 'function') {
+        readEntry.dispose();
+        writeProp.dispose();
+        return { ...shell, fault: 'the script has no i2c read function for an i2c part' };
+      }
+      const writeEntry = context.typeof(writeProp) === 'function' ? writeProp : null;
+      if (writeEntry === null) writeProp.dispose();
+      return { ...shell, readEntry, writeEntry, fault: null };
+    }
+    const entry = context.getProp(module, ENTRY[part.bus]);
+    module.dispose();
+    if (context.typeof(entry) !== 'function') {
       entry.dispose();
-      return { script: part.script, context, entry: context.undefined, fault };
+      return {
+        ...shell,
+        fault: `the script has no ${ENTRY[part.bus]} function for a ${part.bus} part`,
+      };
     }
-    return { script: part.script, context, entry, fault: null };
+    return { ...shell, entry, fault: null };
+  }
+
+  /** A part's compiled state: an edited script reloads, a new part compiles. */
+  function stateFor(part: ScriptedPart): Compiled {
+    let state = compiled.get(part.id);
+    if (state !== undefined && state.script !== part.script) {
+      // A run may have edited the script; the context is the old program.
+      release(state);
+      compiled.delete(part.id);
+      state = undefined;
+    }
+    if (state === undefined) {
+      state = compile(part);
+      compiled.set(part.id, state);
+    }
+    return state;
+  }
+
+  /**
+   * Calls one of a part's entry points, with the host's clock, the operator's
+   * knobs and whatever the bus adds.
+   *
+   * Everything the call needs to clean up is cleaned up here, the fault path
+   * included: a leaked handle aborts the whole runtime when it is freed, so the
+   * one place that creates handles is the one place that disposes them.
+   */
+  function invoke(
+    state: Compiled,
+    entry: QuickJSHandle,
+    timeMs: number,
+    knobs: Readonly<Record<string, number>>,
+    extra?: (arg: QuickJSHandle) => void,
+  ): { handle: QuickJSHandle } | { fault: string } {
+    const context = state.context;
+    nowMs = timeMs;
+
+    // One interrupt handler for the call, because the runtime is shared: a
+    // script that spins must not take the bench's solver with it.
+    const started = performance.now();
+    let overran = false;
+    runtime.setInterruptHandler(() => {
+      if (performance.now() - started <= SCRIPT_BUDGET_MS) return false;
+      overran = true;
+      return true;
+    });
+
+    const arg = context.newObject();
+    const knobHandle = context.newObject();
+    try {
+      context.setProp(arg, 'timeMs', context.newNumber(timeMs));
+      for (const [id, value] of Object.entries(knobs)) {
+        context.setProp(knobHandle, id, context.newNumber(value));
+      }
+      context.setProp(arg, 'knobs', knobHandle);
+      extra?.(arg);
+
+      const result = context.callFunction(entry, context.undefined, arg);
+      if (result.error) {
+        state.fault = overran
+          ? `the script overran its ${SCRIPT_BUDGET_MS} ms budget`
+          : describeError(context, result.error);
+        result.error.dispose();
+        return { fault: state.fault };
+      }
+      return { handle: result.value };
+    } finally {
+      runtime.removeInterruptHandler();
+      knobHandle.dispose();
+      arg.dispose();
+    }
   }
 
   return {
     read(part, timeMs, knobs) {
-      let state = compiled.get(part.id);
-      if (state !== undefined && state.script !== part.script) {
-        // A run may have edited the script; the context is the old program.
-        state.entry.dispose();
-        state.context.dispose();
-        state = undefined;
-        compiled.delete(part.id);
+      const state = stateFor(part);
+      if (state.fault !== null || state.entry === null) {
+        return { value: undefined, fault: state.fault };
       }
-      if (state === undefined) {
-        state = compile(part);
-        compiled.set(part.id, state);
-      }
-      if (state.fault !== null) return { value: undefined, fault: state.fault };
+      const called = invoke(state, state.entry, timeMs, knobs);
+      if ('fault' in called) return { value: undefined, fault: called.fault };
 
+      const value = state.context.getNumber(called.handle);
+      called.handle.dispose();
+      const valid =
+        Number.isFinite(value) &&
+        (part.bus === 'analog' ? value >= 0 && value <= 1 : value === 0 || value === 1);
+      if (!valid) {
+        state.fault =
+          part.bus === 'analog'
+            ? `analog must return a number from 0 to 1, not ${String(value)}`
+            : `digital must return 0 or 1, not ${String(value)}`;
+        return { value: undefined, fault: state.fault };
+      }
+      return { value, fault: null };
+    },
+
+    readI2c(part, register, count, timeMs, knobs) {
+      const state = stateFor(part);
+      if (state.fault !== null || state.readEntry === null) {
+        return { bytes: [], fault: state.fault };
+      }
       const context = state.context;
-      nowMs = timeMs;
-
-      // One interrupt handler for the call, because the runtime is shared: a
-      // script that spins must not take the bench's solver with it.
-      const started = performance.now();
-      let overran = false;
-      runtime.setInterruptHandler(() => {
-        if (performance.now() - started <= SCRIPT_BUDGET_MS) return false;
-        overran = true;
-        return true;
+      const called = invoke(state, state.readEntry, timeMs, knobs, (arg) => {
+        context.setProp(arg, 'register', context.newNumber(register));
+        context.setProp(arg, 'count', context.newNumber(count));
       });
+      if ('fault' in called) return { bytes: [], fault: called.fault };
 
-      const arg = context.newObject();
-      const knobHandle = context.newObject();
-      try {
-        context.setProp(arg, 'timeMs', context.newNumber(timeMs));
-        for (const [id, value] of Object.entries(knobs)) {
-          context.setProp(knobHandle, id, context.newNumber(value));
-        }
-        context.setProp(arg, 'knobs', knobHandle);
-
-        const result = context.callFunction(state.entry, context.undefined, arg);
-        if (result.error) {
-          state.fault = overran
-            ? `the script overran its ${SCRIPT_BUDGET_MS} ms budget`
-            : describeError(context, result.error);
-          result.error.dispose();
-          return { value: undefined, fault: state.fault };
-        }
-        const value = context.getNumber(result.value);
-        result.value.dispose();
-        const valid =
-          Number.isFinite(value) &&
-          (part.bus === 'analog' ? value >= 0 && value <= 1 : value === 0 || value === 1);
-        if (!valid) {
-          state.fault =
-            part.bus === 'analog'
-              ? `analog must return a number from 0 to 1, not ${String(value)}`
-              : `digital must return 0 or 1, not ${String(value)}`;
-          return { value: undefined, fault: state.fault };
-        }
-        return { value, fault: null };
-      } finally {
-        runtime.removeInterruptHandler();
-        knobHandle.dispose();
-        arg.dispose();
+      const answer: unknown = context.dump(called.handle);
+      called.handle.dispose();
+      if (!Array.isArray(answer) || answer.some((byte) => !isByte(byte))) {
+        state.fault = `an i2c read must answer bytes, not ${JSON.stringify(answer)}`;
+        return { bytes: [], fault: state.fault };
       }
+      return { bytes: answer as number[], fault: null };
+    },
+
+    writeI2c(part, register, bytes, timeMs, knobs) {
+      const state = stateFor(part);
+      if (state.fault !== null) return { ok: false, fault: state.fault };
+      // No `write` is a device that only answers: the bus NACKs the write, which
+      // is what a real slave without the register does.
+      if (state.writeEntry === null) return { ok: false, fault: null };
+      const context = state.context;
+      const called = invoke(state, state.writeEntry, timeMs, knobs, (arg) => {
+        context.setProp(arg, 'register', context.newNumber(register));
+        const array = context.newArray();
+        try {
+          for (const [index, byte] of bytes.entries()) {
+            context.setProp(array, index, context.newNumber(byte));
+          }
+          context.setProp(arg, 'bytes', array);
+        } finally {
+          // `setProp` does not take ownership, and an undisposed object handle
+          // makes `JS_FreeRuntime` abort when the runtime is freed. Number
+          // handles are static and need none of this; an array is not.
+          array.dispose();
+        }
+      });
+      if ('fault' in called) return { ok: false, fault: called.fault };
+
+      const answer: unknown = context.dump(called.handle);
+      called.handle.dispose();
+      return { ok: answer !== false, fault: null };
     },
 
     dispose() {
-      for (const state of compiled.values()) {
-        state.entry.dispose();
-        state.context.dispose();
-      }
+      for (const state of compiled.values()) release(state);
       compiled.clear();
       runtime.dispose();
     },
   };
+}
+
+/** Whether a script's answer byte is one a bus can carry. */
+function isByte(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255;
 }

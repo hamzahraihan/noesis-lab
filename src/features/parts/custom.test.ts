@@ -123,10 +123,10 @@ describe('a scripted part', () => {
 
   it('speaks analog or digital and nothing else', () => {
     expect(reasonFor({ ...goodScript(), component: { kind: 'scripted' } })).toContain(
-      'component.bus must be one of analog, digital',
+      'component.bus must be one of analog, digital, i2c',
     );
-    expect(reasonFor({ ...goodScript(), component: { kind: 'scripted', bus: 'i2c' } })).toContain(
-      'component.bus must be one of analog, digital',
+    expect(reasonFor({ ...goodScript(), component: { kind: 'scripted', bus: 'spi' } })).toContain(
+      'component.bus must be one of analog, digital, i2c',
     );
     const digital = goodScript();
     digital.component = { kind: 'scripted', bus: 'digital' };
@@ -160,6 +160,39 @@ describe('a scripted part', () => {
     const huge = goodScript();
     huge.script = `/*${'x'.repeat(SCRIPT_MAX_CHARS)}*/`;
     expect(reasonFor(huge)).toContain('at most');
+  });
+
+  it('speaks i2c with an address, and needs one in range', () => {
+    const i2c = goodScript();
+    // Four leads need a body wide enough to draw them on.
+    i2c.widthMm = 30;
+    i2c.component = { kind: 'scripted', bus: 'i2c', address: 0x50 };
+    i2c.pins = [
+      { id: 'SDA', label: 'SDA', x: 0, y: 6 },
+      { id: 'SCL', label: 'SCL', x: 10, y: 6 },
+      { id: 'VCC', label: 'VCC', x: 20, y: 6 },
+      { id: 'GND', label: 'GND', x: 30, y: 6, net: 'GND' },
+    ];
+    const verdict = validatePartDefinition(i2c);
+    expect(verdict.ok).toBe(true);
+    if (verdict.ok) expect(verdict.definition.component).toMatchObject({ address: 0x50 });
+
+    // The seven-bit space minus what the standard reserves: general call at the
+    // bottom, the ten-bit prefixes at the top.
+    expect(reasonFor({ ...i2c, component: { kind: 'scripted', bus: 'i2c' } })).toContain(
+      'component.address',
+    );
+    expect(
+      reasonFor({ ...i2c, component: { kind: 'scripted', bus: 'i2c', address: 0x04 } }),
+    ).toContain('component.address');
+    expect(
+      reasonFor({ ...i2c, component: { kind: 'scripted', bus: 'i2c', address: 0x78 } }),
+    ).toContain('component.address');
+
+    // A bus that does not use an address may not carry one.
+    expect(
+      reasonFor({ ...goodScript(), component: { kind: 'scripted', bus: 'analog', address: 0x50 } }),
+    ).toContain('component.address');
   });
 
   it('round-trips through the file the app writes, script and all', () => {

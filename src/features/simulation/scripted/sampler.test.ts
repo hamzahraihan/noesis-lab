@@ -5,6 +5,16 @@ import type { PartDefinition } from '@/features/parts';
 import { createScriptedSampler, SCRIPTED_SAMPLE_MS } from './sampler';
 import type { ScriptedRuntime } from './runtime';
 
+/** A runtime with only the half a leg needs: the other buses answer nothing. */
+function stubRuntime(read: ScriptedRuntime['read']): ScriptedRuntime {
+  return {
+    read,
+    readI2c: () => ({ bytes: [], fault: null }),
+    writeI2c: () => ({ ok: false, fault: null }),
+    dispose: () => undefined,
+  };
+}
+
 /**
  * The sampler alone: the translation between "what does this part say" and the
  * map the netlist reads, with a stub in place of QuickJS.
@@ -42,13 +52,10 @@ describe('the scripted sampler', () => {
       0,
     );
     const asked: string[] = [];
-    const runtime: ScriptedRuntime = {
-      read: (part) => {
-        asked.push(part.id);
-        return { value: part.id === probeA.id ? 0.25 : 0.75, fault: null };
-      },
-      dispose: () => undefined,
-    };
+    const runtime = stubRuntime((part) => {
+      asked.push(part.id);
+      return { value: part.id === probeA.id ? 0.25 : 0.75, fault: null };
+    });
 
     const sample = createScriptedSampler(runtime, () => [probeA, probeB]);
     const values = sample(0, NO_DYNAMIC_STATE);
@@ -65,10 +72,7 @@ describe('the scripted sampler', () => {
   it('leaves a faulted part out of the map, which the netlist reads as zero', () => {
     const builder = new BenchBuilder();
     const part = builder.addPart(probe('broken'), 0, 0);
-    const runtime: ScriptedRuntime = {
-      read: () => ({ value: undefined, fault: 'Error: no sensor' }),
-      dispose: () => undefined,
-    };
+    const runtime = stubRuntime(() => ({ value: undefined, fault: 'Error: no sensor' }));
 
     const values = createScriptedSampler(runtime, () => [part])(0, NO_DYNAMIC_STATE);
     expect(values.size).toBe(0);
@@ -78,21 +82,16 @@ describe('the scripted sampler', () => {
     const builder = new BenchBuilder();
     const part = builder.addPart(
       probe('knobbed', {
-        knobs: [
-          { id: 'moisture', label: 'Moisture', min: 0, max: 100, step: 1, defaultValue: 40 },
-        ],
+        knobs: [{ id: 'moisture', label: 'Moisture', min: 0, max: 100, step: 1, defaultValue: 40 }],
       }),
       0,
       0,
     );
     let seen: Readonly<Record<string, number>> = {};
-    const runtime: ScriptedRuntime = {
-      read: (_part, _timeMs, knobs) => {
-        seen = knobs;
-        return { value: 0.5, fault: null };
-      },
-      dispose: () => undefined,
-    };
+    const runtime = stubRuntime((_part, _timeMs, knobs) => {
+      seen = knobs;
+      return { value: 0.5, fault: null };
+    });
 
     // The knob's own default is what a part reports before anyone turns it.
     createScriptedSampler(runtime, () => [part])(0, NO_DYNAMIC_STATE);
@@ -104,13 +103,10 @@ describe('the scripted sampler', () => {
     const builder = new BenchBuilder();
     const part = builder.addPart(probe('timed'), 0, 0);
     let at = -1;
-    const runtime: ScriptedRuntime = {
-      read: (_part, timeMs) => {
-        at = timeMs;
-        return { value: 0.5, fault: null };
-      },
-      dispose: () => undefined,
-    };
+    const runtime = stubRuntime((_part, timeMs) => {
+      at = timeMs;
+      return { value: 0.5, fault: null };
+    });
 
     createScriptedSampler(runtime, () => [part])(12_345, {} as DynamicState);
     expect(at).toBe(12_345);

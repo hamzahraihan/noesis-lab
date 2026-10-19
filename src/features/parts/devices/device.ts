@@ -31,6 +31,27 @@ export interface I2cDevice {
 }
 
 /**
+ * The half of a scripted slave the device needs, without the script in it.
+ *
+ * Declared here rather than in the simulation feature on purpose: the device is a
+ * part, the runtime belongs to the solver, and the seam between them is two
+ * methods. It keeps the dependency pointing the way the boundary gate insists on
+ * -- `parts` never reaches into `simulation` for a value.
+ */
+export interface ScriptedI2cSlave {
+  /**
+   * The bytes the slave answers for a read of `count` at `register`.
+   *
+   * Null is "no answer at all" -- a faulted or absent script -- which the bus
+   * reads as a NACK. An empty or short array is different: that is a device
+   * answering, and the bus repeats its last byte rather than refusing.
+   */
+  read(register: number, count: number): readonly number[] | null;
+  /** False when the slave refused, which the bus answers as a NACK. */
+  write(register: number, bytes: readonly number[]): boolean;
+}
+
+/**
  * A read that runs off the end of what a device has.
  *
  * I2C has no way to say "there is nothing more": a device that answers fewer

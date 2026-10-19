@@ -126,4 +126,76 @@ describe('the scripted runtime', () => {
     expect(runtime.read(part, 0, {})).toEqual({ value: 0.1, fault: null });
     expect(runtime.read(part, 5, {})).toEqual({ value: 0.2, fault: null });
   });
+
+  /*
+   * The I2C half. The bus keeps the register pointer, not the device: the first
+   * byte of a transaction is the pointer and everything after is data, so what
+   * the script sees is a register and the bytes that follow it.
+   */
+  const i2c = (script: string, id = 'slave'): ScriptedPart => ({ id, script, bus: 'i2c' });
+
+  it('answers a register read with the bytes a slave returns', async () => {
+    runtime = await createScriptedRuntime();
+    const part = i2c('({ i2c: { read: ({ register, count }) => [register, count, 0xaa] } })');
+    expect(runtime.readI2c(part, 0x42, 2, 0, {})).toEqual({
+      bytes: [0x42, 2, 0xaa],
+      fault: null,
+    });
+  });
+
+  it('lets a write change what the next read answers, because a context is real JS', async () => {
+    runtime = await createScriptedRuntime();
+    const part = i2c(
+      '(() => { let value = 0x10; return { i2c: {' +
+        ' read: () => [value],' +
+        ' write: ({ bytes }) => { value = bytes[0] ?? 0; },' +
+        ' } }; })()',
+    );
+
+    expect(runtime.readI2c(part, 0, 1, 0, {})).toEqual({ bytes: [0x10], fault: null });
+    expect(runtime.writeI2c(part, 0, [0x5a], 0, {})).toEqual({ ok: true, fault: null });
+    expect(runtime.readI2c(part, 0, 1, 0, {})).toEqual({ bytes: [0x5a], fault: null });
+  });
+
+  it('hands an i2c read the knobs and the solver clock, as the other buses get', async () => {
+    runtime = await createScriptedRuntime();
+    const part = i2c('({ i2c: { read: ({ timeMs, knobs }) => [timeMs / 1000, knobs.level] } })');
+    expect(runtime.readI2c(part, 0, 2, 4_000, { level: 7 })).toEqual({
+      bytes: [4, 7],
+      fault: null,
+    });
+  });
+
+  it('takes a refusal as a NACK, and a missing write as one too', async () => {
+    runtime = await createScriptedRuntime();
+    const refusing = i2c('({ i2c: { read: () => [0], write: () => false } })');
+    expect(runtime.writeI2c(refusing, 0, [1], 0, {})).toEqual({ ok: false, fault: null });
+
+    // A device that only answers: the bus NACKs the write rather than inventing
+    // a fault, which is what a real slave without that register does.
+    const answering = i2c('({ i2c: { read: () => [0] } })');
+    expect(runtime.writeI2c(answering, 0, [1], 0, {})).toEqual({ ok: false, fault: null });
+  });
+
+  it('latches a faulting slave, as it latches a faulting sensor', async () => {
+    runtime = await createScriptedRuntime();
+    const part = i2c('({ i2c: { read: () => { throw new Error("not that register"); } } })');
+
+    const first = runtime.readI2c(part, 0x02, 1, 0, {});
+    expect(first.bytes).toEqual([]);
+    expect(first.fault).toContain('not that register');
+    expect(runtime.writeI2c(part, 0, [], 0, {})).toEqual({ ok: false, fault: first.fault });
+    expect(runtime.readI2c(part, 0x03, 1, 0, {})).toEqual({ bytes: [], fault: first.fault });
+  });
+
+  it('refuses an answer that is not bytes, and says which', async () => {
+    runtime = await createScriptedRuntime();
+    const part = i2c('({ i2c: { read: () => [300] } })');
+    const answer = runtime.readI2c(part, 0, 1, 0, {});
+    expect(answer.bytes).toEqual([]);
+    expect(answer.fault).toContain('must answer bytes');
+
+    const missing = runtime.readI2c(i2c('({ digital: () => 1 })'), 0, 1, 0, {});
+    expect(missing.fault).toContain('no i2c object');
+  });
 });

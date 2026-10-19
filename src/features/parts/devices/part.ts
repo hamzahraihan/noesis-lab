@@ -7,11 +7,12 @@
  */
 
 import type { PartDefinition } from '../catalog';
-import type { I2cDevice } from './device';
+import type { I2cDevice, ScriptedI2cSlave } from './device';
 import { Ssd1306 } from '../display/ssd1306';
 import { Ds1307 } from './ds1307';
 import { Hx711 } from './hx711';
 import { Mpu6050 } from './mpu6050';
+import { ScriptedI2cDevice } from './scripted';
 
 export type { I2cDevice } from './device';
 
@@ -25,9 +26,22 @@ export function isI2cDevice(candidate: object): candidate is I2cDevice {
   return 'address' in candidate && 'read' in candidate && 'onBus' in candidate;
 }
 
-export function createI2cDevice(definition: PartDefinition): I2cDevice | null {
+export function createI2cDevice(
+  definition: PartDefinition,
+  slave?: ScriptedI2cSlave,
+): I2cDevice | null {
   const component = definition.component;
   switch (component.kind) {
+    /*
+     * A part the host has no model for: the file says which bus it speaks, and
+     * on I2C that means an address and a script. The slave is passed in rather
+     * than reached for, because the runtime that answers it belongs to whoever
+     * owns the solve.
+     */
+    case 'scripted':
+      return component.bus === 'i2c' && slave !== undefined
+        ? new ScriptedI2cDevice(component.address, slave)
+        : null;
     case 'display':
       // Only the OLED speaks I2C; a TFT on the same wires stays silent, and a
       // character LCD is driven over its own parallel header instead.

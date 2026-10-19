@@ -60,6 +60,7 @@ import { buildLittlefsImage } from '../rp2040/image';
 import type { Rp2040Hooks } from '../rp2040/backend';
 import { GROUND } from '../elements';
 import { loadScriptedRuntime } from '../scripted/load';
+import { createScriptedI2c } from '../scripted/i2c';
 import { createScriptedSampler } from '../scripted/sampler';
 import { I2CBus } from '../bus/i2c';
 import { SpiBus } from '../bus/spi';
@@ -288,6 +289,7 @@ class SimCore implements CoreHandle {
   private async startScriptedRuntime(): Promise<void> {
     const runtime = await loadScriptedRuntime();
     this.engine.setScriptedSampler(createScriptedSampler(runtime, () => this.bench.parts));
+    this.engine.setScriptedI2c(createScriptedI2c(runtime, () => this.bench.parts));
   }
 
   get timeMs(): number {
