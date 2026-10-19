@@ -128,7 +128,7 @@ export function ProjectPage() {
             {builds.map(({ entry, build }) => (
               <li
                 key={entry.id}
-                className="flex flex-col overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-slate-600 hover:bg-[var(--hd-surface)]"
+                className="flex flex-col overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/60 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.7)] transition-all duration-150 ease-out hover:-translate-y-px hover:border-[var(--hd-border-strong)] hover:bg-[var(--hd-surface)]"
               >
                 <span className="block h-36 border-b border-[var(--hd-border)] bg-[var(--hd-bg)]">
                   <GalleryPreview
