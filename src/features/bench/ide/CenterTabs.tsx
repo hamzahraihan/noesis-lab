@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Component1Icon } from '@radix-ui/react-icons';
 import type { CenterKey } from '../store/shell-state';
 import { isCircuitKey } from '../store/shell-state';
@@ -23,6 +23,14 @@ export function CenterTabs({
   editor: ReactNode;
 }) {
   const circuitActive = isCircuitKey(active);
+  const [editorMounted, setEditorMounted] = useState(!circuitActive);
+  /*
+   * Latched during render rather than in an effect: the pane must not paint one
+   * empty frame between a tab click and the editor arriving, and the latch is
+   * one-way -- switching back to the canvas must not tear Monaco down and lose
+   * the cursor and scroll positions of every open tab.
+   */
+  if (!circuitActive && !editorMounted) setEditorMounted(true);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div
@@ -81,17 +89,22 @@ export function CenterTabs({
         })}
       </div>
       {/*
-       * Both panes stay mounted; the inactive one hides. Unmounting the editor
-       * would destroy the Monaco instance and its per-tab view states (cursor,
-       * scroll), and unmounting the canvas would reset its pan/zoom — so a tab
-       * switch would feel like a reload. A hidden pane costs a DOM subtree.
+       * Both panes stay mounted once they have been shown; the inactive one
+       * hides. Unmounting the editor would destroy the Monaco instance and its
+       * per-tab view states (cursor, scroll), and unmounting the canvas would
+       * reset its pan/zoom — so a tab switch would feel like a reload. A hidden
+       * pane costs a DOM subtree.
+       *
+       * The editor waits for its first show, though: it carries Monaco, which
+       * is megabytes a lesson session may never need, and the canvas has no
+       * download of its own to wait for.
        */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className={`min-h-0 flex-1 ${circuitActive ? 'flex flex-col' : 'hidden'}`}>
           {circuit}
         </div>
         <div className={`min-h-0 flex-1 ${circuitActive ? 'hidden' : 'flex flex-col'}`}>
-          {editor}
+          {editorMounted ? editor : null}
         </div>
       </div>
     </div>
