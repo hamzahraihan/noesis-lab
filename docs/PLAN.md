@@ -115,9 +115,11 @@ An interactive simulation platform designed to bridge the gap between software c
   fault reaches the operator as one line in the console per part per fault.
   It was deferred because it needed an ABI over the solver's `Element[]`, a sandbox
   that cannot touch the DOM, worker-safe evaluation, and a story for a user module
-  that throws mid-solve; the spec answers those four. Still open from that spec:
-  the Problems panel row a fault should own (today's line is the console), and one
-  worked example in the gallery.
+  that throws mid-solve; the spec answers those four. A circuit now **carries the
+  parts it uses** (`CircuitDocument.definitions`), so a file or a share link
+  opens on a machine that never imported anything — which is what a gallery
+  example needs. Still open from that spec: the Problems panel row a fault should
+  own (today's line is the console), and the worked example itself.
 
 ---
 
