@@ -28,7 +28,7 @@ export function CenterTabs({
       <div
         role="tablist"
         aria-label="Editor tabs"
-        className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900 px-2"
+        className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-[var(--hd-border)] bg-[var(--hd-surface)] px-2"
       >
         <button
           type="button"
@@ -37,7 +37,7 @@ export function CenterTabs({
           onClick={() => onSelect('circuit')}
           title="Circuit canvas"
           className={`flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 font-mono text-xs ${
-            circuitActive ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-100'
+            circuitActive ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)] hover:text-[var(--hd-text)]'
           }`}
         >
           <Component1Icon className="icon-sm" aria-hidden="true" />
@@ -52,7 +52,7 @@ export function CenterTabs({
               role="tab"
               aria-selected={selected}
               className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                selected ? 'bg-slate-800 text-slate-100' : 'text-slate-400'
+                selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
               }`}
             >
               <button
@@ -62,7 +62,7 @@ export function CenterTabs({
                   if (!isEntry) onRenameFile(file.name);
                 }}
                 title={isEntry ? file.name : `${file.name} — double-click to rename`}
-                className="rounded-none px-2 py-1 transition-colors hover:text-slate-100"
+                className="rounded-none px-2 py-1 transition-colors hover:text-[var(--hd-text)]"
               >
                 {file.name}
               </button>
@@ -71,7 +71,7 @@ export function CenterTabs({
                   type="button"
                   onClick={() => onCloseFile(file.name)}
                   aria-label={`Remove ${file.name}`}
-                  className="rounded-none px-1 py-1 text-slate-500 transition-colors hover:text-red-300"
+                  className="rounded-none px-1 py-1 text-[var(--hd-muted)] transition-colors hover:text-red-300"
                 >
                   ×
                 </button>
