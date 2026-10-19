@@ -103,16 +103,21 @@ An interactive simulation platform designed to bridge the gap between software c
   **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 35
   component kinds the simulator implements — geometry, parameters, pins, knobs and
   colours, validated at import and resolvable by the compiler like any shipped
-  part. No new behaviour, by construction: an imported part cannot introduce a
-  kind the host has no model for. **Scripting/Wasm half specified** (2026-10-19,
-  `docs/superpowers/specs/2026-10-19-behaviour-parts-design.md`), not yet built:
-  QuickJS in the simulation worker, a `scripted` component kind taking an
-  analog/digital/I2C sensor's answer from a script, one context per part, the
-  host's simulated clock and a seeded PRNG, a per-call budget, and a latched safe
-  state with a diagnostic rather than a silent value. It was deferred because it
-  needs an ABI over the solver's `Element[]`, a sandbox that cannot touch the DOM,
-  worker-safe evaluation, and a story for a user module that throws mid-solve; the
-  spec answers those four.
+  part. **Scripting half shipped** (2026-10-19, spec
+  `docs/superpowers/specs/2026-10-19-behaviour-parts-design.md`): a `scripted`
+  component kind whose answer comes from a script running in QuickJS compiled to
+  WebAssembly -- one context per part, the host's simulated clock and a seeded
+  PRNG, a per-call budget, and a latched safe state with a diagnostic rather than
+  a silent value (spec §5). It speaks three buses: an analog fraction, a digital
+  level, or an I2C slave answering register reads and writes at the address its
+  file declares. The runtime loads lazily — 492 KB of WASM behind a dynamic
+  import, fetched the first time a bench holds a part that has a script — and a
+  fault reaches the operator as one line in the console per part per fault.
+  It was deferred because it needed an ABI over the solver's `Element[]`, a sandbox
+  that cannot touch the DOM, worker-safe evaluation, and a story for a user module
+  that throws mid-solve; the spec answers those four. Still open from that spec:
+  the Problems panel row a fault should own (today's line is the console), and one
+  worked example in the gallery.
 
 ---
 
