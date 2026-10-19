@@ -108,4 +108,36 @@ describe('circuit file vocabulary', () => {
   it('says what happened when a file cannot be read', () => {
     expect(UNREADABLE_FILE_NOTICE).toMatch(/^That circuit file could not be read/);
   });
+  it('carries a circuit’s own part through the file, and reads it back without an import', () => {
+    const probe = {
+      id: 'soil-probe',
+      name: 'Soil moisture probe',
+      category: 'input',
+      widthMm: 20,
+      heightMm: 12,
+      bodyColour: '#5b6b4a',
+      legendColour: '#f2f2ee',
+      component: { kind: 'scripted', bus: 'analog' },
+      script: '({ analog: () => 0.5 })',
+      pins: [
+        { id: 'AOUT', label: 'OUT', x: 0, y: 6 },
+        { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+        { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+      ],
+    } as const;
+    const doc = {
+      version: 1,
+      parts: [{ id: 'probe', type: 'soil-probe', x: 0, y: 0, rotation: 0 }],
+      wires: [],
+      definitions: [probe],
+    };
+
+    const text = circuitFileText(doc as never);
+    expect(text).toContain('"soil-probe"');
+
+    // The other machine: nothing imported, and the file still means what it said.
+    const back = readCircuitFile(text, 'noesis-esp32-circuit.json');
+    expect(back.parts[0]?.type).toBe('soil-probe');
+    expect(back.definitions?.[0]?.id).toBe('soil-probe');
+  });
 });
