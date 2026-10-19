@@ -63,7 +63,7 @@ export function PartSearch({
            * full width instead of starting behind a magnifier.
            */}
           <MagnifyingGlassIcon
-            className="icon-sm pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-slate-600"
+            className="icon-sm pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[var(--hd-faint)]"
             aria-hidden="true"
           />
           <Input
@@ -81,7 +81,7 @@ export function PartSearch({
               type="button"
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute top-1/2 right-1 -translate-y-1/2 rounded-none p-0.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+              className="absolute top-1/2 right-1 -translate-y-1/2 rounded-none p-0.5 text-[var(--hd-muted)] transition-colors hover:bg-[var(--hd-border)] hover:text-[var(--hd-text)]"
             >
               <Cross2Icon className="icon-sm" aria-hidden="true" />
             </button>
@@ -89,7 +89,7 @@ export function PartSearch({
         </label>
       </div>
 
-      <h2 className="px-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+      <h2 className="px-3 pb-1 text-xs font-semibold tracking-wide text-[var(--hd-muted)] uppercase">
         {searching ? `${results.length} match${results.length === 1 ? '' : 'es'}` : 'Quick parts'}
       </h2>
 
@@ -97,7 +97,7 @@ export function PartSearch({
         {results.length === 0 ? (
           // A search that finds nothing should offer the way out, not just
           // report the absence.
-          <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center text-xs text-slate-500">
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center text-xs text-[var(--hd-muted)]">
             <p>No parts match “{query}”.</p>
             <Button variant="outline" size="sm" onClick={() => setQuery('')}>
               Clear search
@@ -140,13 +140,13 @@ function SearchRow({
       type="button"
       onClick={() => onPlace(definition, entry)}
       title={entry.note}
-      className="mx-2 flex w-[calc(100%-1rem)] items-start gap-2 rounded-none px-2 py-1.5 text-left transition-colors hover:bg-slate-700"
+      className="mx-2 flex w-[calc(100%-1rem)] items-start gap-2 rounded-none px-2 py-1.5 text-left transition-colors hover:bg-[var(--hd-border-strong)]"
     >
       <PartPreview definition={definition} className="mt-0.5 h-7 w-9 shrink-0" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-slate-200">{entry.name}</span>
+        <span className="block truncate text-sm text-[var(--hd-text)]">{entry.name}</span>
         {showNote && (
-          <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">{entry.note}</span>
+          <span className="mt-0.5 block text-xs leading-snug text-[var(--hd-muted)]">{entry.note}</span>
         )}
       </span>
     </button>
