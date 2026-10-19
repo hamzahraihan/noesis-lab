@@ -209,3 +209,61 @@ describe('ILI9341 framebuffer', () => {
     expect(display.isMirrored).toBe(false);
   });
 });
+
+/**
+ * The canvases blit a panel only when its revision moves, so a mutation that
+ * forgets to count leaves a frozen picture on screen. Each way the glass can
+ * change gets a leg here.
+ */
+describe('ILI9341 frame revision', () => {
+  it('counts every way a pixel can change', () => {
+    const display = new Ili9341();
+    expect(display.frameRevision).toBe(0);
+
+    setFullWindow(display);
+    command(display, 0x2c);
+    data(display, 0xf8, 0x00);
+    deselect(display);
+    const streamed = display.frameRevision;
+    expect(streamed).toBeGreaterThan(0);
+
+    display.fill(0, 0, 4, 4, 0x07e0);
+    const filled = display.frameRevision;
+    expect(filled).toBeGreaterThan(streamed);
+
+    display.print('A', 0, 0, 0xffff);
+    const printed = display.frameRevision;
+    expect(printed).toBeGreaterThan(filled);
+
+    display.clear();
+    expect(display.frameRevision).toBeGreaterThan(printed);
+  });
+
+  it('counts a turn or a reset, which redraw the glass without a write', () => {
+    const display = new Ili9341();
+    display.setRotation(1);
+    const turned = display.frameRevision;
+    expect(turned).toBeGreaterThan(0);
+
+    // Asking for the orientation it already has changes nothing.
+    display.setRotation(1);
+    expect(display.frameRevision).toBe(turned);
+
+    command(display, 0x36, 0x00);
+    const upright = display.frameRevision;
+    expect(upright).toBeGreaterThan(turned);
+
+    command(display, 0x01);
+    expect(display.frameRevision).toBeGreaterThan(upright);
+  });
+
+  it('expands into a caller-owned buffer of the right size', () => {
+    const display = new Ili9341();
+    const into = new Uint8ClampedArray(ILI9341_WIDTH * ILI9341_HEIGHT * 4);
+    expect(display.toRgba(into)).toBe(into);
+
+    // A buffer of the wrong shape is ignored rather than half-filled.
+    const wrong = new Uint8ClampedArray(16);
+    expect(display.toRgba(wrong)).not.toBe(wrong);
+  });
+});

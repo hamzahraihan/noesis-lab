@@ -671,6 +671,12 @@ function pushSegmentLevels(
   set(element, 'values', levels);
 }
 
+/** The last image each TFT canvas was given, so an idle panel re-blits nothing. */
+const frameCache = new WeakMap<
+  HTMLCanvasElement,
+  { source: Ili9341; revision: number; image: ImageData }
+>();
+
 /**
  * Paints a display controller's framebuffer into the element's own canvas.
  *
@@ -686,9 +692,22 @@ function blitFramebuffer(element: HTMLElement, controller: DisplayController | u
   if (!(canvas instanceof HTMLCanvasElement)) return;
   const context = canvas.getContext('2d');
   if (!context) return;
-  const image = context.createImageData(ILI9341_WIDTH, ILI9341_HEIGHT);
-  image.data.set(controller.toRgba());
+  /*
+   * One cache per canvas, keyed on the controller's own change counter: this
+   * runs on every painted frame, and a panel nothing has drawn to should cost
+   * a compare rather than a full conversion plus the upload.
+   */
+  const previous = frameCache.get(canvas);
+  if (previous && previous.source === controller && previous.revision === controller.frameRevision) {
+    return;
+  }
+  const image = previous?.image ?? context.createImageData(ILI9341_WIDTH, ILI9341_HEIGHT);
+  const pixels = controller.toRgba(image.data);
+  // A turned panel hands back an image of its own shape; the canvas keeps the
+  // panel's, so that one still goes through a copy.
+  if (pixels !== image.data) image.data.set(pixels);
   context.putImageData(image, 0, 0);
+  frameCache.set(canvas, { source: controller, revision: controller.frameRevision, image });
 }
 
 /**

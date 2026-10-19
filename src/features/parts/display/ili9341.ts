@@ -111,6 +111,22 @@ export class Ili9341 {
   /** The last MADCTL byte the panel was sent, which is its orientation. */
   private madctl = 0;
 
+  /**
+   * Counts every change to what the panel shows.
+   *
+   * The bench blits each panel into a canvas once per frame, and converting a
+   * 480x320 panel to RGBA costs milliseconds: this counter is what lets a
+   * renderer skip both the conversion and the upload when nothing has moved.
+   * Orientation counts too, because turning the panel changes the picture
+   * without touching a byte of RAM.
+   */
+  private revision = 0;
+
+  /** Bumped whenever the visible picture could have changed. */
+  get frameRevision(): number {
+    return this.revision;
+  }
+
   private columnStart = 0;
   private columnEnd = 0;
   private pageStart = 0;
@@ -328,11 +344,16 @@ export class Ili9341 {
    * Already in reading order, so the canvas does not have to know the panel is
    * turned: it is handed an upright image of whatever a user is looking at,
    * which is the only way the renderer stays a renderer.
+   *
+   * A caller that repaints every frame can hand in the target it already owns
+   * -- an `ImageData`'s own buffer, say -- and pay no allocation. A buffer of
+   * the wrong size is ignored rather than half-filled.
    */
-  toRgba(): Uint8ClampedArray {
+  toRgba(into?: Uint8ClampedArray): Uint8ClampedArray {
     const width = this.width;
     const height = this.height;
-    const pixels = new Uint8ClampedArray(width * height * 4);
+    const pixels =
+      into && into.length === width * height * 4 ? into : new Uint8ClampedArray(width * height * 4);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const colour = this.pixelAt(x, y);
@@ -366,6 +387,7 @@ export class Ili9341 {
    * the glass.
    */
   blit(x: number, y: number, width: number, height: number, rgb565: Uint16Array): void {
+    this.revision++;
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         const offset = this.ramOffset(x + col, y + row);
@@ -388,6 +410,8 @@ export class Ili9341 {
    * the register is what the panel obeys, and this is only a way of setting it.
    */
   setRotation(rotation: PanelRotation): PanelRotation {
+    if (this.rotation === rotation) return this.rotation;
+    this.revision++;
     this.madctl = ROTATION_MADCTL[rotation] ?? ROTATION_MADCTL[0];
     return this.rotation;
   }
@@ -446,12 +470,14 @@ export class Ili9341 {
   private setVisible(x: number, y: number, colour: number): void {
     const offset = this.ramOffset(x, y);
     if (offset < 0) return;
+    this.revision++;
     this.framebuffer[offset] = colour >> 8;
     this.framebuffer[offset + 1] = colour & 0xff;
   }
 
   /** Wipes the framebuffer, as the TFT_eSPI clear() does. */
   clear(): void {
+    this.revision++;
     this.framebuffer.fill(0);
   }
 
@@ -509,7 +535,11 @@ export class Ili9341 {
         else if (index === 3) this.pageEnd = Math.max(0, Math.min(value, this.ramHeight - 1));
         return;
       case MADCTL:
-        if (index === 0) this.madctl = value & (MADCTL_MX | MADCTL_MY | MADCTL_MV);
+        if (index === 0) {
+          const next = value & (MADCTL_MX | MADCTL_MY | MADCTL_MV);
+          if (next !== this.madctl) this.revision++;
+          this.madctl = next;
+        }
         return;
       default:
         // The rest affect drive, not what is stored on screen.
@@ -518,6 +548,7 @@ export class Ili9341 {
   }
 
   private reset(): void {
+    this.revision++;
     this.displayOn = false;
     this.streaming = false;
     this.expecting = 0;
@@ -544,6 +575,7 @@ export class Ili9341 {
     if (this.cursorPage < 0 || this.cursorPage >= this.ramHeight) return;
     const index =
       (this.cursorPage * this.ramWidth + this.cursorColumn) * 2 + (this.expectHighByte ? 0 : 1);
+    this.revision++;
     this.framebuffer[index] = byte;
     if (this.expectHighByte) {
       this.expectHighByte = false;

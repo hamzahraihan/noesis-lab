@@ -1376,6 +1376,16 @@ function ColourPanel({
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   /*
+   * The last frame handed to this canvas. A panel that has not been drawn to
+   * costs an integer compare here instead of a full conversion and upload, and
+   * the image is kept so the next real frame allocates nothing either. The
+   * controller counts its own changes (`frameRevision`), and the instance is
+   * part of the key because a rebuilt bench hands over a fresh controller
+   * whose counter starts over.
+   */
+  const blitRef = useRef<{ source: Ili9341; revision: number; image: ImageData } | null>(null);
+
+  /*
    * What the panel is showing right now. The controller knows, and it is the
    * only thing that does: the definition records the glass, the controller
    * records how it is being read. Falling back to the definition means a panel
@@ -1408,9 +1418,25 @@ function ColourPanel({
     // the browser is scaling one pixel to one pixel.
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
-    const image = context.createImageData(width, height);
-    image.data.set(tft.toRgba());
+    const previous = blitRef.current;
+    const reusable =
+      previous && previous.image.width === width && previous.image.height === height
+        ? previous.image
+        : null;
+    if (
+      previous &&
+      reusable &&
+      previous.source === tft &&
+      previous.revision === tft.frameRevision
+    ) {
+      return;
+    }
+    const image = reusable ?? context.createImageData(width, height);
+    // Straight into the image's own buffer: the conversion rewrites every
+    // pixel, so a reused one is as fresh as a new one.
+    tft.toRgba(image.data);
     context.putImageData(image, 0, 0);
+    blitRef.current = { source: tft, revision: tft.frameRevision, image };
   });
 
   if (width === 0 || height === 0) return null;

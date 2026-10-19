@@ -95,6 +95,7 @@ import {
 } from '@/features/parts';
 import type {
   DisplayController,
+  Ili9341,
   KnobSpec,
   LcdCommand,
   PartDefinition,
@@ -223,6 +224,17 @@ class SimCore implements CoreHandle {
   private faultText: string | null = null;
   private serial: string[] = [];
   private serialCursor = 0;
+  /**
+   * The last frame pulled out of the bench's colour panel, so a snapshot of an
+   * unchanged panel re-sends bytes instead of walking every pixel again.
+   */
+  private tftCache: {
+    panel: Ili9341;
+    revision: number;
+    width: number;
+    height: number;
+    rgb565: Uint8Array;
+  } | null = null;
   private shm: SharedArrayBuffer | null = null;
   private layout: SnapshotLayout | null = null;
   private lcdDriver: LcdDriver | null = null;
@@ -574,7 +586,19 @@ class SimCore implements CoreHandle {
     // looking at. The gate lives in the port, not in the glass.
     const panel = colorPanel(this.displayControllers())?.panel;
     if (!panel) {
+      this.tftCache = null;
       view.writeFrame(0, 0, new Uint8Array(0));
+      return;
+    }
+    /*
+     * Snapshots come once per painted frame, and a panel nothing has drawn to
+     * should not be walked again: the controller counts its own changes, and a
+     * match re-sends the bytes it already has. A fresh panel instance always
+     * misses, so a rebuilt controller can never be served a stale frame.
+     */
+    const cached = this.tftCache;
+    if (cached && cached.panel === panel && cached.revision === panel.frameRevision) {
+      view.writeFrame(cached.width, cached.height, cached.rgb565);
       return;
     }
     const width = Math.max(0, Math.floor(panel.width));
@@ -589,6 +613,7 @@ class SimCore implements CoreHandle {
         rgb565[o++] = colour & 0xff;
       }
     }
+    this.tftCache = { panel, revision: panel.frameRevision, width, height, rgb565 };
     view.writeFrame(width, height, rgb565);
   }
 
