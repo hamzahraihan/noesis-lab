@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { esp32DevKitV1, partDefinitionById, useCustomPartsStore } from '@/features/parts';
+import { circuitFileText, readCircuitFile } from '../utils/circuit-file';
 import { Simulation } from './simulation';
 
 /**
@@ -134,5 +135,40 @@ describe('a scripted part on a bench', () => {
     }
 
     useCustomPartsStore.getState().clear();
+  });
+
+  it('opens on a machine that never imported the part, because the circuit carries it', async () => {
+    const outcome = useCustomPartsStore.getState().import(probeFile, 'soil-probe.json');
+    expect(outcome.refused).toEqual([]);
+    const definition = partDefinitionById('soil-probe');
+    expect(definition).toBeDefined();
+    if (definition === undefined) return;
+
+    // Authoring: the import is how the part is written, the placement is what
+    // makes the circuit responsible for it.
+    const authored = new Simulation(esp32DevKitV1());
+    // A bench is a board and its parts: the board first, then the import.
+    expect(
+      authored.loadCircuit({
+        version: 1,
+        parts: [{ id: 'board', type: 'esp32-devkit-v1', x: 0, y: 0, rotation: 0 }],
+        wires: [],
+      }),
+    ).toEqual([]);
+    authored.addPart(definition, 0, 0);
+    expect(authored.document.definitions?.map((entry) => entry.id)).toEqual(['soil-probe']);
+    const text = circuitFileText(authored.document);
+
+    // The other machine: nothing imported at all.
+    useCustomPartsStore.getState().clear();
+    expect(partDefinitionById('soil-probe')).toBeUndefined();
+    const doc = readCircuitFile(text, 'noesis-esp32-circuit.json');
+
+    const opened = new Simulation(esp32DevKitV1());
+    expect(opened.loadCircuit(doc)).toEqual([]);
+    await opened.scriptedReady();
+    opened.engine.settle();
+    // The script ran, from the definition the file brought: half the rail.
+    expect(dividerOhms(opened)).toBeCloseTo(10_000, 6);
   });
 });
