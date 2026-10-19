@@ -2,22 +2,22 @@
 name: Noesis
 description: An instrument console for learning embedded systems — recessive chrome, one sky accent, amber meter, emerald live signal.
 colors:
-  primary: "oklch(0.685 0.169 237.323)"
-  primary-strong: "oklch(0.588 0.158 241.966)"
-  primary-soft: "oklch(0.685 0.169 237.323 / 0.14)"
-  meter: "#fbbf24"
+  primary: "#38bdf8"
+  primary-strong: "#268bd2"
+  primary-soft: "#38bdf8 / 0.14"
+  bg: "#17171a"
+  surface: "#1e1e2e"
+  surface-deep: "#11111b"
+  surface-alt: "#181825"
+  border: "#313244"
+  border-strong: "#45475a"
+  text: "#cdd6f4"
+  muted: "#9399b2"
+  faint: "#6c7086"
+  meter: "#f9e2af"
   live-signal: "#34d399"
   destructive: "#ef4444"
-  neutral-950: "#020617"
-  neutral-900: "#0f172a"
-  neutral-800: "#1e293b"
-  neutral-700: "#334155"
-  neutral-600: "#475569"
-  neutral-500: "#64748b"
-  neutral-400: "#94a3b8"
-  neutral-300: "#cbd5e1"
-  neutral-200: "#e2e8f0"
-  neutral-100: "#f1f5f9"
+  wire-black: "#111111"
 typography:
   body:
     fontFamily: "'Noto Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -64,23 +64,23 @@ components:
     rounded: "{rounded.control}"
     padding: "0.5rem 0.75rem"
   button-secondary:
-    backgroundColor: "{colors.neutral-800}"
-    textColor: "{colors.neutral-200}"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
     rounded: "{rounded.control}"
     padding: "0.5rem 0.75rem"
   button-outline:
     backgroundColor: "transparent"
-    textColor: "{colors.neutral-300}"
+    textColor: "{colors.muted}"
     rounded: "{rounded.control}"
     padding: "0.5rem 0.75rem"
   card:
-    backgroundColor: "{colors.neutral-900}"
-    textColor: "{colors.neutral-100}"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
     rounded: "{rounded.xl}"
     padding: "1rem"
   input:
-    backgroundColor: "{colors.neutral-800}"
-    textColor: "{colors.neutral-200}"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
     rounded: "{rounded.control}"
     padding: "0.25rem 0.5rem"
 ---
@@ -94,7 +94,7 @@ components:
 Noesis is drawn as an instrument console: recessive chrome so the canvas and the readouts carry the eye, one accent (sky) for anything the operator drives, amber reserved for the meter's own mode colour and for caution, emerald reserved for a live signal. Nothing else is allowed to be colourful, because a panel that steals the accent has taken the one cue that means "this is yours to press". The mood is recessive and instrument-grade, kept calm and focused: controls are compact, type is small, and many readouts can coexist without the screen becoming loud. Surfaces are flat at rest; depth appears only as a response to state. Components feel tactile and confident — solid fills, clear affordance, immediate feedback.
 
 **Key Characteristics:**
-- Dark slate console (neutral-950 background, neutral-900 surfaces) with a single sky accent.
+- Dark console on a Catppuccin-Mocha ground (#17171a background, #1e1e2e surfaces) with a single sky accent (#38bdf8).
 - Compact, dense-but-calm information layout; text-xs/text-sm dominate.
 - Flat surfaces at rest; shadows only on overlays, floating panels, and hover elevation.
 - Square corners (0 radius) throughout; no rounded components or marketing corners.
@@ -102,26 +102,29 @@ Noesis is drawn as an instrument console: recessive chrome so the canvas and the
 
 ## Colors
 
-The palette is a dark slate console with one interactive accent and three reserved signal colours.
+The palette is the herdr console: a dark Catppuccin-Mocha ground with one sky accent and three reserved signal colours, shared across the whole product.
 
 ### Primary
-- **Sky Instrument Blue** (oklch(0.685 0.169 237.323)): the single interactive accent — focus rings, selection, slider thumbs, and the solid button fill's brighter partner. Used on ≤10% of any screen; its rarity is the point.
-- **Sky Instrument Blue Strong** (oklch(0.588 0.158 241.966)): solid button fills and primary actions.
-- **Sky Instrument Blue Soft** (oklch(0.685 0.169 237.323 / 0.14)): selection backgrounds and soft hover tints.
+- **Sky Accent** (#38bdf8): the single interactive accent — focus rings, selection, slider thumbs, active tabs, and solid button fills. Used on ≤10% of any screen; its rarity is the point.
+- **Sky Accent Strong** (#268bd2): solid button fills and primary actions (hover deepens to #1e6fa8).
+- **Sky Accent Soft** (#38bdf8 / 0.14): selection backgrounds and soft hover tints.
 
 ### Secondary
-- **Meter Amber** (#fbbf24): the multimeter's own mode colour and caution states. Never used for generic emphasis.
+- **Caution Amber** (#f9e2af): the multimeter's own mode colour and caution states. Never used for generic emphasis.
 
 ### Tertiary
 - **Live Signal Emerald** (#34d399): a signal that is currently live or changing. Reserved for live data only.
 
 ### Neutral
-- **Console Black** (#020617, neutral-950): page background.
-- **Surface** (#0f172a, neutral-900): cards, panels, popovers.
-- **Raised Surface** (#1e293b, neutral-800): inputs, secondary buttons, hover states.
-- **Border** (#334155, neutral-700): dividers and ghost borders.
-- **Muted Text** (#64748b–#94a3b8, neutral-500/400): secondary labels and disabled text.
-- **Body Text** (#cbd5e1–#f1f5f9, neutral-300/100): primary readable text.
+- **Console Black** (#17171a, --hd-bg): page background.
+- **Surface** (#1e1e2e, --hd-surface): cards, panels, popovers.
+- **Deep Surface** (#11111b, --hd-bg-deep): recessed wells, code blocks, canvas backdrop.
+- **Alt Surface** (#181825, --hd-surface-alt): sidebars and secondary panels.
+- **Border** (#313244, --hd-border): dividers and ghost borders.
+- **Strong Border** (#45475a, --hd-border-strong): hover/focus borders.
+- **Body Text** (#cdd6f4, --hd-text): primary readable text.
+- **Muted Text** (#9399b2, --hd-muted): secondary labels and disabled text.
+- **Faint Text** (#6c7086, --hd-faint): tertiary labels and placeholders.
 
 ### Signal
 - **Destructive Red** (#ef4444): errors and destructive actions only.
@@ -129,7 +132,7 @@ The palette is a dark slate console with one interactive accent and three reserv
 ### Named Rules
 **The One Voice Rule.** The primary accent is used on ≤10% of any given screen. Its rarity is the point; a panel that steals the accent has taken the one cue that means "this is yours to press".
 
-**The Reserved Colour Rule.** Amber is the meter's. Emerald is live data. Red is destructive. None of them may be borrowed for decoration or generic emphasis.
+**The Reserved Colour Rule.** Amber is the meter's and caution's. Emerald is live data. Red is destructive. None of them may be borrowed for decoration or generic emphasis.
 
 ## Typography
 
