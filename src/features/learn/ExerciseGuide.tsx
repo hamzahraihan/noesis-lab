@@ -98,23 +98,23 @@ export function ExerciseGuide({
       <DialogContent
         showCloseButton={false}
         aria-describedby={undefined}
-        className="guide-panel flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden bg-slate-900 p-0 sm:max-w-3xl"
+        className="guide-panel flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden bg-[var(--hd-surface)] p-0 sm:max-w-3xl"
       >
         <DialogTitle className="sr-only">{exercise.title}</DialogTitle>
         {/* Header: what this is, and the way out. */}
-        <div className="flex shrink-0 items-start gap-3 border-b border-slate-800 px-5 pt-4 pb-3">
-          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-none bg-sky-500/15 text-sky-400">
+        <div className="flex shrink-0 items-start gap-3 border-b border-[var(--hd-border)] px-5 pt-4 pb-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-none bg-sky-500/15 text-[var(--hd-accent)]">
             <ReaderIcon className="icon" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-[11px] tracking-wide text-slate-500">
+            <p className="font-mono text-[11px] tracking-wide text-[var(--hd-muted)]">
               EXERCISE {exercise.id} · {exercise.difficulty.toUpperCase()} ·{' '}
               {exercise.minutes.toUpperCase()}
             </p>
-            <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-balance text-slate-100">
+            <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-balance text-[var(--hd-text)]">
               {exercise.title}
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">{exercise.module}</p>
+            <p className="mt-0.5 text-xs text-[var(--hd-muted)]">{exercise.module}</p>
           </div>
           <Button
             type="button"
@@ -131,15 +131,15 @@ export function ExerciseGuide({
 
         {/* Progress: how far through the build. A linear bar, because it is
             real content — which step the learner is on — not decoration. */}
-        <div className="shrink-0 border-b border-slate-800 px-5 py-2.5">
+        <div className="shrink-0 border-b border-[var(--hd-border)] px-5 py-2.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">
+            <span className="text-[var(--hd-muted)]">
               Step {Math.min(stepIndex + 1, totalSteps)} of {totalSteps}
             </span>
-            <span className="num text-slate-500">{doneCount} done</span>
+            <span className="num text-[var(--hd-muted)]">{doneCount} done</span>
           </div>
           <div
-            className="mt-1.5 h-1 overflow-hidden rounded-none bg-slate-800"
+            className="mt-1.5 h-1 overflow-hidden rounded-none bg-[var(--hd-border)]"
             role="progressbar"
             aria-valuenow={doneCount}
             aria-valuemin={0}
@@ -155,13 +155,13 @@ export function ExerciseGuide({
 
         {/* Body: brief first, then the current step, then reference tables. */}
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4">
-          <p className="max-w-[65ch] text-sm leading-relaxed text-slate-300">{exercise.brief}</p>
+          <p className="max-w-[65ch] text-sm leading-relaxed text-[var(--hd-text)]">{exercise.brief}</p>
 
           <div className="flex flex-wrap gap-1.5">
             {exercise.concepts.map((concept) => (
               <span
                 key={concept}
-                className="rounded-none bg-slate-800 px-2 py-1 text-[11px] leading-tight text-slate-400"
+                className="rounded-none bg-[var(--hd-border)] px-2 py-1 text-[11px] leading-tight text-[var(--hd-muted)]"
               >
                 {concept}
               </span>
@@ -175,10 +175,10 @@ export function ExerciseGuide({
            * bench itself is where it runs.
            */}
           <figure>
-            <div className="overflow-hidden rounded-none border border-slate-800 bg-slate-950">
+            <div className="overflow-hidden rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)]">
               <ExercisePreview exercise={exercise} fit="slice" className="h-32 w-full" />
             </div>
-            <figcaption className="mt-1.5 text-xs leading-relaxed text-slate-500">
+            <figcaption className="mt-1.5 text-xs leading-relaxed text-[var(--hd-muted)]">
               What you are building toward — the finished wiring.
             </figcaption>
           </figure>
@@ -191,7 +191,7 @@ export function ExerciseGuide({
               </CardTitle>
               <ul className="mt-2 space-y-1.5">
                 {exercise.solution.working.map((sign) => (
-                  <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-slate-400">
+                  <li key={sign} className="flex gap-2.5 text-sm leading-relaxed text-[var(--hd-muted)]">
                     <CheckIcon
                       className="icon-sm mt-0.5 shrink-0 text-emerald-500"
                       aria-hidden="true"
@@ -208,8 +208,8 @@ export function ExerciseGuide({
               <CheckIcon className="icon-sm" aria-hidden="true" />
               Build it
             </CardTitle>
-            <div className="mt-2.5 rounded-none border border-slate-700/80 bg-slate-950/60 p-4">
-              <p className="text-sm leading-relaxed text-slate-200">{currentStep}</p>
+            <div className="mt-2.5 rounded-none border border-[var(--hd-border-strong)]/80 bg-[var(--hd-bg-deep)]/60 p-4">
+              <p className="text-sm leading-relaxed text-[var(--hd-text)]">{currentStep}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
@@ -241,7 +241,7 @@ export function ExerciseGuide({
                     <ArrowRightIcon className="icon" aria-hidden="true" />
                   </Button>
                 ) : (
-                  <span className="text-xs text-slate-500">Last step — press Run when ready.</span>
+                  <span className="text-xs text-[var(--hd-muted)]">Last step — press Run when ready.</span>
                 )}
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Jump to a step">
@@ -255,10 +255,10 @@ export function ExerciseGuide({
                     title={`Step ${index + 1}`}
                     className={`size-6 rounded-none font-mono text-[11px] transition-colors ${
                       index === stepIndex
-                        ? 'bg-sky-600 text-white'
+                        ? 'bg-[var(--hd-accent)] text-white'
                         : done.has(index)
-                          ? 'bg-emerald-950 text-emerald-400'
-                          : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'
+                          ? 'bg-emerald-950 text-[var(--hd-success)]'
+                          : 'bg-[var(--hd-border)] text-[var(--hd-muted)] hover:bg-[var(--hd-border-strong)] hover:text-[var(--hd-text)]'
                     }`}
                   >
                     {index + 1}
@@ -278,18 +278,18 @@ export function ExerciseGuide({
                 {exercise.wiring.map((row, index) => (
                   <tr
                     key={`${row.pin}-${row.part}-${row.terminal}-${index}`}
-                    className="border-b border-slate-800/60 last:border-0"
+                    className="border-b border-[var(--hd-border)]/60 last:border-0"
                   >
                     <td
                       className={`w-16 py-1.5 pr-3 font-mono text-xs ${
-                        isBoardPin(row.pin) ? 'text-sky-400' : 'text-slate-500'
+                        isBoardPin(row.pin) ? 'text-[var(--hd-accent)]' : 'text-[var(--hd-muted)]'
                       }`}
                     >
                       {row.pin}
                     </td>
-                    <td className="py-1.5 pr-3 text-slate-200">{row.part}</td>
-                    <td className="py-1.5 pr-3 font-mono text-xs text-slate-400">{row.terminal}</td>
-                    <td className="py-1.5 text-slate-400">{row.goesTo}</td>
+                    <td className="py-1.5 pr-3 text-[var(--hd-text)]">{row.part}</td>
+                    <td className="py-1.5 pr-3 font-mono text-xs text-[var(--hd-muted)]">{row.terminal}</td>
+                    <td className="py-1.5 text-[var(--hd-muted)]">{row.goesTo}</td>
                   </tr>
                 ))}
               </tbody>
@@ -301,11 +301,11 @@ export function ExerciseGuide({
             <ul className="mt-2.5 space-y-1.5">
               {exercise.parts.map((entry) => (
                 <li key={entry.name} className="flex gap-2.5 text-sm">
-                  <span className="num w-7 shrink-0 text-right font-mono text-xs text-slate-500">
+                  <span className="num w-7 shrink-0 text-right font-mono text-xs text-[var(--hd-muted)]">
                     {entry.qty}×
                   </span>
-                  <span className="text-slate-200">{entry.name}</span>
-                  <span className="text-slate-500">— {entry.why}</span>
+                  <span className="text-[var(--hd-text)]">{entry.name}</span>
+                  <span className="text-[var(--hd-muted)]">— {entry.why}</span>
                 </li>
               ))}
             </ul>
@@ -320,7 +320,7 @@ export function ExerciseGuide({
               <p className="mt-1.5 text-sm font-medium text-amber-100/90">
                 {exercise.fault.break_}
               </p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-400">
+              <p className="mt-1 text-sm leading-relaxed text-[var(--hd-muted)]">
                 {exercise.fault.teaches}
               </p>
             </div>
@@ -328,17 +328,17 @@ export function ExerciseGuide({
 
           <section aria-label="Hints">
             <CardTitle className="flex items-center gap-2">Stuck?</CardTitle>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            <p className="mt-2 text-sm leading-relaxed text-[var(--hd-muted)]">
               Try it first — the guessing is the skill. Take hints one at a time.
             </p>
             <div className="mt-2.5 space-y-2">
               {exercise.hints.slice(0, hintsRevealed).map((hint) => (
                 <div
                   key={hint.when}
-                  className="rounded-none border border-slate-800 bg-slate-950/60 p-3.5"
+                  className="rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)]/60 p-3.5"
                 >
-                  <p className="text-sm font-medium text-slate-200">{hint.when}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-slate-400">{hint.answer}</p>
+                  <p className="text-sm font-medium text-[var(--hd-text)]">{hint.when}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--hd-muted)]">{hint.answer}</p>
                 </div>
               ))}
             </div>
@@ -359,11 +359,11 @@ export function ExerciseGuide({
         </div>
 
         {/* Footer: the way back to the full lesson, and the way onto the bench. */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-800 bg-slate-950/40 px-5 py-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--hd-border)] bg-[var(--hd-bg-deep)]/40 px-5 py-3">
           <Button asChild variant="secondary" size="sm">
             <Link to={`/learn/${exercise.id}`}>Full lesson {exercise.id}</Link>
           </Button>
-          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500">
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--hd-muted)]">
             <input
               type="checkbox"
               checked={dontShow}
