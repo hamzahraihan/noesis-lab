@@ -154,6 +154,15 @@ export interface PartDefinition {
    */
   readonly knobs?: readonly KnobSpec[];
   /**
+   * The source of a `scripted` part's behaviour.
+   *
+   * Only `scripted` reads it, and it is data like everything else here: the
+   * runtime is what judges it (`simulation/scripted/runtime.ts`), and a script
+   * that will not load is a dead part with a diagnostic, never an import that
+   * silently does nothing.
+   */
+  readonly script?: string;
+  /**
    * True for a part with a momentary contact the operator presses and holds.
    *
    * Momentary contacts are held in state rather than described by a knob,

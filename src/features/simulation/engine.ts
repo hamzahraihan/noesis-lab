@@ -39,6 +39,7 @@ import { GROUND, type Element } from './elements';
 import { buildNetlist, type Netlist } from './netlist';
 import type { Bench, PartInstance } from './bench';
 import { NO_DYNAMIC_STATE, type DynamicState } from '@/features/parts';
+import { SCRIPTED_SAMPLE_MS, type ScriptedSampler } from './scripted/sampler';
 import {
   INTERNAL_PULLUP_OHMS,
   INPUT_IMPEDANCE_OHMS,
@@ -136,6 +137,15 @@ export class Engine {
    * (part of the key), while presses rebuild and null the cache anyway.
    */
   private solvedIrKey = '';
+  /**
+   * The last reading every scripted part gave, and who asks them.
+   *
+   * Sampling is the backend's job (`scripted/sampler.ts`): the engine only knows
+   * that some parts answer through a function, and how often to ask.
+   */
+  private scriptedValues: ReadonlyMap<string, number> = new Map();
+  private scriptedSampler: ScriptedSampler | null = null;
+  private scriptedSampledAtMs = Number.NEGATIVE_INFINITY;
   /** Topology generations: bumped on every netlist (re)assignment. */
   private topoRevision = 0;
   /**
@@ -246,6 +256,7 @@ export class Engine {
       this.relayEnergized,
       this.sonarMeasuring,
       this.irTransmitting !== null,
+      this.scriptedValues,
     );
     this.topoRevision++;
     this.solution = null;
@@ -1062,7 +1073,8 @@ export class Engine {
       // and one shared re-solve covers armature and transmission changes alike.
       const armaturesMoved = this.pumpRelays();
       const transmissionMoved = this.pumpIr();
-      if (armaturesMoved || transmissionMoved) {
+      const scriptedMoved = this.pumpScripted(timeMs);
+      if (armaturesMoved || transmissionMoved || scriptedMoved) {
         // An armature moved: the contact elements above are stale, so rebuild
         // the netlist once and re-solve. The coil is an independent resistor,
         // so its volts barely move with the contacts and one pass converges.
@@ -1072,6 +1084,7 @@ export class Engine {
           this.relayEnergized,
           this.sonarMeasuring,
           this.irTransmitting !== null,
+          this.scriptedValues,
         );
         this.netlist = netlist;
         this.topoRevision++;
@@ -1128,6 +1141,7 @@ export class Engine {
       this.relayEnergized,
       this.sonarMeasuring,
       this.irTransmitting !== null,
+      this.scriptedValues,
     );
     this.topoRevision++;
     this.solution = null;
@@ -1245,6 +1259,58 @@ export class Engine {
    * pass. Reads both coil ends through the pin map, so an unwired coil
    * rests at 0 V and stays on NC.
    */
+  /**
+   * Asks the scripted parts, at the sampler's cadence, and says whether any
+   * answer changed.
+   *
+   * A changed answer needs a fresh netlist because a scripted part *is* its
+   * divider: the resistance is the reading. Unchanged answers are free -- that is
+   * the whole reason the cadence exists, since the script call costs
+   * microseconds and the rebuild costs a solve.
+   */
+  private pumpScripted(timeMs: number): boolean {
+    const sampler = this.scriptedSampler;
+    if (sampler === null) return false;
+    if (timeMs - this.scriptedSampledAtMs < SCRIPTED_SAMPLE_MS) return false;
+    this.scriptedSampledAtMs = timeMs;
+    const next = sampler(timeMs, this.dynamicState);
+    if (next.size === this.scriptedValues.size) {
+      let same = true;
+      for (const [id, value] of next) {
+        if (this.scriptedValues.get(id) !== value) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+    this.scriptedValues = next;
+    return true;
+  }
+
+  /**
+   * Installs the scripted sampler (a backend's job, once its runtime is ready).
+   *
+   * Rebuilds, because a bench that had no sampler may have been built with every
+   * scripted part reading zero, and the first sample is the correction.
+   */
+  /**
+   * A control moved: the next solve re-reads the scripts, cadence or not.
+   *
+   * The cadence exists to bound rebuilds on a *running* bench, where simulated
+   * time moves on its own. A knob turn is the operator saying the answer just
+   * changed, and an idle bench has no next sample to wait for.
+   */
+  resampleScripted(): void {
+    this.scriptedSampledAtMs = Number.NEGATIVE_INFINITY;
+  }
+
+  setScriptedSampler(sampler: ScriptedSampler | null): void {
+    this.scriptedSampler = sampler;
+    this.scriptedSampledAtMs = Number.NEGATIVE_INFINITY;
+    if (sampler !== null) this.rebuild();
+  }
+
   private pumpRelays(): boolean {
     const netlist = this.netlist;
     if (!netlist) return false;

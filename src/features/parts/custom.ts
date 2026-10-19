@@ -38,6 +38,15 @@ export const PART_FILE_VERSION = 1;
  */
 export const PART_FILE_MAX_BYTES = 262_144;
 
+/**
+ * How much source a part file may carry.
+ *
+ * The data half's rule is that a part is one file with nothing to fetch; a script
+ * is still text, so it has a ceiling -- comfortably above a real sensor, far
+ * below a bundle.
+ */
+export const SCRIPT_MAX_CHARS = 32_768;
+
 /** The kinds a custom part may be: the board and the breadboard are not parts. */
 const RESERVED_KINDS = new Set(['mcu', 'breadboard']);
 
@@ -58,6 +67,7 @@ const DEFINITION_KEYS = new Set([
   'ramPixels',
   'glassMm',
   'large',
+  'script',
 ]);
 
 const PIN_KEYS = new Set(['id', 'label', 'x', 'y', 'net']);
@@ -113,6 +123,7 @@ const INTEGER_PARAMS: Readonly<
  * is what makes "the ids the behaviour reads" a lookup instead of a judgement.
  */
 function layoutParam(kind: string): string | null {
+  if (kind === 'scripted') return 'bus';
   if (kind === 'display') return 'controller';
   if (kind === 'sensor-module' || kind === 'lcd') return 'variant';
   if (kind === 'i2c-sensor') return 'device';
@@ -159,9 +170,21 @@ function layoutKey(component: ComponentSpec): string {
 /** The kinds a custom part may use: every kind the catalogue ships, less two. */
 export function importableKinds(): readonly string[] {
   if (kinds !== null) return kinds;
-  kinds = [...new Set(shippedShapes().map((shape) => shape.kind))].sort();
+  // `scripted` is the one kind with no shipped part to derive from: the host has
+  // no model for it, which is the whole point, so its bus and pins are named
+  // here the way a sibling kind's would be derived.
+  kinds = [...new Set([...shippedShapes().map((shape) => shape.kind), 'scripted'])].sort();
   return kinds;
 }
+
+/** The buses a scripted part may speak, and the pins each one brings. */
+const SCRIPTED_BUSES: Readonly<Record<string, readonly string[]>> = {
+  analog: ['AOUT', 'VCC', 'GND'],
+  digital: ['DOUT', 'VCC', 'GND'],
+};
+
+/** The rails a scripted part's own leads may join, as the bench's modules do. */
+const SCRIPTED_NETS: readonly string[] = ['GND', 'VCC'];
 
 /** The shipped definitions of a kind, optionally narrowed to one layout. */
 function shapesOf(kind: string, layout?: string): readonly ShippedShape[] {
@@ -329,6 +352,7 @@ function checkComponent(value: unknown): ComponentVerdict {
   if (layout !== null) allowed.add(layout);
   // The diode, which is a name in the file rather than the bench's numbers.
   if (kind === 'led') allowed.add('profile');
+  if (kind === 'scripted') allowed.add('bus');
   if (OHM_KINDS.has(kind)) allowed.add('ohms');
   if (kind === 'capacitor') allowed.add('farads');
   if (kind === 'display') allowed.add('address');
@@ -338,7 +362,14 @@ function checkComponent(value: unknown): ComponentVerdict {
     if (!allowed.has(key)) return bad(`component.${key} is not part of "${kind}"`);
   }
 
+  if (kind === 'scripted') {
+    const bus = component.bus;
+    if (typeof bus !== 'string' || SCRIPTED_BUSES[bus] === undefined) {
+      return bad(`component.bus must be one of ${Object.keys(SCRIPTED_BUSES).join(', ')}`);
+    }
+  }
   for (const param of ENUM_PARAMS) {
+    if (kind === 'scripted') break;
     if (!(param in component)) continue;
     const values = stringValuesOf(kind, param);
     if (values.length === 0) return bad(`component.${param} is not part of "${kind}"`);
@@ -445,7 +476,10 @@ function checkPins(
     if (typeof pin.label !== 'string') return `pins[${index}].label must be text`;
     if (pin.net !== undefined) {
       if (typeof pin.net !== 'string') return `pins[${index}].net must be a name`;
-      const nets = netNamesFor(component.kind, layoutKey(component));
+      const nets =
+        component.kind === 'scripted'
+          ? SCRIPTED_NETS
+          : netNamesFor(component.kind, layoutKey(component));
       if (!nets.includes(pin.net)) {
         return `pins[${index}].net "${pin.net}" is not one this kind's own leads join (${nets.join(', ') || 'none'})`;
       }
@@ -459,7 +493,10 @@ function checkPins(
     }
   }
 
-  const expected = pinIdsForComponent(component);
+  const expected =
+    component.kind === 'scripted'
+      ? (SCRIPTED_BUSES[String(component.bus)] ?? null)
+      : pinIdsForComponent(component);
   if (expected === null) {
     return 'no bench part of this kind and these parameters exists, so nothing would read its pins';
   }
@@ -499,8 +536,12 @@ function checkKnobs(value: unknown, component: ComponentSpec): string | null {
   // None at all is always legal: the behaviour then reads the value its own
   // constants default to. What is not legal is a control nothing asks for.
   if (value.length === 0) return null;
+  // A scripted part's knobs are the script's own, which is the one place this
+  // rule cannot come from the catalogue: no shipped part reads them, but the
+  // script that came with the file does.
   const allowed = knobIdsFor(component.kind, layoutKey(component));
-  if (allowed.length === 0) return `this kind's behaviour reads no knobs`;
+  const scripted = component.kind === 'scripted';
+  if (!scripted && allowed.length === 0) return `this kind's behaviour reads no knobs`;
   const ids = new Set<string>();
   for (const [index, entry] of value.entries()) {
     if (!isPlainObject(entry)) return `knobs[${index}] must be an object`;
@@ -510,7 +551,7 @@ function checkKnobs(value: unknown, component: ComponentSpec): string | null {
     }
     if (typeof knob.id !== 'string' || knob.id === '') return `knobs[${index}].id must be a name`;
     if (ids.has(knob.id)) return `two knobs are called "${knob.id}"`;
-    if (!allowed.includes(knob.id)) {
+    if (!scripted && !allowed.includes(knob.id)) {
       return `knobs[${index}].id "${knob.id}" is not one this kind's behaviour reads (${allowed.join(', ')})`;
     }
     ids.add(knob.id);
@@ -641,6 +682,17 @@ export function validatePartDefinition(value: unknown): PartVerdict {
 
   // Fields the kind's own parts all carry, because the behaviour reads them: an
   // LED's diode, a button's momentary contact.
+  const script = part.script;
+  if (component.kind === 'scripted') {
+    if (typeof script !== 'string' || script.trim() === '') {
+      return refuse('a scripted part must carry its script');
+    }
+    if (script.length > SCRIPT_MAX_CHARS) {
+      return refuse(`a script may be at most ${SCRIPT_MAX_CHARS} characters`);
+    }
+  } else if (script !== undefined) {
+    return refuse('script is only for a scripted part');
+  }
   const profile = (component as unknown as Record<string, unknown>).profile;
   if (componentAlwaysHas(component.kind, layout, 'profile') && profile === undefined) {
     return refuse(`${component.kind} must name a diode in component.profile`);

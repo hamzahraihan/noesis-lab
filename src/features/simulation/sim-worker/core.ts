@@ -59,6 +59,8 @@ import { fetchRp2040Assets, type Rp2040Assets } from '../rp2040/assets';
 import { buildLittlefsImage } from '../rp2040/image';
 import type { Rp2040Hooks } from '../rp2040/backend';
 import { GROUND } from '../elements';
+import { loadScriptedRuntime } from '../scripted/load';
+import { createScriptedSampler } from '../scripted/sampler';
 import { I2CBus } from '../bus/i2c';
 import { SpiBus } from '../bus/spi';
 import { BusLog } from '../bus/log';
@@ -268,6 +270,26 @@ class SimCore implements CoreHandle {
     );
   }
 
+  /**
+   * The scripting half, loading the first time a scripted part exists.
+   *
+   * Lazy for the same reason as the in-page backend: 492 KB of QuickJS behind a
+   * dynamic import, and a bench that never mentions a script must never fetch
+   * it. Install ing the sampler rebuilds the netlist, so the first sample
+   * replaces the safe zero a scripted part read until then.
+   */
+  private scriptedStart: Promise<void> | null = null;
+
+  private ensureScriptedRuntime(): void {
+    if (!this.bench.parts.some((part) => part.definition.script !== undefined)) return;
+    this.scriptedStart ??= this.startScriptedRuntime();
+  }
+
+  private async startScriptedRuntime(): Promise<void> {
+    const runtime = await loadScriptedRuntime();
+    this.engine.setScriptedSampler(createScriptedSampler(runtime, () => this.bench.parts));
+  }
+
   get timeMs(): number {
     return this.engine.timeMs;
   }
@@ -335,6 +357,7 @@ class SimCore implements CoreHandle {
     if (execution === 'rp2040')
       void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
     this.engine.rebuild(bench, this.controls);
+    this.ensureScriptedRuntime();
     this.engine.settle();
     this.ensureSnapshotBuffer();
   }
@@ -415,6 +438,7 @@ class SimCore implements CoreHandle {
       const value = op.value;
       if (typeof value === 'object' && value !== null) {
         this.controls.setKnob(op.partId, value.spec, value.value);
+        this.engine.resampleScripted();
       }
     }
     this.engine.rebuild(this.bench, this.controls);

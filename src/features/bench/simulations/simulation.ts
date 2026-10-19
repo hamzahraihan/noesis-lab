@@ -15,7 +15,7 @@ import {
   type Terminal,
   type WireEnd,
 } from '@/features/simulation';
-import { Engine } from '@/features/simulation';
+import { createScriptedSampler, Engine, loadScriptedRuntime } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { compile } from '@/features/simulation';
 import { pinRefFor } from '@/features/simulation';
@@ -292,6 +292,32 @@ export class Simulation {
   private readonly busLog = new BusLog();
 
   private serialDirty = true;
+
+  private scriptedStart: Promise<void> | null = null;
+
+  /**
+   * The scripting half, loading on first ask.
+   *
+   * Lazy on purpose: the runtime is 492 KB of QuickJS behind a dynamic import,
+   * so a bench with no scripted parts must never fetch it -- and every test that
+   * builds a bench is such a bench. The promise is the signal to wait on
+   * (nothing here sleeps); it is already resolved when no part needs one.
+   */
+  async scriptedReady(): Promise<void> {
+    if (!this.bench.parts.some((part) => part.definition.script !== undefined)) return;
+    this.scriptedStart ??= this.startScriptedRuntime();
+    await this.scriptedStart;
+  }
+
+  /**
+   * Starts the scripting half. The runtime is owned by the sampler's closure,
+   * which lives as long as the engine does; a page navigation is what frees it,
+   * exactly as it frees the bench.
+   */
+  private async startScriptedRuntime(): Promise<void> {
+    const runtime = await loadScriptedRuntime();
+    this.engine.setScriptedSampler(createScriptedSampler(runtime, () => this.bench.parts));
+  }
 
   constructor(board: PartDefinition, deps?: SimulationDeps) {
     this.mcu = new McuRuntime(board);
@@ -1184,6 +1210,9 @@ export class Simulation {
       throw new Error('part placement produced an unloadable circuit');
     }
     this.pushUndo(before);
+    // A scripted part is the one thing that needs the runtime; start loading it
+    // the moment one exists, and let `scriptedReady` be what anyone waits on.
+    void this.scriptedReady();
     const placed = this.bench.parts.find((candidate) => candidate.id === result.partId);
     if (!placed) throw new Error(`part ${result.partId} was not placed`);
     return placed;
@@ -1206,6 +1235,7 @@ export class Simulation {
     const errors = this.adoptCircuit(doc);
     // A seed is a starting point, not a list of edits: nothing to step back to.
     if (errors.length === 0) this.clearHistory();
+    void this.scriptedReady();
     return errors;
   }
 
@@ -1295,6 +1325,7 @@ export class Simulation {
   /** Moves one of a part's controls and re-solves around it. */
   setKnob(partId: string, spec: KnobSpec, value: number): void {
     this.recordKnob(partId, spec, value);
+    this.engine.resampleScripted();
     this.rebuild();
   }
 

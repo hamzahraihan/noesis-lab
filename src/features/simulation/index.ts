@@ -57,6 +57,19 @@ export * from './net/network';
 // the notice names the hosts, and nothing else may reach `fetch`.
 export * from './net/live-hosts';
 export * from './net/bridge';
+/*
+ * The scripting half of custom parts: the runtime is loaded lazily (`load.ts`),
+ * so exporting the loader costs the bundle nothing and the 492 KB of QuickJS is
+ * fetched only when a scripted part exists.
+ */
+export * from './scripted/load';
+export * from './scripted/sampler';
+export type {
+  ScriptedReading,
+  ScriptedRuntime,
+  ScriptedPart,
+  ScriptedBus,
+} from './scripted/runtime';
 // The bench's colour panel, exported for the same reason: both backends drive
 // one port, and the gate that makes it obey the wires lives in the port.
 export * from './display/tft';

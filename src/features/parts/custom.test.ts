@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PART_FILE_VERSION,
+  SCRIPT_MAX_CHARS,
   importableKinds,
   layoutValuesFor,
   partFileText,
@@ -54,7 +55,10 @@ describe('the derivation', () => {
     expect(kinds).toContain('ir-remote');
     expect(kinds).not.toContain('mcu');
     expect(kinds).not.toContain('breadboard');
-    expect(kinds.length).toBe(35);
+    // 35 shipped kinds plus `scripted`, which ships no part on purpose: the
+    // whole point of that kind is that the host has no model for it.
+    expect(kinds).toContain('scripted');
+    expect(kinds.length).toBe(36);
   });
 
   it("reads a kind's pins from the shipped part of that kind", () => {
@@ -80,6 +84,105 @@ describe('the derivation', () => {
     expect(layoutValuesFor('sensor-module')).toContain('pir');
     // A kind with no layout parameter has no values to choose from.
     expect(layoutValuesFor('resistor')).toEqual([]);
+  });
+});
+
+/**
+ * A scripted part, in the shape a file would carry it.
+ *
+ * This is the kind with no shipped twin: nothing in the catalogue tells the
+ * validator what its pins are, so the bus does.
+ */
+function goodScript(): Record<string, unknown> {
+  return {
+    id: 'soil-probe',
+    name: 'Soil moisture probe',
+    category: 'input',
+    widthMm: 20,
+    heightMm: 12,
+    bodyColour: '#5b6b4a',
+    legendColour: '#f2f2ee',
+    component: { kind: 'scripted', bus: 'analog' },
+    script: '({ analog: () => 0.5 })',
+    pins: [
+      { id: 'AOUT', label: 'OUT', x: 0, y: 6 },
+      { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+      { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+    ],
+  };
+}
+
+describe('a scripted part', () => {
+  it('needs no shipped twin: the bus names its pins', () => {
+    const verdict = validatePartDefinition(goodScript());
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.definition.component).toEqual({ kind: 'scripted', bus: 'analog' });
+    expect(verdict.definition.script).toContain('analog');
+  });
+
+  it('speaks analog or digital and nothing else', () => {
+    expect(reasonFor({ ...goodScript(), component: { kind: 'scripted' } })).toContain(
+      'component.bus must be one of analog, digital',
+    );
+    expect(reasonFor({ ...goodScript(), component: { kind: 'scripted', bus: 'i2c' } })).toContain(
+      'component.bus must be one of analog, digital',
+    );
+    const digital = goodScript();
+    digital.component = { kind: 'scripted', bus: 'digital' };
+    digital.pins = [
+      { id: 'DOUT', label: 'OUT', x: 0, y: 6 },
+      { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+      { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+    ];
+    expect(validatePartDefinition(digital).ok).toBe(true);
+  });
+
+  it('draws the pins its bus brings', () => {
+    const wrong = goodScript();
+    wrong.pins = [
+      { id: 'SIG', label: 'OUT', x: 0, y: 6 },
+      { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+      { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+    ];
+    expect(reasonFor(wrong)).toContain('AOUT');
+  });
+
+  it('carries its own script, and a script belongs to it alone', () => {
+    expect(reasonFor({ ...goodScript(), script: undefined })).toContain('must carry its script');
+    expect(reasonFor({ ...goodScript(), script: '   ' })).toContain('must carry its script');
+    expect(reasonFor({ ...goodResistor(), script: '({ resistor: () => 10 })' })).toContain(
+      'script is only for a scripted part',
+    );
+  });
+
+  it('bounds the script, because a part is one file with nothing to fetch', () => {
+    const huge = goodScript();
+    huge.script = `/*${'x'.repeat(SCRIPT_MAX_CHARS)}*/`;
+    expect(reasonFor(huge)).toContain('at most');
+  });
+
+  it('round-trips through the file the app writes, script and all', () => {
+    const verdict = validatePartDefinition(goodScript());
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    const read = readPartFile(partFileText(verdict.definition), 'exported.part.json');
+    expect(read.refused).toEqual([]);
+    const back = read.definitions[0];
+    expect(back?.script).toBe('({ analog: () => 0.5 })');
+    expect(back?.component).toEqual({ kind: 'scripted', bus: 'analog' });
+    expect(back?.pins.map((pin) => pin.id)).toEqual(['AOUT', 'VCC', 'GND']);
+  });
+
+  it('leaves the knobs to the script, but still checks they can be turned', () => {
+    const knobbed = goodScript();
+    knobbed.knobs = [
+      { id: 'moisture', label: 'Moisture', min: 0, max: 100, step: 1, defaultValue: 40 },
+    ];
+    expect(validatePartDefinition(knobbed).ok).toBe(true);
+    const broken = goodScript();
+    broken.knobs = [{ id: 'moisture', label: 'Moisture', min: 100, max: 0, step: 1 }];
+    expect(reasonFor(broken)).toContain('min must be below max');
   });
 });
 
@@ -318,8 +421,10 @@ describe('the shipped catalogue', () => {
       ),
     );
     // A kind with no shipped part would have no pin ids to derive and no
-    // parameters to copy, so the format could not describe it at all.
-    expect([...importable].filter((kind) => !covered.has(kind))).toEqual([]);
+    // parameters to copy, so the format could not describe it at all -- with one
+    // exception, which is the point of the kind: a scripted part's pins and
+    // parameters belong to its script, and `custom.ts` names them itself.
+    expect([...importable].filter((kind) => !covered.has(kind))).toEqual(['scripted']);
   });
 });
 
