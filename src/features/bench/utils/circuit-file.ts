@@ -9,7 +9,7 @@
  * publishing one become the same act.
  */
 
-import { parseCircuit, type CircuitDocument } from '@/features/simulation';
+import { documentForFile, parseCircuit, type CircuitDocument } from '@/features/simulation';
 
 /**
  * A wrong file cannot wedge the read. The whole shipped corpus — seventeen
@@ -36,9 +36,13 @@ export function circuitFileName(boardId: string): string {
 /**
  * A document as file text: two-space JSON and a trailing newline, which is
  * exactly how `decompile`'s output is stored under `learn/circuits/`.
+ *
+ * Written through `documentForFile`, so the file carries the definitions its
+ * parts actually use and nothing else: a circuit of shipped parts is byte-for-
+ * byte what it always was, and one that brought a part along says so.
  */
 export function circuitFileText(doc: CircuitDocument): string {
-  return `${JSON.stringify(doc, null, 2)}\n`;
+  return `${JSON.stringify(documentForFile(doc), null, 2)}\n`;
 }
 
 /**
