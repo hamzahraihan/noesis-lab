@@ -6,8 +6,8 @@
  * panels are instruments, and an instrument that needs explaining is a bad one.
  */
 
-import Editor, { type OnMount } from '@monaco-editor/react';
-import { memo, useEffect, useMemo, useRef } from 'react';
+import type { OnMount } from '@monaco-editor/react';
+import { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
@@ -47,7 +47,7 @@ import {
 } from './library-manager';
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
-import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './monaco-setup';
+import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './editor-constants';
 import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import type { Example } from '@/features/learn';
 import {
@@ -411,6 +411,26 @@ const SERIAL_TAIL_LINES = 100;
 
 /** Tier-2 libraries download once and then cache: until then the bench is offline for them. */
 const NOT_FETCHED_NOTE = 'not fetched — needs network once';
+
+/*
+ * Monaco arrives as its own chunk, the first time the firmware pane or a
+ * library slot renders. Both are behind toggles a session may never open, and
+ * the chunk is megabytes, so paying for it at load is the difference between a
+ * fast first paint and one that waits on an editor nobody asked for.
+ */
+const CodeEditor = lazy(() => import('./CodeEditor'));
+
+/** Holds the editor's box while its chunk arrives, so the layout does not jump. */
+function EditorFallback({ height }: { height: string }) {
+  return (
+    <div
+      style={{ height }}
+      className="flex items-center justify-center text-xs text-[var(--hd-muted)]"
+    >
+      Loading editor…
+    </div>
+  );
+}
 
 export const SerialMonitor = memo(function SerialMonitor({ lines }: { lines: readonly string[] }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -1294,30 +1314,32 @@ export function FirmwareEditor({
               </div>
             </>
           )}
-          <Editor
-            height="100%"
-            language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
-            theme={FIRMWARE_THEME}
-            value={active?.content ?? ''}
-            onChange={(next) => {
-              if (active) handleContentChange(active.name, next ?? '');
-            }}
-            onMount={handleMount}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 12,
-              lineHeight: 19,
-              fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-              scrollBeyondLastLine: false,
-              smoothScrolling: true,
-              cursorBlinking: 'smooth',
-              padding: { top: 10, bottom: 10 },
-              renderLineHighlight: 'none',
-              automaticLayout: true,
-              tabSize: 2,
-              wordWrap: 'off',
-            }}
-          />
+          <Suspense fallback={<EditorFallback height="100%" />}>
+            <CodeEditor
+              height="100%"
+              language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
+              theme={FIRMWARE_THEME}
+              value={active?.content ?? ''}
+              onChange={(next) => {
+                if (active) handleContentChange(active.name, next ?? '');
+              }}
+              onMount={handleMount}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 12,
+                lineHeight: 19,
+                fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                scrollBeyondLastLine: false,
+                smoothScrolling: true,
+                cursorBlinking: 'smooth',
+                padding: { top: 10, bottom: 10 },
+                renderLineHighlight: 'none',
+                automaticLayout: true,
+                tabSize: 2,
+                wordWrap: 'off',
+              }}
+            />
+          </Suspense>
           {/*
            * Libraries: the curated provided set plus the project's own custom
            * slots, in a popup over the editor rather than a section under it.
@@ -1865,30 +1887,32 @@ export function FirmwareEditor({
                   </Button>
                 </div>
                 {selectedSlotFile && activeSlotId && activeSlotPath ? (
-                  <Editor
-                    height="12rem"
-                    language={FIRMWARE_LANGUAGE}
-                    theme={FIRMWARE_THEME}
-                    value={selectedSlotFile.content}
-                    onChange={(next) => {
-                      handleSlotContentChange(activeSlotId, activeSlotPath, next ?? '');
-                    }}
-                    onMount={handleSlotMount}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 12,
-                      lineHeight: 19,
-                      fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-                      scrollBeyondLastLine: false,
-                      smoothScrolling: true,
-                      cursorBlinking: 'smooth',
-                      padding: { top: 10, bottom: 10 },
-                      renderLineHighlight: 'none',
-                      automaticLayout: true,
-                      tabSize: 2,
-                      wordWrap: 'off',
-                    }}
-                  />
+                  <Suspense fallback={<EditorFallback height="12rem" />}>
+                    <CodeEditor
+                      height="12rem"
+                      language={FIRMWARE_LANGUAGE}
+                      theme={FIRMWARE_THEME}
+                      value={selectedSlotFile.content}
+                      onChange={(next) => {
+                        handleSlotContentChange(activeSlotId, activeSlotPath, next ?? '');
+                      }}
+                      onMount={handleSlotMount}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 12,
+                        lineHeight: 19,
+                        fontFamily: "'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
+                        scrollBeyondLastLine: false,
+                        smoothScrolling: true,
+                        cursorBlinking: 'smooth',
+                        padding: { top: 10, bottom: 10 },
+                        renderLineHighlight: 'none',
+                        automaticLayout: true,
+                        tabSize: 2,
+                        wordWrap: 'off',
+                      }}
+                    />
+                  </Suspense>
                 ) : (
                   <p className="px-1 py-2 text-xs text-[var(--hd-faint)]">
                     Empty library: add a header and its sources from the Libraries popup.

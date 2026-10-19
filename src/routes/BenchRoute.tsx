@@ -2,11 +2,11 @@
 // DOM shell as props.
 //
 // The deep `@/features/bench/Bench` path is the T7 dispatch §2 composition
-// exemption: the shell pulls instruments/Panels → monaco-editor, so it stays
-// out of the node-safe `@/features/bench` barrel, and only src/app/** and
-// src/routes/** may import it deep. Passing learn content as props (rather
-// than letting Bench import it) is what keeps the bench → learn value
-// direction at zero — the boundary gate forbids it.
+// exemption: the shell is the DOM half of the bench, so it stays out of the
+// node-safe `@/features/bench` barrel, and only src/app/** and src/routes/**
+// may import it deep. Passing learn content as props (rather than letting
+// Bench import it) is what keeps the bench → learn value direction at zero —
+// the boundary gate forbids it.
 import Bench from '@/features/bench/components/Bench';
 import {
   BOARDS,

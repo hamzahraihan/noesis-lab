@@ -16,6 +16,7 @@ import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
 import tsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import { loader } from '@monaco-editor/react';
+import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './editor-constants';
 
 /**
  * Monaco runs its language services in web workers. Vite needs to be told it may
@@ -28,20 +29,6 @@ self.MonacoEnvironment = {
 };
 
 loader.config({ monaco });
-
-/** Arduino sketch files have no extension in the wild, so name the language. */
-export const FIRMWARE_LANGUAGE = 'arduino-cpp';
-
-/**
- * The Python the Pi runs.
- *
- * Monaco ships a Python tokenizer of its own, but it is aimed at CPython's
- * grammar -- `import`, `def`, classes, decorators -- most of which this VM
- * refuses. A name that highlights is a name that looks supported, so the
- * language is registered here against what actually runs: gpiozero's
- * constructors, and the handful of builtins the interpreter answers.
- */
-export const PYTHON_LANGUAGE = 'gpiozero-python';
 
 const PYTHON_KEYWORDS = [
   'and',
@@ -494,9 +481,6 @@ registerArduinoLanguage();
 
 registerPythonLanguage();
 
-/** Editor theme, so the code pane matches the rest of the bench. */
-export const FIRMWARE_THEME = 'noesis-dark';
-
 monaco.editor.defineTheme(FIRMWARE_THEME, {
   base: 'vs-dark',
   inherit: true,
@@ -518,5 +502,3 @@ monaco.editor.defineTheme(FIRMWARE_THEME, {
     'editorLineNumber.activeForeground': '#94a3b8',
   },
 });
-
-export { monaco };

@@ -4,9 +4,10 @@
 // no DOM/monaco chain, so tests and features/learn import through here.
 // Tier 2 — the DOM shell (Bench, Workbench) — lives behind explicit deep
 // paths `@/features/bench/Bench`, imported ONLY by the composition layer
-// (`src/app/**`, `src/routes/**`). Bench.tsx pulls instruments/Panels into
-// monaco-editor, which crashes vitest node collection (Task 5 reviewer), so
-// the shell must never transitively enter this barrel.
+// (`src/app/**`, `src/routes/**`): the shell runs in the browser, not in
+// vitest's node collection, so it must never transitively enter this barrel.
+// The editors below it reach Monaco through a lazy chunk
+// (`instruments/CodeEditor`), so a route pays for it only once one renders.
 export { Simulation } from './simulations/simulation';
 export {
   routeWire,
