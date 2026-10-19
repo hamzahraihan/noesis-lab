@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { BenchBuilder } from '@/features/simulation';
-import { arduinoUnoR3, DynamicState, rotateOffset } from '@/features/parts';
+import {
+  arduinoUnoR3,
+  DynamicState,
+  rotateOffset,
+  useCustomPartsStore,
+  type PartDefinition,
+} from '@/features/parts';
 import {
   compile,
   decompile,
+  documentForFile,
   parseCircuit,
   validateCircuit,
   type CircuitDocument,
@@ -339,5 +346,125 @@ describe('parseCircuit', () => {
     expect(() => parseCircuit({ ...minimalDoc, version: 2 }, '5.1')).toThrow(
       /5\.1: unsupported circuit version: 2/,
     );
+  });
+});
+
+/*
+ * A circuit that brings its own parts.
+ *
+ * The rule these legs pin: a part file is how a part is *authored*, and the
+ * circuit is how it *travels*. A document that names a part the build does not
+ * ship carries the definition, resolved before anything the local session
+ * imported -- so the same file produces the same bench on every machine.
+ */
+describe('a circuit that carries its parts', () => {
+  const probe = (script: string): PartDefinition => ({
+    id: 'soil-probe',
+    name: 'Soil moisture probe',
+    category: 'input',
+    widthMm: 20,
+    heightMm: 12,
+    bodyColour: '#5b6b4a',
+    legendColour: '#f2f2ee',
+    component: { kind: 'scripted', bus: 'analog' },
+    script,
+    pins: [
+      { id: 'AOUT', label: 'OUT', x: 0, y: 6 },
+      { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+      { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+    ],
+  });
+
+  const carried: CircuitDocument = {
+    version: 1,
+    parts: [{ id: 'probe', type: 'soil-probe', x: 0, y: 0, rotation: 0 }],
+    wires: [],
+    definitions: [probe('({ analog: () => 0.25 })')],
+  };
+
+  it('compiles a part the machine never imported', () => {
+    expect(useCustomPartsStore.getState().parts).toEqual([]);
+    const { bench, errors } = compile(carried);
+    expect(errors).toEqual([]);
+    expect(bench?.parts[0]?.definition.script).toContain('0.25');
+  });
+
+  it('resolves a wire against the definition the file brought', () => {
+    const wired: CircuitDocument = {
+      ...carried,
+      wires: [
+        {
+          id: 'w',
+          from: 'probe:AOUT',
+          to: 'probe:GND',
+          colour: '#ef4444',
+          gaugeAwg: 26,
+          bends: [],
+        },
+      ],
+    };
+    // `AOUT` exists only because the file says so: nothing shipped answers to it.
+    expect(compile(wired).errors).toEqual([]);
+  });
+
+  it('says a part has no definition anywhere, and where it looked', () => {
+    const orphan: CircuitDocument = { ...carried, definitions: undefined };
+    expect(() => parseCircuit(orphan, '7.1')).toThrow(
+      /7\.1: unknown part type: soil-probe \(not shipped, not imported, and this circuit carries no definition for it\)/,
+    );
+  });
+
+  it('refuses a definition the part validator refuses', () => {
+    const bad = {
+      ...carried,
+      definitions: [
+        { ...probe('({ analog: () => 0.5 })'), component: { kind: 'scripted', bus: 'i2c' } },
+      ],
+    };
+    expect(validateCircuit(bad).join('; ')).toContain('definitions[0] is not a part:');
+  });
+
+  it('refuses two definitions for one id, because a type names one part', () => {
+    const bad = {
+      ...carried,
+      definitions: [probe('({ analog: () => 0.1 })'), probe('({ analog: () => 0.9 })')],
+    };
+    expect(validateCircuit(bad)).toContain('duplicate definition: soil-probe');
+  });
+
+  it('lets the file win over an imported part of the same id', () => {
+    const imported = probe('({ analog: () => 0.9 })');
+    const outcome = useCustomPartsStore
+      .getState()
+      .import(JSON.stringify({ version: 1, parts: [imported] }), 'soil-probe.part.json');
+    expect(outcome.refused).toEqual([]);
+
+    const { bench, errors } = compile(carried);
+    expect(errors).toEqual([]);
+    // The circuit was written against 0.25; an import cannot change what a file
+    // means, which is the whole reason the definition travels with it.
+    expect(bench?.parts[0]?.definition.script).toContain('0.25');
+    useCustomPartsStore.getState().clear();
+  });
+
+  it('leaves a document of shipped parts exactly as it was', () => {
+    // Which is what keeps every circuit in `learn/circuits/` byte-identical.
+    expect(documentForFile(minimalDoc)).toBe(minimalDoc);
+  });
+
+  it('writes no field at all once nothing carried is placed', () => {
+    const empty = documentForFile({ ...carried, parts: [] });
+    expect('definitions' in empty).toBe(false);
+  });
+
+  it('writes only the definitions its parts use', () => {
+    const two: CircuitDocument = {
+      ...carried,
+      definitions: [
+        ...(carried.definitions ?? []),
+        { ...probe('({ analog: () => 0.5 })'), id: 'unused-probe' },
+      ],
+    };
+    expect(documentForFile(two).definitions?.map((entry) => entry.id)).toEqual(['soil-probe']);
   });
 });
