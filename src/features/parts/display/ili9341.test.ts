@@ -266,4 +266,42 @@ describe('ILI9341 frame revision', () => {
     const wrong = new Uint8ClampedArray(16);
     expect(display.toRgba(wrong)).not.toBe(wrong);
   });
+
+  /**
+   * The expansion walks rows and strides along them rather than asking
+   * `pixelAt` per pixel, and it does no bounds check inside the loop; this is
+   * the net under that walk. Every orientation, every pixel, and the bytes must
+   * be the ones the panel itself reports.
+   */
+  it('expands every orientation exactly as pixelAt reads it', () => {
+    const display = new Ili9341(480, 320);
+    display.fill(0, 0, 480, 40, 0x001f);
+    display.print('ROTATION', 12, 90, 0xf800);
+    display.fill(300, 200, 60, 60, 0x07e0);
+
+    for (const rotation of [0, 1, 2, 3] as const) {
+      display.setRotation(rotation);
+      const width = display.width;
+      const height = display.height;
+      const rgba = display.toRgba();
+
+      const reference = new Uint8ClampedArray(width * height * 4);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const colour = display.pixelAt(x, y);
+          const red = (colour >> 11) & 0x1f;
+          const green = (colour >> 5) & 0x3f;
+          const blue = colour & 0x1f;
+          const i = (y * width + x) * 4;
+          reference[i] = (red << 3) | (red >> 2);
+          reference[i + 1] = (green << 2) | (green >> 4);
+          reference[i + 2] = (blue << 3) | (blue >> 2);
+          reference[i + 3] = 0xff;
+        }
+      }
+
+      const firstDifference = rgba.findIndex((byte, index) => byte !== reference[index]);
+      expect(firstDifference, `rotation ${rotation} differs at byte ${firstDifference}`).toBe(-1);
+    }
+  });
 });

@@ -354,10 +354,30 @@ export class Ili9341 {
     const height = this.height;
     const pixels =
       into && into.length === width * height * 4 ? into : new Uint8ClampedArray(width * height * 4);
+    this.ensureMapped();
+
+    /*
+     * The walk is a straight line, so it is walked as one.
+     *
+     * Asking `pixelAt` for each of 153,600 pixels means 153,600 mapping
+     * computations and bounds checks, and it measured at twice the cost of the
+     * expansion itself. The cached mapping makes each *row* a constant plus a
+     * stride: x advances by one step along whichever RAM axis it drives, and y
+     * moves the other axis. So the offset is worked out once per row and then
+     * stepped, and no bounds check is needed inside -- `ensureMapped` builds
+     * the two axes from the visible size, which is the RAM's own size with the
+     * two exchanged when the panel is turned, so every visible point maps
+     * inside the RAM by construction.
+     */
+    const swap = (this.madctl & MADCTL_MV) !== 0;
+    const stepAlongX = swap ? this.xStep * this.ramWidth * 2 : this.xStep * 2;
+    let i = 0;
     for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const colour = this.pixelAt(x, y);
-        const i = (y * width + x) * 4;
+      let at = swap
+        ? (this.xBase * this.ramWidth + (y * this.yStep + this.yBase)) * 2
+        : ((y * this.yStep + this.yBase) * this.ramWidth + this.xBase) * 2;
+      for (let x = 0; x < width; x++, at += stepAlongX) {
+        const colour = (this.framebuffer[at] << 8) | this.framebuffer[at + 1];
         const red = (colour >> 11) & 0x1f;
         const green = (colour >> 5) & 0x3f;
         const blue = colour & 0x1f;
@@ -366,6 +386,7 @@ export class Ili9341 {
         pixels[i + 1] = (green << 2) | (green >> 4);
         pixels[i + 2] = (blue << 3) | (blue >> 2);
         pixels[i + 3] = 0xff;
+        i += 4;
       }
     }
     return pixels;
