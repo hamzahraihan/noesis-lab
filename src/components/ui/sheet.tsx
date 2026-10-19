@@ -39,7 +39,7 @@ function SheetOverlay({
 }
 
 const sheetVariants = cva(
-  'data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 rounded-none border border-slate-700 bg-slate-900 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
+  'data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 rounded-none border border-[var(--hd-border-strong)] bg-[var(--hd-surface)] shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
   {
     variants: {
       side: {
@@ -77,7 +77,7 @@ function SheetContent({
         {showCloseButton && (
           <SheetPrimitive.Close
             data-slot="sheet-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-slate-800 absolute top-4 right-4 rounded-none opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"
+            className="ring-offset-background focus:ring-ring data-[state=open]:bg-[var(--hd-border)] absolute top-4 right-4 rounded-none opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"
           >
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
