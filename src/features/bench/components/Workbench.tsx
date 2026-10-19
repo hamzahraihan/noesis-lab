@@ -95,7 +95,7 @@ export interface WorkbenchProps {
 const CLICK_SLOP_PX = 4;
 
 /** How close a click must land to a hole to count as hitting it. */
-const HOLE_PICK_RADIUS_MM = 2;
+const HOLE_PICK_RADIUS_MM = 3;
 /**
  * How close a press on a wire must be to a hole to count as aiming at the
  * pin rather than the wire.
@@ -105,7 +105,7 @@ const HOLE_PICK_RADIUS_MM = 2;
  * core the press is on the metal and means the pin; outside it the wire body
  * wins, so clicking a segment to split it is not swallowed by a nearby hole.
  */
-const PIN_CORE_RADIUS_MM = 1;
+const PIN_CORE_RADIUS_MM = 2;
 /** Zoom applied per millimetre of wheel travel, before the per-device scaling. */
 const ZOOM_PER_WHEEL_MM = 0.0015;
 /**
@@ -335,8 +335,6 @@ export function Workbench({
   locked = false,
 }: WorkbenchProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const pendingPointerRef = useRef<{ x: number; y: number } | null>(null);
-  const rafRef = useRef<number | null>(null);
   const wireAnchor = useWorkbenchStore((s) => s.wireAnchor);
   const wireBends = useWorkbenchStore((s) => s.wireBends);
   const cancelDraft = useWorkbenchStore((s) => s.cancelDraft);
@@ -367,11 +365,7 @@ export function Workbench({
     return () => window.removeEventListener('keydown', onKey);
   }, [cancelDraft]);
 
-  useEffect(() => {
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
+
 
   const setPointer = useWorkbenchStore((s) => s.setPointer);
   const pointerMm = useWorkbenchStore((s) => s.pointerMm);
@@ -415,6 +409,9 @@ export function Workbench({
   /** Visible height, always the same shape as the canvas it is drawn into. */
   const viewHeight = view.width / aspect;
 
+  /** Cached screen rect of the canvas, refreshed on resize. */
+  const rectRef = useRef<DOMRect | null>(null);
+
   /**
    * Tracks the canvas shape so the view box can match it.
    *
@@ -426,28 +423,26 @@ export function Workbench({
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg) return;
+    const updateRect = () => {
+      rectRef.current = svg.getBoundingClientRect();
+    };
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       if (width > 0 && height > 0) setAspect(width / height);
+      updateRect();
     });
     observer.observe(svg);
-    return () => observer.disconnect();
-  }, [setAspect]);
-
-  /** Converts a pointer event into world millimetres. */
-  const rectRef = useRef<DOMRect | null>(null);
-  useEffect(() => {
-    const update = () => {
-      if (svgRef.current) rectRef.current = svgRef.current.getBoundingClientRect();
+    updateRect();
+    window.addEventListener('resize', updateRect);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateRect);
     };
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
+  }, [setAspect]);
 
   const toWorld = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } => {
-      const rect = rectRef.current ?? svgRef.current?.getBoundingClientRect() ?? null;
+      const rect = svgRef.current?.getBoundingClientRect() ?? null;
       if (!rect || rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
       return {
         x: view.x + ((clientX - rect.left) / rect.width) * view.width,
@@ -484,10 +479,38 @@ export function Workbench({
      * same question about the part's own body.
      */
     const partUnderPointer = rotatedPartAt(bench, world);
-    const partId = partUnderPointer?.id ?? null;
+    /*
+     * A press that lands on a wire but within a couple of millimetres of a
+     * part's body still means the part: the wire's fat hit path sits on top of
+     * everything, and without this a component with wiring attached could not be
+     * grabbed except by hitting its exact (unwired) pixels.
+     */
+    let partId = partUnderPointer?.id ?? null;
+    if (partId === null) {
+      let best: { id: string; distance: number } | null = null;
+      for (const part of bench.parts) {
+        const box = artworkBox(part.definition, part.rotation);
+        const left = part.x + box.dx;
+        const top = part.y + box.dy;
+        const cx = left + box.widthMm / 2;
+        const cy = top + box.heightMm / 2;
+        const distance = Math.hypot(cx - world.x, cy - world.y);
+        if (distance < 20 && (best === null || distance < best.distance)) {
+          best = { id: part.id, distance };
+        }
+      }
+      if (best !== null) partId = best.id;
+    }
     pressedPartRef.current = partId;
+    /*
+     * A part under the pointer takes precedence over any wire hit path sitting
+     * on top of it: otherwise a wire crossing a breadboard would be grabbed
+     * instead of the board, and dragging the board would bend the wire.
+     */
     pressedWireRef.current =
-      (event.target as Element).closest('[data-wire-id]')?.getAttribute('data-wire-id') ?? null;
+      partId === null
+        ? ((event.target as Element).closest('[data-wire-id]')?.getAttribute('data-wire-id') ?? null)
+        : null;
     const pressedTarget = event.target as Element;
     pressedHandleRef.current =
       pressedTarget.closest('[data-bend-index]') !== null
@@ -663,22 +686,8 @@ export function Workbench({
     const world = toWorld(event.clientX, event.clientY);
     // Snap the pointer to a hole when one is close, so the draft jumper
     // previews the connection that a click would actually commit.
-    const hole = nearestHoleFast(terminalGrid, world.x, world.y);
-    const snapped = hole ? { x: hole.x, y: hole.y } : world;
-
-    /*
-     * Throttle the store update to one per frame. Pointer events can fire more
-     * often than the display refreshes, and each update re-renders the whole
-     * canvas; coalescing them keeps the drag smooth instead of queuing work.
-     */
-    pendingPointerRef.current = snapped;
-    if (rafRef.current === null) {
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        const next = pendingPointerRef.current;
-        if (next) setPointer(next);
-      });
-    }
+    const hole = nearestHole(bench, world.x, world.y);
+    setPointer(hole ? { x: hole.x, y: hole.y } : world);
 
     const drag = dragRef.current;
     if (!drag) return;
@@ -769,7 +778,7 @@ export function Workbench({
        * a loose contact at that spot, which is what a wire end hanging off the
        * edge of a board actually looks like.
        */
-      const hole = nearestHoleFast(terminalGrid, world.x, world.y);
+      const hole = nearestHole(bench, world.x, world.y);
       onMoveWireEnd(
         drag.wireId,
         drag.end,
@@ -873,7 +882,7 @@ export function Workbench({
     }
     if (movedRef.current) return;
     const world = toWorld(event.clientX, event.clientY);
-    const terminal = nearestHoleFast(terminalGrid, world.x, world.y);
+    const terminal = nearestHole(bench, world.x, world.y);
 
     if (wireAnchor !== null) {
       if (!terminal) {
@@ -1005,26 +1014,6 @@ export function Workbench({
    */
   const benchRevision = bench.revision;
 
-  /*
-   * Spatial index of terminals, so a pointer move does not scan every hole on
-   * the bench. Rebuilt only when the bench changes (parts moved/turned), not
-   * on every pointer move.
-   */
-  const terminalGrid = useMemo(() => {
-    const grid = new Map<string, Terminal[]>();
-    const cell = HOLE_PICK_RADIUS_MM;
-    for (const terminal of bench.terminals) {
-      const cx = Math.floor(terminal.x / cell);
-      const cy = Math.floor(terminal.y / cell);
-      const key = `${cx},${cy}`;
-      const bucket = grid.get(key);
-      if (bucket) bucket.push(terminal);
-      else grid.set(key, [terminal]);
-    }
-    return grid;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bench, benchRevision]);
-
   /**
    * Every contact, indexed by id.
    *
@@ -1036,7 +1025,7 @@ export function Workbench({
    */
   /** The hole under the cursor, which is what a click would pick. */
   const hovered = useMemo(
-    () => (pointerMm ? nearestHoleFast(terminalGrid, pointerMm.x, pointerMm.y) : null),
+    () => (pointerMm ? nearestHole(bench, pointerMm.x, pointerMm.y) : null),
     /*
      * `benchRevision` is not read in the body, and deliberately so.
      *
@@ -1161,7 +1150,7 @@ export function Workbench({
   return (
     <svg
       ref={svgRef}
-      className="h-full w-full touch-none select-none bg-[var(--hd-bg-deep)]"
+      className="h-full w-full touch-none select-none bg-[#1e293b]"
       viewBox={`${view.x} ${view.y} ${view.width} ${viewHeight}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1232,7 +1221,7 @@ export function Workbench({
     >
       <defs>
         <pattern id="bench-grid" width={10.16} height={10.16} patternUnits="userSpaceOnUse">
-          <path d="M 10.16 0 L 0 0 0 10.16" fill="none" stroke="#1e293b" strokeWidth={0.3} />
+          <path d="M 10.16 0 L 0 0 0 10.16" fill="none" stroke="#334155" strokeWidth={0.3} />
         </pattern>
       </defs>
 
@@ -1586,24 +1575,15 @@ function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
 }
 
-/** Nearest terminal within picking range, using a spatial grid. */
-function nearestHoleFast(grid: Map<string, Terminal[]>, x: number, y: number): Terminal | null {
-  const cell = HOLE_PICK_RADIUS_MM;
-  const cx = Math.floor(x / cell);
-  const cy = Math.floor(y / cell);
+/** Nearest terminal within picking range, or null. */
+function nearestHole(bench: Bench, x: number, y: number): Terminal | null {
   let best: Terminal | null = null;
   let bestDistance = HOLE_PICK_RADIUS_MM;
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      const bucket = grid.get(`${cx + dx},${cy + dy}`);
-      if (!bucket) continue;
-      for (const terminal of bucket) {
-        const distance = Math.hypot(terminal.x - x, terminal.y - y);
-        if (distance < bestDistance) {
-          best = terminal;
-          bestDistance = distance;
-        }
-      }
+  for (const terminal of bench.terminals) {
+    const distance = Math.hypot(terminal.x - x, terminal.y - y);
+    if (distance < bestDistance) {
+      best = terminal;
+      bestDistance = distance;
     }
   }
   return best;
