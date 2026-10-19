@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { partDefinitionById } from '@/features/parts';
+import { partDefinitionById, useCustomPartsStore } from '@/features/parts';
 import { BUTTON_CAP_COLOURS } from './bench';
 import {
   addPart,
@@ -18,6 +18,8 @@ import {
   type PartRotation,
 } from './circuit-edit';
 import { compile, decompile, type CircuitDocument } from './circuit-doc';
+
+const EMPTY: CircuitDocument = { version: 1, parts: [], wires: [] };
 
 const BASE: CircuitDocument = {
   version: 1,
@@ -247,4 +249,36 @@ describe('every edit survives a round trip through the bench', () => {
       roundTrips(result.doc);
     });
   }
+  it('carries an imported part into the document that places it', () => {
+    const imported = {
+      id: 'resistor-4k7',
+      name: '4.7k Resistor',
+      category: 'passive',
+      widthMm: 10.16,
+      heightMm: 4,
+      bodyColour: '#d8c9a3',
+      legendColour: '#3f3a2f',
+      component: { kind: 'resistor', ohms: 4700 },
+      pins: [
+        { id: 'a', label: '1', x: 0, y: 2 },
+        { id: 'b', label: '2', x: 10.16, y: 2 },
+      ],
+    };
+    useCustomPartsStore
+      .getState()
+      .import(JSON.stringify({ version: 1, parts: [imported] }), 'resistor-4k7.part.json');
+
+    const placed = addPart(EMPTY, 'resistor-4k7', 0, 0);
+    if (placed.doc === undefined) throw new Error('placement refused');
+    expect(placed.doc.definitions?.map((entry) => entry.id)).toEqual(['resistor-4k7']);
+
+    // Placing it twice does not carry it twice: a type names one definition.
+    const again = addPart(placed.doc, 'resistor-4k7', 40, 0);
+    expect(again.doc?.definitions?.length).toBe(1);
+
+    // And a shipped part needs nothing: the build has it.
+    const shipped = addPart(EMPTY, 'arduino-uno-r3', 0, 0);
+    expect(shipped.doc?.definitions).toBeUndefined();
+    useCustomPartsStore.getState().clear();
+  });
 });
