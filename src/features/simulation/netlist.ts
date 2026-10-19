@@ -890,13 +890,41 @@ export function buildNetlist(
 
   const groundRoot = chooseGroundRoot(bench, sets);
 
+  /*
+   * Which terminals the circuit can actually see.
+   *
+   * A breadboard is mostly holes: eight hundred of them, drawn together into
+   * nets that nothing is clipped to. Such a net is real -- a wire dropped on it
+   * joins it -- but until one is, it cannot carry current or be sensed, and the
+   * solver's matrix is dense and cubic in node count. Numbering them anyway
+   * handed a bare breadboard 134 nodes and made every solve pay for the
+   * plastic; the solver is handed only the nets a reading can reach. A
+   * component's own pin is always one of them, wired or not, because that is
+   * where a loose pin's drift is stamped.
+   */
+  const signalTerminals = new Uint8Array(bench.terminals.length).fill(1);
+  for (const part of bench.parts) {
+    if (part.definition.component.kind !== 'breadboard') continue;
+    for (const pinId of Object.keys(part.terminals)) signalTerminals[part.terminals[pinId]] = 0;
+  }
+  for (const wire of bench.wires) {
+    signalTerminals[wire.from] = 1;
+    signalTerminals[wire.to] = 1;
+  }
+  const liveRoots = new Set<number>();
+  for (const terminal of bench.terminals) {
+    if (signalTerminals[terminal.id] === 0) continue;
+    const root = sets.find(terminal.id);
+    if (root !== groundRoot) liveRoots.add(root);
+  }
+
   // Number the nets, skipping the reference.
   const nodeIndexOfRoot = new Map<number, number>();
   const netsByRoot = new Map<number, number[]>();
   let nodeCount = 0;
   for (const terminal of bench.terminals) {
     const root = sets.find(terminal.id);
-    if (root === groundRoot) continue;
+    if (root === groundRoot || !liveRoots.has(root)) continue;
     if (!nodeIndexOfRoot.has(root)) {
       nodeIndexOfRoot.set(root, nodeCount);
       netsByRoot.set(root, []);

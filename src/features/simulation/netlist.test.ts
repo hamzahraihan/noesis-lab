@@ -97,7 +97,11 @@ describe('netlist extraction', () => {
   });
 
   it('unions the five holes of one breadboard strip', () => {
-    const { builder } = benchWithBreadboardAndEsp32();
+    const { builder, esp32 } = benchWithBreadboardAndEsp32();
+    // A strip is a net only once something is plugged into it: one hole is
+    // wired to a pin, and the other four have to come along.
+    const gpio2 = pinAt(esp32, 'R_D2');
+    builder.addWire(gpio2.x, gpio2.y, holeX(10), holeY(0));
     const board = builder.build();
     const breadboard = board.parts[0];
 
@@ -106,10 +110,18 @@ describe('netlist extraction', () => {
     const netlist = buildNetlist(board, NO_DYNAMIC_STATE);
     const nodes = holesAtoE.map((terminal) => netlist.nodeOfTerminal[terminal]);
     expect(new Set(nodes).size).toBe(1);
+    // The strip is the pin's net, not the reference it would otherwise join.
+    expect(nodes[0]).toBe(netlist.pinNode.get(`${esp32.id}:R_D2`));
   });
 
   it('keeps the top and bottom strips of a column apart', () => {
-    const { builder } = benchWithBreadboardAndEsp32();
+    const { builder, esp32 } = benchWithBreadboardAndEsp32();
+    // Both strips need a wire to be nets at all, so each gets its own pin: if
+    // the board connected a..e to f..j the two jumpers would merge into one.
+    const top = pinAt(esp32, 'R_D2');
+    const bottom = pinAt(esp32, 'R_D4');
+    builder.addWire(top.x, top.y, holeX(10), holeY(0));
+    builder.addWire(bottom.x, bottom.y, holeX(10), holeY(5));
     const board = builder.build();
     const breadboard = board.parts[0];
     const netlist = buildNetlist(board, NO_DYNAMIC_STATE);
@@ -117,6 +129,21 @@ describe('netlist extraction', () => {
     const topStrip = netlist.nodeOfTerminal[breadboard.terminals.s10a];
     const bottomStrip = netlist.nodeOfTerminal[breadboard.terminals.s10f];
     expect(topStrip).not.toBe(bottomStrip);
+    expect(topStrip).toBe(netlist.pinNode.get(`${esp32.id}:R_D2`));
+    expect(bottomStrip).toBe(netlist.pinNode.get(`${esp32.id}:R_D4`));
+  });
+
+  it('numbers only the nets a reading can reach', () => {
+    const { builder } = benchWithBreadboardAndEsp32();
+    const board = builder.build();
+    const breadboard = board.parts[0];
+    const netlist = buildNetlist(board, NO_DYNAMIC_STATE);
+
+    // 882 terminals, and barely more than the board's own pins get a node: the
+    // solver's matrix is dense and cubic in node count, so an empty breadboard
+    // must not be in it. Holes stay at the reference until something is wired.
+    expect(netlist.nodeOfTerminal[breadboard.terminals.s10a]).toBe(GROUND);
+    expect(netlist.nodeCount).toBeLessThan(60);
   });
 
   it('treats every ground pin on the board as the reference net', () => {
