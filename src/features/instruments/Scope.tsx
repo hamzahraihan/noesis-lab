@@ -106,14 +106,14 @@ export function ScopePanel({
     <div className="flex flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
         <CardTitle className="flex flex-1 items-center gap-2">
-          <ActivityLogIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <ActivityLogIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
           Oscilloscope
         </CardTitle>
         <Select
           value={probePinId ?? 'none'}
           onValueChange={(next) => onProbe(next === 'none' ? null : next)}
         >
-          <SelectTrigger className="h-6 max-w-28 text-[11px]" aria-label="Probe pin">
+          <SelectTrigger className="h-6 max-w-28 text-xs" aria-label="Probe pin">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -132,13 +132,13 @@ export function ScopePanel({
           ref={canvasRef}
           width={520}
           height={TRACE_HEIGHT_MM}
-          className="w-full rounded-none border border-slate-800 bg-slate-950"
+          className="w-full rounded-none border border-[var(--hd-border)] bg-[var(--hd-bg-deep)]"
         />
         {!probePinId && (
           // The trace area is a fixed 60 mm tall, so this is a single line that
           // fits inside it. The earlier two-line copy overflowed and painted
           // over the UART readout underneath.
-          <p className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 px-2 text-center text-[11px] text-slate-600">
+          <p className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 px-2 text-center text-xs text-[var(--hd-faint)]">
             <Crosshair1Icon className="icon-sm shrink-0" aria-hidden="true" />
             Clip the probe onto a pin to capture its voltage.
           </p>
@@ -146,7 +146,7 @@ export function ScopePanel({
       </div>
 
       {probePinId ? (
-        <dl className="grid grid-cols-3 gap-1 text-[11px]">
+        <dl className="grid grid-cols-3 gap-1 text-xs">
           <Reading label="Freq" value={frequency > 0 ? `${frequency.toFixed(0)} Hz` : '--'} />
           <Reading label="Duty" value={`${duty.toFixed(0)}%`} />
           <Reading label="Samples" value={String(samples.length)} />
@@ -154,9 +154,9 @@ export function ScopePanel({
       ) : null}
 
       <div className="flex items-center gap-2">
-        <StopwatchIcon className="icon-sm shrink-0 text-slate-500" aria-hidden="true" />
+        <StopwatchIcon className="icon-sm shrink-0 text-[var(--hd-muted)]" aria-hidden="true" />
         <Select value={String(baud)} onValueChange={(next) => onBaud(Number(next))}>
-          <SelectTrigger className="h-6 w-20 shrink-0 text-[11px]" aria-label="UART baud rate">
+          <SelectTrigger className="h-6 w-20 shrink-0 text-xs" aria-label="UART baud rate">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -167,7 +167,7 @@ export function ScopePanel({
             ))}
           </SelectContent>
         </Select>
-        <span className="truncate font-mono text-[11px] text-emerald-300">
+        <span className="truncate font-mono text-xs text-[var(--hd-success)]">
           {decoded.length > 0 ? ascii : '--'}
         </span>
       </div>
@@ -178,8 +178,8 @@ export function ScopePanel({
 function Reading({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="tabular-nums text-slate-200">{value}</dd>
+      <dt className="text-[var(--hd-muted)]">{label}</dt>
+      <dd className="tabular-nums text-[var(--hd-text)]">{value}</dd>
     </div>
   );
 }
