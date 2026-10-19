@@ -1114,26 +1114,16 @@ export default function Bench(props: BenchProps) {
   const onMovePart = useCallback(
     (partId: string, x: number, y: number) => {
       if (layoutLocked) return;
-      const part = bench.parts.find((candidate) => candidate.id === partId);
       const nextX = Math.round(x);
       const nextY = Math.round(y);
-      // Carry the waypoints of any jumper tied to this part along with it, so
-      // a moved part drags its wiring instead of leaving bends behind.
-      const dx = part ? nextX - part.x : 0;
-      const dy = part ? nextY - part.y : 0;
-      const partTerminals = part ? new Set(Object.values(part.terminals)) : new Set<number>();
-      const tiedWires =
-        part && (dx !== 0 || dy !== 0)
-          ? bench.wires.filter((wire) => partTerminals.has(wire.from) || partTerminals.has(wire.to))
-          : [];
+      /*
+       * Moving a part must not rewrite its wires' bends here: doing so calls
+       * `simulation.setWireBends`, which (outside a wire-bends gesture) writes
+       * to the document and pushes undo history on every frame, corrupting the
+       * circuit and persisting bogus wiring. Straight wires follow the moved
+       * part's terminals on their own; bends stay where they are.
+       */
       simulation.movePart(partId, nextX, nextY);
-      for (const wire of tiedWires) {
-        if (wire.bends.length === 0) continue;
-        simulation.setWireBends(
-          wire.id,
-          wire.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy })),
-        );
-      }
       // Asked for explicitly, because the animation loop only re-renders while
       // the simulation is running. A stopped bench relied on that loop drawing
       // every frame for everything to update -- which is why dragging a part
@@ -1182,8 +1172,9 @@ export default function Bench(props: BenchProps) {
     (from: Terminal, to: Terminal, bends: readonly BendPoint[]) => {
       if (layoutLocked) return;
       simulation.routeWire(from, to, bends, wireColour);
+      forceRender((n) => n + 1);
     },
-    [simulation, wireColour, layoutLocked],
+    [simulation, wireColour, layoutLocked, forceRender],
   );
 
   const onSetWireBends = useCallback(
@@ -1578,7 +1569,7 @@ export default function Bench(props: BenchProps) {
    * rebuild the simulation.
    */
   return (
-    <div className="flex h-screen flex-col bg-[var(--hd-surface)] text-[var(--hd-text)]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[var(--hd-surface)] text-[var(--hd-text)]">
       {/*
        * Three groups, left to right: what bench you are on, what the simulation
        * is doing, then what you can reach. The old header ran them together as
