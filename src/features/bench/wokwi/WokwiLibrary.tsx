@@ -24,8 +24,8 @@ const CARD_MM = 46;
 export function WokwiLibrary() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
-      <p className="mb-3 text-xs text-slate-500">
-        Every element <code className="text-slate-400">@wokwi/elements</code> ships, drawn by
+      <p className="mb-3 text-xs text-[var(--hd-muted)]">
+        Every element <code className="text-[var(--hd-muted)]">@wokwi/elements</code> ships, drawn by
         itself. The bench adopts the ones whose circuit the solver can solve; the rest are here so
         you can see what they would take.
       </p>
@@ -69,13 +69,13 @@ function ElementCard({ element }: { element: LibraryElement }) {
     <figure
       className={`flex h-full flex-col rounded-none border p-2 ${
         element.status === 'placed'
-          ? 'border-slate-800 bg-slate-950'
-          : 'border-slate-800/60 bg-slate-950/50'
+          ? 'border-[var(--hd-border)] bg-[var(--hd-bg-deep)]'
+          : 'border-[var(--hd-border)]/60 bg-[var(--hd-bg-deep)]/50'
       }`}
       title={element.note}
     >
       <div
-        className="flex h-24 items-center justify-center overflow-hidden rounded-none bg-slate-900/60"
+        className="flex h-24 items-center justify-center overflow-hidden rounded-none bg-[var(--hd-surface)]/60"
         style={{ width: element.sizeMm.w * scale, maxWidth: '100%' }}
       >
         <div
@@ -83,21 +83,21 @@ function ElementCard({ element }: { element: LibraryElement }) {
           style={{ width: `${element.sizeMm.w}px`, height: `${element.sizeMm.h}px` }}
         />
       </div>
-      <figcaption className="mt-1.5 text-[11px] leading-snug font-medium text-slate-300">
+      <figcaption className="mt-1.5 text-xs leading-snug font-medium text-[var(--hd-text)]">
         {element.name}
       </figcaption>
-      <p className="num mt-0.5 text-[10px] text-slate-600">
+      <p className="num mt-0.5 text-xs text-[var(--hd-faint)]">
         {element.sizeMm.w.toFixed(1)} × {element.sizeMm.h.toFixed(1)} mm
       </p>
-      <span className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
+      <span className="mt-1 flex items-center gap-1 text-xs text-[var(--hd-muted)]">
         {element.status === 'placed' && (
           <CheckCircledIcon className="icon-sm text-emerald-500" aria-hidden="true" />
         )}
         {element.status === 'needs-api' && (
-          <ClockIcon className="icon-sm text-amber-400" aria-hidden="true" />
+          <ClockIcon className="icon-sm text-[var(--hd-warn)]" aria-hidden="true" />
         )}
         {element.status === 'other-part' && (
-          <InfoCircledIcon className="icon-sm text-slate-500" aria-hidden="true" />
+          <InfoCircledIcon className="icon-sm text-[var(--hd-muted)]" aria-hidden="true" />
         )}
         {STATUS_LABEL[element.status]}
       </span>
