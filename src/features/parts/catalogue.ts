@@ -523,6 +523,18 @@ export const BENCH_PART_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(BOARD_FACTORIES),
 ]);
 
+/**
+ * Whether an id belongs to a part this build ships.
+ *
+ * The line the circuit format draws: a shipped part is described by the build and
+ * needs no definition in a file, while anything else -- a part imported from a
+ * part file -- has to travel with the circuit that uses it, or the circuit only
+ * opens on the machine that imported it.
+ */
+export function isShippedPart(id: string): boolean {
+  return PART_CATALOGUE.some((entry) => entry.id === id) || BOARD_FACTORIES[id] !== undefined;
+}
+
 export function partDefinitionById(id: string): PartDefinition | undefined {
   const entry = PART_CATALOGUE.find((e) => e.id === id);
   if (entry) return entry.make();
