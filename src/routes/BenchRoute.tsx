@@ -18,6 +18,7 @@ import {
   exerciseById,
   ExerciseGuide,
   exerciseLanguage,
+  exampleProjectFor,
   firmwareForBuild,
   galleryById,
   isBoardId,
@@ -32,6 +33,7 @@ export default function BenchRoute() {
     <Bench
       EXAMPLES={EXAMPLES}
       starterSketchFor={starterSketchFor}
+      exampleProjectFor={exampleProjectFor}
       BOARDS={BOARDS}
       boardOption={boardOption}
       DEFAULT_BOARD_ID={DEFAULT_BOARD_ID}

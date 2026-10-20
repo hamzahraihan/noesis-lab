@@ -8,6 +8,15 @@ export interface Rp2040Hooks {
   readonly onSettle: () => void;
   readonly onEdge?: (gpio: number, cycles: number, high: boolean) => void;
   readonly serial: { serialWrite(text: string): void };
+  /**
+   * The bench's I2C sink, shared with the AVR machine path. Absent in
+   * unit tests that drive the bridge directly.
+   */
+  readonly i2c?: {
+    writeByte(address: number, byte: number, isFirst: boolean): boolean;
+    readByte(address: number, index: number): number;
+    writeEnd?(): void;
+  };
 }
 
 export const RP2040_CLOCK_HZ = 125_000_000;

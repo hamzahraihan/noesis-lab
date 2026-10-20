@@ -12,7 +12,7 @@
  */
 
 import { boardOption, type BoardId } from './boardRegistry';
-import type { FirmwareLanguage } from '@/features/simulation';
+import { toSingleFileProject, type FirmwareLanguage, type FirmwareProject } from '@/features/simulation';
 
 export interface Example {
   readonly id: string;
@@ -44,6 +44,20 @@ export interface Example {
  */
 export function exampleSketchFor(example: Example, boardId: BoardId): string {
   return example.sketches?.[boardId] ?? example.sketch;
+}
+
+/**
+ * The project a bench loads for an example on a board.
+ *
+ * Both halves come from the board's own answer: `exampleSketchFor` picks the
+ * port and `boardOption` says which language and entry file that port is
+ * written in. A caller that built this from `example.sketch` instead would put
+ * C++ in a `main.py` tab on every Python board -- which is how the RP2040's
+ * clock example loaded and failed on its first `//`.
+ */
+export function exampleProjectFor(example: Example, boardId: BoardId): FirmwareProject {
+  const language = boardOption(boardId).language;
+  return toSingleFileProject(exampleSketchFor(example, boardId), language);
 }
 
 export const BLINK_SKETCH = `#include <Arduino.h>
@@ -199,19 +213,21 @@ void loop() {
 `;
 
 /**
- * The clock example on the Pico, in MicroPython.
+ * The clock example on the two MicroPython boards.
  *
  * The same three registers and the same unpacking as the C++ sketch, written
  * the way MicroPython spells them: one `readfrom_mem` moves the three bytes,
  * a function pulls the tens and units out of each, and `I2C(0)` names the
- * board's default bus rather than a pin pair, because the Pico's I2C0 is fixed
- * to GP0 and GP1.
+ * board's default bus rather than a pin pair. That is the whole port: the Pico
+ * brings I2C0 out on GP0/GP1 and the Nano RP2040 Connect on A4/A5, and the
+ * sketch does not have to know which.
  *
  * The register values are binary-coded decimal, so an hour is read as
  * `(high * 10) + low` rather than as the byte itself -- the mistake that makes
- * a clock count 0x10 as sixteen.
+ * a clock count 0x10 as sixteen. The three bytes arrive seconds first; the
+ * printed line is hours first, so the indices run backwards.
  */
-const PICO_CLOCK_SKETCH = `from machine import I2C
+const MICROPYTHON_CLOCK_SKETCH = `from machine import I2C
 import time
 
 bus = I2C(0)
@@ -227,7 +243,7 @@ def two(value):
 
 def clock():
     data = bus.readfrom_mem(ADDR, 0, 3)
-    return two(bcd(data[0])) + ':' + two(bcd(data[1])) + ':' + two(bcd(data[2]))
+    return two(bcd(data[2])) + ':' + two(bcd(data[1])) + ':' + two(bcd(data[0]))
 
 print('clock online')
 
@@ -350,7 +366,10 @@ export const I2C_CLOCK_EXAMPLE: Example = {
   name: 'I2C read',
   note: 'Reads a real-time clock register by register, the way the datasheet says to.',
   sketch: I2C_CLOCK_SKETCH,
-  sketches: { pico: PICO_CLOCK_SKETCH },
+  sketches: {
+    pico: MICROPYTHON_CLOCK_SKETCH,
+    rp2040: MICROPYTHON_CLOCK_SKETCH,
+  },
 };
 
 export const POTENTIOMETER_EXAMPLE: Example = {

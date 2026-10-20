@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '@/features/bench/simulations/simulation';
 import { BOARDS, boardOption } from './boardRegistry';
-import { EXAMPLES, I2C_CLOCK_EXAMPLE, POTENTIOMETER_EXAMPLE, exampleSketchFor } from './examples';
+import {
+  EXAMPLES,
+  I2C_CLOCK_EXAMPLE,
+  POTENTIOMETER_EXAMPLE,
+  exampleProjectFor,
+  exampleSketchFor,
+} from './examples';
+import { ENTRY_BY_LANGUAGE } from '@/features/simulation';
 import { exampleCircuitFor } from './benches';
 import { esp32DevKitV1, resistorDefinition } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';
@@ -62,7 +69,7 @@ describe('the examples', () => {
         const simulation = new Simulation(board.make());
         const doc = exampleCircuitFor(example.id, board.id)!;
         expect(simulation.loadCircuit(doc), `${example.id} on ${board.id}`).toEqual([]);
-        simulation.loadFirmware(exampleSketchFor(example, board.id), board.language);
+        simulation.loadFirmware(exampleProjectFor(example, board.id));
         // A syntax error is reported rather than thrown, so this is the check
         // that an example the VM cannot read never ships.
         expect(simulation.firmwareError, `${example.id} on ${board.id}`).toBeNull();
@@ -70,6 +77,26 @@ describe('the examples', () => {
     },
     60_000,
   );
+
+  it('builds each board’s example in that board’s language', () => {
+    /*
+     * The bench loads `exampleProjectFor`, so the project's language and its
+     * text have to be the same answer. This is the seam the RP2040 clock went
+     * through: the circuit and port existed, but the editor built the project
+     * from the shared C++ sketch and put it in `main.py`.
+     */
+    for (const example of EXAMPLES) {
+      for (const board of BOARDS) {
+        if (exampleCircuitFor(example.id, board.id) === null) continue;
+        const project = exampleProjectFor(example, board.id);
+        const label = `${example.id} on ${board.id}`;
+        expect(project.language, label).toBe(board.language);
+        expect(project.activeName, label).toBe(ENTRY_BY_LANGUAGE[board.language]);
+        expect(project.files, label).toHaveLength(1);
+        expect(project.files[0].content, label).toBe(exampleSketchFor(example, board.id));
+      }
+    }
+  });
 
   it('wires a clock onto the board I2C pins', () => {
     const simulation = exampleBench('i2c-clock');
@@ -163,7 +190,7 @@ describe('the examples', () => {
       const doc = exampleCircuitFor('potentiometer', boardId);
       expect(doc, `potentiometer on ${boardId}`).not.toBeNull();
       expect(simulation.loadCircuit(doc!)).toEqual([]);
-      simulation.loadFirmware(exampleSketchFor(POTENTIOMETER_EXAMPLE, boardId), 'python');
+      simulation.loadFirmware(exampleProjectFor(POTENTIOMETER_EXAMPLE, boardId));
 
       const pot = partNamed(simulation, 'Potentiometer');
       expect(pot, boardId).toBeDefined();
@@ -197,26 +224,42 @@ describe('the examples', () => {
     }
   }, 60_000);
 
-  it('reads the clock on the Pico bus', () => {
-    const simulation = new Simulation(boardOption('pico').make());
-    const doc = exampleCircuitFor('i2c-clock', 'pico');
-    expect(doc, 'i2c-clock on pico').not.toBeNull();
-    expect(simulation.loadCircuit(doc!)).toEqual([]);
-    simulation.loadFirmware(exampleSketchFor(I2C_CLOCK_EXAMPLE, 'pico'), 'python');
+  it('reads the clock on each MicroPython board’s bus', () => {
+    for (const boardId of ['pico', 'rp2040'] as const) {
+      const simulation = new Simulation(boardOption(boardId).make());
+      const doc = exampleCircuitFor('i2c-clock', boardId);
+      expect(doc, `i2c-clock on ${boardId}`).not.toBeNull();
+      expect(simulation.loadCircuit(doc!)).toEqual([]);
+      simulation.loadFirmware(exampleProjectFor(I2C_CLOCK_EXAMPLE, boardId));
 
-    const clock = partNamed(simulation, 'DS1307');
-    expect(clock).toBeDefined();
-    // Wired, not merely placed: the DS1307's own SDA and SCL must land on the
-    // two nets the Pico's I2C0 peripheral sits on.
-    expect(simulation.engine.i2cDevice(clock!.id)?.onBus).toBe(true);
+      const clock = partNamed(simulation, 'DS1307');
+      expect(clock, boardId).toBeDefined();
+      // Wired, not merely placed: the DS1307's own SDA and SCL must land on
+      // the two nets the board's I2C0 peripheral sits on. On the Nano RP2040
+      // Connect those are A4/A5, which firmware reaches only through the
+      // internal tie to GPIO12/13.
+      expect(simulation.engine.i2cDevice(clock!.id)?.onBus, boardId).toBe(true);
 
-    run(simulation, 2);
-    const lines = simulation.serialLines().join('\n');
-    expect(lines).toContain('clock online');
-    // The sketch unpacks BCD itself, so a mangled byte would show as a
-    // malformed time rather than as a short line.
-    expect(lines).toMatch(/^\d\d:\d\d:\d\d$/m);
-  }, 30_000);
+      run(simulation, 2);
+      const lines = simulation.serialLines().join('\n');
+      expect(lines, boardId).toContain('clock online');
+      /*
+       * The sketch unpacks BCD itself, so a mangled byte would show as a
+       * malformed time rather than as a short line. The DS1307's three bytes
+       * are seconds, minutes, hours while the printed line is hours first:
+       * over two seconds the first two fields must stay zero and the last one
+       * must advance. A reversed port printed `02:00:00`, which the old
+       * shape-only regex happily accepted.
+       */
+      const times = lines.split('\n').filter((line) => /^\d\d:\d\d:\d\d$/.test(line));
+      expect(times.length, boardId).toBeGreaterThan(0);
+      expect(
+        times.every((time) => /^00:00:0[0-2]$/.test(time)),
+        `${boardId}: ${times.join(', ')}`,
+      ).toBe(true);
+      expect(times.some((time) => time !== '00:00:00'), boardId).toBe(true);
+    }
+  }, 60_000);
 
   it('colours device wires by signal', () => {
     /*

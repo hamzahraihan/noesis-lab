@@ -62,7 +62,7 @@ export const PROJECTS: readonly BoardProject[] = [
     tagline: 'Modern 3.3 V practice with a 12-bit ADC.',
     why: '3.3 V logic and 12-bit conversion on a Nano-sized board. The analogue block silkscreens A0–A3 on the pins its ADC samples, which surprises anyone coming from an AVR.',
     youWillSee: [...STARTER_SEEN],
-    tryNext: ['potentiometer'],
+    tryNext: ['potentiometer', 'i2c-clock'],
   },
   {
     board: 'mega',

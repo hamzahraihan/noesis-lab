@@ -10,6 +10,7 @@ import {
 import { bootromB1 } from './bootrom';
 import { Rp2040Clock } from './clock';
 import { attachRp2040GpioBridge } from './gpio';
+import { attachRp2040I2cBridge } from './i2c';
 import { decodeUf2, type Uf2Image } from './uf2';
 import { Rp2040Serial } from './usb';
 
@@ -99,6 +100,11 @@ export class Rp2040Backend implements ExecutionBackend {
 
   private attachBridges(): Rp2040Serial {
     attachRp2040GpioBridge(this.rp2040, this.hooks);
+    if (this.hooks.i2c) {
+      for (const peripheral of this.rp2040.i2c) {
+        attachRp2040I2cBridge(peripheral, this.hooks.i2c);
+      }
+    }
     return new Rp2040Serial(this.rp2040, this.clock, this.hooks.serial);
   }
 

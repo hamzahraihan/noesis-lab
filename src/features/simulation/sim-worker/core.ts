@@ -689,7 +689,7 @@ class SimCore implements CoreHandle {
       onSettle: () => this.engine.settle(),
       isProbed: () => this.engine.isBeingProbed,
       serial: { serialWrite: (text) => this.pushSerial(text) },
-      i2c: this.avrI2cSink(),
+      i2c: this.i2cSink(),
     });
     this.avrBackend = flashed;
     if (this.wantWasm && !this.wasmDemoted)
@@ -770,10 +770,17 @@ class SimCore implements CoreHandle {
       readPin: (gpio) => this.engine.readDigital(gpio),
       onSettle: () => this.engine.settle(),
       serial: { serialWrite: (text) => this.pushSerial(text) },
+      i2c: this.i2cSink(),
     };
   }
 
-  private avrI2cSink(): {
+  /**
+   * The machine backends' I2C sink: each byte goes to the engine (which
+   * decides the ACK and moves device state) and is staged through the shared
+   * `I2CBus` so the closing `writeEnd` records the transfer in the bus log.
+   * Reads stay engine-direct.
+   */
+  private i2cSink(): {
     writeByte(address: number, byte: number, isFirst: boolean): boolean;
     readByte(address: number, index: number): number;
     writeEnd(): void;

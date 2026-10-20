@@ -8,8 +8,9 @@
  * `parseCircuit` gate, `compile` and board check as a curriculum circuit --
  * there is no second representation to drift.
  *
- * Examples are generated for the Arduino-language boards only: their sketches
- * are C++, and a Python board has no business being offered one.
+ * An example is offered on a board only when it has a circuit and a sketch for
+ * that board's firmware: the C++ examples cover the Arduino boards, and the
+ * MicroPython ports cover the Pico and the Nano RP2040 Connect.
  */
 
 import type { CircuitDocument } from '@/features/simulation';
@@ -40,6 +41,7 @@ import exampleI2cClockFranzininho from './example-i2c-clock-franzininho.json';
 import exampleI2cClockMega from './example-i2c-clock-mega.json';
 import exampleI2cClockNano from './example-i2c-clock-nano.json';
 import exampleI2cClockPico from './example-i2c-clock-pico.json';
+import exampleI2cClockRp2040 from './example-i2c-clock-rp2040.json';
 import exampleI2cClockUno from './example-i2c-clock-uno.json';
 import examplePotentiometerPico from './example-potentiometer-pico.json';
 import examplePotentiometerRp2040 from './example-potentiometer-rp2040.json';
@@ -78,11 +80,13 @@ export const EXAMPLE_CIRCUITS: Readonly<Record<string, Partial<Record<BoardId, C
       mega: parseCircuit(exampleI2cClockMega, 'example-i2c-clock-mega'),
       franzininho: parseCircuit(exampleI2cClockFranzininho, 'example-i2c-clock-franzininho'),
       /*
-       * The Pico's port of the same clock: I2C0 comes out on GP0 and GP1, so
-       * the two data wires land on the first two pins of the left header rather
-       * than on dedicated SDA and SCL holes -- the Pico has none.
+       * The MicroPython ports of the same clock. The Pico's I2C0 comes out on
+       * GP0 and GP1, so the data wires land on the first two pins of the left
+       * header -- the Pico has no dedicated SDA/SCL holes. The Nano RP2040
+       * Connect brings the same peripheral out on A4 and A5.
        */
       pico: parseCircuit(exampleI2cClockPico, 'example-i2c-clock-pico'),
+      rp2040: parseCircuit(exampleI2cClockRp2040, 'example-i2c-clock-rp2040'),
     },
     potentiometer: {
       /*

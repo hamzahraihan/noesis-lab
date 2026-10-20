@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-nano-rp2040-connect",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "ds1307-rtc",
+      "x": 90,
+      "y": 40,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p2:SDA",
+      "to": "p1:A4",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p2:SCL",
+      "to": "p1:A5",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p2:GND",
+      "to": "p1:J1_GND",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p2:VCC",
+      "to": "p1:3V3",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

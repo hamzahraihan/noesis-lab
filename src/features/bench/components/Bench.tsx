@@ -172,6 +172,12 @@ export interface BenchProps {
    * idiom.
    */
   readonly starterSketchFor: (boardId: BoardId, language?: FirmwareLanguage) => string;
+  /**
+   * The project an example loads on a board: its port and the language that
+   * port is written in, chosen together. Reading `Example.sketch` here would
+   * put the shared C++ in a Python board's `main.py`.
+   */
+  readonly exampleProjectFor: (example: Example, boardId: BoardId) => FirmwareProject;
   readonly BOARDS: ReadonlyArray<BoardOption>;
   readonly boardOption: (boardId: BoardId) => BoardOption;
   readonly DEFAULT_BOARD_ID: BoardId;
@@ -202,6 +208,7 @@ export default function Bench(props: BenchProps) {
   const {
     EXAMPLES,
     starterSketchFor,
+    exampleProjectFor,
     BOARDS,
     boardOption,
     DEFAULT_BOARD_ID,
@@ -1268,14 +1275,14 @@ export default function Bench(props: BenchProps) {
       simulation.replaceCircuit(circuit);
       // An example is a fresh bench, so it gets framed like any other load.
       useWorkbenchStore.getState().fitTo(benchBounds(simulation.bench));
-      const next = toSingleFileProject(example.sketch, boardOption(boardId).language);
+      const next = exampleProjectFor(example, boardId);
       setProject(next);
       setExampleId(example.id);
       if (workerClient !== null && workerLive) workerClient.loadFirmware(next);
       else simulation.loadFirmware(next);
       forceRender((n) => n + 1);
     },
-    [simulation, workerClient, workerLive, EXAMPLES, boardOption, boardId, exampleCircuitFor],
+    [simulation, workerClient, workerLive, EXAMPLES, boardId, exampleCircuitFor, exampleProjectFor],
   );
 
   /*
