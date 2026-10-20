@@ -355,7 +355,10 @@ export function lcdFromSnapshot(
  * flags say whether the glass is lit and whether the image is mirrored, which
  * is what the panel was showing, not only what it drew.
  */
-export function ssd1306FromSnapshot(frameBytes: readonly number[], flags: number): Ssd1306 {
+export function ssd1306FromSnapshot(
+  frameBytes: Uint8Array | readonly number[],
+  flags: number,
+): Ssd1306 {
   const panel = new Ssd1306();
   panel.loadFrame(new Uint8Array(frameBytes), {
     lit: (flags & SSD1306_FLAG_LIT) !== 0,
