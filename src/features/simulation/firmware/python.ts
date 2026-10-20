@@ -28,6 +28,7 @@ import {
   FirmwareSyntaxError,
   type Expr,
   type FunctionDecl,
+  type KeywordArgument,
   type Program,
   type SourceLocation,
   type Stmt,
@@ -36,6 +37,7 @@ import {
 export type PythonTokenKind =
   | 'number'
   | 'string'
+  | 'bytes'
   | 'fstring'
   | 'identifier'
   | 'punctuation'
@@ -192,7 +194,9 @@ function numberValue(text: string): number {
 }
 
 function unescape(text: string): string {
-  return text.replace(/\\(.)/gs, (_, escape: string) => {
+  return text.replace(/\\x[0-9a-fA-F]{2}|\\(.)/gs, (match, escape: string) => {
+    // A byte's own spelling: `\x00` is the byte, not the four characters.
+    if (match.startsWith('\\x')) return String.fromCharCode(Number.parseInt(match.slice(2), 16));
     switch (escape) {
       case 'n':
         return '\n';
@@ -351,6 +355,18 @@ export function tokenizePython(source: string, file = 'main.py'): PythonToken[] 
       continue;
     }
 
+    // Checked before the identifier rule, which would otherwise take the `b`
+    // for a name and leave the quote to start a string of its own.
+    if (
+      (char === 'b' || char === 'B') &&
+      (source[index + 1] === '"' || source[index + 1] === "'")
+    ) {
+      const literal = readStringLiteral(source, index + 1);
+      advance(literal.end - index);
+      emit('bytes', literal.body, location);
+      continue;
+    }
+
     if (char === '"' || char === "'") {
       const literal = readStringLiteral(source, index);
       advance(literal.end - index);
@@ -456,15 +472,16 @@ class PythonParser {
     const name = this.expectIdentifier().text;
     this.expectPunctuation('(');
 
-    const parameters: { name: string; type: string }[] = [];
+    const parameters: { name: string; type: string; defaultValue?: Expr }[] = [];
     if (!this.atPunctuation(')')) {
       do {
         if (this.acceptPunctuation('*')) this.next();
         const parameter = this.expectIdentifier().text;
-        // A default is read and dropped. Nothing in this VM binds an optional
-        // argument differently, so keeping it would imply otherwise.
-        if (this.acceptPunctuation('=')) this.readExpression();
-        parameters.push({ name: parameter, type: '' });
+        // A default is kept: an argument the caller leaves out takes it, and a
+        // keyword argument of the same name takes its place.
+        let defaultValue: Expr | undefined;
+        if (this.acceptPunctuation('=')) defaultValue = this.readExpression();
+        parameters.push({ name: parameter, type: '', ...(defaultValue ? { defaultValue } : {}) });
       } while (this.acceptPunctuation(','));
     }
     this.expectPunctuation(')');
@@ -887,13 +904,35 @@ class PythonParser {
     for (;;) {
       if (this.acceptPunctuation('(')) {
         const args: Expr[] = [];
+        const keywords: KeywordArgument[] = [];
         if (!this.atPunctuation(')')) {
           do {
-            args.push(this.readExpression());
+            /*
+             * A keyword argument is a name and an `=`. Python binds those by
+             * name, so a sketch can spell a call the way its documentation
+             * does and the callee decides which names it knows.
+             */
+            if (
+              this.peek().kind === 'identifier' &&
+              this.peek(1).kind === 'punctuation' &&
+              this.peek(1).text === '='
+            ) {
+              const name = this.next().text;
+              this.next();
+              keywords.push({ name, value: this.readExpression() });
+            } else {
+              args.push(this.readExpression());
+            }
           } while (this.acceptPunctuation(','));
         }
         this.expectPunctuation(')');
-        expression = { kind: 'call', callee: expression, args, location: expression.location };
+        expression = {
+          kind: 'call',
+          callee: expression,
+          args,
+          ...(keywords.length > 0 ? { keywords } : {}),
+          location: expression.location,
+        };
         continue;
       }
       if (this.acceptPunctuation('[')) {
@@ -919,6 +958,29 @@ class PythonParser {
     }
     if (token.kind === 'string') {
       return { kind: 'string', value: token.text, location: token.location };
+    }
+    if (token.kind === 'bytes') {
+      /*
+       * A bytes literal is a list of byte values. The bench's buffers are
+       * arrays, so that is what it is: `b'\x00\xaf'` is two bytes, not four
+       * characters.
+       */
+      const items = Array.from(token.text, (character) => ({
+        kind: 'number' as const,
+        value: character.charCodeAt(0),
+        location: token.location,
+      }));
+      return { kind: 'list', items, location: token.location };
+    }
+    if (token.kind === 'punctuation' && token.text === '[') {
+      const items: Expr[] = [];
+      if (!this.atPunctuation(']')) {
+        do {
+          items.push(this.readExpression());
+        } while (this.acceptPunctuation(','));
+      }
+      this.expectPunctuation(']');
+      return { kind: 'list', items, location: token.location };
     }
     if (token.kind === 'fstring') {
       return readFstring(token, this.file);
