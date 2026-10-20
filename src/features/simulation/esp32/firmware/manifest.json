@@ -2,15 +2,16 @@
   "note": "The pinned artefacts of the ESP32 machine path: the emulator, the chip's own mask ROM, and the MicroPython image it boots. Re-verify with the sha256 above; never patch in place.",
   "artifacts": [
     {
-      "name": "esp32sim (WebAssembly build, with the GPIO seam)",
-      "version": "2026-08-25 + esp32sim-gpio-seam.patch",
+      "name": "esp32sim (WebAssembly build, with the GPIO and I2C seams)",
+      "version": "2026-08-25 + esp32sim-gpio-seam.patch + esp32sim-i2c-seam.patch",
       "file": "esp32sim.wasm",
-      "bytes": 3386384,
-      "sha256": "67fe300b651117dcfa2c159b2ab5b228f3841297bd2913c0bd9c85dd92d1da3a",
+      "bytes": 3387703,
+      "sha256": "74f2d917de4b91b0342cbcaa0f9aa1ff553970c7181dbc06a4d943ba2fdf772f",
       "url": "https://mikroverk.github.io/esp32sim/wasm/esp32sim.wasm",
       "license": "MIT",
       "source": "https://github.com/mikroverk/esp32sim",
-      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif. This build carries the local patch in ../patches/, which adds the three exports a bench needs to read what the chip drives and to drive what it reads; scripts/build-esp32-wasm.mjs rebuilds it from upstream and the patch."
+      "toolchain": "rustc 1.99.1 (stable-x86_64-pc-windows-msvc), wasm32-unknown-unknown",
+      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif. This build carries the two local patches in ../patches/: the GPIO seam, which adds the three exports a bench needs to read what the chip drives and to drive what it reads, and the I2C seam, which lets the host answer the chip's I2C controller so the bench's devices are on the bus the firmware talks on. scripts/build-esp32-wasm.mjs rebuilds it from upstream and the patches; the hash above is the toolchain's output, and the host family changes it."
     },
     {
       "name": "MicroPython (ESP32 port, ESP32_GENERIC variant)",

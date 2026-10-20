@@ -1,12 +1,19 @@
 /**
  * Builds the ESP32 emulator's WebAssembly module.
  *
- * The module is upstream's, with one local patch: the GPIO seam a bench needs
- * to read what the chip drives and to drive what it reads. The build is
- * reproducible -- a pinned upstream commit, the pinned patch, and upstream's own
- * build script -- so the module committed under
+ * The module is upstream's, with two local patches: the GPIO seam a bench
+ * needs to read what the chip drives and to drive what it reads, and the I2C
+ * seam that lets the host answer the chip's I2C controller, so the bench's
+ * devices are on the bus the firmware talks on. The build is reproducible --
+ * a pinned upstream commit, the pinned patches, and upstream's own build
+ * script -- so the module committed under
  * `src/features/simulation/esp32/firmware/` can be rebuilt and checked
  * against the hash the manifest records.
+ *
+ * The hash belongs to a toolchain: the module is a wasm build, and the host
+ * family changes it. The manifest records the toolchain the committed
+ * artefact came from, and this script prints the one it used, so a mismatch
+ * is a fact rather than a mystery.
  *
  * Needs a Rust toolchain with the `wasm32-unknown-unknown` target, and a
  * shell for upstream's `tools/wasm-build.sh` (bash: git bash on Windows, bash
@@ -34,7 +41,10 @@ import { createHash } from 'node:crypto';
 const UPSTREAM = 'https://github.com/mikroverk/esp32sim.git';
 const COMMIT = '964c26c1a6dac335e849195d2cabc15c713015a3';
 const ROOT = resolve(import.meta.dirname, '..');
-const PATCH = join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-gpio-seam.patch');
+const PATCHES = [
+  join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-gpio-seam.patch'),
+  join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-i2c-seam.patch'),
+];
 const TARGET = join(ROOT, 'src/features/simulation/esp32/firmware/esp32sim.wasm');
 const MANIFEST = join(ROOT, 'src/features/simulation/esp32/firmware/manifest.json');
 
@@ -62,12 +72,35 @@ function run(command, args, cwd) {
   });
 }
 
+/**
+ * The toolchain the build used.
+ *
+ * Upstream's build script takes the compiler `rustup` points at, so this is
+ * the same answer, and the module's bytes belong to it: the host family
+ * changes them. Set `RUSTUP_TOOLCHAIN` to the toolchain the manifest records
+ * to rebuild the committed bytes.
+ */
+function toolchain() {
+  try {
+    return execFileSync('rustc', ['--version'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        CARGO_HOME: join(SCRATCH, '..', 'cargo'),
+        RUSTUP_HOME: join(SCRATCH, '..', 'rustup'),
+      },
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
 mkdirSync(SCRATCH, { recursive: true });
 const work = mkdtempSync(join(SCRATCH, 'esp32sim-'));
 try {
   run('git', ['clone', '--filter=blob:none', UPSTREAM, work]);
   run('git', ['checkout', COMMIT], work);
-  run('git', ['apply', PATCH], work);
+  for (const patch of PATCHES) run('git', ['apply', patch], work);
   run('bash', ['tools/wasm-build.sh'], work);
 
   const built = join(work, 'web/wasm/esp32sim.wasm');
@@ -79,6 +112,7 @@ try {
   const entry = manifest.artifacts.find((artifact) => artifact.file === 'esp32sim.wasm');
   if (!entry) throw new Error('the manifest has no esp32sim.wasm entry');
   console.log(`esp32sim.wasm: ${bytes.length} bytes, sha256 ${sha256}`);
+  console.log(`toolchain: ${toolchain()}`);
   if (entry.sha256 !== sha256) {
     console.log(`the manifest records ${entry.sha256}`);
     console.log('update the manifest if the build is the new reference');

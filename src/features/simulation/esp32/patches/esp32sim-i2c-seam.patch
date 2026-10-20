@@ -1,0 +1,108 @@
+diff --git a/wasm/src/lib.rs b/wasm/src/lib.rs
+index c1632e7..d72f777 100644
+--- a/wasm/src/lib.rs
++++ b/wasm/src/lib.rs
+@@ -41,6 +41,30 @@ fn log(s: &str) {
+     unsafe { host_log(s.as_ptr(), s.len()); }
+ }
+ 
++// --- Host seam: the classic ESP32's I2C bus, for a bench that wires the chip ---
++//
++// The classic I2C controller is a master that exchanges bytes with attached
++// devices: a transaction exists as the controller's calls into a device, not
++// as a waveform on two pins. A bench's devices live in the host, so these
++// four imports are the seam -- the controller asks, the host answers.
++
++#[cfg(target_arch = "wasm32")]
++#[link(wasm_import_module = "env")]
++extern "C" {
++    fn host_i2c_start(address: u32, read: u32) -> u32;
++    fn host_i2c_write(address: u32, byte: u32) -> u32;
++    fn host_i2c_read(address: u32) -> u32;
++    fn host_i2c_stop(address: u32);
++}
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_i2c_start(_address: u32, _read: u32) -> u32 { 0 }
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_i2c_write(_address: u32, _byte: u32) -> u32 { 0 }
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_i2c_read(_address: u32) -> u32 { 0xff }
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_i2c_stop(_address: u32) {}
++
+ pub struct Emu {
+     m: MachineKind,
+     /// the last drained outbox: (1 text | 2 binary, payload), addressed by index from JS
+@@ -182,6 +206,56 @@ fn prepare<S: Soc>(m: &mut Machine<S>) {
+     m.console.capture = true;
+ }
+ 
++/// A device that lives in the host: the controller asks, the host answers.
++///
++/// The controller selects devices by address, so this one answers for every
++/// address and leaves the choice to the host, which knows what is on the
++/// bench's bus and what the firmware addressed.
++struct HostI2c {
++    address: u8,
++}
++
++impl esp_periph::i2c::I2cDevice for HostI2c {
++    fn address(&self, _configured: u8) -> u8 { self.address }
++    fn start_address(&mut self, _configured: u8, address: u8, read: bool) -> bool {
++        self.address = address;
++        // SAFETY: the import is a plain call into the host's function table.
++        unsafe { host_i2c_start(address as u32, u32::from(read)) != 0 }
++    }
++    fn write(&mut self, b: u8) -> bool {
++        // SAFETY: the import is a plain call into the host's function table.
++        unsafe { host_i2c_write(self.address as u32, b as u32) != 0 }
++    }
++    fn read(&mut self) -> u8 {
++        // SAFETY: the import is a plain call into the host's function table.
++        unsafe { host_i2c_read(self.address as u32) as u8 }
++    }
++    fn stop(&mut self) {
++        // SAFETY: the import is a plain call into the host's function table.
++        unsafe { host_i2c_stop(self.address as u32) };
++    }
++}
++
++/// Attach the host's I2C device to the classic ESP32's I2C controller.
++///
++/// The bench's devices are the host's, so the controller needs one to talk
++/// to. Returns 0 on success, 1 when the chip is not a classic ESP32 or the
++/// bus does not exist.
++#[no_mangle]
++pub unsafe extern "C" fn esp32sim_i2c_attach_host(e: *mut Emu, bus: u32) -> u32 {
++    let e = unsafe { &mut *e };
++    match &mut e.m {
++        machine::MachineKind::Esp32(m) => {
++            let Some(i2c) = m.bus.periph.i2c.get_mut(bus as usize) else { return 1 };
++            // 0x7f is no device's address: the host answers for every address,
++            // and this is only the slot the controller keeps it in.
++            i2c.attach(0x7f, Box::new(HostI2c { address: 0x7f }));
++            0
++        }
++        _ => 1,
++    }
++}
++
+ /// Destroy an emulator returned by `esp32sim_new`. A null pointer is ignored.
+ ///
+ /// # Safety
+diff --git a/web/wasm/worker.js b/web/wasm/worker.js
+index 242f037..768f0b8 100644
+--- a/web/wasm/worker.js
++++ b/web/wasm/worker.js
+@@ -18,7 +18,10 @@ function withBytes(bytes, f) { const p = put(bytes); try { return f(p, bytes.len
+ const blockJit = createJitHost(() => wasm);
+ let experiments = [], setupError = null, smoothDisplay = false;
+ let frameAck = false, framesInFlight = 0, pendingFrame = null;
+-const imports = { env: { ...blockJit.imports, host_log: (p, n) => postMessage({ log: dec.decode(mem().subarray(p, p + n)) }) } };
++// The page has no I2C devices of its own, so the bus seam answers "nobody is
++// there": a transaction is not acknowledged and a read comes back as 0xff.
++const imports = { env: { ...blockJit.imports, host_log: (p, n) => postMessage({ log: dec.decode(mem().subarray(p, p + n)) }),
++  host_i2c_start: () => 0, host_i2c_write: () => 0, host_i2c_read: () => 0xff, host_i2c_stop: () => {} } };
+ 
+ function drain() {
+   const n = wasm.esp32sim_out_take(emu);
