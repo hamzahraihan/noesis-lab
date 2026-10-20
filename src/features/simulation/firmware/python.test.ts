@@ -384,6 +384,16 @@ describe('the spellings a sketch uses', () => {
       0, 175,
     ]);
   });
+
+  it('reads a comprehension as the element and the iterable it walks', () => {
+    const declaration = first('x = [i * 2 for i in range(3)]');
+    if (declaration.kind !== 'varDecl' || declaration.init?.kind !== 'comprehension') {
+      throw new Error('expected a comprehension');
+    }
+    expect(declaration.init.variable).toBe('i');
+    expect(declaration.init.element).toMatchObject({ kind: 'binary' });
+    expect(declaration.init.iterable).toMatchObject({ kind: 'call' });
+  });
 });
 
 /** One expression, for assertions about operator rewriting. */

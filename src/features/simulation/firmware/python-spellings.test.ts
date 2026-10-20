@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FirmwareRunner, type FirmwareServices } from './interpreter';
 
 /**
- * The call spellings a MicroPython sketch uses.
+ * The spellings a MicroPython sketch uses.
  *
  * The front end used to stop at the first keyword argument and the first
  * bytes literal, so a sketch written the way its documentation does could not
@@ -103,5 +103,19 @@ describe('a call spelled the way Python spells it', () => {
 
     expect(bus).toContain('write 0');
     expect(bus).toContain('write 175');
+  });
+
+  it('builds a list from a comprehension over a range', () => {
+    const { serial } = run(['squares = [i * i for i in range(5)]', 'print(squares[2])'].join('\n'));
+
+    expect(serial).toContain('4');
+  });
+
+  it('builds a list from a comprehension over an array', () => {
+    const { serial } = run(
+      ['values = [1, 2, 3]', 'doubled = [v * 2 for v in values]', 'print(doubled[2])'].join('\n'),
+    );
+
+    expect(serial).toContain('6');
   });
 });
