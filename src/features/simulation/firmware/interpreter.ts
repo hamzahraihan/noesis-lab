@@ -1276,6 +1276,7 @@ export class FirmwareRuntime {
     args: Value[],
     parent: Scope,
     services: FirmwareServices,
+    keywords: readonly { name: string; value: Value }[] = [],
   ): Generator<DelayRequest, Value, void> {
     /*
      * `len` needs the scope to find what it is measuring, so it cannot live
@@ -1321,8 +1322,30 @@ export class FirmwareRuntime {
 
     const scope = new Scope(parent);
     declaration.parameters.forEach((parameter, index) => {
-      scope.values.set(parameter.name, args[index] ?? 0);
+      const argument = args[index];
+      if (argument !== undefined) {
+        scope.values.set(parameter.name, argument);
+        return;
+      }
+      // An argument the caller left out takes the parameter's default, or
+      // nothing at all when it has none.
+      scope.values.set(
+        parameter.name,
+        parameter.defaultValue === undefined ? 0 : (this.staticValue(parameter.defaultValue) ?? 0),
+      );
     });
+    /*
+     * A keyword argument binds the parameter of that name, wherever the
+     * argument sits. A name the function does not have is left alone: the
+     * built-ins take what they know and ignore the rest, and a sketch that
+     * spells a call the way its documentation does should not stop at the
+     * spelling.
+     */
+    for (const keyword of keywords) {
+      if (declaration.parameters.some((parameter) => parameter.name === keyword.name)) {
+        scope.values.set(keyword.name, keyword.value);
+      }
+    }
 
     const flow = yield* this.execute(declaration.body, scope, services);
     // The body's `return` carries the value out; falling off the end, as C
@@ -1938,6 +1961,19 @@ export class FirmwareRuntime {
       case 'boolean':
         return expression.value ? 1 : 0;
 
+      case 'list': {
+        /*
+         * A list of values, and the bytes literal too: the bench's buffers
+         * are arrays, so `b'\x00\xaf'` is two numbers and not four
+         * characters.
+         */
+        const items: number[] = [];
+        for (const item of expression.items) {
+          items.push(asNumber((yield* this.evaluate(item, scope, services)) as Value));
+        }
+        return items;
+      }
+
       case 'identifier': {
         /*
          * A name that holds an array evaluates to a copy of its store, so a
@@ -2185,12 +2221,19 @@ export class FirmwareRuntime {
 
       case 'call': {
         const callee = expression.callee;
+        const keywords: { name: string; value: Value }[] = [];
+        for (const keyword of expression.keywords ?? []) {
+          keywords.push({
+            name: keyword.name,
+            value: (yield* this.evaluate(keyword.value, scope, services)) as Value,
+          });
+        }
         if (callee.kind === 'identifier') {
           const args: Value[] = [];
           for (const argument of expression.args) {
             args.push((yield* this.evaluate(argument, scope, services)) as Value);
           }
-          return (yield* this.callFunction(callee.name, args, scope, services)) as Value;
+          return (yield* this.callFunction(callee.name, args, scope, services, keywords)) as Value;
         }
         if (callee.kind === 'member' && callee.target.kind === 'identifier') {
           const args: Value[] = [];
