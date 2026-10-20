@@ -876,6 +876,10 @@ class SimCore implements CoreHandle {
       // sink the RP2040's bridge uses: the engine decides who is on the bus
       // and the bus log sees the transfer either way.
       i2c: this.i2cSink(),
+      // The chip's SPI master shifts bytes out of the same bus, and the
+      // D/C and chip-select lines the bench's displays need are the chip's
+      // own GPIOs, so the sink carries their level with every byte.
+      spi: this.spiSink(),
     };
   }
 
@@ -921,6 +925,36 @@ class SimCore implements CoreHandle {
           bus: 'i2c',
           address: transfer.address,
           bytes: transfer.bytes,
+          acknowledged: transfer.acknowledged,
+          micros: transfer.micros,
+        });
+      },
+    };
+  }
+
+  /**
+   * The bench's SPI bus, as the emulated chip's master sees it.
+   *
+   * The chip shifts bytes out and reads MISO back, so every byte goes to the
+   * bus with the level of the D/C line the sketch is driving, and the bus
+   * answers with the byte the device would have shifted in.
+   */
+  private spiSink(): {
+    begin(): void;
+    transfer(byte: number, dataSelect: boolean, chipSelected: boolean): number;
+    end(): void;
+  } {
+    return {
+      begin: () => this.spi.begin(),
+      transfer: (byte, dataSelect, chipSelected) =>
+        this.spi.transfer(byte, dataSelect, chipSelected),
+      end: () => {
+        const transfer = this.spi.end();
+        this.busLog.record({
+          timeMs: this.engine.timeMs,
+          bus: 'spi',
+          address: null,
+          bytes: transfer.bytes.map((byte) => byte.value),
           acknowledged: transfer.acknowledged,
           micros: transfer.micros,
         });
