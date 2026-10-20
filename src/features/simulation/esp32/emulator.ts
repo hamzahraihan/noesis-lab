@@ -60,6 +60,9 @@ interface Esp32SimExports {
   esp32sim_out_kind(emu: number, index: number): number;
   esp32sim_out_ptr(emu: number, index: number): number;
   esp32sim_out_len(emu: number, index: number): number;
+  esp32sim_gpio_out(emu: number): bigint;
+  esp32sim_gpio_oe(emu: number): bigint;
+  esp32sim_gpio_set_input(emu: number, pin: number, level: number): number;
   esp32sim_cycles(emu: number): number;
   esp32sim_cpu_hz(emu: number): number;
 }
@@ -81,6 +84,23 @@ export interface Esp32Emulator {
    * sees the firmware's output in the order it wrote it.
    */
   run(cycles: number): string[];
+  /**
+   * The levels the chip drives on its pads, as a bitmask: bit n is pin n.
+   *
+   * A pad the chip drives low is not in this word, so the enable word tells
+   * "driven low" from "not driven at all".
+   */
+  readonly gpioOut: bigint;
+  /** Which pads the chip drives as outputs, as a bitmask: bit n is pin n. */
+  readonly gpioOutEnable: bigint;
+  /**
+   * Drives an input pad, the way the board around the chip does.
+   *
+   * This is the level the chip reads there: a button on the bench is a pad
+   * the host pulls low, and a sensor's output is a pad the host raises.
+   * Answers whether the chip took it.
+   */
+  setInput(pin: number, level: boolean): boolean;
   /** The emulated cycles since the boot. */
   readonly cycles: number;
   /** The chip's clock, in hertz. */
@@ -117,10 +137,10 @@ export async function bootEsp32(assets: Esp32Assets): Promise<Esp32Emulator> {
     memory().set(bytes, pointer);
     return pointer;
   };
-  const withBytes = <T>(bytes: Uint8Array, use: (pointer: number, length: number) => T): T => {
+  const withBytes = <T>(bytes: Uint8Array, call: (pointer: number, length: number) => T): T => {
     const pointer = put(bytes);
     try {
-      return use(pointer, bytes.length);
+      return call(pointer, bytes.length);
     } finally {
       exports!.esp32sim_free(pointer, bytes.length);
     }
@@ -135,7 +155,10 @@ export async function bootEsp32(assets: Esp32Assets): Promise<Esp32Emulator> {
   exports.esp32sim_set_jit?.(emu, 0);
 
   const rom = new Uint8Array(assets.rom);
-  if (withBytes(rom, (pointer, length) => exports!.esp32sim_load(emu, LOAD_ROM, pointer, length)) !== 0) {
+  if (
+    withBytes(rom, (pointer, length) => exports!.esp32sim_load(emu, LOAD_ROM, pointer, length)) !==
+    0
+  ) {
     throw new Error('esp32: the mask ROM would not load');
   }
   const image = new Uint8Array(assets.image);
@@ -164,6 +187,15 @@ export async function bootEsp32(assets: Esp32Assets): Promise<Esp32Emulator> {
         if (envelope?.t === 'serial' && envelope.data !== undefined) lines.push(envelope.data);
       }
       return lines;
+    },
+    get gpioOut(): bigint {
+      return exports!.esp32sim_gpio_out(emu);
+    },
+    get gpioOutEnable(): bigint {
+      return exports!.esp32sim_gpio_oe(emu);
+    },
+    setInput(pin: number, level: boolean): boolean {
+      return exports!.esp32sim_gpio_set_input(emu, pin, level ? 1 : 0) === 0;
     },
     get cycles(): number {
       return exports!.esp32sim_cycles(emu);

@@ -39,4 +39,19 @@ describe('the emulated ESP32', () => {
     expect(console).toContain('>>>');
     expect(chip.cpuHz).toBe(240_000_000);
   }, 120_000);
+
+  it('hands the chip pins to the host', async () => {
+    const chip = await bootEsp32(assets());
+    for (let slice = 0; slice < 20; slice++) chip.run(4_000_000);
+
+    /*
+     * The seam a bench needs: what the chip drives, and what it reads. The
+     * chip drives its flash pins while it boots, so the words are not empty --
+     * the host is reading the chip's own pins rather than a fixed zero -- and
+     * the host can drive a pad the chip then reads.
+     */
+    expect(typeof chip.gpioOut).toBe('bigint');
+    expect(chip.gpioOutEnable).toBeGreaterThan(0n);
+    expect(chip.setInput(4, true)).toBe(true);
+  }, 120_000);
 });

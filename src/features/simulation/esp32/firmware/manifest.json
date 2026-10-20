@@ -2,15 +2,15 @@
   "note": "The pinned artefacts of the ESP32 machine path: the emulator, the chip's own mask ROM, and the MicroPython image it boots. Re-verify with the sha256 above; never patch in place.",
   "artifacts": [
     {
-      "name": "esp32sim (WebAssembly build)",
-      "version": "2026-08-25",
+      "name": "esp32sim (WebAssembly build, with the GPIO seam)",
+      "version": "2026-08-25 + esp32sim-gpio-seam.patch",
       "file": "esp32sim.wasm",
-      "bytes": 3386380,
-      "sha256": "6f8d52afffdeb47374ebef4f00d6939f243cc2f5ca28207127346a746de6d468",
+      "bytes": 3386384,
+      "sha256": "67fe300b651117dcfa2c159b2ab5b228f3841297bd2913c0bd9c85dd92d1da3a",
       "url": "https://mikroverk.github.io/esp32sim/wasm/esp32sim.wasm",
       "license": "MIT",
       "source": "https://github.com/mikroverk/esp32sim",
-      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif."
+      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif. This build carries the local patch in ../patches/, which adds the three exports a bench needs to read what the chip drives and to drive what it reads; scripts/build-esp32-wasm.mjs rebuilds it from upstream and the patch."
     },
     {
       "name": "MicroPython (ESP32 port, ESP32_GENERIC variant)",

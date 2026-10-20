@@ -1,0 +1,54 @@
+diff --git a/wasm/src/lib.rs b/wasm/src/lib.rs
+index c1632e7..9c112e4 100644
+--- a/wasm/src/lib.rs
++++ b/wasm/src/lib.rs
+@@ -460,3 +460,49 @@ pub extern "C" fn esp32sim_test_gpio_waveform() -> u32 {
+     gpio_waveform_tests::run();
+     24
+ }
++
++// --- Host seam: the classic ESP32's GPIO, for a bench that wires the chip ---
++//
++// A circuit simulator needs the chip's pins: what the firmware drives, and
++// what it reads. The emulator models the GPIO block fully, but the board model
++// is the only thing that saw the driven levels, and a board model is a fixed
++// piece of hardware. These three exports are the seam a host simulator uses
++// instead: two words of output state, and a way to drive an input pad.
++
++/// The levels the chip drives high on its pads, as a bitmask: bit n is pin n.
++///
++/// A pad the chip drives low is not in this word, so the caller reads the
++/// enable word to tell "driven low" from "not driven at all".
++#[no_mangle]
++pub unsafe extern "C" fn esp32sim_gpio_out(e: *mut Emu) -> u64 {
++    let e = unsafe { &*e };
++    match &e.m {
++        machine::MachineKind::Esp32(m) => m.bus.periph.gpio.gpio.out,
++        _ => 0,
++    }
++}
++
++/// Which pads the chip drives as outputs, as a bitmask: bit n is pin n.
++#[no_mangle]
++pub unsafe extern "C" fn esp32sim_gpio_oe(e: *mut Emu) -> u64 {
++    let e = unsafe { &*e };
++    match &e.m {
++        machine::MachineKind::Esp32(m) => m.bus.periph.gpio.gpio.enable,
++        _ => 0,
++    }
++}
++
++/// Drive an input pad, the way the board around the chip does: this is the
++/// level the chip reads there. Returns 0 on success, 1 when the chip is not a
++/// classic ESP32.
++#[no_mangle]
++pub unsafe extern "C" fn esp32sim_gpio_set_input(e: *mut Emu, pin: u32, level: u32) -> u32 {
++    let e = unsafe { &mut *e };
++    match &mut e.m {
++        machine::MachineKind::Esp32(m) => {
++            m.bus.gpio_set_input(pin as u8, level != 0);
++            0
++        }
++        _ => 1,
++    }
++}
