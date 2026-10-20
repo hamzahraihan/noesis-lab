@@ -1,7 +1,7 @@
-import path from "node:path";
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
-import tailwindcss from "@tailwindcss/vite";
+import path from 'node:path';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -11,7 +11,17 @@ export default defineConfig({
   // canvas while the rest of the UI kept updating -- a blank OLED next to a
   // running status bar. Correctness wins over the memoisation here.
   plugins: [tailwindcss(), react()],
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
+  /*
+   * Where the build's scratch goes.
+   *
+   * The dependency cache and the bundle are both large and both rewritten on
+   * every build, which is a lot of writes for a machine that has a second
+   * drive. `VITE_CACHE_DIR` and `VITE_OUT_DIR` move them; unset, they stay
+   * where they have always been, so the default is still a plain checkout.
+   */
+  cacheDir: process.env.VITE_CACHE_DIR,
+  build: { outDir: process.env.VITE_OUT_DIR ?? 'dist' },
   // Every Worker in the app is constructed with `{ type: 'module' }` and the
   // sim worker's graph carries dynamic imports (the wasm seam), which the
   // default iife worker format cannot represent under rolldown -- it fails
