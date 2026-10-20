@@ -1293,6 +1293,8 @@ export default function Bench(props: BenchProps) {
    */
   const handleLanguageChange = (nextLanguage: FirmwareLanguage) => {
     if (nextLanguage === project.language) return;
+    // A board runs one firmware: a language it cannot run is not a choice.
+    if (!boardOption(boardId).languages.includes(nextLanguage)) return;
     if (
       project.files.length > 1 &&
       !window.confirm('Switching language discards other-language tabs. Continue?')
@@ -2244,6 +2246,7 @@ export default function Bench(props: BenchProps) {
                 onToggle={() => {}}
                 headerHidden
                 language={project.language}
+                languages={boardOption(boardId).languages}
                 onChangeLanguage={handleLanguageChange}
                 onRun={handleRun}
                 onReset={() => {

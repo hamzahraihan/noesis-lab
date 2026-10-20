@@ -67,6 +67,7 @@ import { I2CBus } from '../bus/i2c';
 import { SpiBus } from '../bus/spi';
 import { BusLog } from '../bus/log';
 import { FirmwareRunner, type FirmwareServices } from '../firmware/interpreter';
+import { pythonModulesFor } from '../firmware/python-modules';
 import { FirmwareSyntaxError } from '../firmware/parser';
 import {
   allocSnapshot,
@@ -1064,6 +1065,12 @@ class SimCore implements CoreHandle {
       },
       net: createNetPort(this.net),
       nowMs: () => this.engine.timeMs,
+      // The board's own pin namespace: on most boards a sketch's pin number is
+      // the GPIO number, and on the Nano RP2040 Connect it is not.
+      pins: this.mcu.arduinoPins,
+      // The Python vocabulary this board's runtime speaks: `machine` on the
+      // MicroPython boards, `gpiozero` on a Raspberry Pi.
+      pythonModules: pythonModulesFor(this.mcu.board.id),
       pinMode: (pin, mode) => {
         // No settle here: pin writes only retarget future solves, and the
         // slice loop settles once per step below.

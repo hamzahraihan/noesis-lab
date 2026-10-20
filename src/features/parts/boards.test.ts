@@ -140,6 +140,57 @@ describe('board definitions', () => {
   });
 });
 
+describe('the Arduino pin namespace', () => {
+  it('renames the pins on the board whose header and chip disagree', () => {
+    /*
+     * The Nano RP2040 Connect is the one board where a C++ sketch's pin index
+     * is not the chip's GPIO: `pinMode(2)` means the hole labelled D2, which
+     * is GPIO25, and the analog block answers 14 to 19 the way every Arduino
+     * board does.
+     */
+    const mcu = new McuRuntime(nanoRp2040Connect());
+    expect(mcu.arduinoPins.map).toMatchObject({
+      2: 25,
+      10: 5,
+      12: 4,
+      13: 6,
+      14: 26,
+      17: 29,
+      18: 12,
+      19: 13,
+    });
+  });
+
+  it('gives the analog constants the values each core uses', () => {
+    // An ESP32 names its analog pins by the GPIO behind them.
+    expect(new McuRuntime(esp32DevKitV1()).arduinoPins.aliases).toEqual({
+      A0: 36,
+      A1: 39,
+      A2: 34,
+      A3: 35,
+      A4: 32,
+      A5: 33,
+    });
+    // A Mega numbers them after its fifty-four digital pins.
+    expect(new McuRuntime(arduinoMega2560()).arduinoPins.aliases).toEqual({
+      A0: 54,
+      A1: 55,
+      A2: 56,
+      A3: 57,
+      A4: 58,
+      A5: 59,
+    });
+    // The Pico's analog pins are GP26 to GP28.
+    expect(new McuRuntime(raspberryPiPico()).arduinoPins.aliases).toEqual({
+      A0: 26,
+      A1: 27,
+      A2: 28,
+    });
+    // An Uno's are 14 to 19, which is the default, so it says nothing.
+    expect(new McuRuntime(arduinoUnoR3()).arduinoPins.aliases).toBeUndefined();
+  });
+});
+
 describe('default bus pins', () => {
   it('puts the I2C bus on the pins each board silkscreens for it', () => {
     expect(new McuRuntime(esp32DevKitV1()).i2cPins).toEqual([21, 22]);

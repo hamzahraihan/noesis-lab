@@ -74,6 +74,20 @@ function sketchPin(boardId: BoardId): number {
 }
 
 describe('board registry', () => {
+  it('offers a board only the languages it can run', () => {
+    /*
+     * A board runs one firmware. An Arduino board takes C++, a Raspberry Pi
+     * takes Python, and the MicroPython boards take both -- but the language
+     * a bench opens in is always one the board can actually execute.
+     */
+    for (const board of BOARDS) {
+      expect(board.languages, `${board.name} languages`).toContain(board.language);
+    }
+    expect(boardOption('uno').languages).toEqual(['arduino-cpp']);
+    expect(boardOption('raspberry-pi').languages).toEqual(['python']);
+    expect(boardOption('esp32').languages).toContain('python');
+  });
+
   it('offers a unique id per board, including the default', () => {
     const ids = BOARDS.map((board) => board.id);
     // Duplicates would make one board unreachable: the first match always wins.
@@ -203,6 +217,71 @@ describe('board registry', () => {
       expect(simulation.mcu.pinIdForGpio(12)).toBe('J3_A4');
       expect(simulation.mcu.pinIdForGpio(13)).toBe('J3_A5');
       expect(simulation.engine.i2cDevice(oled.id)?.onBus).toBe(true);
+    });
+
+    it('runs the ESP32 MicroPython starter on its own bench', () => {
+      /*
+       * The ESP32 runs MicroPython too, and the Python it runs is `machine` --
+       * the library the RP2040 boards speak -- not the Raspberry Pi's
+       * `gpiozero`. The starter drives GP2, the hole the document labels D2,
+       * and the LED is what proves the vocabulary and the wiring agree.
+       */
+      const { simulation, led } = starterDrivePin('esp32');
+      simulation.loadFirmware(starterSketchFor('esp32', 'python'), 'python');
+      expect(simulation.firmwareError).toBeNull();
+      simulation.start();
+
+      const anodeKey = `${led.id}:anode`;
+      let brightest = 0;
+      let darkest = Infinity;
+      for (let frame = 0; frame < 120; frame++) {
+        simulation.tick(0.05);
+        const level = simulation.pinVoltages().get(anodeKey) ?? -1;
+        brightest = Math.max(brightest, level);
+        darkest = Math.min(darkest, level);
+      }
+      expect(brightest, 'the MicroPython starter never lit the LED').toBeGreaterThan(1.5);
+      expect(darkest, 'the MicroPython starter never went dark').toBeLessThan(0.5);
+    });
+
+    it('refuses a Python module the board does not have', () => {
+      /*
+       * A Raspberry Pi runs Raspberry Pi OS, where the library is `gpiozero`,
+       * and a MicroPython board has `machine`. Asking for the other one is
+       * asking for hardware that is not there, and the bench says so instead
+       * of running a sketch that does nothing.
+       */
+      const pi = new Simulation(boardOption('raspberry-pi').make());
+      pi.loadFirmware('from machine import Pin\nled = Pin(17, Pin.OUT)\n', 'python');
+      expect(pi.firmwareError).toContain('gpiozero');
+
+      const esp32 = new Simulation(boardOption('esp32').make());
+      esp32.loadFirmware('from gpiozero import LED\nled = LED(2)\n', 'python');
+      expect(esp32.firmwareError).toContain('machine');
+    });
+
+    it('runs a C++ sketch on the Nano RP2040 in the Arduino namespace', () => {
+      /*
+       * The header is an Arduino silkscreen wrapped around an RP2040, so a C++
+       * sketch says `pinMode(2)` for the hole labelled D2 -- GPIO25 -- while
+       * the MicroPython starter says `Pin(25)` for the same hole. Both names
+       * reach the same wire, and the LED is what proves it.
+       */
+      const { simulation, led } = starterDrivePin('rp2040');
+      simulation.loadFirmware(
+        'void setup() { pinMode(2, OUTPUT); } void loop() { digitalWrite(2, HIGH); }',
+        'arduino-cpp',
+      );
+      expect(simulation.firmwareError).toBeNull();
+      simulation.start();
+
+      const anodeKey = `${led.id}:anode`;
+      let brightest = 0;
+      for (let frame = 0; frame < 20; frame++) {
+        simulation.tick(0.05);
+        brightest = Math.max(brightest, simulation.pinVoltages().get(anodeKey) ?? 0);
+      }
+      expect(brightest, 'the C++ sketch never lit the starter LED').toBeGreaterThan(1.5);
     });
 
     it('blink it when the firmware runs', () => {

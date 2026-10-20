@@ -24,7 +24,15 @@ import {
   raspberryPiPico,
 } from '@/features/parts';
 
-export type BoardId = 'esp32' | 'uno' | 'mega' | 'nano' | 'rp2040' | 'franzininho' | 'raspberry-pi' | 'pico';
+export type BoardId =
+  | 'esp32'
+  | 'uno'
+  | 'mega'
+  | 'nano'
+  | 'rp2040'
+  | 'franzininho'
+  | 'raspberry-pi'
+  | 'pico';
 
 export interface BoardOption {
   readonly id: BoardId;
@@ -39,6 +47,16 @@ export interface BoardOption {
    * a setting the operator has to notice.
    */
   readonly language: FirmwareLanguage;
+  /**
+   * The grammars a sketch for this board can be written in.
+   *
+   * A board runs one firmware, and that firmware takes one kind of program:
+   * an Arduino board takes C++, a Raspberry Pi takes Python, and the boards
+   * that boot MicroPython take Python with the `machine` module. A language
+   * the board cannot run is not an option to offer, because the sketch it
+   * would open with is a program nothing on the bench can execute.
+   */
+  readonly languages: readonly FirmwareLanguage[];
   readonly summary: string;
   /** Who should reach for it, and what it makes harder. */
   readonly bestFor: string;
@@ -60,6 +78,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'Arduino Uno R3',
     make: arduinoUnoR3,
     language: 'arduino-cpp',
+    languages: ['arduino-cpp'],
     summary: 'The classic beginner board, and the one the exercises are written for.',
     bestFor:
       'Starting out. 5 V logic and a 10-bit ADC mean the numbers in the lessons match what you measure. Only D2 and D3 take interrupts, which is a lesson in itself.',
@@ -69,6 +88,9 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'ESP32 DevKit V1',
     make: esp32DevKitV1,
     language: 'arduino-cpp',
+    // The ESP32 runs MicroPython as readily as it runs Arduino sketches, and
+    // the Python it runs is the same `machine` the RP2040 boards speak.
+    languages: ['arduino-cpp', 'python'],
     summary: '3.3 V, 12-bit ADC, and four pins that cannot drive anything.',
     bestFor:
       'Later, once 5 V is comfortable. GPIO34-39 are input-only, and GPIO12 and GPIO15 are sampled at reset -- both traps the bench reproduces so you can hit them.',
@@ -78,6 +100,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'Arduino Nano',
     make: arduinoNano,
     language: 'arduino-cpp',
+    languages: ['arduino-cpp'],
     summary: 'The same chip as the Uno on a much smaller board.',
     bestFor:
       'When the Uno is too big for the breadboard. Same 5 V and same 10-bit ADC, so every lesson transfers unchanged.',
@@ -87,6 +110,9 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'Nano RP2040 Connect',
     make: nanoRp2040Connect,
     language: 'python',
+    // The bench boots the pinned MicroPython, and the Arduino core is a
+    // second firmware the same silkscreen also answers to.
+    languages: ['python', 'arduino-cpp'],
     summary: '3.3 V logic with a 12-bit ADC on a Nano-sized board.',
     bestFor:
       'Modern practice. The analogue block silkscreens A0-A3 on the pins its ADC samples, which surprises anyone coming from an AVR.',
@@ -96,6 +122,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'Arduino Mega 2560',
     make: arduinoMega2560,
     language: 'arduino-cpp',
+    languages: ['arduino-cpp'],
     summary: 'Every Uno extra, in numbers: the most pins of any board here.',
     bestFor:
       'Bigger builds. Its SPI is the 50-53 block rather than the 10-13 an Uno sketch names, so a sketch written for one does not transfer by pin number.',
@@ -108,6 +135,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     // here whose firmware is Python, and the bench opens in that language so
     // the first thing it runs is something the board could actually run.
     language: 'python',
+    languages: ['python'],
     summary: 'A Linux computer you wire directly, with no analogue input at all.',
     bestFor:
       'Learning what a pin cannot do. The GPIO is 3.3 V and not 5 V tolerant, the outputs drive a fraction of what an Uno does, there is no analogue input without an MCP3008, and the pins are numbered BCM rather than by position.',
@@ -117,6 +145,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'Franzininho',
     make: franzininhoBoard,
     language: 'arduino-cpp',
+    languages: ['arduino-cpp'],
     summary: 'An ATtiny85 on a small carrier: six I/O pins and no digital header.',
     bestFor:
       'Understanding the limits. Two general GPIO and four analogue pins is not many, the buses sit on the port bits rather than a digital header, and the silkscreen disagrees with the firmware numbers -- PB5 is pin 4 and PB4 is pin 5. Pin 2 is also its SDA, so a sketch cannot own it outright.',
@@ -126,7 +155,11 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     name: 'Raspberry Pi Pico',
     make: raspberryPiPico,
     language: 'python',
-    summary: 'A small RP2040 board with 26 GPIO pins and no analogue input beyond three ADC channels.',
+    // The Pico boots the pinned MicroPython, and its Arduino core answers to
+    // the same GP numbers, so both grammars reach the same holes.
+    languages: ['python', 'arduino-cpp'],
+    summary:
+      'A small RP2040 board with 26 GPIO pins and no analogue input beyond three ADC channels.',
     bestFor:
       'Modern embedded Python on a cheap board. Same RP2040 as the Nano RP2040 Connect, so the MicroPython backend transfers; the header is a 2x20 DIP block rather than a Nano footprint.',
   },

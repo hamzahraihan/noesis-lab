@@ -13,6 +13,8 @@
  */
 
 import { parsePython } from './python';
+import type { PythonModule } from './python-modules';
+import type { ArduinoPins } from '@/features/parts';
 import {
   WL_CONNECT_FAILED,
   WL_CONNECTED,
@@ -213,6 +215,24 @@ export type Evaluator = Generator<DelayRequest, Value, void>;
 
 export interface FirmwareServices {
   nowMs(): number;
+  /**
+   * The pin numbers a sketch on this board names pins by.
+   *
+   * A C++ sketch names Arduino pin indexes and a Python sketch names GPIOs,
+   * so the board -- not the program -- decides what a number means. On most
+   * boards the two are the same number and this is empty; on the Nano RP2040
+   * Connect, whose header is a silkscreen around a chip with its own
+   * numbering, it is the difference between `pinMode(2)` and `Pin(25)`.
+   */
+  readonly pins?: ArduinoPins;
+  /**
+   * The Python modules this board's runtime has.
+   *
+   * MicroPython boards speak `machine` and a Raspberry Pi speaks `gpiozero`;
+   * a board that says nothing here is taken to have both, which is what a
+   * host that does not know the board would assume.
+   */
+  readonly pythonModules?: readonly PythonModule[];
   pinMode(pin: number, mode: number): void;
   digitalWrite(pin: number, level: number): void;
   digitalRead(pin: number): number;
@@ -828,10 +848,26 @@ function pythonImports(content: string): string[] {
     const direct = /^import\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(trimmed)?.[1];
     const from = /^from\s+([A-Za-z_][A-Za-z0-9_]*)\s+import\s+/.exec(trimmed)?.[1];
     const candidate = direct ?? from;
-    if (candidate && candidate !== 'time' && candidate !== 'gpiozero' && candidate !== 'machine')
-      names.push(candidate);
+    if (candidate && candidate !== 'time') names.push(candidate);
   }
   return names;
+}
+
+/**
+ * The Python modules a program imports that name a runtime rather than a file.
+ *
+ * `machine` and `gpiozero` are not tabs: they are the vocabulary of the
+ * runtime a board boots, and a program that imports the one its board does
+ * not have is asking for a library that is not there.
+ */
+const RUNTIME_MODULES: readonly PythonModule[] = ['machine', 'gpiozero'];
+
+function isRuntimeModule(name: string): name is PythonModule {
+  return (RUNTIME_MODULES as readonly string[]).includes(name);
+}
+
+function pythonRuntimeImports(content: string): PythonModule[] {
+  return pythonImports(content).filter(isRuntimeModule);
 }
 
 export class FirmwareRuntime {
@@ -1044,7 +1080,9 @@ export class FirmwareRuntime {
       const content = byName.get(name) ?? '';
       const rawEdges =
         project.language === 'python'
-          ? pythonImports(content).map((mod) => `${mod}.py`)
+          ? pythonImports(content)
+              .filter((mod) => !isRuntimeModule(mod))
+              .map((mod) => `${mod}.py`)
           : localIncludes(content);
       // Quoted system headers ride through like packager.ts (they resolve
       // via the toolchain -I roots): only project tabs are edges here.
@@ -1168,8 +1206,46 @@ export class FirmwareRuntime {
     return this.functions.has(name);
   }
 
+  /**
+   * The GPIO a pin number names, in the namespace this program speaks.
+   *
+   * A C++ sketch names Arduino pin indexes, and on a board whose header and
+   * chip disagree -- the Nano RP2040 Connect -- that index is not the GPIO.
+   * A Python sketch names GPIOs already, so nothing is translated there: the
+   * same board answers `Pin(25)` and `pinMode(2)` with the same hole.
+   */
+  private pinOf(services: FirmwareServices, pin: number): number {
+    if (this.language !== 'arduino-cpp') return pin;
+    const map = services.pins?.map;
+    if (!map) return pin;
+    return map[pin] ?? pin;
+  }
+
+  /**
+   * Whether this board's runtime has a Python module.
+   *
+   * A host that says nothing is taken to have both, which is what a stub
+   * without a board would assume.
+   */
+  private hasModule(services: FirmwareServices, module: PythonModule): boolean {
+    const modules = services.pythonModules;
+    return modules === undefined || modules.includes(module);
+  }
+
   /** Runs `setup()` once, then `loop()` forever. Yields each blocking wait. */
   *main(services: FirmwareServices): Generator<DelayRequest, void, void> {
+    /*
+     * The `A0`..`A5` constants belong to the board, not to the Uno: an ESP32
+     * names its analog pins by the GPIO behind them and a Mega numbers them
+     * from 54, so a sketch that says `analogRead(A0)` has to mean the hole
+     * the board's own core would.
+     */
+    const aliases = services.pins?.aliases;
+    if (aliases) {
+      for (const [name, value] of Object.entries(aliases)) {
+        this.globals.values.set(name, value);
+      }
+    }
     for (const declaration of this.program.globals) {
       yield* this.execute(declaration, this.globals, services);
     }
@@ -1480,6 +1556,7 @@ export class FirmwareRuntime {
     // gpiozero first: its names are the unambiguous ones.
     const gpiozero = called.viaMachine ? undefined : DEVICE_CONSTRUCTORS[called.name];
     if (gpiozero !== undefined) {
+      if (!this.hasModule(services, 'gpiozero')) return false;
       const pin = expression.args[0];
       if (pin?.kind !== 'number') return false;
       const device: Device = { pin: pin.value, kind: gpiozero };
@@ -1506,6 +1583,7 @@ export class FirmwareRuntime {
     if (!called.viaMachine && this.language !== 'python') return false;
     const kind = MACHINE_CONSTRUCTORS[called.name];
     if (kind === undefined) return false;
+    if (!this.hasModule(services, 'machine')) return false;
 
     if (kind === 'i2c') {
       // The bench's I2C bus is the board's, not a pair of pins a sketch names.
@@ -1592,22 +1670,26 @@ export class FirmwareRuntime {
       case 'micros':
         return services.nowMs() * 1000;
       case 'pinMode':
-        services.pinMode(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0));
+        services.pinMode(this.pinOf(services, asNumber(args[0] ?? 0)), asNumber(args[1] ?? 0));
         return 0;
       case 'digitalWrite':
-        services.digitalWrite(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0));
+        services.digitalWrite(this.pinOf(services, asNumber(args[0] ?? 0)), asNumber(args[1] ?? 0));
         return 0;
       case 'digitalRead':
-        return services.digitalRead(asNumber(args[0] ?? 0));
+        return services.digitalRead(this.pinOf(services, asNumber(args[0] ?? 0)));
       case 'analogWrite':
-        services.analogWrite(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0));
+        services.analogWrite(this.pinOf(services, asNumber(args[0] ?? 0)), asNumber(args[1] ?? 0));
         return 0;
       case 'analogRead':
-        return services.analogRead(asNumber(args[0] ?? 0));
+        return services.analogRead(this.pinOf(services, asNumber(args[0] ?? 0)));
       case 'pulseIn': {
         const timeoutUs = asNumber(args[2] ?? 1000000);
         const micros =
-          services.pulseInBegin?.(asNumber(args[0] ?? 0), asNumber(args[1] ?? 0), timeoutUs) ?? 0;
+          services.pulseInBegin?.(
+            this.pinOf(services, asNumber(args[0] ?? 0)),
+            asNumber(args[1] ?? 0),
+            timeoutUs,
+          ) ?? 0;
         // A timeout still costs the wait: hardware sits on the line for
         // the whole window, so a sketch timing around the call observes it.
         if (micros <= 0) {
@@ -2973,7 +3055,7 @@ export class FirmwareRuntime {
   private evaluateServoCall(member: string, args: Value[], services: FirmwareServices): Value {
     const servo = services.servo;
     if (!servo) return 0;
-    const pin = asNumber(args[0] ?? -1);
+    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
 
     switch (member) {
       case 'attach':
@@ -2996,7 +3078,7 @@ export class FirmwareRuntime {
   private evaluateDhtCall(member: string, args: Value[], services: FirmwareServices): Value {
     const dht = services.dht;
     if (!dht) return 0;
-    const pin = asNumber(args[0] ?? -1);
+    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
 
     switch (member) {
       case 'begin':
@@ -3015,7 +3097,7 @@ export class FirmwareRuntime {
   private evaluatePixelsCall(member: string, args: Value[], services: FirmwareServices): Value {
     const pixels = services.pixels;
     if (!pixels) return 0;
-    const pin = asNumber(args[0] ?? -1);
+    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
 
     switch (member) {
       case 'count':
@@ -3038,7 +3120,7 @@ export class FirmwareRuntime {
   private evaluateIrCall(member: string, args: Value[], services: FirmwareServices): Value {
     const ir = services.ir;
     if (!ir) return 0;
-    const pin = asNumber(args[0] ?? -1);
+    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
 
     switch (member) {
       case 'readCode':
@@ -3051,7 +3133,7 @@ export class FirmwareRuntime {
   /** Handles a `dialer.*` call, which addresses dialers by their DIAL pin. */
   private evaluateDialerCall(member: string, args: Value[], services: FirmwareServices): Value {
     const dialer = services.dialer;
-    const pin = asNumber(args[0] ?? -1);
+    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
 
     switch (member) {
       case 'read':
@@ -3064,7 +3146,7 @@ export class FirmwareRuntime {
   /** Handles an `sd.*` call, which addresses cards by their CS pin. */
   private evaluateSdCall(member: string, args: Value[], services: FirmwareServices): Value {
     const sd = services.sd;
-    const pin = asNumber(args[0] ?? -1);
+    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
     const text = (index: number): string => {
       const arg = args[index];
       return typeof arg === 'string' ? arg : String(asNumber(arg ?? 0));
@@ -3260,6 +3342,32 @@ const NON_BLOCKING_QUANTUM_MS = 1;
  */
 const RTC_NOW_CACHE_READS = 50;
 
+/**
+ * Checks that a program imports only the Python modules its board has.
+ *
+ * The board's runtime decides the vocabulary: MicroPython speaks `machine`,
+ * a Raspberry Pi speaks `gpiozero`. A program that asks for the other one
+ * gets an error here rather than a sketch that runs and does nothing.
+ */
+export function assertPythonModules(
+  files: ReadonlyArray<{ readonly name: string; readonly content: string }>,
+  modules: readonly PythonModule[] | undefined,
+): void {
+  if (modules === undefined) return;
+  const allowed = new Set(modules);
+  for (const file of files) {
+    for (const module of pythonRuntimeImports(file.content)) {
+      if (allowed.has(module)) continue;
+      const other: PythonModule = module === 'machine' ? 'gpiozero' : 'machine';
+      throw new FirmwareProjectError(
+        allowed.has(other)
+          ? `${file.name}: this board speaks \`${other}\`, not \`${module}\``
+          : `${file.name}: this board has no \`${module}\`; it runs Arduino C++ sketches`,
+      );
+    }
+  }
+}
+
 export class FirmwareRunner {
   readonly runtime: FirmwareRuntime;
   readonly output: string[] = [];
@@ -3271,6 +3379,12 @@ export class FirmwareRunner {
     services: FirmwareServices,
     language: FirmwareLanguage = 'arduino-cpp',
   ) {
+    const programLanguage = typeof source === 'string' ? language : source.language;
+    if (programLanguage === 'python') {
+      const files =
+        typeof source === 'string' ? [{ name: 'main.py', content: source }] : source.files;
+      assertPythonModules(files, services.pythonModules);
+    }
     this.runtime =
       typeof source === 'string'
         ? new FirmwareRuntime(source, language)

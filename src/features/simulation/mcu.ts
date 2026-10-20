@@ -7,7 +7,7 @@
  * firmware VM, and the solver without any of them knowing about the others.
  */
 
-import type { BoardPin, BoardSpec, PartDefinition } from '@/features/parts';
+import type { ArduinoPins, BoardPin, BoardSpec, PartDefinition } from '@/features/parts';
 
 export type PinDirection = 'input' | 'output' | 'inputPullUp';
 
@@ -162,6 +162,17 @@ export class McuRuntime {
    */
   get i2cPins(): readonly number[] {
     return I2C_PINS[this.board.id] ?? [];
+  }
+
+  /**
+   * The pin numbers a C++ sketch names on this board.
+   *
+   * Empty on most boards, where a sketch's pin number *is* the GPIO number.
+   * The Nano RP2040 Connect is the one board whose header and chip disagree,
+   * and this is where that disagreement is written down.
+   */
+  get arduinoPins(): ArduinoPins {
+    return this.board.arduinoPins ?? {};
   }
 
   /**

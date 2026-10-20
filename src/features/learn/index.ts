@@ -14,6 +14,7 @@ export type { GalleryBuild, GalleryProject } from './gallery';
 export {
   BLINK_EXAMPLE,
   EXAMPLES,
+  ESP32_BLINK_SKETCH,
   PICO_BLINK_SKETCH,
   PI_BLINK_SKETCH,
   RP2040_BLINK_SKETCH,

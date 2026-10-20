@@ -48,6 +48,28 @@ export interface BoardPin {
   readonly canDrive?: boolean;
 }
 
+/**
+ * The pin numbers an Arduino sketch names, and the GPIO each one means.
+ *
+ * Most boards number their holes the way the chip does, so the map is empty
+ * and the identity is the answer. The Nano RP2040 Connect does not: its
+ * header is an Arduino silkscreen wrapped around an RP2040, so `pinMode(2)`
+ * means the hole labelled D2 -- GPIO25 -- while MicroPython's `Pin(25)` means
+ * that same hole. Both languages name the same wire; the board says which
+ * number that wire answers to.
+ */
+export interface ArduinoPins {
+  /** The GPIO each Arduino pin index names. A missing index is the identity. */
+  readonly map?: Readonly<Record<number, number>>;
+  /**
+   * The value of the `A0`..`A5` constants, which is not the same everywhere:
+   * an Uno numbers them 14 to 19, a Mega 54 to 59, and an ESP32 names the GPIO
+   * behind each one. A sketch writes `analogRead(A0)` and means the hole the
+   * board's own core would.
+   */
+  readonly aliases?: Readonly<Record<string, number>>;
+}
+
 export interface BoardSpec {
   readonly id: string;
   readonly name: string;
@@ -63,6 +85,11 @@ export interface BoardSpec {
   readonly pwmHz: number;
   /** ADC resolution in bits, which sets the range analogRead returns. */
   readonly adcBits: number;
+  /**
+   * The pin numbers a C++ sketch names on this board, when they are not the
+   * chip's own GPIO numbers. Absent means the two are the same.
+   */
+  readonly arduinoPins?: ArduinoPins;
 }
 
 export type ComponentSpec =

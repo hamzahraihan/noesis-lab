@@ -208,6 +208,14 @@ function esp32Definition(): PartDefinition {
         sinkOhms: 40,
         pwmHz: 1000,
         adcBits: 12,
+        /*
+         * The ESP32 core names its analog pins by the GPIO behind them, so
+         * `A0` is GPIO36 -- the VP hole -- and not the Uno's 14. The digital
+         * holes already carry their own numbers, so nothing else is renamed.
+         */
+        arduinoPins: {
+          aliases: { A0: 36, A1: 39, A2: 34, A3: 35, A4: 32, A5: 33 },
+        },
       },
     },
     pins,
@@ -699,6 +707,14 @@ function megaDefinition(): PartDefinition {
         sinkOhms: 50,
         pwmHz: 490,
         adcBits: 10,
+        /*
+         * The Mega's analog block sits after its fifty-four digital pins, so
+         * `A0` is 54 and not the Uno's 14. The digital holes keep their own
+         * numbers, as on the Uno.
+         */
+        arduinoPins: {
+          aliases: { A0: 54, A1: 55, A2: 56, A3: 57, A4: 58, A5: 59 },
+        },
       },
     },
     pins,
@@ -1050,6 +1066,41 @@ function rp2040Definition(): PartDefinition {
         sinkOhms: 40,
         pwmHz: 1000,
         adcBits: 12,
+        /*
+         * The Arduino namespace of this board, and the only one that is not
+         * the identity: the header is a silkscreen wrapped around an RP2040,
+         * so `pinMode(2)` means the hole labelled D2 -- GPIO25 -- and the
+         * analog block answers 14 to 19, the way every Arduino board does,
+         * rather than with the GPIO numbers its own core uses.
+         *
+         * The alias values are the index space on purpose. The core's own
+         * `A4` is 12 and its `D12` is 12 as well, and a sketch that says
+         * `analogRead(A4)` has to mean something different from one that says
+         * `digitalWrite(12, ...)`; giving the analog holes 14 to 19 keeps the
+         * two apart.
+         */
+        arduinoPins: {
+          map: {
+            2: 25,
+            3: 15,
+            4: 16,
+            5: 17,
+            6: 18,
+            7: 19,
+            8: 20,
+            9: 21,
+            10: 5,
+            11: 7,
+            12: 4,
+            13: 6,
+            14: 26,
+            15: 27,
+            16: 28,
+            17: 29,
+            18: 12,
+            19: 13,
+          },
+        },
       },
     },
     pins,
@@ -1493,6 +1544,14 @@ function picoDefinition(): PartDefinition {
         sinkOhms: 40,
         pwmHz: 1000,
         adcBits: 12,
+        /*
+         * The Pico's analog pins are GP26 to GP28, and its core names them
+         * that way: `A0` is 26. The digital holes are GP numbers already, so
+         * nothing else is renamed.
+         */
+        arduinoPins: {
+          aliases: { A0: 26, A1: 27, A2: 28 },
+        },
       },
     },
     pins,

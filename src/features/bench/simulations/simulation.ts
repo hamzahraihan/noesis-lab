@@ -25,6 +25,7 @@ import {
   type ScriptFault,
 } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
+import { pythonModulesFor } from '@/features/simulation';
 import { compile } from '@/features/simulation';
 import { pinRefFor } from '@/features/simulation';
 import type { CircuitDocument } from '@/features/simulation';
@@ -2010,6 +2011,12 @@ export class Simulation {
 
   private services(): FirmwareServices {
     return {
+      // The board's own pin namespace: on most boards a sketch's pin number is
+      // the GPIO number, and on the Nano RP2040 Connect it is not.
+      pins: this.mcu.arduinoPins,
+      // The Python vocabulary this board's runtime speaks: `machine` on the
+      // MicroPython boards, `gpiozero` on a Raspberry Pi.
+      pythonModules: pythonModulesFor(this.mcu.board.id),
       // Built here rather than as a field: `this.engine` is assigned in the
       // constructor body, and a field initializer would run before it.
       tft: createTftPort(this.engine, () => this.displayControllers()),

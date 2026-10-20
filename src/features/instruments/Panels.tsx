@@ -473,6 +473,7 @@ export function FirmwareEditor({
   onProjectChange,
   error,
   language,
+  languages,
   expanded,
   onToggle,
   headerHidden = false,
@@ -489,6 +490,14 @@ export function FirmwareEditor({
   error: string | null;
   /** Which grammar the text in the editor is written in. */
   language: FirmwareLanguage;
+  /**
+   * The grammars this board can run.
+   *
+   * A board runs one firmware, so a language it cannot run is not an option:
+   * the sketch that language would open with is a program nothing on the
+   * bench can execute.
+   */
+  languages: readonly FirmwareLanguage[];
   /** Whether the editor body is showing under its header. */
   expanded: boolean;
   onToggle(): void;
@@ -1175,15 +1184,18 @@ export function FirmwareEditor({
               aria-label="Firmware language"
               title={
                 language === 'python'
-                  ? 'Python, with the gpiozero API. A Raspberry Pi runs this.'
+                  ? 'Python. The board decides the library: `machine` on MicroPython, `gpiozero` on a Raspberry Pi.'
                   : 'An Arduino sketch. Runs on every microcontroller here.'
               }
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="arduino-cpp">C++</SelectItem>
-              <SelectItem value="python">Python</SelectItem>
+              {languages.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option === 'python' ? 'Python' : 'C++'}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </label>
@@ -1274,7 +1286,9 @@ export function FirmwareEditor({
                       role="tab"
                       aria-selected={selected}
                       className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                        selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
+                        selected
+                          ? 'bg-[var(--hd-border)] text-[var(--hd-text)]'
+                          : 'text-[var(--hd-muted)]'
                       }`}
                     >
                       <button
@@ -1487,7 +1501,9 @@ export function FirmwareEditor({
                     {selectedLib !== null && (
                       <div className="rounded-none border border-[var(--hd-border)] p-2">
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="font-mono text-[var(--hd-text)]">{selectedLib.name}</span>
+                          <span className="font-mono text-[var(--hd-text)]">
+                            {selectedLib.name}
+                          </span>
                           <span className="flex-1" />
                           <button
                             type="button"
@@ -1502,7 +1518,9 @@ export function FirmwareEditor({
                             ×
                           </button>
                         </div>
-                        <p className="mt-0.5 text-xs text-[var(--hd-muted)]">{selectedLib.sentence}</p>
+                        <p className="mt-0.5 text-xs text-[var(--hd-muted)]">
+                          {selectedLib.sentence}
+                        </p>
                         <p className="text-xs text-[var(--hd-muted)]">
                           by {selectedLib.author} · {selectedLib.category} ·{' '}
                           {selectedLib.architectures.join(', ')}
@@ -1792,7 +1810,9 @@ export function FirmwareEditor({
                         <div
                           key={slot.id}
                           className={`flex shrink-0 items-center gap-2 rounded-none font-mono text-xs ${
-                            selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
+                            selected
+                              ? 'bg-[var(--hd-border)] text-[var(--hd-text)]'
+                              : 'text-[var(--hd-muted)]'
                           }`}
                         >
                           <button
@@ -1850,7 +1870,9 @@ export function FirmwareEditor({
                         role="tab"
                         aria-selected={selected}
                         className={`flex shrink-0 items-center rounded-none font-mono text-xs ${
-                          selected ? 'bg-[var(--hd-border)] text-[var(--hd-text)]' : 'text-[var(--hd-muted)]'
+                          selected
+                            ? 'bg-[var(--hd-border)] text-[var(--hd-text)]'
+                            : 'text-[var(--hd-muted)]'
                         }`}
                       >
                         <button
@@ -1961,7 +1983,9 @@ export function StatusBar({
             className={`relative inline-block size-2 rounded-none ${running ? 'bg-[var(--hd-success)]' : 'bg-slate-600'}`}
           />
         </span>
-        <span className={running ? 'text-[var(--hd-text)]' : ''}>{running ? 'Running' : 'Stopped'}</span>
+        <span className={running ? 'text-[var(--hd-text)]' : ''}>
+          {running ? 'Running' : 'Stopped'}
+        </span>
       </span>
       <span className="num">t = {timeMs.toFixed(0)} ms</span>
       <span className="num">{netCount} nets</span>

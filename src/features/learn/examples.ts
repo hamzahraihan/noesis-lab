@@ -473,6 +473,27 @@ while True:
 `;
 
 /**
+ * The ESP32's starter, in the language its firmware speaks.
+ *
+ * The ESP32 runs MicroPython as readily as it runs Arduino sketches, and the
+ * Python it runs is the same `machine` the RP2040 boards speak -- not the
+ * Raspberry Pi's `gpiozero`, which the shared Python starter used to ask for.
+ * The LED is GP2, the hole the starter document labels D2.
+ */
+export const ESP32_BLINK_SKETCH = `from machine import Pin
+import time
+
+led = Pin(2, Pin.OUT)
+print('esp32 online')
+
+while True:
+    led.value(1)
+    time.sleep(0.5)
+    led.value(0)
+    time.sleep(0.5)
+`;
+
+/**
  * The sketch a bench opens with: the board's own language and idiom.
  *
  * One rule for the three places that seed a project -- mount, board switch and
@@ -488,5 +509,6 @@ export function starterSketchFor(
   if (language !== 'python') return BLINK_SKETCH;
   if (boardId === 'pico') return PICO_BLINK_SKETCH;
   if (boardId === 'rp2040') return RP2040_BLINK_SKETCH;
+  if (boardId === 'esp32') return ESP32_BLINK_SKETCH;
   return PI_BLINK_SKETCH;
 }
