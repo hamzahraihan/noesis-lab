@@ -48,7 +48,7 @@
  * canvas blit path.
  */
 
-import { Engine } from '../engine';
+import { Engine, type I2cBusPins } from '../engine';
 import { McuRuntime } from '../mcu';
 import { AvrBackend } from '../avr/core';
 import { loadWasmModule } from '../avr/wasm-core';
@@ -70,7 +70,12 @@ import { reportedFaults, type ScriptFault } from '../scripted/diagnostics';
 import { I2CBus } from '../bus/i2c';
 import { SpiBus } from '../bus/spi';
 import { BusLog } from '../bus/log';
-import { FirmwareRunner, type FirmwareServices } from '../firmware/interpreter';
+import {
+  FirmwareRunner,
+  describeFirmwareError,
+  type FirmwareServices,
+  type WirePort,
+} from '../firmware/interpreter';
 import { pythonModulesFor } from '../firmware/python-modules';
 import { FirmwareSyntaxError } from '../firmware/parser';
 import {
@@ -318,6 +323,47 @@ class SimCore implements CoreHandle {
   }
 
   /**
+   * The bus on a named pair of pins.
+   *
+   * A sketch that names a pair gets the bus on those pins, so a device wired
+   * to another pair does not answer: the same silence a wire to the wrong hole
+   * gives.
+   */
+  private pinnedI2c(pins: I2cBusPins): I2CBus {
+    return new I2CBus(
+      (address, byte, isControl) => this.engine.writeI2C(address, byte, isControl, pins),
+      (address, count) => this.engine.requestI2C(address, count, pins),
+    );
+  }
+
+  /**
+   * The firmware's view of an I2C bus: the bench's bus, timed and logged.
+   */
+  private i2cPort(bus: I2CBus): WirePort {
+    return {
+      begin: () => bus.begin(0, 0),
+      beginTransmission: (address) => bus.beginTransmission(address),
+      write: (value) => bus.write(value),
+      requestFrom: (address, count) => bus.requestFrom(address, count),
+      read: () => bus.read(),
+      available: () => bus.available(),
+      endTransmission: () => {
+        const transfer = bus.endTransmission();
+        this.busLog.record({
+          timeMs: this.engine.timeMs,
+          bus: 'i2c',
+          address: transfer.address,
+          bytes: transfer.bytes,
+          acknowledged: transfer.acknowledged,
+          micros: transfer.micros,
+        });
+        this.engine.settle();
+        return transfer.micros;
+      },
+    };
+  }
+
+  /**
    * The scripting half, loading the first time a scripted part exists.
    *
    * Lazy for the same reason as the in-page backend: 492 KB of QuickJS behind a
@@ -505,7 +551,18 @@ class SimCore implements CoreHandle {
       }
 
       if (!this.runner || this.runner.done) break;
-      const requested = this.runner.step();
+      let requested: number | null;
+      try {
+        requested = this.runner.step();
+      } catch (error) {
+        /*
+         * A sketch that raised an error it did not catch stops here, and the
+         * reason travels to the page as the bench's fault.
+         */
+        this.runner = null;
+        this.faultText = describeFirmwareError(error);
+        break;
+      }
       if (requested === null) break;
       this.pendingDelayMs = requested;
       // One settle per step, not per pin write: a display refresh alone is a
@@ -1270,27 +1327,14 @@ class SimCore implements CoreHandle {
         return this.engine.readAnalog(pin);
       },
       adcFullScale: this.engine.adcFullScale,
-      wire: {
-        begin: () => this.i2c.begin(0, 0),
-        beginTransmission: (address) => this.i2c.beginTransmission(address),
-        write: (value) => this.i2c.write(value),
-        requestFrom: (address, count) => this.i2c.requestFrom(address, count),
-        read: () => this.i2c.read(),
-        available: () => this.i2c.available(),
-        endTransmission: () => {
-          const transfer = this.i2c.endTransmission();
-          this.busLog.record({
-            timeMs: this.engine.timeMs,
-            bus: 'i2c',
-            address: transfer.address,
-            bytes: transfer.bytes,
-            acknowledged: transfer.acknowledged,
-            micros: transfer.micros,
-          });
-          this.engine.settle();
-          return transfer.micros;
-        },
-      },
+      wire: this.i2cPort(this.i2c),
+      // The bus on the pins a sketch named, for a sketch that named them: a
+      // device wired elsewhere is not on it, and does not answer.
+      wireOnPins: (pins) => this.i2cPort(this.pinnedI2c(pins)),
+      // Whether anything on the bench answers at this address: a MicroPython
+      // sketch that reads a device nobody wired is told so, the way a
+      // controller that was not acknowledged tells it.
+      i2cHasDevice: (address, pins) => this.engine.hasI2cDevice(address, pins),
       spi: {
         begin: () => this.spi.begin(),
         transfer: (value, dataSelect) => this.spi.transfer(value, dataSelect),
