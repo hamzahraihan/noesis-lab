@@ -131,7 +131,20 @@ import { FirmwareProjectError, validateProject, type FirmwareProject } from './p
  * number is wanted (`sizeof` and the SevSeg wiring tables are the readers
  * that see inside them).
  */
-export type Value = number | string | number[] | DateTimeValue | TimeSpanValue | RtcHandle;
+/**
+ * A dictionary: the keys are the program's own strings, the values anything a
+ * program can hold.
+ */
+export type DictValue = Map<string, Value>;
+
+export type Value =
+  | number
+  | string
+  | number[]
+  | DictValue
+  | DateTimeValue
+  | TimeSpanValue
+  | RtcHandle;
 
 /**
  * One SevSeg display's wiring and frame, as `begin` records it.
@@ -724,6 +737,9 @@ export class Instance {
 
 function isTruthy(value: Value): boolean {
   if (typeof value === 'number') return value !== 0;
+  // A dictionary is something when it holds something, the way Python reads
+  // it; an empty one is nothing.
+  if (value instanceof Map) return value.size > 0;
   // A date, a span or an RTC handle is always something rather than nothing;
   // sketches test their fields, never the object itself.
   if (typeof value === 'object') return true;
@@ -745,6 +761,13 @@ function formatValue(value: Value): string {
   // C has no array printing; brackets name the contents rather than the
   // misleading library fallback below.
   if (Array.isArray(value)) return `[${value.join(', ')}]`;
+  // A dictionary prints the way Python prints one: the keys in quotes.
+  if (value instanceof Map) {
+    const entries = [...value.entries()].map(
+      ([key, item]) => `'${key}': ${formatValue(item)}`,
+    );
+    return `{${entries.join(', ')}}`;
+  }
   if (typeof value === 'object') return formatObjectValue(value);
   return formatPrintValue(asNumber(value));
 }
@@ -2067,6 +2090,21 @@ export class FirmwareRuntime {
         return items;
       }
 
+      case 'dict': {
+        /*
+         * A dictionary: the keys are the program's own strings, the values
+         * whatever the program holds. A key that is not a string is written
+         * the way it prints, so a number key and a string key of the same
+         * spelling are the same key.
+         */
+        const entries = new Map<string, Value>();
+        for (const entry of expression.entries) {
+          const key = formatValue((yield* this.evaluate(entry.key, scope, services)) as Value);
+          entries.set(key, (yield* this.evaluate(entry.value, scope, services)) as Value);
+        }
+        return entries;
+      }
+
       case 'comprehension': {
         /*
          * A list comprehension: the element is evaluated once per item, with
@@ -2293,23 +2331,38 @@ export class FirmwareRuntime {
         }
 
         if (expression.target.kind === 'index') {
+          const key = (yield* this.evaluate(expression.target.index, scope, services)) as Value;
           const store = this.resolveArray(expression.target.target, scope);
-          const index = asNumber(
-            (yield* this.evaluate(expression.target.index, scope, services)) as Value,
-          );
-          if (!store || index < 0 || index >= store.length) return 0;
-          store[index] = asNumber(value);
-          return store[index];
+          if (store) {
+            const index = asNumber(key);
+            if (index < 0 || index >= store.length) return 0;
+            store[index] = asNumber(value);
+            return store[index];
+          }
+          // A dictionary is written by its key: `d['a'] = 2`.
+          const target = (yield* this.evaluate(expression.target.target, scope, services)) as Value;
+          if (target instanceof Map) {
+            target.set(formatValue(key), value);
+            return value;
+          }
+          return 0;
         }
 
         return value;
       }
 
       case 'index': {
+        const index = (yield* this.evaluate(expression.index, scope, services)) as Value;
         const store = this.resolveArray(expression.target, scope);
-        const index = asNumber((yield* this.evaluate(expression.index, scope, services)) as Value);
-        if (!store || index < 0 || index >= store.length) return 0;
-        return store[index];
+        if (store) {
+          const position = asNumber(index);
+          if (position < 0 || position >= store.length) return 0;
+          return store[position];
+        }
+        // A dictionary is read by its key: `d['a']`.
+        const target = (yield* this.evaluate(expression.target, scope, services)) as Value;
+        if (target instanceof Map) return target.get(formatValue(index)) ?? 0;
+        return 0;
       }
 
       case 'member': {
@@ -2334,6 +2387,10 @@ export class FirmwareRuntime {
           if (this.currentSelfName === expression.target.name && this.currentInstance) {
             return this.currentInstance.scope.values.get(expression.member) ?? 0;
           }
+          // A dictionary is read by its key, and Python lets a key that is a
+          // name be written as one: `d.a` is `d['a']`.
+          const held = scope.lookup(expression.target.name);
+          if (held instanceof Map) return held.get(expression.member) ?? 0;
           // `Button::RELEASED`: static consts live in the class table, since
           // no instance is involved. Instance-qualified statics (`b.PRESSED`)
           // already resolved above through the seeded field frame.
