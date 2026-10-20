@@ -179,6 +179,9 @@ function runBench(runtime: FirmwareRuntime, bench: ButtonBench, limitMs: number)
   for (let steps = 0; steps < 10000; steps++) {
     const step = main.next();
     if (step.done) return;
+    // The driver is handed a wait; a value belongs to a generator, and this
+    // sketch has none.
+    if (typeof step.value !== 'number') throw new Error('expected a wait, not a value');
     bench.advance(step.value);
     if (bench.now() > limitMs) return;
   }
