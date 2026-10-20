@@ -13,6 +13,7 @@
  */
 
 import { ESP32_FILESYSTEM_OFFSET } from './image';
+import type { Esp32I2cDevice } from './i2c';
 
 /** The bytes the emulator boots from: the module, the mask ROM and the image. */
 export interface Esp32Assets {
@@ -35,6 +36,14 @@ const BOARD = 'esp32';
 
 /** Flash size in megabytes, the size the MicroPython image expects. */
 const FLASH_MB = 4;
+
+/**
+ * The chip's I2C bus the bench's devices sit on.
+ *
+ * The classic ESP32 has two. I2C0 is the one the board brings out on GPIO21
+ * and GPIO22, which is the pair the board model declares as its bus.
+ */
+const I2C_BUS = 0;
 
 /**
  * The module's exports, as far as the boot and the console need them.
@@ -60,6 +69,7 @@ interface Esp32SimExports {
   esp32sim_gpio_out(emu: number): bigint;
   esp32sim_gpio_oe(emu: number): bigint;
   esp32sim_gpio_set_input(emu: number, pin: number, level: number): number;
+  esp32sim_i2c_attach_host(emu: number, bus: number): number;
   esp32sim_cycles(emu: number): number;
   esp32sim_cpu_hz(emu: number): number;
 }
@@ -119,7 +129,11 @@ const decoder = new TextDecoder();
  * from. Without one the chip comes up at its REPL, which is what a bench
  * with nothing to run wants.
  */
-export async function bootEsp32(assets: Esp32Assets, files?: Uint8Array): Promise<Esp32Emulator> {
+export async function bootEsp32(
+  assets: Esp32Assets,
+  files?: Uint8Array,
+  i2c?: Esp32I2cDevice,
+): Promise<Esp32Emulator> {
   const module = await WebAssembly.compile(assets.wasm);
   let exports: Esp32SimExports | null = null;
   const instance = await WebAssembly.instantiate(module, {
@@ -129,6 +143,17 @@ export async function bootEsp32(assets: Esp32Assets, files?: Uint8Array): Promis
       host_log: () => {},
       host_jit_compile: () => 0,
       host_jit_release: () => {},
+      // The chip's I2C controller asks the host who is on the bus. A host
+      // with no devices of its own answers "nobody is there": the address
+      // phase is not acknowledged and a read comes back as 0xff.
+      host_i2c_start: (address: number, read: number) =>
+        i2c && i2c.start(address, read !== 0) ? 1 : 0,
+      host_i2c_write: (address: number, byte: number) =>
+        i2c && i2c.write(address, byte) ? 1 : 0,
+      host_i2c_read: (address: number) => (i2c ? i2c.read(address) : 0xff),
+      host_i2c_stop: (address: number) => {
+        i2c?.stop(address);
+      },
     },
   });
   exports = instance.exports as unknown as Esp32SimExports;
@@ -155,6 +180,13 @@ export async function bootEsp32(assets: Esp32Assets, files?: Uint8Array): Promis
   // The block JIT compiles hot code into extra modules; the host has no
   // compiler to give it, and the interpreter runs the same firmware.
   exports.esp32sim_set_jit?.(emu, 0);
+  // The chip's I2C controller is a master that exchanges bytes with attached
+  // devices, and the bench's devices live in the host: the host's device is
+  // what the controller talks to. I2C0 is the bus the ESP32 board declares,
+  // on GPIO21 and GPIO22.
+  if (exports.esp32sim_i2c_attach_host(emu, I2C_BUS) !== 0) {
+    throw new Error('esp32: the emulator would not take the host onto its I2C bus');
+  }
 
   const rom = new Uint8Array(assets.rom);
   if (

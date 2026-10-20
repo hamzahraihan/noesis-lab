@@ -872,6 +872,10 @@ class SimCore implements CoreHandle {
       readPin: (gpio) => this.engine.readDigital(gpio),
       onSettle: () => this.engine.settle(),
       serial: { serialWrite: (text) => this.pushSerial(text) },
+      // The chip's I2C controller talks to the bench's bus through the same
+      // sink the RP2040's bridge uses: the engine decides who is on the bus
+      // and the bus log sees the transfer either way.
+      i2c: this.i2cSink(),
     };
   }
 
@@ -897,11 +901,13 @@ class SimCore implements CoreHandle {
    * Reads stay engine-direct.
    */
   private i2cSink(): {
+    hasDevice(address: number): boolean;
     writeByte(address: number, byte: number, isFirst: boolean): boolean;
     readByte(address: number, index: number): number;
     writeEnd(): void;
   } {
     return {
+      hasDevice: (address) => this.engine.hasI2cDevice(address),
       writeByte: (address, byte, isFirst) => {
         if (isFirst) this.i2c.beginTransmission(address);
         this.i2c.write(byte);

@@ -1,4 +1,5 @@
 import type { McuRuntime } from '../mcu';
+import type { Esp32I2cSink } from './i2c';
 
 /**
  * Hooks the engine drives, mirroring avr/core.ts's AvrHooks subset.
@@ -18,6 +19,8 @@ export interface Esp32Hooks {
   /** A driven pin changed level, for the engine's edge bookkeeping. */
   readonly onEdge?: (gpio: number, cycles: number, high: boolean) => void;
   readonly serial: { serialWrite(text: string): void };
+  /** The bench's I2C bus, which the chip's controller talks to. */
+  readonly i2c: Esp32I2cSink;
 }
 
 /** The chip's clock, in hertz: the classic ESP32 runs at 240 MHz. */

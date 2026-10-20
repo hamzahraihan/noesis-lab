@@ -830,6 +830,22 @@ export class Engine {
   }
 
   /**
+   * Whether a device answers at this address on the bus.
+   *
+   * A master that addresses a device which is not there is not acknowledged,
+   * and the firmware has to be able to tell that apart from a device that
+   * took the byte and had nothing to say about it.
+   */
+  hasI2cDevice(address: number): boolean {
+    for (const [partId, device] of this.devices) {
+      if (device.address !== (address & 0x7f)) continue;
+      if (!this.isOnI2cBus(partId)) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Delivers one written byte to any device on the bus.
    *
    * Returns whether a device claimed the address, so an unplugged sensor makes
@@ -1034,7 +1050,27 @@ export class Engine {
   }
 
   readPinDigital(pinId: string): boolean {
-    return this.voltageOfNet(this.netOfMcuPin(pinId)) >= this.mcu.board.logicVolts / 2;
+    const net = this.netOfMcuPin(pinId);
+    // An I2C bus idles high: the modules on it carry the pull-ups, and the
+    // bench's I2C model is logical -- it has no resistors for the solver to
+    // find, so a bus with nothing on it solves to zero volts. A line on a
+    // bus that does carry a device therefore reads high, which is what the
+    // devices on it see.
+    if (this.i2cNets.has(net) && this.i2cBusOccupied()) return true;
+    return this.voltageOfNet(net) >= this.mcu.board.logicVolts / 2;
+  }
+
+  /**
+   * Whether a device is on the firmware's I2C bus.
+   *
+   * The bus is the one the board model declares, and a device is on it when
+   * its own data and clock lines land on that bus's nets.
+   */
+  private i2cBusOccupied(): boolean {
+    for (const device of this.devices.values()) {
+      if (device.onBus) return true;
+    }
+    return false;
   }
 
   /**

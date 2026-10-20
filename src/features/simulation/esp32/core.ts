@@ -1,6 +1,7 @@
 import type { ExecutionBackend } from '../avr/backend';
 import { ESP32_CLOCK_HZ, ESP32_MAX_STEP_MS, cyclesPerMs, type Esp32Hooks } from './backend';
 import { bootEsp32, type Esp32Emulator } from './emulator';
+import { esp32I2cDevice } from './i2c';
 
 /** The pieces the chip boots from. */
 export interface Esp32Firmware {
@@ -66,6 +67,7 @@ export class Esp32Backend implements ExecutionBackend {
           image: this.firmware.image,
         },
         this.firmware.filesystem,
+        esp32I2cDevice(this.hooks.i2c),
       );
       this.failed = null;
     } catch (error) {
