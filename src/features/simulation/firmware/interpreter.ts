@@ -15,6 +15,7 @@
 import { parsePython } from './python';
 import type { PythonModule } from './python-modules';
 import type { ArduinoPins } from '@/features/parts';
+import type { I2cBusPins } from '../engine';
 import {
   WL_CONNECT_FAILED,
   WL_CONNECTED,
@@ -65,6 +66,31 @@ type DeviceKind = 'led' | 'switch' | 'output' | 'input' | 'pwm' | 'adc' | 'i2c';
 interface Device {
   readonly pin: number;
   readonly kind: DeviceKind;
+  /**
+   * The bus an I2C device talks on, when the sketch named one.
+   *
+   * A device with no port here talks on the board's own bus, which is what a
+   * sketch that names no pins gets.
+   */
+  readonly i2cPort?: WirePort;
+  /** The pins the sketch named, when it named any. */
+  readonly i2cPins?: I2cBusPins;
+}
+
+/**
+ * The pins a `machine.I2C` call names, in either spelling.
+ *
+ * `I2C(0, 21, 22)` and `I2C(0, sda=21, scl=22)` are the same call, and
+ * MicroPython accepts both. A call that names neither gets the board's bus.
+ */
+function i2cPinsFrom(expression: Expr): I2cBusPins | null {
+  if (expression.kind !== 'call') return null;
+  const keyword = (name: string): Expr | undefined =>
+    expression.keywords?.find((entry) => entry.name === name)?.value;
+  const sda = keyword('sda') ?? expression.args[1];
+  const scl = keyword('scl') ?? expression.args[2];
+  if (sda?.kind !== 'number' || scl?.kind !== 'number') return null;
+  return { sda: sda.value, scl: scl.value };
 }
 
 /** The gpiozero constructors, and the kind of device each one makes. */
@@ -146,6 +172,39 @@ export type Value =
  * program can hold.
  */
 export type DictValue = Map<string, Value>;
+
+/**
+ * A Python exception, as the VM raises one and a sketch catches it.
+ *
+ * The type is the name the sketch wrote (`OSError`, `ValueError`), and the
+ * message is the text a person reads. Both travel together because `except`
+ * picks a handler by the type and the Problems panel shows the message.
+ *
+ * Only these are catchable: a fault in the VM itself is a fault in the
+ * simulator, and swallowing it would hide the bug rather than the sketch's
+ * mistake.
+ */
+export class PythonError extends Error {
+  readonly typeName: string;
+
+  constructor(typeName: string, message: string) {
+    super(message);
+    this.name = 'PythonError';
+    this.typeName = typeName;
+  }
+}
+
+/**
+ * The line a firmware failure reads as.
+ *
+ * A Python error names its type, the way Python prints it, so the Problems
+ * panel shows what the sketch would have shown rather than a bare message.
+ */
+export function describeFirmwareError(error: unknown): string {
+  if (error instanceof PythonError) return `${error.typeName}: ${error.message}`;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
 
 /**
  * One SevSeg display's wiring and frame, as `begin` records it.
@@ -265,6 +324,22 @@ export interface FirmwareServices {
   serialWrite(text: string): void;
   /** The I2C bus, for sketches that drive a display or sensor directly. */
   wire: WirePort;
+  /**
+   * The bus on a named pair of pins, for a sketch that named them.
+   *
+   * Optional for the same reason as every other port here: a host that cannot
+   * move the bus keeps the board's one, and the sketch talks on it as before.
+   */
+  wireOnPins?(pins: I2cBusPins): WirePort;
+  /**
+   * Whether anything on the bench answers at this I2C address.
+   *
+   * Optional because a host that stubs the bus may not know: the bench itself
+   * does, and a MicroPython sketch that reads a device nobody wired gets an
+   * `OSError` there, exactly as it would on real hardware. The pins are the
+   * ones the sketch named, when it named any.
+   */
+  i2cHasDevice?(address: number, pins?: I2cBusPins): boolean;
   /** The SPI bus, for sketches that drive a TFT or a flash chip. */
   spi: SpiPort;
   /**
@@ -1355,7 +1430,11 @@ export class FirmwareRuntime {
     }
 
     const scope = new Scope(parent);
+    const varargs = declaration.varargs;
     declaration.parameters.forEach((parameter, index) => {
+      // The `*args` parameter is bound below, to the arguments the named
+      // parameters did not take.
+      if (varargs !== undefined && parameter.name === varargs) return;
       const argument = args[index];
       if (argument !== undefined) {
         scope.values.set(parameter.name, argument);
@@ -1368,6 +1447,10 @@ export class FirmwareRuntime {
         parameter.defaultValue === undefined ? 0 : (this.staticValue(parameter.defaultValue) ?? 0),
       );
     });
+    if (varargs !== undefined) {
+      const named = declaration.parameters.filter((parameter) => parameter.name !== varargs).length;
+      scope.values.set(varargs, args.slice(named));
+    }
     /*
      * A keyword argument binds the parameter of that name, wherever the
      * argument sits. A name the function does not have is left alone: the
@@ -1518,7 +1601,11 @@ export class FirmwareRuntime {
      */
     const parameters =
       this.language === 'python' ? declaration.parameters.slice(1) : declaration.parameters;
+    const varargs = declaration.varargs;
     for (const parameter of parameters) {
+      // The `*args` parameter is bound below, to the arguments the named
+      // parameters did not take.
+      if (varargs !== undefined && parameter.name === varargs) continue;
       const arg = args[index++];
       if (arg !== undefined) {
         frame.values.set(parameter.name, arg);
@@ -1530,6 +1617,10 @@ export class FirmwareRuntime {
       } else {
         frame.values.set(parameter.name, 0);
       }
+    }
+    if (varargs !== undefined) {
+      const named = parameters.filter((parameter) => parameter.name !== varargs).length;
+      frame.values.set(varargs, args.slice(named));
     }
   }
 
@@ -1670,8 +1761,21 @@ export class FirmwareRuntime {
     if (!this.hasModule(services, 'machine')) return false;
 
     if (kind === 'i2c') {
-      // The bench's I2C bus is the board's, not a pair of pins a sketch names.
-      scope.bindDevice(name, { pin: 0, kind });
+      /*
+       * `machine.I2C(0, sda=21, scl=22)` names the pair it wants, and a
+       * sketch that names one gets the bus on those pins: a device wired
+       * elsewhere is not answered, which is what the pins mean on real
+       * hardware. A sketch that names neither gets the board's own bus, and a
+       * host that cannot move the bus keeps the board's one either way.
+       */
+      const pins = i2cPinsFrom(expression);
+      const port = pins !== null ? services.wireOnPins?.(pins) : undefined;
+      scope.bindDevice(name, {
+        pin: 0,
+        kind,
+        ...(port ? { i2cPort: port } : {}),
+        ...(pins ? { i2cPins: pins } : {}),
+      });
       return true;
     }
 
@@ -1990,7 +2094,14 @@ export class FirmwareRuntime {
       }
 
       case 'for': {
-        const loopScope = new Scope(scope);
+        /*
+         * C's braces open a scope and Python's do not: only `def` does. A
+         * Python loop body assigns into the program it belongs to, so a name
+         * bound in the body is a name the rest of the program can still see.
+         * A loop that hid its assignments would count to nothing and say so
+         * by counting nothing.
+         */
+        const loopScope = this.language === 'python' ? scope : new Scope(scope);
         if (statement.init) yield* this.execute(statement.init, loopScope, services);
         for (;;) {
           if (statement.condition) {
@@ -2058,7 +2169,119 @@ export class FirmwareRuntime {
           : 0;
         return { kind: 'return', value };
       }
+
+      /*
+       * A guarded block.
+       *
+       * The `finally` clause runs on every path out of the statement -- the
+       * body succeeded, a handler caught the error, the error had no handler,
+       * or the body returned early -- which is the whole point of writing one.
+       * The `else` clause runs only when the body raised nothing, so a `try`
+       * that guards a write can put the follow-up in `else` rather than after
+       * the block.
+       *
+       * A handler binds the error to its name when it has one, so a sketch
+       * can say what went wrong rather than only that something did.
+       */
+      case 'try': {
+        let flow: Flow = NORMAL;
+        let raised = false;
+        let failure: unknown = null;
+
+        try {
+          flow = yield* this.execute(statement.body, scope, services);
+        } catch (error) {
+          raised = true;
+          if (!(error instanceof PythonError)) {
+            // A fault in the VM is not the sketch's to catch.
+            failure = error;
+          } else {
+            let handled = false;
+            for (const handler of statement.handlers) {
+              if (!this.handlerCatches(handler.types, error)) continue;
+              handled = true;
+              if (handler.name) scope.values.set(handler.name, error.message);
+              try {
+                flow = yield* this.execute(handler.body, scope, services);
+              } catch (nested) {
+                failure = nested;
+              }
+              break;
+            }
+            // No handler took it: the error goes on, after `finally`.
+            if (!handled) failure = error;
+          }
+        }
+
+        if (!raised && statement.otherwise) {
+          flow = yield* this.execute(statement.otherwise, scope, services);
+        }
+
+        let finalFlow: Flow = NORMAL;
+        if (statement.final) {
+          finalFlow = yield* this.execute(statement.final, scope, services);
+        }
+        // A `finally` that returns or breaks owns the statement's outcome,
+        // the way it does in Python.
+        if (finalFlow.kind !== 'normal') return finalFlow;
+        if (failure !== null) throw failure;
+        return flow;
+      }
+
+      case 'raise': {
+        const expression = statement.error;
+        let value: Value | undefined;
+        if (expression !== null) {
+          /*
+           * `raise ValueError('bad reading')` names its type in the call and
+           * its message in the argument, so the argument is what is read:
+           * the call itself would answer zero, because the VM has no
+           * exception classes to construct.
+           */
+          const argument =
+            expression.kind === 'call' && expression.callee.kind === 'identifier'
+              ? expression.args[0]
+              : undefined;
+          const read = argument ?? expression;
+          value = (yield* this.evaluate(read, scope, services)) as Value;
+        }
+        throw this.raisedError(expression, value);
+      }
     }
+  }
+
+  /**
+   * Whether a handler takes this error.
+   *
+   * A handler with no types catches everything, and so does one naming
+   * `Exception` or `BaseException`: those are the base of every error a
+   * sketch can raise. Any other name has to match the error's own type.
+   */
+  private handlerCatches(types: readonly string[], error: PythonError): boolean {
+    if (types.length === 0) return true;
+    return types.some(
+      (type) =>
+        type === 'Exception' ||
+        type === 'BaseException' ||
+        type === error.typeName,
+    );
+  }
+
+  /**
+   * The exception a `raise` names.
+   *
+   * `raise ValueError('bad reading')` names its type in the call, so the
+   * type is taken from there and the message from the argument. Anything
+   * else is an `Exception` carrying the value it was given.
+   */
+  private raisedError(expression: Expr | null, value: Value | undefined): PythonError {
+    if (expression !== null && expression.kind === 'call' && expression.callee.kind === 'identifier') {
+      const typeName = expression.callee.name;
+      const message =
+        expression.args.length === 0 ? typeName : formatValue(value === undefined ? '' : value);
+      return new PythonError(typeName, message);
+    }
+    return new PythonError('Exception', value === undefined ? 'exception' : formatValue(value));
   }
 
   // -- expressions ---------------------------------------------------------
@@ -2570,7 +2793,13 @@ export class FirmwareRuntime {
     }
 
     if (device.kind === 'i2c') {
-      return (yield* this.evaluateMachineI2cCall(member, args, services)) as Value;
+      return (yield* this.evaluateMachineI2cCall(
+        member,
+        args,
+        services,
+        device.i2cPort,
+        device.i2cPins,
+      )) as Value;
     }
 
     if (device.kind === 'pwm') {
@@ -3159,8 +3388,10 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
+    port?: WirePort,
+    pins?: I2cBusPins,
   ): Generator<DelayRequest, Value, void> {
-    const wire = services.wire;
+    const wire = port ?? services.wire;
     /*
      * A buffer is an array, and a single byte is accepted where a one-byte
      * buffer is meant: the Python front end has no bytes literal, and making
@@ -3191,8 +3422,10 @@ export class FirmwareRuntime {
         return 0;
       }
       case 'readfrom': {
+        const address = asNumber(args[0] ?? 0);
         const count = Math.max(0, Math.trunc(asNumber(args[1] ?? 0)));
-        wire.requestFrom(asNumber(args[0] ?? 0), count);
+        this.requireI2cDevice(services, address, pins);
+        wire.requestFrom(address, count);
         const out: number[] = [];
         for (let i = 0; i < count; i++) out.push(wire.read());
         return out;
@@ -3210,6 +3443,7 @@ export class FirmwareRuntime {
          */
         const micros = wire.endTransmission();
         if (micros > 0) yield micros / 1000;
+        this.requireI2cDevice(services, address, pins);
         wire.requestFrom(address, count);
         const out: number[] = [];
         for (let i = 0; i < count; i++) out.push(wire.read());
@@ -3226,6 +3460,24 @@ export class FirmwareRuntime {
       default:
         return 0;
     }
+  }
+
+  /**
+   * A read from a device nobody wired.
+   *
+   * MicroPython raises `OSError` when the controller is not acknowledged, and
+   * a sketch that guards its reads has to be able to catch that. The bus on
+   * this bench answers only for a device that is really on it, so the answer
+   * is the honest one -- and a host that cannot say is left alone.
+   */
+  private requireI2cDevice(
+    services: FirmwareServices,
+    address: number,
+    pins?: I2cBusPins,
+  ): void {
+    if (services.i2cHasDevice === undefined) return;
+    if (services.i2cHasDevice(address, pins)) return;
+    throw new PythonError('OSError', `[Errno 5] no device at 0x${(address & 0x7f).toString(16)}`);
   }
 
   /**
