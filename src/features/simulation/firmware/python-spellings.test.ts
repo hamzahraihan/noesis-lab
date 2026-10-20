@@ -154,6 +154,38 @@ describe('a call spelled the way Python spells it', () => {
     expect(serial).toContain('2');
   });
 
+  it('runs a range loop the way Python counts it', () => {
+    const { serial } = run(
+      ['total = 0', 'for i in range(4):', '    total = total + i', 'print(total)'].join('\n'),
+    );
+
+    expect(serial).toContain('6');
+  });
+
+  it('runs a range loop with a start and a stop', () => {
+    const { serial } = run(
+      ['total = 0', 'for i in range(2, 5):', '    total = total + i', 'print(total)'].join('\n'),
+    );
+
+    expect(serial).toContain('9');
+  });
+
+  it('collects the extra arguments into a starred parameter', () => {
+    const { serial } = run(
+      ['def first_of(*rest):', '    return rest[0]', 'print(first_of(7, 8))'].join('\n'),
+    );
+
+    expect(serial).toContain('7');
+  });
+
+  it('keeps the named arguments apart from the starred ones', () => {
+    const { serial } = run(
+      ['def add(first, *rest):', '    return first + rest[0]', 'print(add(1, 2))'].join('\n'),
+    );
+
+    expect(serial).toContain('3');
+  });
+
   it('passes arguments to a Python constructor', () => {
     const { serial } = run(
       [
@@ -168,5 +200,113 @@ describe('a call spelled the way Python spells it', () => {
     );
 
     expect(serial).toContain('7');
+  });
+});
+
+/**
+ * A guarded block.
+ *
+ * A sketch that guards a read had no way to say so: the front end stopped at
+ * the `try` keyword and the Problems panel called it a syntax error, while the
+ * emulated chip ran the same sketch happily.
+ */
+describe('a guarded block', () => {
+  it('catches the error it names and carries on', () => {
+    const { serial } = run(
+      [
+        'try:',
+        "    raise ValueError('bad reading')",
+        'except ValueError as e:',
+        "    print('caught', e)",
+        "print('after')",
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('caught');
+    expect(serial).toContain('bad reading');
+    expect(serial).toContain('after');
+  });
+
+  it('catches anything with a bare except', () => {
+    const { serial } = run(
+      ['try:', "    raise ValueError('boom')", 'except:', "    print('caught')"].join('\n'),
+    );
+
+    expect(serial).toContain('caught');
+  });
+
+  it('catches the errors of several types', () => {
+    const { serial } = run(
+      [
+        'try:',
+        "    raise OSError('no device')",
+        'except (ValueError, OSError):',
+        "    print('caught')",
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('caught');
+  });
+
+  it('leaves an error of another type to travel on', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      ['try:', "    raise ValueError('boom')", 'except OSError:', "    print('caught')"].join('\n'),
+      target.services,
+      'python',
+    );
+
+    expect(() => runner.step()).toThrow(/boom/);
+    expect(target.serial.join('')).not.toContain('caught');
+  });
+
+  it('runs finally whether or not the body raised', () => {
+    const { serial } = run(
+      [
+        'try:',
+        "    raise ValueError('boom')",
+        'except ValueError:',
+        "    print('caught')",
+        'finally:',
+        "    print('finally')",
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('caught');
+    expect(serial).toContain('finally');
+  });
+
+  it('runs finally after a body that raised nothing', () => {
+    const { serial } = run(
+      ['try:', "    print('body')", 'finally:', "    print('finally')"].join('\n'),
+    );
+
+    expect(serial).toContain('body');
+    expect(serial).toContain('finally');
+  });
+
+  it('runs else only when the body raised nothing', () => {
+    const { serial } = run(
+      [
+        'try:',
+        "    raise ValueError('boom')",
+        'except ValueError:',
+        "    print('caught')",
+        'else:',
+        "    print('else')",
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('caught');
+    expect(serial).not.toContain('else');
+  });
+
+  it('runs else when the body raised nothing', () => {
+    const { serial } = run(
+      ['try:', "    print('body')", 'else:', "    print('else')"].join('\n'),
+    );
+
+    expect(serial).toContain('body');
+    expect(serial).toContain('else');
   });
 });
