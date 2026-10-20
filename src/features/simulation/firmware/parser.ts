@@ -367,7 +367,14 @@ export type Expr =
       location: SourceLocation;
     }
   | { kind: 'index'; target: Expr; index: Expr; location: SourceLocation }
-  | { kind: 'member'; target: Expr; member: string; location: SourceLocation };
+  | { kind: 'member'; target: Expr; member: string; location: SourceLocation }
+  /**
+   * A `yield`: the value a generator hands to whoever is iterating it.
+   *
+   * Only meaningful inside a function that yields, which is what makes that
+   * function a generator.
+   */
+  | { kind: 'yield'; value: Expr | null; location: SourceLocation };
 
 export type Stmt =
   | { kind: 'varDecl'; name: string; init: Expr | null; location: SourceLocation }
@@ -439,7 +446,20 @@ export type Stmt =
    * `if` body that opened a scope would lose every assignment it made, because
    * the name would be bound somewhere the rest of the program cannot see.
    */
-  | { kind: 'suite'; statements: Stmt[]; location: SourceLocation };
+  | { kind: 'suite'; statements: Stmt[]; location: SourceLocation }
+  /**
+   * A loop over anything iterable: `for name in items`.
+   *
+   * A range loop keeps the counter loop the VM already has, so it stays a
+   * counter loop; this one is for a list, a dictionary's keys or a generator.
+   */
+  | {
+      kind: 'forEach';
+      variable: string;
+      iterable: Expr;
+      body: Stmt;
+      location: SourceLocation;
+    };
 
 export interface FunctionDecl {
   readonly name: string;
