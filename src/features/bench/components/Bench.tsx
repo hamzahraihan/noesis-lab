@@ -30,6 +30,7 @@ import {
   createWorkerClient,
   lcdFromSnapshot,
   sevenSegmentFromSnapshot,
+  ssd1306FromSnapshot,
   tftFromSnapshot,
   type WorkerClient,
 } from '../simulations/worker-client';
@@ -1040,6 +1041,17 @@ export default function Bench(props: BenchProps) {
             bytes[bytes.length - 1] ?? 0,
           );
           if (panel !== null) lcds.set(part.id, panel);
+        } else if (
+          component.kind === 'display' &&
+          (component.controller === 'ssd1306' || component.controller === 'ssd1306-spi') &&
+          bytes !== undefined
+        ) {
+          // The panel's own memory, and the flags that say whether the glass
+          // is lit and whether the image is mirrored.
+          displays.set(
+            part.id,
+            ssd1306FromSnapshot(bytes.slice(0, bytes.length - 1), bytes[bytes.length - 1] ?? 0),
+          );
         } else if (
           component.kind === 'display' &&
           component.controller === 'ili9341' &&
