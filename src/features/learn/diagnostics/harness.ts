@@ -13,6 +13,8 @@ export interface HarnessSim {
   pressButton(index: number, down: boolean): void;
   jumpTimeMs(ms: number): void;
   serialText(): string;
+  /** Scripted benches only: resolves once the QuickJS runtime is installed. */
+  scriptedReady?(): Promise<void>;
   readGpio(gpio: number): boolean;
   resetAvrCore?(): boolean;
   stageArmedAlarm?(): void;

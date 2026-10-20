@@ -3,6 +3,7 @@ import { BenchBuilder } from '../bench';
 import { NO_DYNAMIC_STATE, type DynamicState } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
 import { createScriptedSampler, SCRIPTED_SAMPLE_MS } from './sampler';
+import { clearReportedFaults, reportedFaults } from './diagnostics';
 import type { ScriptedRuntime } from './runtime';
 
 /** A runtime with only the half a leg needs: the other buses answer nothing. */
@@ -76,6 +77,28 @@ describe('the scripted sampler', () => {
 
     const values = createScriptedSampler(runtime, () => [part])(0, NO_DYNAMIC_STATE);
     expect(values.size).toBe(0);
+  });
+
+  it('reports a fault once, as a row the Problems panel can render', () => {
+    clearReportedFaults();
+    const builder = new BenchBuilder();
+    const part = builder.addPart(probe('broken'), 0, 0);
+    const runtime = stubRuntime(() => ({ value: undefined, fault: 'Error: no sensor' }));
+
+    const sample = createScriptedSampler(runtime, () => [part]);
+    sample(0, NO_DYNAMIC_STATE);
+    sample(10, NO_DYNAMIC_STATE);
+
+    // Latched: the part faulted on both samples, the operator sees one row.
+    expect(reportedFaults()).toEqual([{ partId: part.id, fault: 'Error: no sensor' }]);
+
+    // The row lives as long as the fault: an answer clears it.
+    createScriptedSampler(
+      stubRuntime(() => ({ value: 0.5, fault: null })),
+      () => [part],
+    )(20, NO_DYNAMIC_STATE);
+    expect(reportedFaults()).toEqual([]);
+    clearReportedFaults();
   });
 
   it('hands the script the knobs the operator holds', () => {

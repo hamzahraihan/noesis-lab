@@ -13,7 +13,7 @@
  */
 
 import type { DynamicState, PartDefinition } from '@/features/parts';
-import { reportFault } from './diagnostics';
+import { clearFault, reportFault } from './diagnostics';
 import type { ScriptedRuntime } from './runtime';
 
 /**
@@ -73,7 +73,10 @@ export function createScriptedSampler(
         timeMs,
         knobValues(part.definition, part.id, state),
       );
+      // The row lives exactly as long as the fault does: a script that answers
+      // again -- fixed by an edit, or a knob that recovered -- clears its row.
       if (reading.fault !== null) reportFault(part.id, reading.fault);
+      else clearFault(part.id);
       if (reading.value !== undefined) values.set(part.id, reading.value);
     }
     return values;

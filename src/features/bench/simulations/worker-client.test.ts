@@ -428,6 +428,29 @@ describe('worker port protocol', () => {
     client?.dispose();
   });
 
+  it('reports script faults from the worker as rows the Problems panel can render', () => {
+    const port = fakePort();
+    const client = portClient(port, vi.fn());
+    const buf = replyInitOk(port);
+    // The refresh rides the frame poll: thirty frames is half a second.
+    const frame = (generation: number): void => {
+      headerView(buf).generation = generation;
+      client.poll();
+    };
+    for (let i = 0; i < 30; i++) frame(i + 2);
+    const ask = port.sent.find((msg) => (msg as { type?: string }).type === 'faults') as
+      | { id: number; type: string }
+      | undefined;
+    expect(ask?.type).toBe('faults');
+    port.reply({
+      id: ask?.id,
+      ok: true,
+      rows: [{ partId: 'p3', fault: 'Error: no sensor' }],
+    });
+    expect(client.faults()).toEqual([{ partId: 'p3', fault: 'Error: no sensor' }]);
+    client.dispose();
+  });
+
   it('sends the rp2040 execution when the build asks for it', () => {
     const port = fakePort();
     const client = createWorkerClient({

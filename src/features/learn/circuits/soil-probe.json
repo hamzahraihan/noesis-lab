@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "breadboard-830",
+      "x": 230,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "soil-probe",
+      "x": 415,
+      "y": 70,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:5V",
+      "to": "p3:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:A0",
+      "to": "p3:AOUT",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:J1_GND",
+      "to": "p3:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ],
+  "definitions": [
+    {
+      "id": "soil-probe",
+      "name": "Soil moisture probe",
+      "category": "input",
+      "widthMm": 20,
+      "heightMm": 12,
+      "bodyColour": "#5b6b4a",
+      "legendColour": "#f2f2ee",
+      "component": {
+        "kind": "scripted",
+        "bus": "analog"
+      },
+      "script": "({ analog: ({ knobs }) => knobs.moisture / 100 })",
+      "knobs": [
+        {
+          "id": "moisture",
+          "label": "Moisture",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "defaultValue": 40
+        }
+      ],
+      "pins": [
+        {
+          "id": "AOUT",
+          "label": "OUT",
+          "x": 0,
+          "y": 6
+        },
+        {
+          "id": "VCC",
+          "label": "VCC",
+          "x": 10,
+          "y": 6
+        },
+        {
+          "id": "GND",
+          "label": "GND",
+          "x": 20,
+          "y": 6,
+          "net": "GND"
+        }
+      ]
+    }
+  ]
+}

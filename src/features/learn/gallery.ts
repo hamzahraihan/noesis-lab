@@ -2073,6 +2073,59 @@ const LIVE_WEATHER: GalleryProject = {
   ],
 };
 
+/* ------------------------------------------------------------------ *
+ * Soil Moisture Probe — a sensor the bench has no model for
+ * ------------------------------------------------------------------ */
+
+/*
+ * The worked example for behaviour parts (`docs/superpowers/specs/
+ * 2026-10-19-behaviour-parts-design.md` §8). The part is not in the
+ * catalogue: its definition travels inside the circuit document, so the file
+ * opens on a machine that never imported anything. The behaviour is the
+ * script, and the knob is its input -- turn it and the ADC follows.
+ */
+const SOIL_PROBE_SKETCH = `#include <Arduino.h>
+
+#define PROBE A0
+
+void setup() {
+  Serial.begin(9600);
+}
+
+void loop() {
+  int reading = analogRead(PROBE);
+  /*
+   * idiv, because the VM's division is true division: the sketch wants a whole
+   * percentage to print, not 39.98.
+   */
+  int percent = idiv(reading * 100, 1023);
+  Serial.print("moisture ");
+  Serial.print(percent);
+  Serial.println("%");
+  delay(500);
+}
+`;
+
+const SOIL_PROBE: GalleryProject = {
+  id: 'soil-probe',
+  title: 'Soil Moisture Probe',
+  blurb:
+    'A sensor the bench has no model for, written as a script and carried in the circuit file itself: turn the Moisture knob and the Uno reads it on A0 — the script is the sensor.',
+  parts: [{ name: 'Soil moisture probe', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      circuit: CIRCUITS['soil-probe'],
+      sketch: SOIL_PROBE_SKETCH,
+    },
+  ],
+  working: [
+    'The serial prints a moisture percentage twice a second, and the inspector shows the probe with its knob.',
+    'Turn Moisture down and the reading follows: the script reads the knob, the netlist holds the divider, and the ADC reads it back.',
+    'It is a part from the circuit file, not the catalogue — the bench never had a soil probe built in.',
+  ],
+};
+
 export const GALLERY: readonly GalleryProject[] = [
   ALARM_CLOCK,
   SAFE,
@@ -2083,6 +2136,7 @@ export const GALLERY: readonly GalleryProject[] = [
   NET_CLOCK,
   SENSOR_FEED,
   LIVE_WEATHER,
+  SOIL_PROBE,
 ];
 
 export function galleryById(id: string): GalleryProject | null {

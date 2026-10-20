@@ -51,11 +51,7 @@ import type {
   GalleryProject,
 } from '@/features/learn';
 import type { CircuitDocument, FirmwareLanguage, FirmwareProject } from '@/features/simulation';
-import {
-  ENTRY_BY_LANGUAGE,
-  renameFile,
-  toSingleFileProject,
-} from '@/features/simulation';
+import { ENTRY_BY_LANGUAGE, renameFile, toSingleFileProject } from '@/features/simulation';
 import { FirmwareEditor, Inspector, SerialMonitor } from '@/features/instruments';
 import { WIRE_COLOURS } from '../wiring/wire-colours';
 import type { WireEnd } from '@/features/simulation';
@@ -672,7 +668,7 @@ export default function Bench(props: BenchProps) {
    * flag opts out. Persisted so the choice survives a reload.
    */
   const [forceNoWorker, setForceNoWorker] = useState<boolean>(
-    () => (typeof localStorage !== 'undefined' && localStorage.getItem('noesis-no-worker') === '1'),
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('noesis-no-worker') === '1',
   );
   useEffect(() => {
     if (typeof localStorage !== 'undefined') {
@@ -752,6 +748,12 @@ export default function Bench(props: BenchProps) {
   const activeFirmwareError = workerActive
     ? (workerClient.fault ?? simulation.firmwareError)
     : simulation.firmwareError;
+  /* Script faults are latched by whichever realm runs the scripts: the worker
+   * reports its rows over its message channel, the in-page runtime reads its
+   * own. A fault is a problem of the part, so it gets its own row. */
+  const activeFaults = workerActive ? workerClient.faults() : simulation.faults();
+  const faultPartName = (partId: string): string =>
+    simulation.bench.parts.find((part) => part.id === partId)?.definition.name ?? partId;
 
   // Only pins firmware can actually name are worth probing; the power and
   // ground headers are rails, not signals.
@@ -1544,7 +1546,11 @@ export default function Bench(props: BenchProps) {
     // wired, which is why every layout edit refuses while one is live; opening
     // a file replaces the whole circuit, so it refuses too.
     if (layoutLocked) return;
-    if (bench.parts.length > 0 && !window.confirm('Replace the current bench with this circuit file?')) return;
+    if (
+      bench.parts.length > 0 &&
+      !window.confirm('Replace the current bench with this circuit file?')
+    )
+      return;
     void (async () => {
       try {
         if (file.size > CIRCUIT_FILE_MAX_BYTES)
@@ -1746,7 +1752,10 @@ export default function Bench(props: BenchProps) {
               {`worker · ${workerStatus.fps}fps · ${workerStatus.ratio.toFixed(2)}×`}
             </span>
           ) : (
-            <span className="text-xs text-[var(--hd-muted)]" title={workerFallback ?? 'In-page simulation'}>
+            <span
+              className="text-xs text-[var(--hd-muted)]"
+              title={workerFallback ?? 'In-page simulation'}
+            >
               in-page
             </span>
           )}
@@ -1782,7 +1791,10 @@ export default function Bench(props: BenchProps) {
            * awaiting Run lands 'compile cancelled' and stays stopped.
            */}
           {compiling && (
-            <span className="flex items-center gap-1.5 text-xs text-[var(--hd-muted)]" role="status">
+            <span
+              className="flex items-center gap-1.5 text-xs text-[var(--hd-muted)]"
+              role="status"
+            >
               Compiling for Uno…
               <Button
                 type="button"
@@ -1911,9 +1923,7 @@ export default function Bench(props: BenchProps) {
                 Copy circuit link
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => saveCircuitFile()}>
-                Save circuit
-              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => saveCircuitFile()}>Save circuit</DropdownMenuItem>
               <DropdownMenuItem
                 disabled={selectedCustomPart === undefined}
                 onSelect={() => {
@@ -1940,9 +1950,7 @@ export default function Bench(props: BenchProps) {
                 Open part…
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => setForceNoWorker((v) => !v)}
-              >
+              <DropdownMenuItem onSelect={() => setForceNoWorker((v) => !v)}>
                 {forceNoWorker ? 'Enable sim worker' : 'Disable sim worker'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -2008,7 +2016,10 @@ export default function Bench(props: BenchProps) {
         <div className="flex shrink-0 items-center gap-3 border-b border-[var(--hd-border)] bg-[var(--hd-bg-deep)]/80 px-4 py-1.5 text-sm">
           <span className="truncate text-[var(--hd-text)]">
             <span className="font-medium text-[var(--hd-text)]">{foundProject.title}</span>
-            <span className="text-[var(--hd-muted)]"> — wired and loaded, press Run to see it live.</span>
+            <span className="text-[var(--hd-muted)]">
+              {' '}
+              — wired and loaded, press Run to see it live.
+            </span>
           </span>
           <span className="flex-1" />
           <Link
@@ -2195,19 +2206,26 @@ export default function Bench(props: BenchProps) {
                     </button>
                   </div>
                 )}
-              <div
-                className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-2 rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/80 px-2 py-1 font-mono text-[10px] text-[var(--hd-muted)] backdrop-blur"
-                role="status"
-                aria-label="Simulation status"
-              >
-                <span className={isRunning ? 'text-[var(--hd-success)]' : ''}>
-                  {isRunning ? 'running' : 'stopped'}
-                </span>
-                <span className="tabular-nums">
-                  {((workerClient !== null && workerLive ? workerClient.timeMs : simulation.engine.timeMs) / 1000).toFixed(3)}s
-                </span>
-                <span className="tabular-nums">{simulation.engine.currentNetlist.nodeCount} nodes</span>
-              </div>
+                <div
+                  className="pointer-events-none absolute bottom-2 right-2 z-10 flex items-center gap-2 rounded-none border border-[var(--hd-border)] bg-[var(--hd-surface)]/80 px-2 py-1 font-mono text-[10px] text-[var(--hd-muted)] backdrop-blur"
+                  role="status"
+                  aria-label="Simulation status"
+                >
+                  <span className={isRunning ? 'text-[var(--hd-success)]' : ''}>
+                    {isRunning ? 'running' : 'stopped'}
+                  </span>
+                  <span className="tabular-nums">
+                    {(
+                      (workerClient !== null && workerLive
+                        ? workerClient.timeMs
+                        : simulation.engine.timeMs) / 1000
+                    ).toFixed(3)}
+                    s
+                  </span>
+                  <span className="tabular-nums">
+                    {simulation.engine.currentNetlist.nodeCount} nodes
+                  </span>
+                </div>
               </div>
             }
             editor={
@@ -2265,7 +2283,7 @@ export default function Bench(props: BenchProps) {
             tab={bottomTab}
             open={bottomOpen}
             height={layout.bottomHeight}
-            hasError={(activeFirmwareError ?? shareError) !== null}
+            hasError={(activeFirmwareError ?? shareError) !== null || activeFaults.length > 0}
             onTab={setBottomTab}
             onToggle={() => toggleBottom()}
             serial={
@@ -2315,9 +2333,19 @@ export default function Bench(props: BenchProps) {
               />
             }
             problems={
-              <p className="px-3 py-2 font-mono text-xs text-red-300">
-                {activeFirmwareError ?? shareError ?? 'No problems.'}
-              </p>
+              activeFirmwareError === null && shareError === null && activeFaults.length === 0 ? (
+                <p className="px-3 py-2 font-mono text-xs text-[var(--hd-muted)]">No problems.</p>
+              ) : (
+                <ul className="space-y-1 px-3 py-2 font-mono text-xs text-red-300">
+                  {activeFirmwareError !== null && <li>{activeFirmwareError}</li>}
+                  {shareError !== null && <li>{shareError}</li>}
+                  {activeFaults.map((row) => (
+                    <li key={row.partId}>
+                      {faultPartName(row.partId)}: {row.fault}
+                    </li>
+                  ))}
+                </ul>
+              )
             }
           />
         </main>
@@ -2420,7 +2448,6 @@ export default function Bench(props: BenchProps) {
           />
         )}
       </div>
-
     </div>
   );
 }

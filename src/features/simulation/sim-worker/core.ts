@@ -62,6 +62,7 @@ import { GROUND } from '../elements';
 import { loadScriptedRuntime } from '../scripted/load';
 import { createScriptedI2c } from '../scripted/i2c';
 import { createScriptedSampler } from '../scripted/sampler';
+import { reportedFaults, type ScriptFault } from '../scripted/diagnostics';
 import { I2CBus } from '../bus/i2c';
 import { SpiBus } from '../bus/spi';
 import { BusLog } from '../bus/log';
@@ -148,6 +149,10 @@ export interface CoreHandle {
   snapshot(): SharedArrayBuffer;
   readonly timeMs: number;
   readonly fault: string | null;
+  /** Script faults latched in this realm, for the Problems panel. */
+  faults(): readonly ScriptFault[];
+  /** Resolves once the scripted runtime is installed, for benches with scripts. */
+  scriptedReady(): Promise<void>;
   readonly wasmAttached: boolean;
   readonly rp2040Attached: boolean;
 }
@@ -310,6 +315,16 @@ class SimCore implements CoreHandle {
 
   get fault(): string | null {
     return this.faultText;
+  }
+
+  faults(): readonly ScriptFault[] {
+    return reportedFaults();
+  }
+
+  /** Resolves once the scripted runtime is installed (or immediately, if idle). */
+  scriptedReady(): Promise<void> {
+    this.ensureScriptedRuntime();
+    return this.scriptedStart ?? Promise.resolve();
   }
 
   /** Test seam: whether the live AVR backend has Wasm attached. */

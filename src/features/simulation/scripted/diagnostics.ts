@@ -9,6 +9,11 @@
  * a script that throws on every call must not turn the solver into a log spout.
  */
 
+export interface ScriptFault {
+  readonly partId: string;
+  readonly fault: string;
+}
+
 const reported = new Map<string, string>();
 
 /** Reports a part's fault the first time it is seen, and never the same one twice. */
@@ -16,6 +21,19 @@ export function reportFault(partId: string, fault: string): void {
   if (reported.get(partId) === fault) return;
   reported.set(partId, fault);
   console.warn(`scripted part ${partId}: ${fault}`);
+}
+
+/**
+ * The latched faults, for the Problems panel and for whatever transport sits
+ * between it and the runtime (the worker reports its own realm's rows).
+ */
+export function reportedFaults(): readonly ScriptFault[] {
+  return [...reported].map(([partId, fault]) => ({ partId, fault }));
+}
+
+/** Forgets one part's fault, because its script answered again. */
+export function clearFault(partId: string): void {
+  reported.delete(partId);
 }
 
 /** Forgets a part's faults, because Reset is the operator's retry. */

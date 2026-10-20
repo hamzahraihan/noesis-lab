@@ -14,6 +14,7 @@ import { exerciseById } from '@/features/learn';
 import { CIRCUITS } from '@/features/learn/circuits';
 import { esp32DevKitV1, ili9341Definition, type Ili9341 } from '@/features/parts';
 import type { NetAnswer, NetFetcher } from '@/features/simulation';
+import { clearReportedFaults } from '../scripted/diagnostics';
 
 describe('sim core', () => {
   it('steps an interpreter blink without Worker globals', () => {
@@ -30,6 +31,47 @@ describe('sim core', () => {
     core.step(16);
     expect(core.timeMs).toBeGreaterThan(0);
     expect(core.fault).toBeNull();
+  });
+
+  it('reports a script fault from the worker realm as a Problems row', async () => {
+    clearReportedFaults();
+    const sim = new Simulation(boardOption('uno').make());
+    const doc = CIRCUITS['soil-probe'];
+    const broken = {
+      ...doc,
+      definitions: (doc.definitions ?? []).map((definition) => ({
+        ...definition,
+        script: '({ analog: () => { throw new Error("no sensor"); } })',
+      })),
+    };
+    expect(sim.loadCircuit(broken)).toEqual([]);
+
+    const core = createSimCore(boardOption('uno').make());
+    core.rebuild(
+      sim.bench,
+      {
+        language: 'arduino-cpp',
+        activeName: 'main.ino',
+        files: [
+          {
+            name: 'main.ino',
+            content:
+              '#include <Arduino.h>\nvoid setup() {}\nvoid loop() { Serial.println(analogRead(A0)); delay(100); }',
+          },
+        ],
+      } as never,
+      'interpreter',
+    );
+    await core.scriptedReady();
+    for (let i = 0; i < 30; i++) core.step(16);
+
+    // The row is the worker realm's own latch: the same module the sampler
+    // wrote is what the message channel reads.
+    const rows = core.faults();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.partId).toBe('p3');
+    expect(rows[0]?.fault).toContain('no sensor');
+    clearReportedFaults();
   });
 
   it('pauses stepping when frames go unconsumed (backpressure)', () => {

@@ -8,6 +8,7 @@
  * carrying the new buffer.
  */
 import { createSimCore, type CoreHandle } from './core';
+import { clearReportedFaults } from '../scripted/diagnostics';
 import { ACK_STALE_MS, headerView, shouldThrottle } from './protocol';
 import type { Bench } from '../bench';
 import type { FirmwareProject } from '../firmware/project';
@@ -36,7 +37,8 @@ type Incoming =
   | { id: number; type: 'edit'; bench: Bench }
   | { id: number; type: 'flash'; words: Uint16Array }
   | { id: number; type: 'speed'; scale: number }
-  | { id: number; type: 'ack'; generation: number };
+  | { id: number; type: 'ack'; generation: number }
+  | { id: number; type: 'faults' };
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
 let execution: 'interpreter' | 'avr' | 'rp2040' = 'interpreter';
@@ -65,6 +67,8 @@ function handle(port: Port, msg: Incoming): void {
         break;
       }
       try {
+        // A fresh run is the operator's retry: the previous run's rows are gone.
+        clearReportedFaults();
         core = createSimCore(board, undefined, { liveNetwork: msg.liveNetwork ?? false });
         firmware = msg.firmware;
         execution = msg.execution;
@@ -141,6 +145,9 @@ function handle(port: Port, msg: Incoming): void {
       break;
     case 'ping':
       ok(msg.id, { fault: core?.fault ?? null });
+      break;
+    case 'faults':
+      ok(msg.id, { rows: core?.faults() ?? [] });
       break;
   }
 }

@@ -114,10 +114,21 @@ describe('the project gallery', () => {
     expect(alarm.builds[1]!.circuit).toBe(alarm.builds[0]!.circuit);
   });
 
-  it('names only parts the catalogue stocks and says what running shows', () => {
+  it('names only parts the catalogue stocks or the circuit defines, and says what running shows', () => {
     for (const entry of GALLERY) {
+      // A build may carry its own part definitions (behaviour parts), so the
+      // list may name a part the catalogue does not stock: what it must name
+      // is something the reader will actually find on the bench.
+      const defined = new Set(
+        entry.builds.flatMap((build) =>
+          (build.circuit.definitions ?? []).map((definition) => definition.name),
+        ),
+      );
       for (const part of entry.parts) {
-        expect(CATALOGUE_NAMES.has(part.name), `${entry.id} part "${part.name}"`).toBe(true);
+        expect(
+          CATALOGUE_NAMES.has(part.name) || defined.has(part.name),
+          `${entry.id} part "${part.name}"`,
+        ).toBe(true);
         expect(part.qty).toBeGreaterThan(0);
       }
       expect(entry.working.length, `${entry.id} working`).toBeGreaterThan(0);
@@ -324,6 +335,7 @@ describe('the project gallery', () => {
       reaction: 5,
       'net-clock': 6,
       'sensor-feed': 6,
+      'soil-probe': 3,
     };
     for (const entry of GALLERY) {
       for (const build of entry.builds) {
@@ -742,6 +754,42 @@ void loop() {
    * budged, which is exactly the reported symptom, so this test watches the
    * decoded text: 15:00, one minute later, then an Hour tap on top.
    */
+  it('runs the scripted probe live: the knob is the sensor', async () => {
+    const build = galleryById('soil-probe')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    await simulation.scriptedReady();
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const readPercent = (): number => {
+      const matches = [
+        ...simulation
+          .serialLines()
+          .join('')
+          .matchAll(/moisture (\d+)%/g),
+      ];
+      return Number(matches.at(-1)![1]);
+    };
+    const run = (seconds: number): void => {
+      for (let i = 0; i < seconds * 20; i++) simulation.tick(0.05);
+    };
+
+    // The safe state first: the runtime is installed, so the divider carries
+    // the knob's default (40) and the ADC reads it back through the sketch.
+    run(1.5);
+    expect(readPercent()).toBeGreaterThan(30);
+    expect(readPercent()).toBeLessThan(50);
+
+    // Turn the operator's knob: same part, same wire, a different answer.
+    const probe = simulation.bench.parts.find((part) => part.definition.id === 'soil-probe')!;
+    const knob = probe.definition.knobs![0]!;
+    simulation.setKnob(probe.id, knob, 10);
+    run(1.5);
+    expect(readPercent()).toBeLessThan(20);
+  }, 60_000);
+
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
       const build = galleryById('alarm-clock')!.builds[0];

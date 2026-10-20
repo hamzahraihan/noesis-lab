@@ -64,6 +64,7 @@ export * from './net/bridge';
  */
 export * from './scripted/load';
 export * from './scripted/sampler';
+export { clearReportedFaults, reportedFaults, type ScriptFault } from './scripted/diagnostics';
 export * from './scripted/i2c';
 export type {
   ScriptedReading,

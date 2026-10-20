@@ -77,6 +77,7 @@ import {
   type CompileResult,
   type FirmwareProject,
   type ProjectLibraryContext,
+  type ScriptFault,
   type SnapshotLayout,
 } from '@/features/simulation';
 import {
@@ -489,6 +490,8 @@ export interface WorkerClient {
   attachBuffer(buf: SharedArrayBuffer): void;
   poll(): 'ok' | 'reallocated' | 'stale';
   status(): WorkerStatus;
+  /** Script faults the worker has latched, as of the last refresh. */
+  faults(): readonly ScriptFault[];
   readonly fault: string | null;
   readonly timeMs: number;
   readonly serialOverflow: boolean;
@@ -504,6 +507,24 @@ export interface SimWorkerPort {
   postMessage(msg: unknown): void;
   onmessage: ((event: { data: unknown }) => void) | null;
   terminate(): void;
+}
+
+/**
+ * A fault row as the worker sends it, or null for anything else.
+ *
+ * The reply crosses a realm boundary, so it is shaped data rather than a type:
+ * the guard is the boundary, and the panel renders only what it passed.
+ */
+function asFaultRows(value: unknown): readonly ScriptFault[] | null {
+  if (!Array.isArray(value)) return null;
+  const rows: ScriptFault[] = [];
+  for (const entry of value) {
+    if (entry === null || typeof entry !== 'object') return null;
+    if (!('partId' in entry) || !('fault' in entry)) return null;
+    if (typeof entry.partId !== 'string' || typeof entry.fault !== 'string') return null;
+    rows.push({ partId: entry.partId, fault: entry.fault });
+  }
+  return rows;
 }
 
 class WorkerClientImpl implements WorkerClient {
@@ -531,6 +552,8 @@ class WorkerClientImpl implements WorkerClient {
    * travels in `init` because the worker owns its own network. */
   private liveNetwork = false;
   private faultText: string | null = null;
+  private faultRows: readonly ScriptFault[] = [];
+  private faultPolls = 0;
   private compileAbort: AbortController | null = null;
   private stagedHex: Uint16Array | null = null;
   private overflowSticky = false;
@@ -782,8 +805,15 @@ class WorkerClientImpl implements WorkerClient {
       } catch {
         // Header unreadable: skip the ack, the next frame carries on.
       }
+      // Faults are rare and latched; twice a second is far more often than a
+      // row can change, and it keeps the panel current within a blink.
+      if (++this.faultPolls % 30 === 0) this.post('faults');
     }
     return outcome;
+  }
+
+  faults(): readonly ScriptFault[] {
+    return this.faultRows;
   }
 
   status(): WorkerStatus {
@@ -881,6 +911,7 @@ class WorkerClientImpl implements WorkerClient {
       realloc?: unknown;
       fault?: unknown;
       error?: unknown;
+      rows?: unknown;
     };
     if (typeof reply.id !== 'number') return;
     const kind = this.pending.get(reply.id);
@@ -913,6 +944,9 @@ class WorkerClientImpl implements WorkerClient {
         this.sendInit();
       }
       this.flushOutbox();
+    } else if (kind === 'faults') {
+      const rows = asFaultRows(reply.rows);
+      if (rows !== null) this.faultRows = rows;
     } else if (kind === 'edit' && reply.realloc === true) {
       const buf = reply.buffer as SharedArrayBuffer | undefined;
       if (!this.checkHandshakeBuffer(buf)) return;

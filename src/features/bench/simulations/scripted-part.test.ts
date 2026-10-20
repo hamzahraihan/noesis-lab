@@ -171,4 +171,40 @@ describe('a scripted part on a bench', () => {
     // The script ran, from the definition the file brought: half the rail.
     expect(dividerOhms(opened)).toBeCloseTo(10_000, 6);
   });
+
+  it('shows a throwing script as one Problems row, and only while it faults', async () => {
+    const throwingFile = JSON.stringify({
+      version: 1,
+      parts: [
+        {
+          id: 'throwing-probe',
+          name: 'Throwing probe',
+          category: 'input',
+          widthMm: 20,
+          heightMm: 12,
+          bodyColour: '#5b6b4a',
+          legendColour: '#f2f2ee',
+          component: { kind: 'scripted', bus: 'analog' },
+          script: '({ analog: () => { throw new Error("no sensor"); } })',
+          pins: [
+            { id: 'AOUT', label: 'OUT', x: 0, y: 6 },
+            { id: 'VCC', label: 'VCC', x: 10, y: 6 },
+            { id: 'GND', label: 'GND', x: 20, y: 6, net: 'GND' },
+          ],
+        },
+      ],
+    });
+    const outcome = useCustomPartsStore.getState().import(throwingFile, 'throwing-probe.json');
+    expect(outcome.refused).toEqual([]);
+    const definition = partDefinitionById('throwing-probe');
+    if (definition === undefined) throw new Error('the throwing probe did not import');
+
+    const simulation = new Simulation(esp32DevKitV1());
+    const part = simulation.addPart(definition, 0, 0);
+    await simulation.scriptedReady();
+    simulation.engine.settle();
+
+    // The row names the part and carries the script's own message.
+    expect(simulation.faults()).toEqual([{ partId: part.id, fault: 'Error: no sensor' }]);
+  });
 });

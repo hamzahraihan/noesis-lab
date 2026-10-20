@@ -118,8 +118,11 @@ An interactive simulation platform designed to bridge the gap between software c
   that throws mid-solve; the spec answers those four. A circuit now **carries the
   parts it uses** (`CircuitDocument.definitions`), so a file or a share link
   opens on a machine that never imported anything — which is what a gallery
-  example needs. Still open from that spec: the Problems panel row a fault should
-  own (today's line is the console), and the worked example itself.
+  example needs. **Worked example shipped** (2026-10-20): the gallery's *Soil
+  Moisture Probe* carries its definition inside the circuit document, and its
+  knob is the sensor — the sketch reads whatever the script answers on A0. Still
+  open from that spec: the Problems panel row a fault should own (today's line is
+  the console).
 
 ---
 

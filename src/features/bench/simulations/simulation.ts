@@ -19,7 +19,10 @@ import {
   createScriptedI2c,
   createScriptedSampler,
   Engine,
+  clearReportedFaults,
   loadScriptedRuntime,
+  reportedFaults,
+  type ScriptFault,
 } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { compile } from '@/features/simulation';
@@ -1027,6 +1030,8 @@ export class Simulation {
 
   /** Rebuilds the circuit and restarts firmware from t=0. */
   reset(): void {
+    // A reset is the operator's retry: the last run's script rows are gone.
+    clearReportedFaults();
     this.engine.timeMs = 0;
     this.mcu.reset();
     this.serial = [];
@@ -1503,6 +1508,16 @@ export class Simulation {
    * would then never re-read it. Handing out a fresh array only on real changes
    * keeps the monitor live without re-rendering 60 times a second for nothing.
    */
+  /**
+   * Script faults latched by the in-page runtime, for the Problems panel.
+   *
+   * The worker path reports the same rows across its own message channel: the
+   * faults are latched in whichever realm owns the script's context.
+   */
+  faults(): readonly ScriptFault[] {
+    return reportedFaults();
+  }
+
   serialLines(): readonly string[] {
     if (this.serialDirty) {
       this.serialSnapshot = [...this.serial];

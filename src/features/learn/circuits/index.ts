@@ -32,6 +32,7 @@ import esp32Tft from './esp32-tft.json';
 import parking from './parking.json';
 import reaction from './reaction.json';
 import safe from './safe.json';
+import soilProbe from './soil-probe.json';
 import weather from './weather.json';
 
 /** The exercise or project id a document belongs to. */
@@ -53,6 +54,7 @@ export type CircuitId =
   | 'parking'
   | 'reaction'
   | 'safe'
+  | 'soil-probe'
   | 'weather';
 
 export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
@@ -73,5 +75,6 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   parking: parseCircuit(parking, 'parking'),
   reaction: parseCircuit(reaction, 'reaction'),
   safe: parseCircuit(safe, 'safe'),
+  'soil-probe': parseCircuit(soilProbe, 'soil-probe'),
   weather: parseCircuit(weather, 'weather'),
 };
