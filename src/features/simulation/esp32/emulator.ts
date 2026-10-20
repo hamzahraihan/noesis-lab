@@ -6,16 +6,13 @@
  * firmware on the bench is the firmware that would run on the board -- the
  * same arrangement the RP2 path has with rp2040js and a pinned UF2.
  *
- * What the host sees is the chip's console. The module reports what the
- * firmware printed as JSON envelopes, and what the operator types goes back
- * the other way into UART0.
- *
- * The pins are the open question. The emulator's GPIO block has exactly the
- * seam a bench needs -- a host-driven input level, and the levels the chip
- * drives -- but the WebAssembly ABI does not export either yet, so a bench
- * cannot wire the emulated chip to its solver until it does. Until then this
- * module is the chip's console, and the console is all it is.
+ * What the host sees is the chip's console and its pins. The module reports
+ * what the firmware printed as JSON envelopes, and what the operator types
+ * goes back the other way into UART0; the GPIO words say what the chip
+ * drives, and the input setter says what it reads.
  */
+
+import { ESP32_FILESYSTEM_OFFSET } from './image';
 
 /** The bytes the emulator boots from: the module, the mask ROM and the image. */
 export interface Esp32Assets {
@@ -116,8 +113,13 @@ const decoder = new TextDecoder();
  * The three artefacts are the whole firmware story: the mask ROM is what the
  * chip runs first, the image carries the bootloader and the application, and
  * the module is the machine they run on.
+ *
+ * `files` is the sketch the chip will run: a filesystem image built by
+ * `buildEsp32Filesystem`, which the chip mounts at boot and takes `main.py`
+ * from. Without one the chip comes up at its REPL, which is what a bench
+ * with nothing to run wants.
  */
-export async function bootEsp32(assets: Esp32Assets): Promise<Esp32Emulator> {
+export async function bootEsp32(assets: Esp32Assets, files?: Uint8Array): Promise<Esp32Emulator> {
   const module = await WebAssembly.compile(assets.wasm);
   let exports: Esp32SimExports | null = null;
   const instance = await WebAssembly.instantiate(module, {
@@ -168,6 +170,16 @@ export async function bootEsp32(assets: Esp32Assets): Promise<Esp32Emulator> {
     ) !== 0
   ) {
     throw new Error('esp32: the application image would not load');
+  }
+  if (files) {
+    const filesystem = new Uint8Array(files);
+    if (
+      withBytes(filesystem, (pointer, length) =>
+        exports!.esp32sim_load_at(emu, ESP32_FILESYSTEM_OFFSET, pointer, length),
+      ) !== 0
+    ) {
+      throw new Error('esp32: the filesystem would not load');
+    }
   }
   if (exports.esp32sim_boot(emu, 0) !== 0) throw new Error('esp32: the chip would not boot');
 
