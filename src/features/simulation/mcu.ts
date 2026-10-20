@@ -90,7 +90,13 @@ const SPI_PINS: Readonly<Record<string, readonly number[]>> = {
   uno: [10, 9, 13, 11],
   nano: [10, 9, 13, 11],
   mega: [53, 9, 52, 51],
-  rp2040: [10, 9, 13, 11],
+  /*
+   * The Nano RP2040's SPI0 block as the starter wires it: chip select D10 is
+   * GPIO5, data/command is D9 (GPIO21), clock D13 is GPIO6, and MOSI D11 is
+   * GPIO7. Naming the header digits here would put the bus on D10/D9/D13/D11
+   * by coincidence of the old model, not on the peripheral's GPIOs.
+   */
+  rp2040: [5, 21, 6, 7],
   pico: [17, 20, 18, 19],
   /*
    * The Pi's SPI0, in the same shape as the rows above: chip-select, the

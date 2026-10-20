@@ -16,6 +16,7 @@ export {
   EXAMPLES,
   PICO_BLINK_SKETCH,
   PI_BLINK_SKETCH,
+  RP2040_BLINK_SKETCH,
   exampleProjectFor,
   starterSketchFor,
 } from './examples';

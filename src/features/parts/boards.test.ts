@@ -78,24 +78,48 @@ describe('board definitions', () => {
     const mcu = new McuRuntime(nanoRp2040Connect());
     expect(mcu.pinIdForGpio(26)).toBe('J3_A0');
     expect(mcu.pinIdForGpio(29)).toBe('J3_A3');
-    expect(mcu.pinIdForGpio(3)).toBe('J1_D3');
+    expect(mcu.pinIdForGpio(15)).toBe('J1_D3');
   });
 
-  it('leaves the RP2040 aliases A4 to A7 unnumbered but ties A4/A5 to their GPIOs', () => {
+  it('maps the RP2040 header to the GPIOs its silkscreen names', () => {
     /*
-     * Two holes claiming one pin number would let one silently steal the
-     * other's terminal, so A4/A5 carry no number of their own. They are still
-     * electrically the GPIO12/13 pads D12/D13 bring out, which the shared
-     * internal nets say; without that tie a wire on A4 reaches nothing.
+     * The Nano form factor is wrapped around a chip whose pins are numbered
+     * independently: D2 is GPIO25 and D13 is GPIO6, not 2 and 13. A4/A5 are
+     * the I2C pair on GPIO12/13, and A6/A7 have no GPIO behind them. This is
+     * the table a MicroPython sketch names its pins by, so it has to be the
+     * real one rather than the header digit.
      */
-    const definition = nanoRp2040Connect();
-    const mcu = new McuRuntime(definition);
-    const aliases = ['J3_A4', 'J3_A5', 'J3_A6', 'J3_A7'].map((id) => mcu.boardPin(id)?.gpio);
-    expect(aliases).toEqual([undefined, undefined, undefined, undefined]);
-
-    const pins = new Map(definition.pins.map((pin) => [pin.id, pin]));
-    expect(pins.get('J3_A4')?.net).toBe(pins.get('J1_D12')?.net);
-    expect(pins.get('J3_A5')?.net).toBe(pins.get('J2_D13')?.net);
+    const mcu = new McuRuntime(nanoRp2040Connect());
+    const expected: ReadonlyArray<readonly [number, string]> = [
+      [0, 'J1_TX'],
+      [1, 'J1_RX'],
+      [25, 'J1_D2'],
+      [15, 'J1_D3'],
+      [16, 'J1_D4'],
+      [17, 'J1_D5'],
+      [18, 'J1_D6'],
+      [19, 'J1_D7'],
+      [20, 'J1_D8'],
+      [21, 'J1_D9'],
+      [5, 'J1_D10'],
+      [7, 'J1_D11'],
+      [4, 'J1_D12'],
+      [6, 'J2_D13'],
+      [26, 'J3_A0'],
+      [27, 'J3_A1'],
+      [28, 'J3_A2'],
+      [29, 'J3_A3'],
+      [12, 'J3_A4'],
+      [13, 'J3_A5'],
+    ];
+    for (const [gpio, pinId] of expected) {
+      expect(mcu.pinIdForGpio(gpio), `GPIO${gpio}`).toBe(pinId);
+    }
+    // Every numbered hole is a different pad. A duplicate would let the last
+    // declaration steal the first one's terminal.
+    expect(new Set(expected.map(([gpio]) => gpio)).size).toBe(expected.length);
+    expect(mcu.boardPin('J3_A6')?.gpio).toBeUndefined();
+    expect(mcu.boardPin('J3_A7')?.gpio).toBeUndefined();
   });
 
   it('runs the Nano and the Uno off the same chip, at the same voltage', () => {
@@ -127,6 +151,11 @@ describe('default bus pins', () => {
   it('puts the Mega SPI on its own 50-53 block rather than the Uno 10-13', () => {
     expect(new McuRuntime(arduinoMega2560()).spiPins).toEqual([53, 9, 52, 51]);
     expect(new McuRuntime(arduinoUnoR3()).spiPins).toEqual([10, 9, 13, 11]);
+  });
+
+  it('names the RP2040 SPI pins by GPIO, not by header digit', () => {
+    // D10/D9/D13/D11 carry GPIO5/21/6/7 on the Nano RP2040.
+    expect(new McuRuntime(nanoRp2040Connect()).spiPins).toEqual([5, 21, 6, 7]);
   });
 
   it('leaves the Nano and the Uno on the same bus pins', () => {

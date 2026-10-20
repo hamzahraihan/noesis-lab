@@ -940,67 +940,51 @@ const RP2040_J3: ReadonlyArray<HeaderHole> = [
 ];
 
 /**
- * The digital header is numbered the way a sketch names it: D2 is pin 2, and
- * TX and RX are pins 0 and 1.
+ * The header labels mapped to the GPIO numbers the RP2040's MicroPython
+ * firmware addresses.
+ *
+ * D2 is GPIO25, not GPIO2: the Nano form factor wraps a chip whose pins are
+ * numbered independently of the Arduino silkscreen. TX/RX are GPIO0/1 and the
+ * analog block below carries its own four numbers. A sketch that wants the
+ * hole labelled D13 names GPIO6; the wiring agrees because this table says
+ * which hole that is.
  */
 const RP2040_PIN_GPIOS: Readonly<Record<string, number>> = {
   TX: 0,
   RX: 1,
-  D2: 2,
-  D3: 3,
-  D4: 4,
-  D5: 5,
-  D6: 6,
-  D7: 7,
-  D8: 8,
-  D9: 9,
-  D10: 10,
-  D11: 11,
-  D12: 12,
-  D13: 13,
+  D2: 25,
+  D3: 15,
+  D4: 16,
+  D5: 17,
+  D6: 18,
+  D7: 19,
+  D8: 20,
+  D9: 21,
+  D10: 5,
+  D11: 7,
+  D12: 4,
+  D13: 6,
 };
 
 /**
  * What the analog block's holes are on the chip: the GPIO number firmware
  * addresses them by, and the ADC channel they sample from.
  *
- * Only A0-A3 have either. They are GPIO26 to GPIO29 and the ADC's four
- * channels, so `analogRead(26)` and `analogRead(A0)` are the same pin. A4 and
- * A5 are the I2C pair -- GPIO12 and GPIO13, which D12 and D13 already bring out
- * on this board -- and A6 and A7 have no GPIO behind them at all.
- *
- * A4/A5 stay unnumbered here on purpose: the runtime keys pins by gpio, so a
- * second pin claiming 12 would take over D12's terminal. Their pin specs share
- * an internal net with D12/D13 instead (`RP2040_ALIASED_NETS`), which is how a
- * wire on A4 becomes the same node as firmware's GPIO12 and the I2C bus can
- * reach it. The ADC has four channels, so a number on A6 would only resolve
- * `analogRead` to a pin the chip cannot sample; A6/A7 are reached by wiring,
- * not by firmware.
+ * Only A0-A3 sample. They are GPIO26 to GPIO29 and the ADC's four channels, so
+ * `analogRead(26)` and `analogRead(A0)` are the same pin. A4 and A5 are the I2C
+ * pair on GPIO12/13 with no converter behind them, and A6/A7 have no GPIO at
+ * all. Those four are reached by wiring, not by `analogRead`; a number on A6
+ * would only resolve to a pin the chip cannot sample.
  */
 const RP2040_ANALOG: Readonly<Record<string, { gpio?: number; adc?: number }>> = {
   A0: { gpio: 26, adc: 0 },
   A1: { gpio: 27, adc: 1 },
   A2: { gpio: 28, adc: 2 },
   A3: { gpio: 29, adc: 3 },
-  A4: {},
-  A5: {},
+  A4: { gpio: 12 },
+  A5: { gpio: 13 },
   A6: {},
   A7: {},
-};
-
-/**
- * Holes that bring out the same silicon pad under two silkscreens.
- *
- * A4 and A5 are the I2C pair, and they are GPIO12/GPIO13; D12 and D13 bring out
- * those same GPIOs. The GPIO numbers belong to D12/D13 in `boardPins` so the
- * runtime keeps one terminal per number, and these internal nets make a wire on
- * A4 the same electrical node as GPIO12, which is what lets the bus find it.
- */
-const RP2040_ALIASED_NETS: Readonly<Record<string, string>> = {
-  D12: 'GPIO12',
-  A4: 'GPIO12',
-  D13: 'GPIO13',
-  A5: 'GPIO13',
 };
 
 function rp2040BoardPin(id: string, headerLabel: string): BoardPin {
@@ -1038,7 +1022,7 @@ function rp2040Definition(): PartDefinition {
             ? '5V'
             : headerLabel === '3V3'
               ? '3V3'
-              : RP2040_ALIASED_NETS[headerLabel],
+              : undefined,
     });
     boardPins.push(rp2040BoardPin(id, headerLabel));
   };
@@ -1444,7 +1428,11 @@ const PICO_HEADER_Y = 2.54;
 function picoBoardPin(id: string, label: string, gpio: number | -1): BoardPin {
   const isGround = label === 'GND';
   const isPower =
-    label === '3V3' || label === 'VSYS' || label === 'VBUS' || label === 'ADC_VREF' || label === '3V3_EN';
+    label === '3V3' ||
+    label === 'VSYS' ||
+    label === 'VBUS' ||
+    label === 'ADC_VREF' ||
+    label === '3V3_EN';
   const analog = label === 'GP26' || label === 'GP27' || label === 'GP28';
   return {
     id,
@@ -1460,7 +1448,11 @@ function picoDefinition(): PartDefinition {
   const pins: PinSpec[] = [];
   const boardPins: BoardPin[] = [];
 
-  const addColumn = (column: readonly (readonly [string, number | -1])[], x: number, prefix: string) => {
+  const addColumn = (
+    column: readonly (readonly [string, number | -1])[],
+    x: number,
+    prefix: string,
+  ) => {
     column.forEach(([label, gpio], index) => {
       const id = `${prefix}_${index}`;
       pins.push({

@@ -12,7 +12,11 @@
  */
 
 import { boardOption, type BoardId } from './boardRegistry';
-import { toSingleFileProject, type FirmwareLanguage, type FirmwareProject } from '@/features/simulation';
+import {
+  toSingleFileProject,
+  type FirmwareLanguage,
+  type FirmwareProject,
+} from '@/features/simulation';
 
 export interface Example {
   readonly id: string;
@@ -428,19 +432,38 @@ while True:
 `;
 
 /**
- * The Nano RP2040 Connect's starter, in the language its firmware speaks.
+ * The Raspberry Pi Pico's starter, in the language its firmware speaks.
  *
  * The engine boots the pinned MicroPython, so the library is `machine` and the
  * mounted entry is `main.py` -- gpiozero is a Raspberry Pi OS module and does
- * not exist on this firmware. The LED is GPIO 2, the pin `STARTER_WIRING` wires
- * to the starter LED for this board, and the print is the boot's proof in the
- * serial monitor: a console program shows its work there, not on the glass.
+ * not exist on this firmware. The LED is GP2, the pin the starter document
+ * wires, and the print is the boot's proof in the serial monitor.
  */
 export const PICO_BLINK_SKETCH = `from machine import Pin
 import time
 
 led = Pin(2, Pin.OUT)
 print('pico online')
+
+while True:
+    led.value(1)
+    time.sleep(0.5)
+    led.value(0)
+    time.sleep(0.5)
+`;
+
+/**
+ * The Nano RP2040 Connect's starter.
+ *
+ * The same MicroPython, but the header is not the chip: the hole labelled D2
+ * is GPIO25, so that is the number the sketch uses. The old shared sketch said
+ * Pin(2), which drove a GPIO the Nano does not bring out and left the LED dark.
+ */
+export const RP2040_BLINK_SKETCH = `from machine import Pin
+import time
+
+led = Pin(25, Pin.OUT)
+print('rp2040 online')
 
 while True:
     led.value(1)
@@ -463,5 +486,7 @@ export function starterSketchFor(
   language: FirmwareLanguage = boardOption(boardId).language,
 ): string {
   if (language !== 'python') return BLINK_SKETCH;
-  return boardId === 'rp2040' || boardId === 'pico' ? PICO_BLINK_SKETCH : PI_BLINK_SKETCH;
+  if (boardId === 'pico') return PICO_BLINK_SKETCH;
+  if (boardId === 'rp2040') return RP2040_BLINK_SKETCH;
+  return PI_BLINK_SKETCH;
 }
