@@ -347,6 +347,13 @@ export type Expr =
   /** A list of values, `[1, 2, 3]`; the bytes literal is the same shape. */
   | { kind: 'list'; items: Expr[]; location: SourceLocation }
   /**
+   * A dictionary literal: `{'a': 1, 'b': 2}`.
+   *
+   * The keys are expressions, so a dictionary can be built from names the
+   * program holds, not only from literals.
+   */
+  | { kind: 'dict'; entries: { key: Expr; value: Expr }[]; location: SourceLocation }
+  /**
    * A list comprehension: `[element for name in iterable]`.
    *
    * The element is evaluated once per item, with the name bound to it, and
