@@ -315,6 +315,18 @@ function locationOffset(source: string, location: SourceLocation): number {
 // AST
 // ---------------------------------------------------------------------------
 
+/**
+ * A keyword argument: `name=value` in a call.
+ *
+ * Python binds these by name rather than by position, so a sketch can spell a
+ * call the way its documentation does -- `I2C(0, sda=21, scl=22)` -- and the
+ * callee decides which names it knows.
+ */
+export interface KeywordArgument {
+  readonly name: string;
+  readonly value: Expr;
+}
+
 export type Expr =
   | { kind: 'number'; value: number; location: SourceLocation }
   | { kind: 'string'; value: string; location: SourceLocation }
@@ -324,7 +336,16 @@ export type Expr =
   | { kind: 'binary'; operator: string; left: Expr; right: Expr; location: SourceLocation }
   | { kind: 'assign'; target: Expr; operator: string; value: Expr; location: SourceLocation }
   | { kind: 'ternary'; condition: Expr; whenTrue: Expr; whenFalse: Expr; location: SourceLocation }
-  | { kind: 'call'; callee: Expr; args: Expr[]; location: SourceLocation }
+  | {
+      kind: 'call';
+      callee: Expr;
+      args: Expr[];
+      /** Arguments bound by name; absent when the call used none. */
+      keywords?: readonly KeywordArgument[];
+      location: SourceLocation;
+    }
+  /** A list of values, `[1, 2, 3]`; the bytes literal is the same shape. */
+  | { kind: 'list'; items: Expr[]; location: SourceLocation }
   | { kind: 'index'; target: Expr; index: Expr; location: SourceLocation }
   | { kind: 'member'; target: Expr; member: string; location: SourceLocation };
 
