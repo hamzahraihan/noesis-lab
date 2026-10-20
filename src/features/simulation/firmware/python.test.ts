@@ -339,8 +339,8 @@ describe('errors', () => {
   });
 
   it('names the feature it cannot run', () => {
-    expect(() => parsePython('try:\n    pass\nexcept:\n    pass\n')).toThrow(/not supported/);
     expect(() => parsePython('while a:\n    with b:\n        pass\n')).toThrow(/not supported/);
+    expect(() => parsePython('f = lambda x: x\n')).toThrow(/not supported/);
   });
 });
 
@@ -412,6 +412,59 @@ describe('the spellings a sketch uses', () => {
     const declaration = program.classes.get('Counter');
     expect(declaration).toBeDefined();
     expect([...(declaration?.methods.keys() ?? [])]).toEqual(['bump']);
+  });
+});
+
+describe('a guarded block', () => {
+  it('reads the handlers, the else clause and the finally clause', () => {
+    const program = parsePython(
+      [
+        'try:',
+        '    x = 1',
+        'except ValueError as e:',
+        '    x = 2',
+        'except (OSError, TypeError):',
+        '    x = 3',
+        'else:',
+        '    x = 4',
+        'finally:',
+        '    x = 5',
+      ].join('\n'),
+    );
+
+    const statement = program.globals[0];
+    if (statement.kind !== 'try') throw new Error('expected a try');
+    expect(statement.handlers).toHaveLength(2);
+    expect(statement.handlers[0]?.types).toEqual(['ValueError']);
+    expect(statement.handlers[0]?.name).toBe('e');
+    expect(statement.handlers[1]?.types).toEqual(['OSError', 'TypeError']);
+    expect(statement.handlers[1]?.name).toBeNull();
+    expect(statement.otherwise?.kind).toBe('suite');
+    expect(statement.final?.kind).toBe('suite');
+  });
+
+  it('reads a handler with no type as one that catches everything', () => {
+    const program = parsePython(['try:', '    x = 1', 'except:', '    x = 2'].join('\n'));
+
+    const statement = program.globals[0];
+    if (statement.kind !== 'try') throw new Error('expected a try');
+    expect(statement.handlers[0]?.types).toEqual([]);
+  });
+
+  it('reads a raise as the value it raises', () => {
+    const program = parsePython(["raise ValueError('bad')"].join('\n'));
+
+    const statement = program.globals[0];
+    if (statement.kind !== 'raise') throw new Error('expected a raise');
+    expect(statement.error?.kind).toBe('call');
+  });
+
+  it('reads a raise with nothing as no value at all', () => {
+    const program = parsePython(['raise'].join('\n'));
+
+    const statement = program.globals[0];
+    if (statement.kind !== 'raise') throw new Error('expected a raise');
+    expect(statement.error).toBeNull();
   });
 });
 
