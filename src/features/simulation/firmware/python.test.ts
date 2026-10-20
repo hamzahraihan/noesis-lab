@@ -344,6 +344,48 @@ describe('errors', () => {
   });
 });
 
+describe('the spellings a sketch uses', () => {
+  const first = (source: string): Stmt => parsePython(source).globals[0];
+
+  it('reads a keyword argument as the name it binds', () => {
+    const declaration = first('x = f(1, sda=21, scl=22)');
+    if (declaration.kind !== 'varDecl' || declaration.init?.kind !== 'call') {
+      throw new Error('expected a call');
+    }
+    expect(declaration.init.args).toHaveLength(1);
+    expect(declaration.init.keywords?.map((keyword) => keyword.name)).toEqual(['sda', 'scl']);
+    expect(declaration.init.keywords?.[0]?.value).toMatchObject({ kind: 'number', value: 21 });
+  });
+
+  it('leaves a call without keywords as it was', () => {
+    const declaration = first('x = f(1)');
+    if (declaration.kind !== 'varDecl' || declaration.init?.kind !== 'call') {
+      throw new Error('expected a call');
+    }
+    expect(declaration.init.keywords).toBeUndefined();
+  });
+
+  it('reads a list literal as its items', () => {
+    const declaration = first('x = [1, 2, 3]');
+    if (declaration.kind !== 'varDecl' || declaration.init?.kind !== 'list') {
+      throw new Error('expected a list');
+    }
+    expect(declaration.init.items.map((item) => (item.kind === 'number' ? item.value : null))).toEqual([
+      1, 2, 3,
+    ]);
+  });
+
+  it('reads a bytes literal as its bytes, not its characters', () => {
+    const declaration = first("x = b'\\x00\\xaf'");
+    if (declaration.kind !== 'varDecl' || declaration.init?.kind !== 'list') {
+      throw new Error('expected a list');
+    }
+    expect(declaration.init.items.map((item) => (item.kind === 'number' ? item.value : null))).toEqual([
+      0, 175,
+    ]);
+  });
+});
+
 /** One expression, for assertions about operator rewriting. */
 function parsePythonExpressionKind(source: string): unknown {
   const declaration = parsePython(`x = ${source}`).globals[0];
