@@ -55,6 +55,18 @@ export interface EngineOptions {
 }
 
 /**
+ * The pair of pins an I2C bus runs on.
+ *
+ * A sketch that names a pair gets the bus on those pins; a sketch that names
+ * none gets the board's own bus. The numbers are the board's pin numbers, the
+ * ones the silkscreen carries.
+ */
+export interface I2cBusPins {
+  readonly sda: number;
+  readonly scl: number;
+}
+
+/**
  * Silkscreen name of each board's regulated supply rail.
  *
  * A board is powered by its own regulator, not by whatever the user wired to
@@ -815,10 +827,10 @@ export class Engine {
    * the device is unplugged or wired to the wrong pins -- and, unlike a write,
    * a read has nothing to acknowledge, so silence is the only report there is.
    */
-  requestI2C(address: number, count: number): readonly number[] {
+  requestI2C(address: number, count: number, pins?: I2cBusPins): readonly number[] {
     for (const [partId, device] of this.devices) {
       if (!device.onBus || device.address !== (address & 0x7f)) continue;
-      if (!this.isOnI2cBus(partId)) continue;
+      if (!this.isOnI2cBus(partId, pins)) continue;
       return device.read(count);
     }
     return [];
@@ -836,10 +848,10 @@ export class Engine {
    * and the firmware has to be able to tell that apart from a device that
    * took the byte and had nothing to say about it.
    */
-  hasI2cDevice(address: number): boolean {
+  hasI2cDevice(address: number, pins?: I2cBusPins): boolean {
     for (const [partId, device] of this.devices) {
       if (device.address !== (address & 0x7f)) continue;
-      if (!this.isOnI2cBus(partId)) continue;
+      if (!this.isOnI2cBus(partId, pins)) continue;
       return true;
     }
     return false;
@@ -851,23 +863,57 @@ export class Engine {
    * Returns whether a device claimed the address, so an unplugged sensor makes
    * the transaction come back unacknowledged, as it would on a real bench.
    */
-  writeI2C(address: number, byte: number, isControlPosition: boolean): boolean {
+  writeI2C(
+    address: number,
+    byte: number,
+    isControlPosition: boolean,
+    pins?: I2cBusPins,
+  ): boolean {
     let claimed = false;
     for (const [partId, device] of this.devices) {
-      if (device.address !== (address & 0x7f) || !this.isOnI2cBus(partId)) continue;
+      if (device.address !== (address & 0x7f) || !this.isOnI2cBus(partId, pins)) continue;
       if (device.receive(byte, isControlPosition)) claimed = true;
     }
     return claimed;
   }
 
-  /** True when a display's SDA and SCL both land on the firmware's I2C nets. */
-  private isOnI2cBus(partId: string): boolean {
+  /**
+   * True when a display's SDA and SCL both land on the firmware's I2C nets.
+   *
+   * A sketch that names a pair of pins gets the bus on *those* pins: the
+   * device has to be wired to them, or the bus does not reach it. That is
+   * what the pins mean on real hardware, and it is the difference between a
+   * sketch that talks to the panel and one that talks to nothing.
+   */
+  private isOnI2cBus(partId: string, pins?: I2cBusPins): boolean {
     const netlist = this.currentNetlist;
     const sda = netlist.pinNode.get(`${partId}:SDA`);
     const scl = netlist.pinNode.get(`${partId}:SCL`);
     if (sda === undefined || scl === undefined) return false;
     if (sda === GROUND || scl === GROUND) return false;
+    if (pins !== undefined) {
+      const bus = this.i2cNetsFor(pins);
+      // A pin the board does not have carries no bus at all, so nothing on it
+      // answers: the same silence a wire to a hole that is not there gives.
+      if (bus === null) return false;
+      return sda === bus.sda && scl === bus.scl;
+    }
     return this.i2cNets.has(sda) && this.i2cNets.has(scl);
+  }
+
+  /**
+   * The nets a named pair of pins carries the bus on.
+   *
+   * Null when the board has no such pins: the sketch named a pin that is not
+   * on this board, so there is no bus to talk on.
+   */
+  private i2cNetsFor(pins: I2cBusPins): { sda: number; scl: number } | null {
+    if (!this.mcuPart) return null;
+    const netlist = this.currentNetlist;
+    const sda = this.netOfBoardGpio(netlist, this.mcuPart.id, pins.sda);
+    const scl = this.netOfBoardGpio(netlist, this.mcuPart.id, pins.scl);
+    if (sda === null || scl === null) return null;
+    return { sda, scl };
   }
 
   /**
