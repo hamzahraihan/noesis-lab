@@ -123,20 +123,15 @@ import { FirmwareProjectError, validateProject, type FirmwareProject } from './p
 
 /**
  * A runtime value: numbers for everything numeric, strings for Serial,
- * whole-array copies where a sketch names an array, and RTClib values for
- * sketches that keep time. Date and span objects pass through assignments,
- * arguments and returns untouched; only the operations RTClib defines (field
- * reads, comparison, plus-a-span) see inside them, and everything else reads
- * them as zero rather than crashing. Arrays likewise read as zero wherever a
- * number is wanted (`sizeof` and the SevSeg wiring tables are the readers
- * that see inside them).
+ * whole-array copies where a sketch names an array, dictionaries for the
+ * programs that keep a table of things, and RTClib values for sketches that
+ * keep time. Date and span objects pass through assignments, arguments and
+ * returns untouched; only the operations RTClib defines (field reads,
+ * comparison, plus-a-span) see inside them, and everything else reads them as
+ * zero rather than crashing. Arrays likewise read as zero wherever a number
+ * is wanted (`sizeof` and the SevSeg wiring tables are the readers that see
+ * inside them).
  */
-/**
- * A dictionary: the keys are the program's own strings, the values anything a
- * program can hold.
- */
-export type DictValue = Map<string, Value>;
-
 export type Value =
   | number
   | string
@@ -145,6 +140,12 @@ export type Value =
   | DateTimeValue
   | TimeSpanValue
   | RtcHandle;
+
+/**
+ * A dictionary: the keys are the program's own strings, the values anything a
+ * program can hold.
+ */
+export type DictValue = Map<string, Value>;
 
 /**
  * One SevSeg display's wiring and frame, as `begin` records it.
