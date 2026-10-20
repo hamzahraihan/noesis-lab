@@ -44,6 +44,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 const PATCHES = [
   join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-gpio-seam.patch'),
   join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-i2c-seam.patch'),
+  join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-spi-seam.patch'),
 ];
 const TARGET = join(ROOT, 'src/features/simulation/esp32/firmware/esp32sim.wasm');
 const MANIFEST = join(ROOT, 'src/features/simulation/esp32/firmware/manifest.json');
@@ -101,9 +102,19 @@ try {
   run('git', ['clone', '--filter=blob:none', UPSTREAM, work]);
   run('git', ['checkout', COMMIT], work);
   for (const patch of PATCHES) run('git', ['apply', patch], work);
-  run('bash', ['tools/wasm-build.sh'], work);
-
-  const built = join(work, 'web/wasm/esp32sim.wasm');
+  // Upstream's script copies the module out of `target/`, which is where
+  // cargo leaves it only when the target directory is the default. This
+  // script points cargo at a shared directory so a rebuild is incremental,
+  // so that copy is the one step that cannot work: the artefact is where
+  // cargo put it. A build that failed leaves no artefact, and then the
+  // original error is the one worth reporting.
+  const target = join(SCRATCH, '..', 'cargo-target');
+  const built = join(target, 'wasm32-unknown-unknown', 'release', 'esp32sim_wasm.wasm');
+  try {
+    run('bash', ['tools/wasm-build.sh'], work);
+  } catch (error) {
+    if (!existsSync(built)) throw error;
+  }
   const bytes = readFileSync(built);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   writeFileSync(TARGET, bytes);
