@@ -395,6 +395,15 @@ describe('the spellings a sketch uses', () => {
     expect(declaration.init.iterable).toMatchObject({ kind: 'call' });
   });
 
+  it('reads a dictionary as its entries', () => {
+    const declaration = first("x = {'a': 1, 'b': 2}");
+    if (declaration.kind !== 'varDecl' || declaration.init?.kind !== 'dict') {
+      throw new Error('expected a dictionary');
+    }
+    expect(declaration.init.entries).toHaveLength(2);
+    expect(declaration.init.entries[0]?.key).toMatchObject({ kind: 'string', value: 'a' });
+  });
+
   it('reads a class as its methods', () => {
     const program = parsePython(
       ['class Counter:', '    def bump(self):', '        return 1', '', 'c = 1'].join('\n'),

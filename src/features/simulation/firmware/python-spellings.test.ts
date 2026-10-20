@@ -119,6 +119,22 @@ describe('a call spelled the way Python spells it', () => {
     expect(serial).toContain('6');
   });
 
+  it('reads and writes a dictionary', () => {
+    const { serial } = run(
+      [
+        "d = {'a': 1, 'b': 2}",
+        "d['c'] = 3",
+        "print(d['a'])",
+        'print(d.b)',
+        "print(d['c'])",
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('1');
+    expect(serial).toContain('2');
+    expect(serial).toContain('3');
+  });
+
   it('runs a class with a constructor, methods and fields', () => {
     const { serial } = run(
       [
