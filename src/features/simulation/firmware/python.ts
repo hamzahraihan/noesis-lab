@@ -26,6 +26,7 @@
 
 import {
   FirmwareSyntaxError,
+  type ClassDecl,
   type Expr,
   type FunctionDecl,
   type KeywordArgument,
@@ -446,12 +447,18 @@ class PythonParser {
     const defines = new Map<string, number>();
     const globals: Stmt[] = [];
     const functions = new Map<string, FunctionDecl>();
+    const classes = new Map<string, ClassDecl>();
 
     this.skipBlank();
     while (!this.at('eof')) {
       if (this.atKeyword('def')) {
         const declaration = this.readDef();
         functions.set(declaration.name, declaration);
+        continue;
+      }
+      if (this.atKeyword('class')) {
+        const declaration = this.readClass(this.peek().location);
+        classes.set(declaration.name, declaration);
         continue;
       }
       if (this.atKeyword('import') || this.atKeyword('from')) {
@@ -462,10 +469,44 @@ class PythonParser {
       globals.push(...this.flatten(statement));
     }
 
-    return { defines, macros: new Map(), globals, functions, classes: new Map() };
+    return { defines, macros: new Map(), globals, functions, classes };
   }
 
   // -- statements ----------------------------------------------------------
+
+  /**
+   * A class: a name, a colon, and a body of methods.
+   *
+   * The body may only hold methods, because that is all the VM's class
+   * machinery knows: a field is a name the object holds, and a Python object
+   * holds one the moment it is written to.
+   */
+  private readClass(location: SourceLocation): ClassDecl {
+    this.expectKeyword('class');
+    const name = this.expectIdentifier().text;
+    this.expectPunctuation(':');
+    this.expectNewline();
+    this.expect('indent');
+    const methods = new Map<string, FunctionDecl>();
+    for (;;) {
+      this.skipBlank();
+      if (this.at('dedent')) {
+        this.next();
+        break;
+      }
+      if (this.at('eof')) break;
+      if (!this.atKeyword('def')) {
+        throw new FirmwareSyntaxError(
+          'a class body may only hold methods',
+          this.peek().location,
+          this.file,
+        );
+      }
+      const method = this.readDef();
+      methods.set(method.name, method);
+    }
+    return { name, fields: [], methods, location };
+  }
 
   private readDef(): FunctionDecl {
     const location = this.expectKeyword('def').location;
