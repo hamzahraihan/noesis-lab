@@ -94,7 +94,11 @@ import {
   DynamicState,
   HUMIDITY_KNOB,
   LcdDriver,
+  SSD1306_FLAG_LIT,
+  SSD1306_FLAG_MIRRORED,
+  SSD1306_FRAME_BYTES,
   SevenSegment,
+  Ssd1306,
   TEMPERATURE_KNOB,
   echoMicroseconds,
   pixelCount,
@@ -189,6 +193,13 @@ function displayBytesForBench(bench: Bench): number {
     else if (component.kind === 'lcd') bytes += LCD_TEXT_BYTES + 1;
     else if (component.kind === 'servo') bytes += 1;
     else if (
+      component.kind === 'display' &&
+      (component.controller === 'ssd1306' || component.controller === 'ssd1306-spi')
+    ) {
+      // The panel's own memory, plus the byte that says whether the glass is
+      // lit and whether the image is mirrored.
+      bytes += SSD1306_FRAME_BYTES + 1;
+    } else if (
       component.kind === 'neopixel' ||
       component.kind === 'neopixel-matrix' ||
       component.kind === 'led-ring'
@@ -614,6 +625,19 @@ class SimCore implements CoreHandle {
         const bytes = this.textEncoder.encode(panel ? panel.text() : '');
         for (let i = 0; i < LCD_TEXT_BYTES; i++) put(bytes[i] ?? 0);
         put((panel?.lit ? 1 : 0) | (panel?.backlightOn ? 2 : 0));
+      } else if (
+        component.kind === 'display' &&
+        (component.controller === 'ssd1306' || component.controller === 'ssd1306-spi')
+      ) {
+        const controller = this.engine.displayController(part.id);
+        const panel = controller instanceof Ssd1306 ? controller : null;
+        // Ungated on purpose, like the colour panel: the mirror shows the
+        // panel that is on the bench, even one whose jumpers are pulled.
+        const frame = panel ? panel.frame() : new Uint8Array(0);
+        for (let i = 0; i < SSD1306_FRAME_BYTES; i++) put(frame[i] ?? 0);
+        put(
+          (panel?.lit ? SSD1306_FLAG_LIT : 0) | (panel?.mirrored ? SSD1306_FLAG_MIRRORED : 0),
+        );
       } else if (component.kind === 'servo') {
         const servo = this.engine.servo(part.id);
         put(servo ? Math.max(0, Math.min(180, Math.round(servo.angle))) : 0);
