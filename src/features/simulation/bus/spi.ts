@@ -63,11 +63,17 @@ export class SpiBus {
     this.payload = [];
   }
 
-  /** Sends one byte, returning the value read back on MISO. */
-  transfer(byte: number, dataSelect: boolean): number {
+  /**
+   * Sends one byte, returning the value read back on MISO.
+   *
+   * `chipSelected` is false once chip-select has risen: the byte still goes
+   * out, but the device is told that the command it was in the middle of has
+   * been abandoned -- which is what a real controller sees.
+   */
+  transfer(byte: number, dataSelect: boolean, chipSelected = true): number {
     if (!this.selected) return 0;
     this.payload.push({ value: byte & 0xff, data: dataSelect });
-    if (this.deliver(byte & 0xff, dataSelect, true)) this.sawByte = true;
+    if (this.deliver(byte & 0xff, dataSelect, chipSelected)) this.sawByte = true;
     return 0;
   }
 
