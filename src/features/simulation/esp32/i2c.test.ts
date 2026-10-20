@@ -194,6 +194,13 @@ describe('the emulated ESP32 on the bench bus', () => {
             simulation.engine.requestI2C(address, index + 1)[index] ?? 0xff,
           writeEnd: () => {},
         },
+        // The chip's SPI master is on the bench's bus too, but this sketch
+        // never shifts a byte out on it.
+        spi: {
+          begin: () => {},
+          transfer: () => 0,
+          end: () => {},
+        },
       },
     );
 
