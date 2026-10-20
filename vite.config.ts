@@ -13,15 +13,15 @@ export default defineConfig({
   plugins: [tailwindcss(), react()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   /*
-   * Where the build's scratch goes.
+   * Where the dependency cache goes.
    *
-   * The dependency cache and the bundle are both large and both rewritten on
-   * every build, which is a lot of writes for a machine that has a second
-   * drive. `VITE_CACHE_DIR` and `VITE_OUT_DIR` move them; unset, they stay
-   * where they have always been, so the default is still a plain checkout.
+   * The cache is rewritten on every dev-server start, which is a lot of writes
+   * for a machine that has a second drive. `VITE_CACHE_DIR` moves it; unset, it
+   * stays in `node_modules/.vite` where it has always been. The *bundle* is
+   * not relocatable: `dist` is the deployable artifact, and the hosting story
+   * expects it at that path.
    */
   cacheDir: process.env.VITE_CACHE_DIR,
-  build: { outDir: process.env.VITE_OUT_DIR ?? 'dist' },
   // Every Worker in the app is constructed with `{ type: 'module' }` and the
   // sim worker's graph carries dynamic imports (the wasm seam), which the
   // default iife worker format cannot represent under rolldown -- it fails
