@@ -1,1 +1,5 @@
 *.hex binary
+*.uf2 binary
+*.wasm binary
+*.elf binary
+*.bin binary

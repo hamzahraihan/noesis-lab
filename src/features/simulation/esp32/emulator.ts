@@ -1,0 +1,192 @@
+/**
+ * The emulated ESP32, driven through the esp32sim WebAssembly module.
+ *
+ * The chip is not modelled here: the emulator is. It boots the real mask ROM
+ * and the real second-stage bootloader and runs the real application, so the
+ * firmware on the bench is the firmware that would run on the board -- the
+ * same arrangement the RP2 path has with rp2040js and a pinned UF2.
+ *
+ * What the host sees is the chip's console. The module reports what the
+ * firmware printed as JSON envelopes, and what the operator types goes back
+ * the other way into UART0.
+ *
+ * The pins are the open question. The emulator's GPIO block has exactly the
+ * seam a bench needs -- a host-driven input level, and the levels the chip
+ * drives -- but the WebAssembly ABI does not export either yet, so a bench
+ * cannot wire the emulated chip to its solver until it does. Until then this
+ * module is the chip's console, and the console is all it is.
+ */
+
+/** The bytes the emulator boots from: the module, the mask ROM and the image. */
+export interface Esp32Assets {
+  /** The emulator's WebAssembly module. */
+  readonly wasm: ArrayBuffer;
+  /** The chip's mask ROM, as the ELF the ROM boot expects. */
+  readonly rom: ArrayBuffer;
+  /** The application image, flashed at 0x1000. */
+  readonly image: ArrayBuffer;
+}
+
+/** The load kinds the module's ABI names. */
+const LOAD_ROM = 0;
+
+/** Where the application image goes: the bootloader sits at 0x1000. */
+const IMAGE_OFFSET = 0x1000;
+
+/** The board name the module builds the classic ESP32 from. */
+const BOARD = 'esp32';
+
+/** Flash size in megabytes, the size the MicroPython image expects. */
+const FLASH_MB = 4;
+
+/**
+ * The module's exports, as far as the boot and the console need them.
+ *
+ * The module is a C ABI over the emulator, so the types are the ABI's: a
+ * pointer is an index into the module's memory, and every call that takes
+ * bytes takes a pointer and a length.
+ */
+interface Esp32SimExports {
+  readonly memory: WebAssembly.Memory;
+  esp32sim_alloc(len: number): number;
+  esp32sim_free(ptr: number, len: number): void;
+  esp32sim_new(board: number, boardLen: number, flashMb: number, psramMb: number): number;
+  esp32sim_set_jit?(emu: number, on: number): void;
+  esp32sim_load(emu: number, kind: number, ptr: number, len: number): number;
+  esp32sim_load_at(emu: number, offset: number, ptr: number, len: number): number;
+  esp32sim_boot(emu: number, appDirect: number): number;
+  esp32sim_run(emu: number, cycles: number, unixMs: number): number;
+  esp32sim_out_take(emu: number): number;
+  esp32sim_out_kind(emu: number, index: number): number;
+  esp32sim_out_ptr(emu: number, index: number): number;
+  esp32sim_out_len(emu: number, index: number): number;
+  esp32sim_cycles(emu: number): number;
+  esp32sim_cpu_hz(emu: number): number;
+}
+
+/** One message the chip's console produced. */
+interface ConsoleEnvelope {
+  readonly t?: string;
+  readonly src?: string;
+  readonly data?: string;
+}
+
+/** The emulated chip, once it is running. */
+export interface Esp32Emulator {
+  /**
+   * Runs the chip for at most `cycles` and returns what it printed.
+   *
+   * The console is a queue: the module hands over everything that was
+   * produced since the last call, so a caller that runs the chip in slices
+   * sees the firmware's output in the order it wrote it.
+   */
+  run(cycles: number): string[];
+  /** The emulated cycles since the boot. */
+  readonly cycles: number;
+  /** The chip's clock, in hertz. */
+  readonly cpuHz: number;
+}
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+/**
+ * Boots the emulated chip and returns it.
+ *
+ * The three artefacts are the whole firmware story: the mask ROM is what the
+ * chip runs first, the image carries the bootloader and the application, and
+ * the module is the machine they run on.
+ */
+export async function bootEsp32(assets: Esp32Assets): Promise<Esp32Emulator> {
+  const module = await WebAssembly.compile(assets.wasm);
+  let exports: Esp32SimExports | null = null;
+  const instance = await WebAssembly.instantiate(module, {
+    env: {
+      // The module logs its own diagnostics; the host has no use for them
+      // today, and a line that nobody reads is not worth a console.
+      host_log: () => {},
+      host_jit_compile: () => 0,
+      host_jit_release: () => {},
+    },
+  });
+  exports = instance.exports as unknown as Esp32SimExports;
+
+  const memory = (): Uint8Array => new Uint8Array(exports!.memory.buffer);
+  const put = (bytes: Uint8Array): number => {
+    const pointer = exports!.esp32sim_alloc(bytes.length);
+    memory().set(bytes, pointer);
+    return pointer;
+  };
+  const withBytes = <T>(bytes: Uint8Array, use: (pointer: number, length: number) => T): T => {
+    const pointer = put(bytes);
+    try {
+      return use(pointer, bytes.length);
+    } finally {
+      exports!.esp32sim_free(pointer, bytes.length);
+    }
+  };
+
+  const emu = withBytes(encoder.encode(BOARD), (pointer, length) =>
+    exports!.esp32sim_new(pointer, length, FLASH_MB, 0),
+  );
+  if (!emu) throw new Error('esp32: the emulator would not start');
+  // The block JIT compiles hot code into extra modules; the host has no
+  // compiler to give it, and the interpreter runs the same firmware.
+  exports.esp32sim_set_jit?.(emu, 0);
+
+  const rom = new Uint8Array(assets.rom);
+  if (withBytes(rom, (pointer, length) => exports!.esp32sim_load(emu, LOAD_ROM, pointer, length)) !== 0) {
+    throw new Error('esp32: the mask ROM would not load');
+  }
+  const image = new Uint8Array(assets.image);
+  if (
+    withBytes(image, (pointer, length) =>
+      exports!.esp32sim_load_at(emu, IMAGE_OFFSET, pointer, length),
+    ) !== 0
+  ) {
+    throw new Error('esp32: the application image would not load');
+  }
+  if (exports.esp32sim_boot(emu, 0) !== 0) throw new Error('esp32: the chip would not boot');
+
+  return {
+    run(cycles: number): string[] {
+      exports!.esp32sim_run(emu, cycles, Date.now());
+      const lines: string[] = [];
+      const count = exports!.esp32sim_out_take(emu);
+      for (let index = 0; index < count; index++) {
+        // Kind 1 is text; the rest are the module's own status and display
+        // messages, which the bench has no use for yet.
+        if (exports!.esp32sim_out_kind(emu, index) !== 1) continue;
+        const pointer = exports!.esp32sim_out_ptr(emu, index);
+        const length = exports!.esp32sim_out_len(emu, index);
+        const text = decoder.decode(memory().subarray(pointer, pointer + length));
+        const envelope = parseEnvelope(text);
+        if (envelope?.t === 'serial' && envelope.data !== undefined) lines.push(envelope.data);
+      }
+      return lines;
+    },
+    get cycles(): number {
+      return exports!.esp32sim_cycles(emu);
+    },
+    get cpuHz(): number {
+      return exports!.esp32sim_cpu_hz(emu);
+    },
+  };
+}
+
+/**
+ * Reads one console envelope.
+ *
+ * The module wraps what the chip said in JSON, the way its page protocol
+ * does, so that a display frame and a line of serial can travel the same
+ * queue. A line that is not JSON is not a message this host understands.
+ */
+function parseEnvelope(text: string): ConsoleEnvelope | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{')) return null;
+  try {
+    return JSON.parse(trimmed) as ConsoleEnvelope;
+  } catch {
+    return null;
+  }
+}

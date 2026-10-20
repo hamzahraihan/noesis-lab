@@ -1,0 +1,39 @@
+{
+  "note": "The pinned artefacts of the ESP32 machine path: the emulator, the chip's own mask ROM, and the MicroPython image it boots. Re-verify with the sha256 above; never patch in place.",
+  "artifacts": [
+    {
+      "name": "esp32sim (WebAssembly build)",
+      "version": "2026-08-25",
+      "file": "esp32sim.wasm",
+      "bytes": 3386380,
+      "sha256": "6f8d52afffdeb47374ebef4f00d6939f243cc2f5ca28207127346a746de6d468",
+      "url": "https://mikroverk.github.io/esp32sim/wasm/esp32sim.wasm",
+      "license": "MIT",
+      "source": "https://github.com/mikroverk/esp32sim",
+      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif."
+    },
+    {
+      "name": "MicroPython (ESP32 port, ESP32_GENERIC variant)",
+      "version": "v1.29.0",
+      "releaseDate": "2026-08-24",
+      "file": "ESP32_GENERIC-20260824-v1.29.0.bin",
+      "bytes": 1790544,
+      "sha256": "e67ad6015a0a504c1fec9aa9bbf589d0432ed28e62546f4f8dd8a147f8bd95f6",
+      "url": "https://micropython.org/resources/firmware/ESP32_GENERIC-20260824-v1.29.0.bin",
+      "license": "MIT",
+      "source": "https://github.com/micropython/micropython",
+      "note": "The same MicroPython release the RP2 port is pinned to. A combined bootloader, partition table and application, flashed at 0x1000."
+    },
+    {
+      "name": "ESP32 mask ROM (rev 3.0)",
+      "version": "20260528",
+      "file": "esp32_rev300_rom.elf",
+      "bytes": 857500,
+      "sha256": "920b70635440517866aab2230964a570d2cf2b676658d93c52fbac108c1cca31",
+      "url": "https://github.com/espressif/esp-rom-elfs/releases/tag/20260528",
+      "license": "Apache-2.0",
+      "source": "https://github.com/espressif/esp-rom-elfs",
+      "note": "Espressif's own mask ROM, the first thing the chip runs. The image the emulator boots from; rev 3.0 is the silicon the DevKit V1 carries."
+    }
+  ]
+}
