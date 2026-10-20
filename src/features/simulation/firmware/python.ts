@@ -1040,6 +1040,18 @@ class PythonParser {
       this.expectPunctuation(']');
       return { kind: 'list', items, location: token.location };
     }
+    if (token.kind === 'punctuation' && token.text === '{') {
+      const entries: { key: Expr; value: Expr }[] = [];
+      if (!this.atPunctuation('}')) {
+        do {
+          const key = this.readExpression();
+          this.expectPunctuation(':');
+          entries.push({ key, value: this.readExpression() });
+        } while (this.acceptPunctuation(','));
+      }
+      this.expectPunctuation('}');
+      return { kind: 'dict', entries, location: token.location };
+    }
     if (token.kind === 'fstring') {
       return readFstring(token, this.file);
     }
