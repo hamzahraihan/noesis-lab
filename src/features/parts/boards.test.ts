@@ -81,12 +81,21 @@ describe('board definitions', () => {
     expect(mcu.pinIdForGpio(3)).toBe('J1_D3');
   });
 
-  it('leaves the RP2040 aliases A4 to A7 unnumbered rather than guessing', () => {
-    // Two holes claiming one pin number would let one silently steal the
-    // other's terminal, and an invented mapping would be worse still.
-    const mcu = new McuRuntime(nanoRp2040Connect());
+  it('leaves the RP2040 aliases A4 to A7 unnumbered but ties A4/A5 to their GPIOs', () => {
+    /*
+     * Two holes claiming one pin number would let one silently steal the
+     * other's terminal, so A4/A5 carry no number of their own. They are still
+     * electrically the GPIO12/13 pads D12/D13 bring out, which the shared
+     * internal nets say; without that tie a wire on A4 reaches nothing.
+     */
+    const definition = nanoRp2040Connect();
+    const mcu = new McuRuntime(definition);
     const aliases = ['J3_A4', 'J3_A5', 'J3_A6', 'J3_A7'].map((id) => mcu.boardPin(id)?.gpio);
     expect(aliases).toEqual([undefined, undefined, undefined, undefined]);
+
+    const pins = new Map(definition.pins.map((pin) => [pin.id, pin]));
+    expect(pins.get('J3_A4')?.net).toBe(pins.get('J1_D12')?.net);
+    expect(pins.get('J3_A5')?.net).toBe(pins.get('J2_D13')?.net);
   });
 
   it('runs the Nano and the Uno off the same chip, at the same voltage', () => {
@@ -112,7 +121,7 @@ describe('default bus pins', () => {
     expect(new McuRuntime(esp32DevKitV1()).i2cPins).toEqual([21, 22]);
     expect(new McuRuntime(arduinoUnoR3()).i2cPins).toEqual([18, 19]);
     expect(new McuRuntime(arduinoMega2560()).i2cPins).toEqual([20, 21]);
-    expect(new McuRuntime(nanoRp2040Connect()).i2cPins).toEqual([26, 27]);
+    expect(new McuRuntime(nanoRp2040Connect()).i2cPins).toEqual([12, 13]);
   });
 
   it('puts the Mega SPI on its own 50-53 block rather than the Uno 10-13', () => {

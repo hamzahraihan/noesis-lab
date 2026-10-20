@@ -183,7 +183,7 @@
     },
     {
       "id": "w8",
-      "from": "p1:A0",
+      "from": "p1:A4",
       "to": "p2:s27i",
       "colour": "#92400e",
       "gaugeAwg": 26,
@@ -191,7 +191,7 @@
     },
     {
       "id": "w9",
-      "from": "p1:A1",
+      "from": "p1:A5",
       "to": "p2:s29i",
       "colour": "#ec4899",
       "gaugeAwg": 26,

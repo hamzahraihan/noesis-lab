@@ -60,7 +60,12 @@ const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
   uno: [18, 19],
   nano: [18, 19],
   mega: [20, 21],
-  rp2040: [26, 27],
+  /*
+   * The Nano RP2040 Connect brings I2C0 out on A4/A5, which are GPIO12 and
+   * GPIO13. GP26/27 are ADC channels only and have no I2C alternate function,
+   * so a table that named them put the bus on two pins the silicon cannot use.
+   */
+  rp2040: [12, 13],
   pico: [0, 1],
   /*
    * A single-board computer's I2C is the pair its bus sits on by default: data

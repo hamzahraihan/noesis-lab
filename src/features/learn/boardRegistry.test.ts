@@ -176,6 +176,37 @@ describe('board registry', () => {
       }
     });
 
+    it('puts the Nano RP2040 starter OLED on the pair the board documents', () => {
+      /*
+       * A4/A5 are the I2C pair, but they carry no firmware pin number of their
+       * own -- D12/D13 own GPIO12/13. They are reachable only through the
+       * internal nets those holes share, so this checks both ends of that tie
+       * and then asks the engine whether the device is really on the bus.
+       */
+      const simulation = new Simulation(boardOption('rp2040').make());
+      expect(simulation.loadCircuit(STARTER_CIRCUITS.rp2040)).toEqual([]);
+
+      const board = simulation.bench.parts.find(
+        (part) => part.definition.component.kind === 'mcu',
+      )!;
+      const oled = simulation.bench.parts.find(
+        (part) =>
+          part.definition.component.kind === 'display' &&
+          part.definition.component.controller === 'ssd1306',
+      );
+      if (!oled) throw new Error('rp2040: the starter has no I2C OLED');
+
+      const netlist = simulation.engine.currentNetlist;
+      const netOf = (terminal: string) => netlist.pinNode.get(terminal);
+      expect(netOf(`${board.id}:J3_A4`)).toBe(netOf(`${oled.id}:SDA`));
+      expect(netOf(`${board.id}:J3_A5`)).toBe(netOf(`${oled.id}:SCL`));
+      // The engine resolves the bus through the numbered holes; the internal
+      // ties are what make those the same nodes as A4 and A5.
+      expect(netOf(`${board.id}:J1_D12`)).toBe(netOf(`${oled.id}:SDA`));
+      expect(netOf(`${board.id}:J2_D13`)).toBe(netOf(`${oled.id}:SCL`));
+      expect(simulation.engine.i2cDevice(oled.id)?.onBus).toBe(true);
+    });
+
     it('blink it when the firmware runs', () => {
       /*
        * The paper checks cannot see a pull-up that never reaches the LED or a

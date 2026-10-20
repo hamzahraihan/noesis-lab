@@ -966,13 +966,16 @@ const RP2040_PIN_GPIOS: Readonly<Record<string, number>> = {
  *
  * Only A0-A3 have either. They are GPIO26 to GPIO29 and the ADC's four
  * channels, so `analogRead(26)` and `analogRead(A0)` are the same pin. A4 and
- * A5 are the I2C pair -- GPIO12 and GPIO13, which D12 and D13 already own on
- * this board -- and A6 and A7 have no GPIO behind them at all. Leaving those
- * four empty is a decision, not an omission: the runtime keys pins by gpio, so
- * a second pin claiming 12 would take over the first one's terminal and every
- * wire to one would land on the other, and the ADC has four channels, so a
- * number on A6 would only resolve `analogRead` to a pin the chip cannot
- * sample. The bench reaches all four by wiring, which is how I2C uses them.
+ * A5 are the I2C pair -- GPIO12 and GPIO13, which D12 and D13 already bring out
+ * on this board -- and A6 and A7 have no GPIO behind them at all.
+ *
+ * A4/A5 stay unnumbered here on purpose: the runtime keys pins by gpio, so a
+ * second pin claiming 12 would take over D12's terminal. Their pin specs share
+ * an internal net with D12/D13 instead (`RP2040_ALIASED_NETS`), which is how a
+ * wire on A4 becomes the same node as firmware's GPIO12 and the I2C bus can
+ * reach it. The ADC has four channels, so a number on A6 would only resolve
+ * `analogRead` to a pin the chip cannot sample; A6/A7 are reached by wiring,
+ * not by firmware.
  */
 const RP2040_ANALOG: Readonly<Record<string, { gpio?: number; adc?: number }>> = {
   A0: { gpio: 26, adc: 0 },
@@ -983,6 +986,21 @@ const RP2040_ANALOG: Readonly<Record<string, { gpio?: number; adc?: number }>> =
   A5: {},
   A6: {},
   A7: {},
+};
+
+/**
+ * Holes that bring out the same silicon pad under two silkscreens.
+ *
+ * A4 and A5 are the I2C pair, and they are GPIO12/GPIO13; D12 and D13 bring out
+ * those same GPIOs. The GPIO numbers belong to D12/D13 in `boardPins` so the
+ * runtime keeps one terminal per number, and these internal nets make a wire on
+ * A4 the same electrical node as GPIO12, which is what lets the bus find it.
+ */
+const RP2040_ALIASED_NETS: Readonly<Record<string, string>> = {
+  D12: 'GPIO12',
+  A4: 'GPIO12',
+  D13: 'GPIO13',
+  A5: 'GPIO13',
 };
 
 function rp2040BoardPin(id: string, headerLabel: string): BoardPin {
@@ -1020,7 +1038,7 @@ function rp2040Definition(): PartDefinition {
             ? '5V'
             : headerLabel === '3V3'
               ? '3V3'
-              : undefined,
+              : RP2040_ALIASED_NETS[headerLabel],
     });
     boardPins.push(rp2040BoardPin(id, headerLabel));
   };
