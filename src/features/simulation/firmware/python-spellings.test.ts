@@ -118,4 +118,39 @@ describe('a call spelled the way Python spells it', () => {
 
     expect(serial).toContain('6');
   });
+
+  it('runs a class with a constructor, methods and fields', () => {
+    const { serial } = run(
+      [
+        'class Counter:',
+        '    def __init__(self):',
+        '        self.n = 0',
+        '    def bump(self):',
+        '        self.n = self.n + 1',
+        '        return self.n',
+        'c = Counter()',
+        'print(c.bump())',
+        'print(c.bump())',
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('1');
+    expect(serial).toContain('2');
+  });
+
+  it('passes arguments to a Python constructor', () => {
+    const { serial } = run(
+      [
+        'class Counter:',
+        '    def __init__(self, start):',
+        '        self.n = start',
+        '    def value(self):',
+        '        return self.n',
+        'c = Counter(7)',
+        'print(c.value())',
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('7');
+  });
 });

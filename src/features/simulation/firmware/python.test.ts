@@ -394,6 +394,16 @@ describe('the spellings a sketch uses', () => {
     expect(declaration.init.element).toMatchObject({ kind: 'binary' });
     expect(declaration.init.iterable).toMatchObject({ kind: 'call' });
   });
+
+  it('reads a class as its methods', () => {
+    const program = parsePython(
+      ['class Counter:', '    def bump(self):', '        return 1', '', 'c = 1'].join('\n'),
+    );
+
+    const declaration = program.classes.get('Counter');
+    expect(declaration).toBeDefined();
+    expect([...(declaration?.methods.keys() ?? [])]).toEqual(['bump']);
+  });
 });
 
 /** One expression, for assertions about operator rewriting. */
