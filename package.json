@@ -14,7 +14,8 @@
     "format": "oxfmt src scripts",
     "format:check": "oxfmt --check src scripts",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "npm run typecheck && npm run lint && npm run check:boundaries && npm test"
   },
   "dependencies": {
     "@horang-corp/avr-gcc-wasm": "0.2.0",
