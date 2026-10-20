@@ -892,6 +892,16 @@ export class FirmwareRuntime {
    */
   private currentInstance!: Instance | null;
   /**
+   * The name a Python method binds its object to, the `self` of
+   * `def bump(self)`.
+   *
+   * Python's methods take the object they work on as their first argument and
+   * the body reaches it by that name, so the name has to be known to read and
+   * write the object's own fields. Null outside a Python method, which is
+   * every C++ one.
+   */
+  private currentSelfName: string | null = null;
+  /**
    * Macro names currently being expanded, against self-reference: a define
    * that names itself (`#define X X + 1`) answers zero rather than recursing
    * forever. Saved per runtime, not per call, because expansion nests through
@@ -1436,10 +1446,18 @@ export class FirmwareRuntime {
       }
     }
     this.instances.set(name, instance);
-    const ctor = this.classMethods.get(className)?.get(className);
+    const methods = this.classMethods.get(className);
+    /*
+     * Python's constructor is `__init__`; C++'s is a method named after the
+     * class, and the two are not the same thing.
+     */
+    const ctor = this.language === 'python' ? methods?.get('__init__') : methods?.get(className);
     if (!ctor) return;
     const previous = this.currentInstance;
     this.currentInstance = instance;
+    const previousSelf = this.currentSelfName;
+    this.currentSelfName =
+      this.language === 'python' ? (ctor.parameters[0]?.name ?? null) : null;
     try {
       const frame = new Scope(instance.scope);
       yield* this.bindMethodParameters(frame, instance, ctor, args, services);
@@ -1452,6 +1470,7 @@ export class FirmwareRuntime {
       yield* this.execute(ctor.body, frame, services);
     } finally {
       this.currentInstance = previous;
+      this.currentSelfName = previousSelf;
     }
   }
 
@@ -1468,7 +1487,14 @@ export class FirmwareRuntime {
     services: FirmwareServices,
   ): Generator<DelayRequest, void, void> {
     let index = 0;
-    for (const parameter of declaration.parameters) {
+    /*
+     * A Python method's first parameter is the object itself, and the caller
+     * does not pass it: `c.bump()` reaches the object as `self`. The C++ path
+     * has no such parameter, so the two bind differently.
+     */
+    const parameters =
+      this.language === 'python' ? declaration.parameters.slice(1) : declaration.parameters;
+    for (const parameter of parameters) {
       const arg = args[index++];
       if (arg !== undefined) {
         frame.values.set(parameter.name, arg);
@@ -1496,8 +1522,19 @@ export class FirmwareRuntime {
   ): Generator<DelayRequest, Value, void> {
     const frame = new Scope(instance.scope);
     yield* this.bindMethodParameters(frame, instance, declaration, args, services);
-    const flow = yield* this.execute(declaration.body, frame, services);
-    return flow.kind === 'return' ? flow.value : 0;
+    /*
+     * While a Python method runs, the name its first parameter carries is the
+     * object the body works on, so `self.n` reads that object's field.
+     */
+    const previousSelf = this.currentSelfName;
+    this.currentSelfName =
+      this.language === 'python' ? (declaration.parameters[0]?.name ?? null) : null;
+    try {
+      const flow = yield* this.execute(declaration.body, frame, services);
+      return flow.kind === 'return' ? flow.value : 0;
+    } finally {
+      this.currentSelfName = previousSelf;
+    }
   }
 
   /**
@@ -1640,6 +1677,30 @@ export class FirmwareRuntime {
       pin,
       kind === 'pwm' || output ? PIN_OUTPUT : pullUp ? PIN_INPUT_PULLUP : PIN_INPUT,
     );
+    return true;
+  }
+
+  /**
+   * Binds a name to an object when the initialiser builds one.
+   *
+   * `c = Counter()` is a constructor call whose result is an object rather
+   * than a number, so the name has to be told what it is holding. The class
+   * has to be one this program declared: the built-ins answer for themselves.
+   */
+  private *bindInstanceFrom(
+    name: string,
+    expression: Expr,
+    scope: Scope,
+    services: FirmwareServices,
+  ): Generator<DelayRequest, boolean, void> {
+    if (expression.kind !== 'call' || expression.callee.kind !== 'identifier') return false;
+    const className = expression.callee.name;
+    if (!this.classes.has(className)) return false;
+    const args: Value[] = [];
+    for (const argument of expression.args) {
+      args.push((yield* this.evaluate(argument, scope, services)) as Value);
+    }
+    yield* this.constructInstance(className, name, args, services);
     return true;
   }
 
@@ -1818,6 +1879,21 @@ export class FirmwareRuntime {
       }
 
       case 'varDecl': {
+        if (statement.init) {
+          /*
+           * `c = Counter()` builds an object rather than a number, so the
+           * name has to be told what it is holding. Settled here, where the
+           * name itself is bound: a constructor reaching the call machinery
+           * would have no way to know which name it was stored under.
+           */
+          const built = yield* this.bindInstanceFrom(
+            statement.name,
+            statement.init,
+            scope,
+            services,
+          );
+          if (built) return NORMAL;
+        }
         if (
           statement.init &&
           this.bindDeviceFrom(statement.name, statement.init, scope, services)
@@ -2189,6 +2265,16 @@ export class FirmwareRuntime {
             instance.scope.values.set(expression.target.member, combined);
             return combined;
           }
+          // `self.n = 1` writes the field of the object the running method
+          // works on, the same field the read above reaches.
+          if (
+            expression.operator === '=' &&
+            this.currentSelfName === expression.target.target.name &&
+            this.currentInstance
+          ) {
+            this.currentInstance.scope.values.set(expression.target.member, value);
+            return value;
+          }
         }
         if (expression.target.kind === 'identifier') {
           const name = expression.target.name;
@@ -2242,6 +2328,11 @@ export class FirmwareRuntime {
               this.classStatics.get(instance.className)?.get(expression.member) ??
               0
             );
+          }
+          // `self.n` reads the field of the object the running method works
+          // on, which is the object itself rather than a name in scope.
+          if (this.currentSelfName === expression.target.name && this.currentInstance) {
+            return this.currentInstance.scope.values.get(expression.member) ?? 0;
           }
           // `Button::RELEASED`: static consts live in the class table, since
           // no instance is involved. Instance-qualified statics (`b.PRESSED`)
