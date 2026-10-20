@@ -86,7 +86,11 @@ import {
   Ili9341,
   LcdDriver,
   pixelCount,
+  SSD1306_FLAG_LIT,
+  SSD1306_FLAG_MIRRORED,
+  SSD1306_FRAME_BYTES,
   SevenSegment,
+  Ssd1306,
   type KnobSpec,
   type Lcd1602,
   type LcdCommand,
@@ -222,6 +226,14 @@ function displayBytesForPart(definition: PartDefinition): number {
   if (component.kind === 'lcd') return LCD_TEXT_BYTES + 1;
   if (component.kind === 'servo') return 1;
   if (
+    component.kind === 'display' &&
+    (component.controller === 'ssd1306' || component.controller === 'ssd1306-spi')
+  ) {
+    // The panel's own memory, plus the byte that says whether the glass is
+    // lit and whether the image is mirrored.
+    return SSD1306_FRAME_BYTES + 1;
+  }
+  if (
     component.kind === 'neopixel' ||
     component.kind === 'neopixel-matrix' ||
     component.kind === 'led-ring'
@@ -332,6 +344,23 @@ export function lcdFromSnapshot(
     feed(driver.text(line.slice(0, panel.columns)));
   });
   panel.setBacklight((flags & 0x02) !== 0);
+  return panel;
+}
+
+/**
+ * Rebuilds a monochrome OLED from the frame the worker mirrored.
+ *
+ * The frame is the panel's own memory -- one byte per column per page -- so
+ * putting it back is putting the panel back: the pixels are the pixels. The
+ * flags say whether the glass is lit and whether the image is mirrored, which
+ * is what the panel was showing, not only what it drew.
+ */
+export function ssd1306FromSnapshot(frameBytes: readonly number[], flags: number): Ssd1306 {
+  const panel = new Ssd1306();
+  panel.loadFrame(new Uint8Array(frameBytes), {
+    lit: (flags & SSD1306_FLAG_LIT) !== 0,
+    mirrored: (flags & SSD1306_FLAG_MIRRORED) !== 0,
+  });
   return panel;
 }
 
