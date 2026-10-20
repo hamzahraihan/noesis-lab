@@ -14,8 +14,14 @@ export interface Esp32Firmware {
   readonly filesystem?: Uint8Array;
 }
 
-/** How many pins the chip's GPIO words cover. */
-const PINS = 32;
+/**
+ * How many pins the chip's GPIO words cover.
+ *
+ * The classic ESP32 has GPIO0 to GPIO39, and the board's header holes reach
+ * up to GPIO39 (VP) and GPIO36, so the words are read across that whole
+ * range rather than the first thirty-two.
+ */
+const PINS = 40;
 
 /**
  * The emulated ESP32 behind the bench's pump contract: boot the pinned
@@ -131,11 +137,16 @@ export class Esp32Backend implements ExecutionBackend {
    * The chip reads its inputs from the pads the board's parts drive, so the
    * engine's levels have to reach them; then the engine settles, because the
    * chip has moved.
+   *
+   * Only the board's own pads are pushed. The chip has pads the board does
+   * not bring out -- the flash lines among them -- and writing a level into
+   * one of those would be the host reaching into the chip's insides.
    */
   private settleIfDue(): void {
     if (!this.chip) return;
     for (let pin = 0; pin < PINS; pin++) {
       if (this.driven.has(pin)) continue;
+      if (this.hooks.mcu.pinIdForGpio(pin) === undefined) continue;
       this.chip.setInput(pin, this.hooks.readPin(pin));
     }
     this.hooks.onSettle();

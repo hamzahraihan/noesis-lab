@@ -1,4 +1,5 @@
 import type { BoardId } from '@/features/learn';
+import type { FirmwareLanguage } from '@/features/simulation';
 
 /**
  * Whether a backend can run on a board.
@@ -32,8 +33,37 @@ export function rp2040AvailableFor(boardId: BoardId, worker: boolean): BackendAv
   return { ok: true };
 }
 
+/**
+ * Whether the emulated ESP32 can run.
+ *
+ * The chip is a WebAssembly emulator, so it lives in the simulation worker
+ * like the RP2 engine does, and it is seated on the ESP32 board alone: the
+ * chip it emulates is that board's chip, and no other board here has one.
+ *
+ * The chip's own firmware is MicroPython, so a sketch in C++ has nothing to
+ * run on there. The mode is offered for a Python sketch and refused for a C++
+ * one, with the reason the operator needs.
+ */
+export function esp32AvailableFor(
+  boardId: BoardId,
+  worker: boolean,
+  language: FirmwareLanguage = 'python',
+): BackendAvailability {
+  if (boardId !== 'esp32') {
+    return { ok: false, reason: 'ESP32 mode needs an ESP32 board' };
+  }
+  if (!worker) return { ok: false, reason: 'ESP32 mode needs the simulation worker' };
+  if (language !== 'python') {
+    return {
+      ok: false,
+      reason: 'The emulated ESP32 runs MicroPython: switch the sketch to Python',
+    };
+  }
+  return { ok: true };
+}
+
 export interface BackendSelection {
-  readonly value: 'avr' | 'interpreter' | 'rp2040';
+  readonly value: 'avr' | 'interpreter' | 'rp2040' | 'esp32';
   readonly interpreterDisabled: boolean;
   readonly interpreterTitle: string;
 }
@@ -49,14 +79,18 @@ export function resolveBackendSelection({
   execution,
   avr,
   rp2040,
+  esp32,
   avrMode,
   rp2040Mode,
+  esp32Mode,
 }: {
-  readonly execution: 'interpreter' | 'avr' | 'rp2040' | undefined;
+  readonly execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | undefined;
   readonly avr: BackendAvailability;
   readonly rp2040: BackendAvailability;
+  readonly esp32: BackendAvailability;
   readonly avrMode: boolean;
   readonly rp2040Mode: boolean;
+  readonly esp32Mode: boolean;
 }): BackendSelection {
   if (execution === 'avr') {
     return {
@@ -72,9 +106,23 @@ export function resolveBackendSelection({
       interpreterTitle: 'This build runs on RP2040 only',
     };
   }
+  if (execution === 'esp32') {
+    return {
+      value: 'esp32',
+      interpreterDisabled: true,
+      interpreterTitle: 'This build runs on the emulated ESP32 only',
+    };
+  }
   if (rp2040Mode && rp2040.ok) {
     return {
       value: 'rp2040',
+      interpreterDisabled: false,
+      interpreterTitle: 'Which backend the next Run executes on',
+    };
+  }
+  if (esp32Mode && esp32.ok) {
+    return {
+      value: 'esp32',
       interpreterDisabled: false,
       interpreterTitle: 'Which backend the next Run executes on',
     };
@@ -86,6 +134,8 @@ export function resolveBackendSelection({
       ? 'Which backend the next Run executes on'
       : avrMode
         ? avr.reason
-        : 'Which backend the next Run executes on',
+        : esp32Mode && !esp32.ok
+          ? esp32.reason
+          : 'Which backend the next Run executes on',
   };
 }

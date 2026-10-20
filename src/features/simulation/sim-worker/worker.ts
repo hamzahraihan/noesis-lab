@@ -24,7 +24,7 @@ type Incoming =
       type: 'init';
       bench: Bench;
       firmware: FirmwareProject;
-      execution: 'interpreter' | 'avr' | 'rp2040';
+      execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32';
       wasm?: boolean;
       /** Whether this bench's network may bridge to real hosts. */
       liveNetwork?: boolean;
@@ -41,7 +41,7 @@ type Incoming =
   | { id: number; type: 'faults' };
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
-let execution: 'interpreter' | 'avr' | 'rp2040' = 'interpreter';
+let execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
 let wasm = false;
 let running = false;
 /**

@@ -58,6 +58,10 @@ import { Rp2040Backend } from '../rp2040/core';
 import { fetchRp2040Assets, type Rp2040Assets } from '../rp2040/assets';
 import { buildLittlefsImage } from '../rp2040/image';
 import type { Rp2040Hooks } from '../rp2040/backend';
+import { Esp32Backend } from '../esp32/core';
+import { fetchEsp32Assets, type Esp32Assets } from '../esp32/assets';
+import { buildEsp32Filesystem } from '../esp32/image';
+import type { Esp32Hooks } from '../esp32/backend';
 import { GROUND } from '../elements';
 import { loadScriptedRuntime } from '../scripted/load';
 import { createScriptedI2c } from '../scripted/i2c';
@@ -141,10 +145,11 @@ export interface CoreHandle {
   rebuild(
     bench: Bench,
     firmware: FirmwareProject,
-    execution: 'interpreter' | 'avr' | 'rp2040',
+    execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32',
     wasm?: boolean,
     fetchWasm?: () => Promise<ArrayBuffer>,
     fetchRp2040?: () => Promise<Rp2040Assets>,
+    fetchEsp32?: () => Promise<Esp32Assets>,
   ): void;
   flash(words: Uint16Array): void;
   snapshot(): SharedArrayBuffer;
@@ -156,6 +161,7 @@ export interface CoreHandle {
   scriptedReady(): Promise<void>;
   readonly wasmAttached: boolean;
   readonly rp2040Attached: boolean;
+  readonly esp32Attached: boolean;
 }
 
 /** What a core is built with beyond its board: the bench's live bridge. */
@@ -223,6 +229,17 @@ class SimCore implements CoreHandle {
   private rp2040Pending = false;
   /** Bumped by every rebuild; an attach whose generation is stale never lands. */
   private rp2040Generation = 0;
+  private esp32Backend: Esp32Backend | null = null;
+  /**
+   * True from an esp32 rebuild until its chip has booted (or failed).
+   *
+   * The emulated chip needs its artefacts fetched and its filesystem built
+   * before it can run, and nothing else may run in the meantime for the same
+   * reason the RP2 path gives.
+   */
+  private esp32Pending = false;
+  /** Bumped by every rebuild; an attach whose generation is stale never lands. */
+  private esp32Generation = 0;
   private pendingDelayMs = 0;
   // Fault-cause contract: Wasm attach failures must set a `'wasm ...'`-prefixed
   // cause here without touching the interpreter runner (reserved: the
@@ -338,13 +355,18 @@ class SimCore implements CoreHandle {
     return this.rp2040Backend !== null;
   }
 
+  get esp32Attached(): boolean {
+    return this.esp32Backend !== null;
+  }
+
   rebuild(
     bench: Bench,
     firmware: FirmwareProject,
-    execution: 'interpreter' | 'avr' | 'rp2040',
+    execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32',
     wasm = false,
     fetchWasm: () => Promise<ArrayBuffer> = defaultFetchWasmBytes,
     fetchRp2040: () => Promise<Rp2040Assets> = fetchRp2040Assets,
+    fetchEsp32: () => Promise<Esp32Assets> = fetchEsp32Assets,
   ): void {
     // Lab flag (rollout stage 1): when set, the module loads async and
     // attaches on arrival — the backend runs the JS path until then.
@@ -383,9 +405,14 @@ class SimCore implements CoreHandle {
     this.rp2040Backend = null;
     this.rp2040Generation += 1;
     this.rp2040Pending = execution === 'rp2040';
+    this.esp32Backend = null;
+    this.esp32Generation += 1;
+    this.esp32Pending = execution === 'esp32';
     if (execution === 'avr') this.tryFlashAvr(firmware);
     if (execution === 'rp2040')
       void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
+    if (execution === 'esp32')
+      void this.attachEsp32Async(firmware, this.esp32Generation, fetchEsp32);
     this.engine.rebuild(bench, this.controls);
     this.ensureScriptedRuntime();
     this.engine.settle();
@@ -425,6 +452,16 @@ class SimCore implements CoreHandle {
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
       }
+      if (this.esp32Backend) {
+        this.esp32Backend.step(Math.max(frameEnd - this.engine.timeMs, 0));
+        this.engine.settle();
+        if (this.esp32Backend.fault) {
+          this.faultText = this.esp32Backend.fault;
+          this.esp32Backend = null;
+        }
+        this.advanceBy(frameEnd - this.engine.timeMs);
+        return;
+      }
       /*
        * An rp2040 machine boots asynchronously (artifacts, then the image).
        * Until it lands nothing executes: time still advances, so Run, Reset and
@@ -433,6 +470,15 @@ class SimCore implements CoreHandle {
        * for real firmware.
        */
       if (this.rp2040Pending) {
+        this.advanceBy(frameEnd - this.engine.timeMs);
+        return;
+      }
+      /*
+       * The emulated ESP32 boots the same way: its artefacts arrive, its
+       * filesystem is built, and only then does the chip run. Until it lands
+       * nothing executes, for the same reason.
+       */
+      if (this.esp32Pending) {
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
       }
@@ -758,6 +804,75 @@ class SimCore implements CoreHandle {
       // front end that happens to accept the files is a different engine.
       this.runner = null;
     }
+  }
+
+  /**
+   * Async attach for `execution === 'esp32'`: fetch the pinned artefacts,
+   * build the filesystem the chip mounts, and seat the emulated chip. Gated
+   * twice like `tryFlashAvr`: only the ESP32's board spec can run it, and
+   * only if the generation is still current when each await returns. Anything
+   * thrown lands in `fault`.
+   */
+  private async attachEsp32Async(
+    firmware: FirmwareProject,
+    generation: number,
+    fetcher: () => Promise<Esp32Assets>,
+  ): Promise<void> {
+    if (this.mcu.board.id !== 'esp32') return;
+    try {
+      const assets = await fetcher();
+      if (generation !== this.esp32Generation) return;
+      const filesystem = await buildEsp32Filesystem(
+        firmware.files,
+        new Uint8Array(assets.littlefsWasm),
+      );
+      if (generation !== this.esp32Generation) return;
+      const backend = new Esp32Backend(
+        {
+          wasm: assets.wasm,
+          rom: assets.rom,
+          image: assets.image,
+          filesystem,
+        },
+        this.esp32Hooks(),
+      );
+      await backend.start();
+      if (generation !== this.esp32Generation) return;
+      if (backend.fault) {
+        this.faultText = backend.fault;
+        this.esp32Pending = false;
+        this.runner = null;
+        return;
+      }
+      this.esp32Backend = backend;
+      this.esp32Pending = false;
+    } catch (error) {
+      if (generation !== this.esp32Generation) return;
+      this.esp32Pending = false;
+      this.faultText = error instanceof Error ? error.message : String(error);
+      // An explicit ESP32 mode does not silently fall back to the
+      // interpreter: the mode asked for the real chip, and a Python front end
+      // that happens to accept the files is a different engine.
+      this.runner = null;
+    }
+  }
+
+  /**
+   * The emulated chip's engine hooks.
+   *
+   * The chip speaks its own GPIO numbering, and the ESP32's header holes carry
+   * the chip's numbers (D2 is GPIO2, VP is GPIO36), so a pin crosses this
+   * boundary under its own name -- there is no map to keep in step.
+   */
+  private esp32Hooks(): Esp32Hooks {
+    return {
+      mcu: this.mcu,
+      nowMs: () => this.engine.timeMs,
+      onEdge: (gpio, cycles, high) => this.engine.recordGpioEdge(gpio, cycles, high),
+      readPin: (gpio) => this.engine.readDigital(gpio),
+      onSettle: () => this.engine.settle(),
+      serial: { serialWrite: (text) => this.pushSerial(text) },
+    };
   }
 
   /** Engine hooks: same shape the AVR backend gets, minus the AVR-only ports. */

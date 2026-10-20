@@ -113,6 +113,7 @@ import {
 import { partFileText, useCustomPartsStore } from '@/features/parts';
 import {
   avrAvailableFor,
+  esp32AvailableFor,
   resolveBackendSelection,
   rp2040AvailableFor,
 } from '../simulations/avr-mode';
@@ -433,6 +434,13 @@ export default function Bench(props: BenchProps) {
   const [rp2040Mode, setRp2040Mode] = useState(
     projectBuild?.execution === 'rp2040' || boardId === 'rp2040' || boardId === 'pico',
   );
+  /*
+   * The emulated ESP32 is the other real machine: the chip's own mask ROM, the
+   * real bootloader and real MicroPython, under a WebAssembly emulator. It
+   * speaks MicroPython, so it is offered for a Python sketch and the selector
+   * falls back to the interpreter for a C++ one, with the reason shown.
+   */
+  const [esp32Mode, setEsp32Mode] = useState(projectBuild?.execution === 'esp32');
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
   /*
@@ -479,6 +487,7 @@ export default function Bench(props: BenchProps) {
     // board that refuses it.
     setAvrMode(false);
     setRp2040Mode(boardId === 'rp2040' || boardId === 'pico');
+    setEsp32Mode(false);
   }, [boardId, starterFor]);
 
   /* Execution-pinned builds pin the backend: the interpreter option is
@@ -487,6 +496,7 @@ export default function Bench(props: BenchProps) {
   useEffect(() => {
     if (projectBuild?.execution === 'avr') setAvrMode(true);
     if (projectBuild?.execution === 'rp2040') setRp2040Mode(true);
+    if (projectBuild?.execution === 'esp32') setEsp32Mode(true);
   }, [projectBuild]);
 
   /* The exercise guide auto-opens on arrival unless dismissed for this exercise. */
@@ -1314,12 +1324,15 @@ export default function Bench(props: BenchProps) {
    */
   const avr = avrAvailableFor(boardId);
   const rp2040 = rp2040AvailableFor(boardId, workerClient !== null);
+  const esp32 = esp32AvailableFor(boardId, workerClient !== null, project.language);
   const backend = resolveBackendSelection({
     execution: projectBuild?.execution,
     avr,
     rp2040,
+    esp32,
     avrMode,
     rp2040Mode,
+    esp32Mode,
   });
 
   /*
@@ -1364,6 +1377,14 @@ export default function Bench(props: BenchProps) {
        * the clock for it rather than running the interpreter in the meantime.
        */
       workerClient.setExecution('rp2040');
+      workerClient.loadFirmware(project);
+    } else if (session.backend === 'esp32' && workerClient !== null) {
+      /*
+       * The same contract, on the emulated chip: the worker builds the
+       * filesystem the chip mounts and boots it from the mask ROM. Nothing
+       * executes until the chip is up.
+       */
+      workerClient.setExecution('esp32');
       workerClient.loadFirmware(project);
     } else if (session.backend === 'avr') {
       workerClient?.setExecution('avr');
@@ -1702,19 +1723,22 @@ export default function Bench(props: BenchProps) {
               onValueChange={(next) => {
                 setAvrMode(next === 'avr');
                 setRp2040Mode(next === 'rp2040');
+                setEsp32Mode(next === 'esp32');
               }}
             >
               <SelectTrigger
                 className="h-7 text-xs"
                 aria-label="Execution backend"
                 title={
-                  avr.ok && rp2040.ok
+                  avr.ok && rp2040.ok && esp32.ok
                     ? 'Which backend the next Run executes on'
                     : rp2040Mode && !rp2040.ok
                       ? rp2040.reason
-                      : avrMode && !avr.ok
-                        ? avr.reason
-                        : 'Which backend the next Run executes on'
+                      : esp32Mode && !esp32.ok
+                        ? esp32.reason
+                        : avrMode && !avr.ok
+                          ? avr.reason
+                          : 'Which backend the next Run executes on'
                 }
               >
                 <SelectValue />
@@ -1742,6 +1766,17 @@ export default function Bench(props: BenchProps) {
                   }
                 >
                   RP2040 (Nano)
+                </SelectItem>
+                <SelectItem
+                  value="esp32"
+                  disabled={!esp32.ok}
+                  title={
+                    esp32.ok
+                      ? 'Boot the emulated ESP32 from its mask ROM, running real MicroPython'
+                      : esp32.reason
+                  }
+                >
+                  ESP32 (emulated)
                 </SelectItem>
               </SelectContent>
             </Select>

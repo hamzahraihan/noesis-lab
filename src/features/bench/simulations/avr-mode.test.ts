@@ -4,6 +4,7 @@ import { toSingleFileProject } from '@/features/simulation';
 import { arduinoUnoR3 } from '@/features/parts';
 import {
   avrAvailableFor,
+  esp32AvailableFor,
   resolveBackendSelection,
   rp2040AvailableFor,
   type BackendAvailability,
@@ -36,6 +37,30 @@ describe('rp2040 mode availability', () => {
   });
 });
 
+describe('esp32 mode availability', () => {
+  it('is available on the ESP32 while the worker is there', () => {
+    expect(esp32AvailableFor('esp32', true)).toEqual({ ok: true });
+  });
+
+  it('is refused on another board', () => {
+    expect(esp32AvailableFor('uno', true)).toEqual({ ok: false, reason: expect.any(String) });
+  });
+
+  it('is refused without the simulation worker, because the emulator lives there', () => {
+    expect(esp32AvailableFor('esp32', false)).toEqual({
+      ok: false,
+      reason: 'ESP32 mode needs the simulation worker',
+    });
+  });
+
+  it('is refused for a C++ sketch, because the chip runs MicroPython', () => {
+    expect(esp32AvailableFor('esp32', true, 'arduino-cpp')).toEqual({
+      ok: false,
+      reason: expect.stringContaining('MicroPython'),
+    });
+  });
+});
+
 const AVAILABLE: BackendAvailability = { ok: true };
 
 /** The selector's inputs, with only the fields under test overridden. */
@@ -44,8 +69,10 @@ function select(overrides: Partial<Parameters<typeof resolveBackendSelection>[0]
     execution: undefined,
     avr: AVAILABLE,
     rp2040: AVAILABLE,
+    esp32: AVAILABLE,
     avrMode: false,
     rp2040Mode: false,
+    esp32Mode: false,
     ...overrides,
   });
 }
