@@ -29,8 +29,26 @@ import {
  */
 export type FirmwareLanguage = 'arduino-cpp' | 'python';
 
+/** `Pin(26)` or `26`: the pin a machine constructor names. */
+function pinArgument(expression: Expr | undefined): number | null {
+  if (expression === undefined) return null;
+  if (expression.kind === 'number') return Math.trunc(expression.value);
+  if (expression.kind !== 'call') return null;
+  const callee = expression.callee;
+  const named =
+    callee.kind === 'identifier'
+      ? callee.name === 'Pin'
+      : callee.kind === 'member' &&
+        callee.target.kind === 'identifier' &&
+        callee.target.name === 'machine' &&
+        callee.member === 'Pin';
+  if (!named) return null;
+  const pin = expression.args[0];
+  return pin?.kind === 'number' ? Math.trunc(pin.value) : null;
+}
+
 /** What kind of GPIO device a name in a Python program is holding. */
-type DeviceKind = 'led' | 'switch' | 'output' | 'input' | 'pwm';
+type DeviceKind = 'led' | 'switch' | 'output' | 'input' | 'pwm' | 'adc' | 'i2c';
 
 /**
  * A GPIO device a Python program built with `LED(17)` and kept in a name.
@@ -64,6 +82,21 @@ const DEVICE_CONSTRUCTORS: Readonly<Record<string, DeviceKind>> = {
  * makes `button.is_pressed` mean the same thing here as it does there.
  */
 const SWITCH_ACTIVE_LOW = true;
+
+/**
+ * The `machine` constructors, the MicroPython spelling of the same hardware.
+ *
+ * The Pico and the Nano RP2040 boot MicroPython, so their sketches write
+ * `Pin(2, Pin.OUT)` rather than `LED(2)`. Both end up as the same `Device`
+ * table entry: the pin is the pin, and which method a program calls
+ * (`value(1)` or `on()`) is a spelling, not a second model of the board.
+ */
+const MACHINE_CONSTRUCTORS: Readonly<Record<string, DeviceKind>> = {
+  Pin: 'output',
+  ADC: 'adc',
+  PWM: 'pwm',
+  I2C: 'i2c',
+};
 
 import {
   type ClassDecl,
@@ -185,6 +218,15 @@ export interface FirmwareServices {
   digitalRead(pin: number): number;
   analogWrite(pin: number, value: number): void;
   analogRead(pin: number): number;
+  /**
+   * The top of the board's ADC scale (1023 for ten bits, 4095 for twelve).
+   *
+   * `analogRead` answers in board counts; MicroPython's `read_u16` answers in
+   * sixteen-bit counts on every port, so the translation needs the range it is
+   * translating from. Optional, because a host that stubs hardware may not
+   * care; ten bits is the common case.
+   */
+  adcFullScale?: number;
   serialBegin(baud: number): void;
   serialWrite(text: string): void;
   /** The I2C bus, for sketches that drive a display or sensor directly. */
@@ -786,7 +828,8 @@ function pythonImports(content: string): string[] {
     const direct = /^import\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(trimmed)?.[1];
     const from = /^from\s+([A-Za-z_][A-Za-z0-9_]*)\s+import\s+/.exec(trimmed)?.[1];
     const candidate = direct ?? from;
-    if (candidate && candidate !== 'time' && candidate !== 'gpiozero') names.push(candidate);
+    if (candidate && candidate !== 'time' && candidate !== 'gpiozero' && candidate !== 'machine')
+      names.push(candidate);
   }
   return names;
 }
@@ -1422,23 +1465,79 @@ export class FirmwareRuntime {
     scope: Scope,
     services: FirmwareServices,
   ): boolean {
-    if (expression.kind !== 'call' || expression.callee.kind !== 'identifier') return false;
-    const kind = DEVICE_CONSTRUCTORS[expression.callee.name];
-    const pin = expression.args[0];
-    if (!kind || pin?.kind !== 'number') return false;
+    if (expression.kind !== 'call') return false;
+    const callee = expression.callee;
+    const called =
+      callee.kind === 'identifier'
+        ? { name: callee.name, viaMachine: false }
+        : callee.kind === 'member' &&
+            callee.target.kind === 'identifier' &&
+            callee.target.name === 'machine'
+          ? { name: callee.member, viaMachine: true }
+          : null;
+    if (called === null) return false;
 
-    const device: Device = { pin: pin.value, kind };
-    scope.bindDevice(name, device);
+    // gpiozero first: its names are the unambiguous ones.
+    const gpiozero = called.viaMachine ? undefined : DEVICE_CONSTRUCTORS[called.name];
+    if (gpiozero !== undefined) {
+      const pin = expression.args[0];
+      if (pin?.kind !== 'number') return false;
+      const device: Device = { pin: pin.value, kind: gpiozero };
+      scope.bindDevice(name, device);
+      /*
+       * gpiozero's inputs are pulled up by default -- `Button(pin)` means
+       * `pull_up=True` -- which is what makes a button on a pin and a leg to
+       * ground read as a press rather than as a floating line. Leaving them as
+       * plain inputs would have the pin sit at whatever the solver thinks an
+       * undriven net is, and the button would report presses nobody made.
+       */
+      services.pinMode(
+        device.pin,
+        gpiozero === 'switch' || gpiozero === 'input' ? PIN_INPUT_PULLUP : PIN_OUTPUT,
+      );
+      return true;
+    }
+
     /*
-     * gpiozero's inputs are pulled up by default -- `Button(pin)` means
-     * `pull_up=True` -- which is what makes a button on a pin and a leg to
-     * ground read as a press rather than as a floating line. Leaving them as
-     * plain inputs would have the pin sit at whatever the solver thinks an
-     * undriven net is, and the button would report presses nobody made.
+     * `machine` next, and bare names only from a Python program: after
+     * `from machine import Pin`, `Pin(2, Pin.OUT)` is the idiom, while in C++
+     * that spelling may well be a call of the program's own.
      */
+    if (!called.viaMachine && this.language !== 'python') return false;
+    const kind = MACHINE_CONSTRUCTORS[called.name];
+    if (kind === undefined) return false;
+
+    if (kind === 'i2c') {
+      // The bench's I2C bus is the board's, not a pair of pins a sketch names.
+      scope.bindDevice(name, { pin: 0, kind });
+      return true;
+    }
+
+    const pin = pinArgument(expression.args[0]);
+    if (pin === null) return false;
+
+    if (kind === 'adc') {
+      scope.bindDevice(name, { pin, kind });
+      return true;
+    }
+
+    /*
+     * `Pin(n, Pin.OUT)`: MicroPython's default is an input, and the direction
+     * is an expression (`Pin.OUT` is a member read of a name that is not an
+     * object) rather than an evaluated value, so it is read from the AST.
+     */
+    const mode = expression.args[1];
+    const pull = expression.args[2];
+    const output =
+      kind === 'pwm' ||
+      (mode?.kind === 'member' && mode.member === 'OUT') ||
+      (mode?.kind === 'number' && mode.value !== 0);
+    const pullUp = kind !== 'pwm' && pull?.kind === 'member' && pull.member === 'PULL_UP';
+    const device: Device = { pin, kind: kind === 'pwm' ? 'pwm' : output ? 'output' : 'input' };
+    scope.bindDevice(name, device);
     services.pinMode(
-      device.pin,
-      kind === 'switch' || kind === 'input' ? PIN_INPUT_PULLUP : PIN_OUTPUT,
+      pin,
+      kind === 'pwm' || output ? PIN_OUTPUT : pullUp ? PIN_INPUT_PULLUP : PIN_INPUT,
     );
     return true;
   }
@@ -2025,7 +2124,7 @@ export class FirmwareRuntime {
            */
           const device = scope.deviceFor(callee.target.name);
           if (device) {
-            return (yield* this.callDevice(device, callee.member, services)) as Value;
+            return (yield* this.callDevice(device, callee.member, args, services)) as Value;
           }
           /*
            * A method on a class instance (`c.bump()`), built from a global
@@ -2117,7 +2216,15 @@ export class FirmwareRuntime {
 
   private resolveArray(expression: Expr, scope: Scope): number[] | undefined {
     if (expression.kind !== 'identifier') return undefined;
-    return scope.arrayFor(expression.name);
+    const declared = scope.arrayFor(expression.name);
+    if (declared !== undefined) return declared;
+    /*
+     * A value can be an array too: `data = i2c.readfrom(addr, 2)` is how a
+     * MicroPython program reads a sensor, and `data[0]` has to index what the
+     * bus returned rather than a compiled array declaration.
+     */
+    const bound = scope.lookup(expression.name);
+    return Array.isArray(bound) ? bound : undefined;
   }
 
   /**
@@ -2132,9 +2239,61 @@ export class FirmwareRuntime {
   private *callDevice(
     device: Device,
     member: string,
+    args: Value[],
     services: FirmwareServices,
   ): Generator<DelayRequest, Value, void> {
+    /*
+     * `machine.ADC` answers in sixteen-bit counts on every port, while the
+     * host's `analogRead` answers in the board's own (ten or twelve bits).
+     * `read` is the raw counts, the way some ports spell the same reading.
+     */
+    if (device.kind === 'adc') {
+      switch (member) {
+        case 'read_u16': {
+          const full = services.adcFullScale ?? 1023;
+          return Math.round((services.analogRead(device.pin) / full) * 65535);
+        }
+        case 'read':
+          return services.analogRead(device.pin);
+        default:
+          return 0;
+      }
+    }
+
+    if (device.kind === 'i2c') {
+      return (yield* this.evaluateMachineI2cCall(member, args, services)) as Value;
+    }
+
+    if (device.kind === 'pwm') {
+      switch (member) {
+        case 'duty_u16': {
+          const duty = Math.min(65535, Math.max(0, asNumber(args[0] ?? 0)));
+          services.analogWrite(device.pin, Math.round((duty / 65535) * 255));
+          return 0;
+        }
+        case 'duty': {
+          const duty = Math.min(1023, Math.max(0, asNumber(args[0] ?? 0)));
+          services.analogWrite(device.pin, Math.round((duty / 1023) * 255));
+          return 0;
+        }
+        case 'freq':
+        case 'deinit':
+          return 0;
+      }
+    }
+
     switch (member) {
+      /*
+       * `machine.Pin.value()` reads, `value(1)` writes -- the same pin the
+       * gpiozero spelling calls `on`/`off`, with the argument deciding which
+       * half of the pair is meant.
+       */
+      case 'value':
+        if (args.length > 0) {
+          this.writeDevice(device, 'value', args[0], services);
+          return 0;
+        }
+        return this.readDevice(device, 'value', services);
       /*
        * A press waits the way the real call does: by not returning until the
        * line says so. Polling a millisecond at a time is what keeps the rest
@@ -2673,6 +2832,88 @@ export class FirmwareRuntime {
         return wire.read();
       case 'available':
         return wire.available();
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Handles a `machine.I2C` call.
+   *
+   * MicroPython's spelling of the same transactions `Wire` makes, over the
+   * bench's bus: `readfrom_mem(0x68, 0, 1)` is the datasheet's "write the
+   * register pointer, then read a byte". The bus is the board's, so the
+   * constructor's pins are accepted and ignored, exactly as `Wire.begin()`
+   * without arguments is.
+   */
+  private *evaluateMachineI2cCall(
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<DelayRequest, Value, void> {
+    const wire = services.wire;
+    /*
+     * A buffer is an array, and a single byte is accepted where a one-byte
+     * buffer is meant: the Python front end has no bytes literal, and making
+     * `writeto_mem(0x68, 0, 30)` the spelling keeps the register protocol
+     * legible without teaching a literal the parser cannot read.
+     */
+    const bytes = (value: Value | undefined): number[] =>
+      Array.isArray(value)
+        ? value.map((byte) => Math.trunc(asNumber(byte)) & 0xff)
+        : value === undefined
+          ? []
+          : [Math.trunc(asNumber(value)) & 0xff];
+
+    switch (member) {
+      case 'writeto': {
+        wire.beginTransmission(asNumber(args[0] ?? 0));
+        for (const byte of bytes(args[1])) wire.write(byte);
+        const micros = wire.endTransmission();
+        if (micros > 0) yield micros / 1000;
+        return 0;
+      }
+      case 'writeto_mem': {
+        wire.beginTransmission(asNumber(args[0] ?? 0));
+        wire.write(Math.trunc(asNumber(args[1] ?? 0)) & 0xff);
+        for (const byte of bytes(args[2])) wire.write(byte);
+        const micros = wire.endTransmission();
+        if (micros > 0) yield micros / 1000;
+        return 0;
+      }
+      case 'readfrom': {
+        const count = Math.max(0, Math.trunc(asNumber(args[1] ?? 0)));
+        wire.requestFrom(asNumber(args[0] ?? 0), count);
+        const out: number[] = [];
+        for (let i = 0; i < count; i++) out.push(wire.read());
+        return out;
+      }
+      case 'readfrom_mem': {
+        const address = asNumber(args[0] ?? 0);
+        const count = Math.max(0, Math.trunc(asNumber(args[2] ?? 0)));
+        wire.beginTransmission(address);
+        wire.write(Math.trunc(asNumber(args[1] ?? 0)) & 0xff);
+        /*
+         * The pointer write is a transaction and costs the bus its time, the
+         * same way `writeto_mem` does. Skipping it would let a MicroPython
+         * clock outrun the C++ clock on the same bench by the cost of every
+         * register address it sent.
+         */
+        const micros = wire.endTransmission();
+        if (micros > 0) yield micros / 1000;
+        wire.requestFrom(address, count);
+        const out: number[] = [];
+        for (let i = 0; i < count; i++) out.push(wire.read());
+        return out;
+      }
+      /*
+       * A real scan probes addresses from 8 to 119 one transaction at a time.
+       * The bench's bus reports a transfer's timing, not an acknowledgement,
+       * so there is nothing honest to answer here -- an empty scan is the one
+       * answer that does not invent a device.
+       */
+      case 'scan':
+        return [];
       default:
         return 0;
     }

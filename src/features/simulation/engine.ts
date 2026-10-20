@@ -65,9 +65,12 @@ export interface EngineOptions {
 const SUPPLY_RAIL_LABELS: Readonly<Record<string, string>> = {
   esp32: '3V3',
   rp2040: '3V3',
+  pico: '3V3',
+  'raspberry-pi-4': '3V3',
   uno: '5V',
   mega: '5V',
   nano: '5V',
+  franzininho: '5V',
 };
 
 /**
@@ -1034,14 +1037,24 @@ export class Engine {
     return this.voltageOfNet(this.netOfMcuPin(pinId)) >= this.mcu.board.logicVolts / 2;
   }
 
+  /**
+   * The top of the board's ADC scale, in counts.
+   *
+   * Exposed because MicroPython's `read_u16` has to translate the same range
+   * into sixteen bits, and a second copy of this rule in the interpreter would
+   * drift from the one the C++ path reads.
+   */
+  get adcFullScale(): number {
+    return this.mcu.board.adcBits === 12 ? 4095 : 1023;
+  }
+
   /** Reads a pin as an integer across the board's ADC range. */
   readAnalog(gpio: number): number {
     const pinId = this.mcu.pinIdForGpio(gpio);
     if (!pinId) return 0;
     const volts = this.voltageOfNet(this.netOfMcuPin(pinId));
-    const fullScale = this.mcu.board.adcBits === 12 ? 4095 : 1023;
     const clamped = Math.min(this.mcu.board.logicVolts, Math.max(0, volts));
-    return Math.round((clamped / this.mcu.board.logicVolts) * fullScale);
+    return Math.round((clamped / this.mcu.board.logicVolts) * this.adcFullScale);
   }
 
   /**

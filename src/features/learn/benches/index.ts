@@ -39,7 +39,10 @@ import exampleI2cClockEsp32 from './example-i2c-clock-esp32.json';
 import exampleI2cClockFranzininho from './example-i2c-clock-franzininho.json';
 import exampleI2cClockMega from './example-i2c-clock-mega.json';
 import exampleI2cClockNano from './example-i2c-clock-nano.json';
+import exampleI2cClockPico from './example-i2c-clock-pico.json';
 import exampleI2cClockUno from './example-i2c-clock-uno.json';
+import examplePotentiometerPico from './example-potentiometer-pico.json';
+import examplePotentiometerRp2040 from './example-potentiometer-rp2040.json';
 import exampleServoEsp32 from './example-servo-esp32.json';
 import exampleServoFranzininho from './example-servo-franzininho.json';
 import exampleServoMega from './example-servo-mega.json';
@@ -74,6 +77,21 @@ export const EXAMPLE_CIRCUITS: Readonly<Record<string, Partial<Record<BoardId, C
       nano: parseCircuit(exampleI2cClockNano, 'example-i2c-clock-nano'),
       mega: parseCircuit(exampleI2cClockMega, 'example-i2c-clock-mega'),
       franzininho: parseCircuit(exampleI2cClockFranzininho, 'example-i2c-clock-franzininho'),
+      /*
+       * The Pico's port of the same clock: I2C0 comes out on GP0 and GP1, so
+       * the two data wires land on the first two pins of the left header rather
+       * than on dedicated SDA and SCL holes -- the Pico has none.
+       */
+      pico: parseCircuit(exampleI2cClockPico, 'example-i2c-clock-pico'),
+    },
+    potentiometer: {
+      /*
+       * The two boards whose firmware can read a divider directly: the analog
+       * block behind A0 is wired to the header on both, where an Uno's A0 is
+       * pushed through the Wi-Fi module and the Pi has no converter at all.
+       */
+      pico: parseCircuit(examplePotentiometerPico, 'example-potentiometer-pico'),
+      rp2040: parseCircuit(examplePotentiometerRp2040, 'example-potentiometer-rp2040'),
     },
     'character-lcd': {
       uno: parseCircuit(exampleCharacterLcdUno, 'example-character-lcd-uno'),

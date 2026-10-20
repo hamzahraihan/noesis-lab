@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation } from '@/features/bench/simulations/simulation';
-import { EXAMPLES } from './examples';
+import { BOARDS, boardOption } from './boardRegistry';
+import { EXAMPLES, I2C_CLOCK_EXAMPLE, POTENTIOMETER_EXAMPLE, exampleSketchFor } from './examples';
 import { exampleCircuitFor } from './benches';
 import { esp32DevKitV1, resistorDefinition } from '@/features/parts';
 import { breadboardDefinition } from '@/features/parts';
@@ -44,15 +45,30 @@ function run(simulation: Simulation, seconds = 2): void {
 }
 
 describe('the examples', () => {
+  /*
+   * Every circuit an example ships, on the board it ships for, with the sketch
+   * that board's firmware actually reads. A C++ example speaks C++; the Pico
+   * and the Nano RP2040 speak MicroPython. Loading one board's language into
+   * another is the failure this catches, and it fails on the first line for a
+   * reason that has nothing to do with the wiring.
+   */
   it.each(EXAMPLES.map((example) => [example.id, example] as const))(
-    '%s parses as a sketch',
+    '%s parses on every board it has',
     (_id, example) => {
-      const simulation = new Simulation(esp32DevKitV1());
-      simulation.loadFirmware(example.sketch);
-      // A syntax error is reported rather than thrown, so this is the check
-      // that an example the VM cannot read never ships.
-      expect(simulation.firmwareError).toBeNull();
+      const boards = BOARDS.filter((board) => exampleCircuitFor(example.id, board.id) !== null);
+      expect(boards.length, `${example.id} has a board`).toBeGreaterThan(0);
+
+      for (const board of boards) {
+        const simulation = new Simulation(board.make());
+        const doc = exampleCircuitFor(example.id, board.id)!;
+        expect(simulation.loadCircuit(doc), `${example.id} on ${board.id}`).toEqual([]);
+        simulation.loadFirmware(exampleSketchFor(example, board.id), board.language);
+        // A syntax error is reported rather than thrown, so this is the check
+        // that an example the VM cannot read never ships.
+        expect(simulation.firmwareError, `${example.id} on ${board.id}`).toBeNull();
+      }
     },
+    60_000,
   );
 
   it('wires a clock onto the board I2C pins', () => {
@@ -134,6 +150,72 @@ describe('the examples', () => {
     // command would still pass the range check above, at 90 degrees forever.
     expect(swept).toContain(10);
     expect(swept).toContain(170);
+  }, 30_000);
+
+  /*
+   * Both boards with an analogue block on the header: the Pico's GP26 and the
+   * Nano RP2040's A0 are the same channel behind different silkscreens, so the
+   * same MicroPython sketch and the same wiring have to read the same divider.
+   */
+  it('reads the divider under the knob', () => {
+    for (const boardId of ['pico', 'rp2040'] as const) {
+      const simulation = new Simulation(boardOption(boardId).make());
+      const doc = exampleCircuitFor('potentiometer', boardId);
+      expect(doc, `potentiometer on ${boardId}`).not.toBeNull();
+      expect(simulation.loadCircuit(doc!)).toEqual([]);
+      simulation.loadFirmware(exampleSketchFor(POTENTIOMETER_EXAMPLE, boardId), 'python');
+
+      const pot = partNamed(simulation, 'Potentiometer');
+      expect(pot, boardId).toBeDefined();
+      const knob = pot!.definition.knobs![0];
+
+      /*
+       * The wiper is a divider between the two ends, so the two extremes of the
+       * knob are the two rails and the middle is half of them. This is the check
+       * that the ADC samples the net the wiper is actually on rather than a pin
+       * the sketch named.
+       */
+      const lastLine = () => (simulation.serialLines().at(-1) ?? '').trim();
+
+      simulation.setKnob(pot!.id, knob, 0);
+      run(simulation, 1.5);
+      const low = lastLine();
+      simulation.setKnob(pot!.id, knob, 1);
+      run(simulation, 1.5);
+      const high = lastLine();
+      simulation.setKnob(pot!.id, knob, 0.5);
+      run(simulation, 1.5);
+      const middle = lastLine();
+
+      // Which end is which depends on how the knob's travel is drawn, so the
+      // pair is what matters: one rail and the other, not the same number twice.
+      expect([low, high].sort(), boardId).toEqual(['wiper 0%', 'wiper 100%']);
+      // Linear in between: half of full scale is half the percentage, which
+      // catches a divider that snaps instead of dividing. The two-point gap is
+      // the twelve-bit converter's rounding, not a bend in the divider.
+      expect(middle, boardId).toMatch(/^wiper (49|50)%$/);
+    }
+  }, 60_000);
+
+  it('reads the clock on the Pico bus', () => {
+    const simulation = new Simulation(boardOption('pico').make());
+    const doc = exampleCircuitFor('i2c-clock', 'pico');
+    expect(doc, 'i2c-clock on pico').not.toBeNull();
+    expect(simulation.loadCircuit(doc!)).toEqual([]);
+    simulation.loadFirmware(exampleSketchFor(I2C_CLOCK_EXAMPLE, 'pico'), 'python');
+
+    const clock = partNamed(simulation, 'DS1307');
+    expect(clock).toBeDefined();
+    // Wired, not merely placed: the DS1307's own SDA and SCL must land on the
+    // two nets the Pico's I2C0 peripheral sits on.
+    expect(simulation.engine.i2cDevice(clock!.id)?.onBus).toBe(true);
+
+    run(simulation, 2);
+    const lines = simulation.serialLines().join('\n');
+    expect(lines).toContain('clock online');
+    // The sketch unpacks BCD itself, so a mangled byte would show as a
+    // malformed time rather than as a short line.
+    expect(lines).toMatch(/^\d\d:\d\d:\d\d$/m);
   }, 30_000);
 
   it('colours device wires by signal', () => {

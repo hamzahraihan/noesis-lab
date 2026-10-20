@@ -19,7 +19,31 @@ export interface Example {
   readonly name: string;
   /** What it demonstrates, in the voice the catalogue uses. */
   readonly note: string;
+  /** The sketch most boards get; a board that speaks another language takes its port from `sketches`. */
   readonly sketch: string;
+  /**
+   * Board-specific versions of the same example, where the board's firmware
+   * speaks a different language.
+   *
+   * The Pico and the Nano RP2040 boot MicroPython and the Pi boots gpiozero,
+   * so the C++ sketch in `sketch` cannot run on them however good the wiring
+   * is. A key here is a port of the same circuit into the language that board
+   * actually reads; a board with no key and no C++ circuit simply has no
+   * version of the example.
+   */
+  readonly sketches?: Partial<Record<BoardId, string>>;
+}
+
+/**
+ * The sketch to load for an example on a board.
+ *
+ * One entry point so a caller never has to know whether this particular
+ * example needed a port: the flag in `sketches` is the only difference, and a
+ * caller that reads `sketch` directly would silently load C++ into a Python
+ * bench.
+ */
+export function exampleSketchFor(example: Example, boardId: BoardId): string {
+  return example.sketches?.[boardId] ?? example.sketch;
 }
 
 export const BLINK_SKETCH = `#include <Arduino.h>
@@ -174,6 +198,65 @@ void loop() {
 }
 `;
 
+/**
+ * The clock example on the Pico, in MicroPython.
+ *
+ * The same three registers and the same unpacking as the C++ sketch, written
+ * the way MicroPython spells them: one `readfrom_mem` moves the three bytes,
+ * a function pulls the tens and units out of each, and `I2C(0)` names the
+ * board's default bus rather than a pin pair, because the Pico's I2C0 is fixed
+ * to GP0 and GP1.
+ *
+ * The register values are binary-coded decimal, so an hour is read as
+ * `(high * 10) + low` rather than as the byte itself -- the mistake that makes
+ * a clock count 0x10 as sixteen.
+ */
+const PICO_CLOCK_SKETCH = `from machine import I2C
+import time
+
+bus = I2C(0)
+ADDR = 0x68
+
+def bcd(packed):
+    return (packed >> 4) * 10 + (packed & 15)
+
+def two(value):
+    if value < 10:
+        return '0' + str(value)
+    return str(value)
+
+def clock():
+    data = bus.readfrom_mem(ADDR, 0, 3)
+    return two(bcd(data[0])) + ':' + two(bcd(data[1])) + ':' + two(bcd(data[2]))
+
+print('clock online')
+
+while True:
+    print(clock())
+    time.sleep(1)
+`;
+
+/**
+ * The divider example, in MicroPython.
+ *
+ * `read_u16` is the one conversion every port agrees on: sixteen-bit counts,
+ * whatever width the board's own ADC has, so the same sketch reads a Pico and
+ * a Nano RP2040 without a scale factor per board. `int(...)` is the truncation
+ * because the VM has no floor-division operator to call on.
+ */
+const POTENTIOMETER_SKETCH = `from machine import ADC, Pin
+import time
+
+wiper = ADC(Pin(26))
+print('wiper online')
+
+while True:
+    raw = wiper.read_u16()
+    percent = int(raw * 100 / 65535)
+    print('wiper ' + str(percent) + '%')
+    time.sleep(0.5)
+`;
+
 const LCD_SKETCH = `#include <Arduino.h>
 #include <Wire.h>
 
@@ -267,6 +350,14 @@ export const I2C_CLOCK_EXAMPLE: Example = {
   name: 'I2C read',
   note: 'Reads a real-time clock register by register, the way the datasheet says to.',
   sketch: I2C_CLOCK_SKETCH,
+  sketches: { pico: PICO_CLOCK_SKETCH },
+};
+
+export const POTENTIOMETER_EXAMPLE: Example = {
+  id: 'potentiometer',
+  name: 'Potentiometer',
+  note: 'Reads a divider across the whole scale, so the number follows the knob.',
+  sketch: POTENTIOMETER_SKETCH,
 };
 
 export const LCD_EXAMPLE: Example = {
@@ -286,6 +377,7 @@ export const SERVO_EXAMPLE: Example = {
 export const EXAMPLES: readonly Example[] = [
   BLINK_EXAMPLE,
   I2C_CLOCK_EXAMPLE,
+  POTENTIOMETER_EXAMPLE,
   LCD_EXAMPLE,
   SERVO_EXAMPLE,
 ];

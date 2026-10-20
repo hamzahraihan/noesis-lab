@@ -9,7 +9,7 @@ import {
 } from './boardRegistry';
 
 import { Simulation } from '@/features/bench/simulations/simulation';
-import { BLINK_SKETCH, starterSketchFor } from './examples';
+import { starterSketchFor } from './examples';
 import { STARTER_CIRCUITS } from './benches';
 import type { PartInstance } from '@/features/simulation';
 import type { BoardPin } from '@/features/parts';
@@ -184,13 +184,16 @@ describe('board registry', () => {
        * and a dark state.
        */
       for (const board of BOARDS) {
-        const { simulation, led, pin } = starterDrivePin(board.id);
+        const { simulation, led } = starterDrivePin(board.id);
         const language = boardOption(board.id).language;
-        const probe =
-          language === 'python'
-            ? `from gpiozero import LED\nimport time\nled = LED(${pin.gpio})\nwhile True:\n    led.on()\n    time.sleep(0.5)\n    led.off()\n    time.sleep(0.5)\n`
-            : BLINK_SKETCH;
-        simulation.loadFirmware(probe, language);
+        /*
+         * The board's own starter sketch, not a probe written to suit this
+         * test. Substituting one hid a starter that could not run at all: the
+         * Pico's `machine` import was missing, and a gpiozero probe on the same
+         * bench blinked happily while the bench a learner opens was dead.
+         */
+        simulation.loadFirmware(starterSketchFor(board.id, language), language);
+        expect(simulation.firmwareError, `${board.name} starter`).toBeNull();
         simulation.start();
 
         const anodeKey = `${led.id}:anode`;

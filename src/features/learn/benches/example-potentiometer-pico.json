@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "raspberry-pi-pico",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "potentiometer-10000",
+      "x": 90,
+      "y": 40,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p2:endA",
+      "to": "p1:R_15",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p2:endB",
+      "to": "p1:L_2",
+      "colour": "#111111",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p2:wiper",
+      "to": "p1:R_10",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

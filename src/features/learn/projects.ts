@@ -62,7 +62,7 @@ export const PROJECTS: readonly BoardProject[] = [
     tagline: 'Modern 3.3 V practice with a 12-bit ADC.',
     why: '3.3 V logic and 12-bit conversion on a Nano-sized board. The analogue block silkscreens A0–A3 on the pins its ADC samples, which surprises anyone coming from an AVR.',
     youWillSee: [...STARTER_SEEN],
-    tryNext: ['blink', 'i2c-clock', 'character-lcd', 'servo'],
+    tryNext: ['potentiometer'],
   },
   {
     board: 'mega',
@@ -87,12 +87,12 @@ export const PROJECTS: readonly BoardProject[] = [
     board: 'pico',
     project: 'MicroPython blink on GP2',
     tagline: 'The RP2040 in its own 40-pin shape, driven from MicroPython.',
-    why: 'The same chip as the Nano RP2040 Connect, in the Pico footprint: 26 GPIO across two headers, 12-bit conversion on three ADC channels (GP26–28), and 3.3 V logic. The bench opens in MicroPython here, so the C++ examples stay closed and the Pi’s Python transfers.',
+    why: 'The same chip as the Nano RP2040 Connect, in the Pico footprint: 26 GPIO across two headers, 12-bit conversion on three ADC channels (GP26–28), and 3.3 V logic. The bench opens in MicroPython here, and the clock and divider examples ship MicroPython ports, so the examples are open to this board too.',
     youWillSee: [
       'The serial prints "pico online" once, then the loop runs',
       'The LED on GP2 blinks on and off twice a second',
     ],
-    tryNext: [],
+    tryNext: ['i2c-clock', 'potentiometer'],
   },
   {
     board: 'franzininho',

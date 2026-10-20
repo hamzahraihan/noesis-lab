@@ -2037,6 +2037,7 @@ export class Simulation {
         this.engine.settle();
         return this.engine.readAnalog(pin);
       },
+      adcFullScale: this.engine.adcFullScale,
       wire: {
         begin: () => this.i2c.begin(0, 0),
         beginTransmission: (address) => this.i2c.beginTransmission(address),
