@@ -19,6 +19,25 @@ export const SSD1306_PAGES = SSD1306_HEIGHT / 8;
 
 const FRAMEBUFFER_BYTES = SSD1306_WIDTH * SSD1306_PAGES;
 
+/**
+ * The panel's memory, as it travels between a worker and a page: one byte
+ * per column per page.
+ *
+ * The packed form is the panel's own, so it is a sixteenth of the picture a
+ * page would draw and it needs no unpacking to be stored.
+ */
+export const SSD1306_FRAME_BYTES = FRAMEBUFFER_BYTES;
+
+/**
+ * The flags a frame travels with, in one byte.
+ *
+ * A panel shows more than its pixels: whether the glass is lit, and whether
+ * the image is mirrored. Both are what the panel shows, and a page that had
+ * only the pixels would draw a lit panel dark.
+ */
+export const SSD1306_FLAG_LIT = 1;
+export const SSD1306_FLAG_MIRRORED = 2;
+
 const ADDRESSING_VERTICAL = 0x01;
 const ADDRESSING_PAGE = 0x02;
 
@@ -190,6 +209,31 @@ export class Ssd1306 {
       }
     }
     return pixels;
+  }
+
+  /**
+   * The panel's own memory, as the controller holds it: one byte per column
+   * per page, which is how the panel is really wired and eight times smaller
+   * than the picture a page would draw.
+   *
+   * A copy, so a caller cannot reach into the panel's memory behind its back.
+   */
+  frame(): Uint8Array {
+    return this.framebuffer.slice();
+  }
+
+  /**
+   * Puts a frame back into the panel, as a page does when the worker hands it
+   * the panel it drew.
+   *
+   * The state that is not pixels travels with it: whether the glass is lit,
+   * and whether the image is mirrored. Both are what the panel shows, and a
+   * page that had only the pixels would draw a lit panel dark.
+   */
+  loadFrame(frame: Uint8Array, state: { lit?: boolean; mirrored?: boolean } = {}): void {
+    this.framebuffer.set(frame.subarray(0, FRAMEBUFFER_BYTES));
+    if (state.lit !== undefined) this.displayOn = state.lit;
+    if (state.mirrored !== undefined) this.segmentRemap = state.mirrored;
   }
 
   /** Wipes the framebuffer, as the Adafruit library's clear() does. */
