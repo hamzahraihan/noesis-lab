@@ -514,9 +514,19 @@ class PythonParser {
     this.expectPunctuation('(');
 
     const parameters: { name: string; type: string; defaultValue?: Expr }[] = [];
+    let varargs: string | null = null;
     if (!this.atPunctuation(')')) {
       do {
-        if (this.acceptPunctuation('*')) this.next();
+        if (this.acceptPunctuation('*')) {
+          /*
+           * `*args`: the arguments the caller passed beyond the named ones,
+           * collected into a list. A helper that forwards a buffer of bytes
+           * is written this way.
+           */
+          varargs = this.expectIdentifier().text;
+          parameters.push({ name: varargs, type: '' });
+          continue;
+        }
         const parameter = this.expectIdentifier().text;
         // A default is kept: an argument the caller leaves out takes it, and a
         // keyword argument of the same name takes its place.
@@ -528,7 +538,14 @@ class PythonParser {
     this.expectPunctuation(')');
     this.expectPunctuation(':');
 
-    return { name, returnType: '', parameters, body: this.readSuite(location), location };
+    return {
+      name,
+      returnType: '',
+      parameters,
+      ...(varargs ? { varargs } : {}),
+      body: this.readSuite(location),
+      location,
+    };
   }
 
   /** Skips an import whole. The VM binds its own runtime names. */
@@ -542,6 +559,8 @@ class PythonParser {
     if (this.atKeyword('if')) return this.readIf();
     if (this.atKeyword('while')) return this.readWhile();
     if (this.atKeyword('for')) return this.readFor();
+    if (this.atKeyword('try')) return this.readTry();
+    if (this.atKeyword('raise')) return this.readRaise();
     if (this.atKeyword('return')) {
       this.next();
       const value = this.at('newline') ? null : this.readExpression();
@@ -609,6 +628,71 @@ class PythonParser {
     const condition = this.readExpression();
     this.expectPunctuation(':');
     return { kind: 'while', condition, body: this.readSuite(location), location };
+  }
+
+  /**
+   * `try:` with its `except` handlers, an optional `else` and an optional
+   * `finally`.
+   *
+   * The clauses come in the order Python allows them: the handlers first,
+   * then `else`, then `finally`. A handler with no type catches everything,
+   * and a handler may name several types in brackets, which is how a sketch
+   * guards a read that can fail two ways.
+   */
+  private readTry(): Stmt {
+    const location = this.expectKeyword('try').location;
+    this.expectPunctuation(':');
+    const body = this.readSuite(location);
+    const handlers: { types: string[]; name: string | null; body: Stmt }[] = [];
+    let otherwise: Stmt | null = null;
+    let final: Stmt | null = null;
+
+    for (;;) {
+      if (this.atKeyword('except')) {
+        this.next();
+        const types: string[] = [];
+        let name: string | null = null;
+        if (this.atPunctuation('(')) {
+          this.next();
+          do {
+            types.push(this.expectIdentifier().text);
+          } while (this.acceptPunctuation(','));
+          this.expectPunctuation(')');
+        } else if (!this.atPunctuation(':')) {
+          types.push(this.expectIdentifier().text);
+        }
+        if (this.atKeyword('as')) {
+          this.next();
+          name = this.expectIdentifier().text;
+        }
+        this.expectPunctuation(':');
+        handlers.push({ types, name, body: this.readSuite(location) });
+        continue;
+      }
+      if (this.atKeyword('else')) {
+        this.next();
+        this.expectPunctuation(':');
+        otherwise = this.readSuite(location);
+        continue;
+      }
+      if (this.atKeyword('finally')) {
+        this.next();
+        this.expectPunctuation(':');
+        final = this.readSuite(location);
+        continue;
+      }
+      break;
+    }
+
+    return { kind: 'try', body, handlers, otherwise, final, location };
+  }
+
+  /** `raise`, with or without a value. */
+  private readRaise(): Stmt {
+    const location = this.expectKeyword('raise').location;
+    const error = this.at('newline') || this.at('eof') ? null : this.readExpression();
+    this.endStatement();
+    return { kind: 'raise', error, location };
   }
 
   /**
@@ -720,11 +804,27 @@ class PythonParser {
     if (bounds.length === 0 || bounds.length > 3) {
       throw new FirmwareSyntaxError('range() takes one to three arguments', location, this.file);
     }
-    const [start, stop, step] = bounds;
+    /*
+     * Python's three spellings: `range(stop)`, `range(start, stop)` and
+     * `range(start, stop, step)`.
+     *
+     * Reading the first bound as the start made `range(4)` count from four
+     * to nothing, so the loop never ran at all -- a sketch's most ordinary
+     * loop did nothing, silently. The VM's own `range` value has always read
+     * the one-argument form as a stop, and this is the same reading.
+     */
+    const first = bounds[0] as Expr;
+    if (bounds.length === 1) {
+      return {
+        start: { kind: 'number', value: 0, location },
+        stop: first,
+        step: { kind: 'number', value: 1, location },
+      };
+    }
     return {
-      start: start ?? { kind: 'number', value: 0, location },
-      stop: stop ?? { kind: 'number', value: 0, location },
-      step: step ?? { kind: 'number', value: 1, location },
+      start: first,
+      stop: bounds[1] ?? { kind: 'number', value: 0, location },
+      step: bounds[2] ?? { kind: 'number', value: 1, location },
     };
   }
 
