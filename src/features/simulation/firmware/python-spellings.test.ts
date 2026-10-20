@@ -310,3 +310,91 @@ describe('a guarded block', () => {
     expect(serial).toContain('else');
   });
 });
+
+/**
+ * A generator.
+ *
+ * A function that yields hands its values over one at a time, which is what
+ * lets a sketch write `while True: yield sensor.read()` without the bench
+ * running out of values to wait for.
+ */
+describe('a generator', () => {
+  it('hands its values over one at a time', () => {
+    const { serial } = run(
+      [
+        'def counter():',
+        '    yield 1',
+        '    yield 2',
+        '    yield 3',
+        '',
+        'total = 0',
+        'for value in counter():',
+        '    total = total + value',
+        'print(total)',
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('6');
+  });
+
+  it('runs nothing until the first value is asked for', () => {
+    const { serial } = run(
+      ['def counter():', "    print('started')", '    yield 1', '', "g = counter()", "print('made')"].join(
+        '\n',
+      ),
+    );
+
+    // The body has not run: making the generator is not running it.
+    expect(serial).toContain('made');
+    expect(serial).not.toContain('started');
+  });
+
+  it('is lazy, so a generator that never ends does not hang the bench', () => {
+    const { serial } = run(
+      [
+        'def readings():',
+        '    i = 0',
+        '    while True:',
+        '        yield i',
+        '        i = i + 1',
+        '',
+        'count = 0',
+        'for value in readings():',
+        '    count = count + 1',
+        '    if count > 3:',
+        '        break',
+        'print(count)',
+      ].join('\n'),
+    );
+
+    expect(serial).toContain('4');
+  });
+
+  it('iterates a list the way Python does', () => {
+    const { serial } = run(
+      ['total = 0', 'for value in [1, 2, 3]:', '    total = total + value', 'print(total)'].join(
+        '\n',
+      ),
+    );
+
+    expect(serial).toContain('6');
+  });
+
+  it('refuses a yield outside a function', () => {
+    const target = host();
+    const runner = new FirmwareRunner('yield 1\n', target.services, 'python');
+
+    expect(() => runner.step()).toThrow(/yield outside a function/);
+  });
+
+  it('says so when the thing being walked cannot be walked', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      ['for value in 7:', '    print(value)'].join('\n'),
+      target.services,
+      'python',
+    );
+
+    expect(() => runner.step()).toThrow(/not iterable/);
+  });
+});
