@@ -346,6 +346,19 @@ export type Expr =
     }
   /** A list of values, `[1, 2, 3]`; the bytes literal is the same shape. */
   | { kind: 'list'; items: Expr[]; location: SourceLocation }
+  /**
+   * A list comprehension: `[element for name in iterable]`.
+   *
+   * The element is evaluated once per item, with the name bound to it, and
+   * the list is what those came to.
+   */
+  | {
+      kind: 'comprehension';
+      element: Expr;
+      variable: string;
+      iterable: Expr;
+      location: SourceLocation;
+    }
   | { kind: 'index'; target: Expr; index: Expr; location: SourceLocation }
   | { kind: 'member'; target: Expr; member: string; location: SourceLocation };
 
