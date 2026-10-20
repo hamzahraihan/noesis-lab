@@ -67,8 +67,10 @@ import {
   type FirmwareLanguage,
   type FirmwareProject,
   type FirmwareServices,
+  type I2cBusPins,
+  type WirePort,
 } from '@/features/simulation';
-import { FirmwareSyntaxError } from '@/features/simulation';
+import { FirmwareSyntaxError, describeFirmwareError } from '@/features/simulation';
 import { validateLibraries, libraryDeclarations, projectSlots } from '@/features/simulation';
 import type { KnobSpec, PartDefinition, Rotation } from '@/features/parts';
 import { nextAutomaticWireColour } from '../wiring/wire-colours';
@@ -1612,7 +1614,19 @@ export class Simulation {
       }
 
       if (!this.runner || this.runner.done) break;
-      const requested = this.runner.step();
+      let requested: number | null;
+      try {
+        requested = this.runner.step();
+      } catch (error) {
+        /*
+         * A sketch that raised an error it did not catch stops here, and the
+         * reason is said out loud. Letting the error out of the frame would
+         * take the whole page with it.
+         */
+        this.firmwareError = describeFirmwareError(error);
+        this.runner = null;
+        break;
+      }
       if (requested === null) break;
       this.pendingDelayMs = requested;
       // One settle per step, not per pin write: a display refresh alone is a
@@ -1664,6 +1678,47 @@ export class Simulation {
     (address, byte, isControl) => this.engine.writeI2C(address, byte, isControl),
     (address, count) => this.engine.requestI2C(address, count),
   );
+
+  /**
+   * The bus on a named pair of pins.
+   *
+   * A sketch that names a pair gets the bus on those pins, so a device wired
+   * to another pair does not answer: the same silence a wire to the wrong hole
+   * gives.
+   */
+  private pinnedI2c(pins: I2cBusPins): I2CBus {
+    return new I2CBus(
+      (address, byte, isControl) => this.engine.writeI2C(address, byte, isControl, pins),
+      (address, count) => this.engine.requestI2C(address, count, pins),
+    );
+  }
+
+  /**
+   * The firmware's view of an I2C bus: the bench's bus, timed and logged.
+   */
+  private i2cPort(bus: I2CBus): WirePort {
+    return {
+      begin: () => bus.begin(0, 0),
+      beginTransmission: (address) => bus.beginTransmission(address),
+      write: (value) => bus.write(value),
+      requestFrom: (address, count) => bus.requestFrom(address, count),
+      read: () => bus.read(),
+      available: () => bus.available(),
+      endTransmission: () => {
+        const transfer = bus.endTransmission();
+        this.busLog.record({
+          timeMs: this.engine.timeMs,
+          bus: 'i2c',
+          address: transfer.address,
+          bytes: transfer.bytes,
+          acknowledged: transfer.acknowledged,
+          micros: transfer.micros,
+        });
+        this.engine.settle();
+        return transfer.micros;
+      },
+    };
+  }
 
   rebuild(): void {
     this.engine.rebuild(this.builder.build(), this.controls);
@@ -2045,27 +2100,14 @@ export class Simulation {
         return this.engine.readAnalog(pin);
       },
       adcFullScale: this.engine.adcFullScale,
-      wire: {
-        begin: () => this.i2c.begin(0, 0),
-        beginTransmission: (address) => this.i2c.beginTransmission(address),
-        write: (value) => this.i2c.write(value),
-        requestFrom: (address, count) => this.i2c.requestFrom(address, count),
-        read: () => this.i2c.read(),
-        available: () => this.i2c.available(),
-        endTransmission: () => {
-          const transfer = this.i2c.endTransmission();
-          this.busLog.record({
-            timeMs: this.engine.timeMs,
-            bus: 'i2c',
-            address: transfer.address,
-            bytes: transfer.bytes,
-            acknowledged: transfer.acknowledged,
-            micros: transfer.micros,
-          });
-          this.engine.settle();
-          return transfer.micros;
-        },
-      },
+      wire: this.i2cPort(this.i2c),
+      // The bus on the pins a sketch named, for a sketch that named them: a
+      // device wired elsewhere is not on it, and does not answer.
+      wireOnPins: (pins) => this.i2cPort(this.pinnedI2c(pins)),
+      // Whether anything on the bench answers at this address: a MicroPython
+      // sketch that reads a device nobody wired is told so, the way a
+      // controller that was not acknowledged tells it.
+      i2cHasDevice: (address, pins) => this.engine.hasI2cDevice(address, pins),
       spi: {
         begin: () => this.spi.begin(),
         transfer: (value, dataSelect) => this.spi.transfer(value, dataSelect),
