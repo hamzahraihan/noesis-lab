@@ -1,0 +1,146 @@
+diff --git a/wasm/src/lib.rs b/wasm/src/lib.rs
+index f008b59..b885e0d 100644
+--- a/wasm/src/lib.rs
++++ b/wasm/src/lib.rs
+@@ -65,6 +65,27 @@ unsafe fn host_i2c_read(_address: u32) -> u32 { 0xff }
+ #[cfg(not(target_arch = "wasm32"))]
+ unsafe fn host_i2c_stop(_address: u32) {}
+ 
++// --- Host seam: the classic ESP32's SPI bus, for a bench that wires the chip ---
++//
++// The classic SPI master shifts bytes out on MOSI and reads MISO back: a
++// transaction is the bytes the controller shifted, not a waveform on the
++// pins. A bench's devices live in the host, so these three imports are the
++// seam -- the host tells the controller what a device would have answered.
++
++#[cfg(target_arch = "wasm32")]
++#[link(wasm_import_module = "env")]
++extern "C" {
++    fn host_spi_begin(host: u32);
++    fn host_spi_byte(host: u32, byte: u32, flags: u32) -> u32;
++    fn host_spi_end(host: u32);
++}
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_spi_begin(_host: u32) {}
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_spi_byte(_host: u32, _byte: u32, _flags: u32) -> u32 { 0 }
++#[cfg(not(target_arch = "wasm32"))]
++unsafe fn host_spi_end(_host: u32) {}
++
+ pub struct Emu {
+     m: MachineKind,
+     /// the last drained outbox: (1 text | 2 binary, payload), addressed by index from JS
+@@ -256,6 +277,97 @@ pub unsafe extern "C" fn esp32sim_i2c_attach_host(e: *mut Emu, bus: u32) -> u32
+     }
+ }
+ 
++/// A board whose SPI bus is the host's.
++///
++/// The classic SPI master is a transaction-level model: the controller hands
++/// the board the bytes it shifted out and takes back the bytes it read on
++/// MISO. A bench's devices live in the host, so this board hands the bytes
++/// over and takes the answer back.
++///
++/// The chip drives the bench's data/command and chip-select lines as
++/// ordinary GPIOs, and the host needs their level for every byte, so this
++/// board watches them: a display tells a command from pixel data by the D/C
++/// line, and a display that is not selected has to be told so.
++struct HostSpi {
++    /// The SPI host the bench's bus sits on: 2 is HSPI, 3 is VSPI.
++    host: u8,
++    /// The chip's GPIO that carries the D/C line.
++    data_select: u8,
++    /// The chip's GPIO that carries the chip-select line.
++    chip_select: u8,
++    /// The D/C line's level: true means the bytes are data, not commands.
++    data: bool,
++    /// The chip-select line's level: true means the device is not selected.
++    released: bool,
++}
++
++impl esp_soc::board::BoardModel for HostSpi {
++    fn name(&self) -> &'static str { "esp32dev" }
++
++    fn gpio_changes(&mut self, changes: &[(u8, bool)]) {
++        for (pin, level) in changes {
++            if *pin == self.data_select { self.data = *level; }
++            else if *pin == self.chip_select { self.released = *level; }
++        }
++    }
++
++    fn spi_transfer(&mut self, host: u8, tx: &[u8], rx_len: usize) -> Vec<u8> {
++        if host != self.host {
++            // Another bus: nothing of the host's is on it.
++            return vec![0xff; rx_len];
++        }
++        // SAFETY: the imports are plain calls into the host's function table.
++        unsafe { host_spi_begin(host as u32) };
++        let mut rx = Vec::with_capacity(rx_len);
++        for &byte in tx {
++            // Bit 0: the D/C line is high, so the byte is data. Bit 1: the
++            // chip-select line is low, so the device is selected.
++            let flags = u32::from(self.data) | (u32::from(!self.released) << 1);
++            let miso = unsafe { host_spi_byte(host as u32, byte as u32, flags) } as u8;
++            rx.push(miso);
++        }
++        unsafe { host_spi_end(host as u32) };
++        // A read with nothing to shift out reads an idle line.
++        while rx.len() < rx_len { rx.push(0xff); }
++        rx.truncate(rx_len);
++        rx
++    }
++}
++
++/// Attach the host's SPI bus to the classic ESP32's SPI master.
++///
++/// The bench's devices are the host's, so the master needs somewhere to shift
++/// its bytes. `host` is the SPI host the bus sits on (2 is HSPI, 3 is VSPI),
++/// `data_select` and `chip_select` are the chip's GPIOs carrying the D/C and
++/// chip-select lines. Returns 0 on success, 1 when the chip is not a classic
++/// ESP32.
++#[no_mangle]
++pub unsafe extern "C" fn esp32sim_spi_attach_host(
++    e: *mut Emu,
++    host: u32,
++    data_select: u32,
++    chip_select: u32,
++) -> u32 {
++    let e = unsafe { &mut *e };
++    match &mut e.m {
++        machine::MachineKind::Esp32(m) => {
++            m.bus.board = Box::new(HostSpi {
++                host: host as u8,
++                data_select: data_select as u8,
++                chip_select: chip_select as u8,
++                data: false,
++                released: true,
++            });
++            // The classic chip's board model has no pin transport, so the
++            // bus was built with the board's GPIO reporting off. This board
++            // watches two pins, so the bus has to report them.
++            m.bus.attach_board_devices();
++            0
++        }
++        _ => 1,
++    }
++}
++
+ /// Destroy an emulator returned by `esp32sim_new`. A null pointer is ignored.
+ ///
+ /// # Safety
+diff --git a/web/wasm/worker.js b/web/wasm/worker.js
+index 768f0b8..280ee6c 100644
+--- a/web/wasm/worker.js
++++ b/web/wasm/worker.js
+@@ -20,8 +20,10 @@ let experiments = [], setupError = null, smoothDisplay = false;
+ let frameAck = false, framesInFlight = 0, pendingFrame = null;
+ // The page has no I2C devices of its own, so the bus seam answers "nobody is
+ // there": a transaction is not acknowledged and a read comes back as 0xff.
++// The SPI seam has no devices either: nothing is selected, and MISO is idle.
+ const imports = { env: { ...blockJit.imports, host_log: (p, n) => postMessage({ log: dec.decode(mem().subarray(p, p + n)) }),
+-  host_i2c_start: () => 0, host_i2c_write: () => 0, host_i2c_read: () => 0xff, host_i2c_stop: () => {} } };
++  host_i2c_start: () => 0, host_i2c_write: () => 0, host_i2c_read: () => 0xff, host_i2c_stop: () => {},
++  host_spi_begin: () => {}, host_spi_byte: () => 0xff, host_spi_end: () => {} } };
+ 
+ function drain() {
+   const n = wasm.esp32sim_out_take(emu);
