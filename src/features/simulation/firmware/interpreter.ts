@@ -165,7 +165,35 @@ export type Value =
   | DictValue
   | DateTimeValue
   | TimeSpanValue
-  | RtcHandle;
+  | RtcHandle
+  | GeneratorValue
+  | Yielded;
+
+/**
+ * A generator: a function that hands its values over one at a time.
+ *
+ * The body is a generator of its own, so nothing runs until the first value
+ * is asked for -- the whole point of a generator, and the reason a sketch can
+ * write `while True: yield sensor.read()` without taking the bench with it.
+ */
+export class GeneratorValue {
+  readonly generator: Generator<Produced, Flow, void>;
+
+  constructor(generator: Generator<Produced, Flow, void>) {
+    this.generator = generator;
+  }
+}
+
+/**
+ * A value a generator hands over, wrapped so a wait and a value differ.
+ *
+ * The VM's driver is handed a number of milliseconds to wait; a generator
+ * hands over a value. Wrapping the value keeps the two apart without
+ * guessing from the number.
+ */
+export interface Yielded {
+  readonly yielded: Value;
+}
 
 /**
  * A dictionary: the keys are the program's own strings, the values anything a
@@ -284,7 +312,15 @@ const SEVSEG_GLYPHS: Readonly<Record<string, number>> = {
 
 /** Yields the milliseconds a blocking call wants to wait. */
 export type DelayRequest = number;
-export type Evaluator = Generator<DelayRequest, Value, void>;
+
+/**
+ * What a running program hands back to its driver.
+ *
+ * A wait is a number of milliseconds; a value a generator yields is wrapped.
+ */
+export type Produced = DelayRequest | Yielded;
+
+export type Evaluator = Generator<Produced, Value, void>;
 
 export interface FirmwareServices {
   nowMs(): number;
@@ -714,13 +750,32 @@ export const LEVEL_LOW = 0;
 export const LEVEL_HIGH = 1;
 
 /** Signals a non-local exit from a statement. */
-type Flow =
+export type Flow =
   | { kind: 'normal' }
   | { kind: 'break' }
   | { kind: 'continue' }
   | { kind: 'return'; value: Value };
 
 const NORMAL: Flow = { kind: 'normal' };
+
+/**
+ * Whether a statement tree yields somewhere.
+ *
+ * A walk over the tree rather than a list of the kinds that can hold one: a
+ * yield can sit in an expression inside any of them, and a list would be a
+ * list to keep in step with the grammar.
+ */
+function containsYield(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some(containsYield);
+  if (node === null || typeof node !== 'object') return false;
+  const record = node as Record<string, unknown>;
+  if (record.kind === 'yield') return true;
+  for (const key of Object.keys(record)) {
+    if (key === 'location') continue;
+    if (containsYield(record[key])) return true;
+  }
+  return false;
+}
 
 class Scope {
   readonly values = new Map<string, Value>();
@@ -844,7 +899,13 @@ function formatValue(value: Value): string {
     );
     return `{${entries.join(', ')}}`;
   }
-  if (typeof value === 'object') return formatObjectValue(value);
+  // A generator prints as what it is; a value on its way out of one prints
+  // as the value it carries.
+  if (typeof value === 'object') {
+    if ('yielded' in value) return formatValue(value.yielded);
+    if (value instanceof GeneratorValue) return '<generator>';
+    return formatObjectValue(value);
+  }
   return formatPrintValue(asNumber(value));
 }
 
@@ -1001,6 +1062,15 @@ export class FirmwareRuntime {
    */
   private currentSelfName: string | null = null;
   /**
+   * Which functions are generators, cached per declaration.
+   *
+   * A function that yields is a generator: calling it hands back a generator
+   * rather than a value, and its body does not run until the first value is
+   * asked for. The answer is cached because a sketch may call such a
+   * function once a second for a whole session.
+   */
+  private generators!: WeakMap<FunctionDecl, boolean>;
+  /**
    * Macro names currently being expanded, against self-reference: a define
    * that names itself (`#define X X + 1`) answers zero rather than recursing
    * forever. Saved per runtime, not per call, because expansion nests through
@@ -1048,6 +1118,10 @@ export class FirmwareRuntime {
     this.defines = new Map(program.defines);
     this.macros = new Map(program.macros);
     this.macroResolving = [];
+    // Set here rather than by a field initializer: the merged-project path
+    // builds the runtime without its constructor, so a field initializer
+    // would never run.
+    this.generators = new WeakMap();
     this.tones = new Map();
     this.sevseg = new Map();
     this.rtcNowCache = null;
@@ -1342,7 +1416,7 @@ export class FirmwareRuntime {
   }
 
   /** Runs `setup()` once, then `loop()` forever. Yields each blocking wait. */
-  *main(services: FirmwareServices): Generator<DelayRequest, void, void> {
+  *main(services: FirmwareServices): Generator<Produced, void, void> {
     /*
      * The `A0`..`A5` constants belong to the board, not to the Uno: an ESP32
      * names its analog pins by the GPIO behind them and a Mega numbers them
@@ -1386,7 +1460,7 @@ export class FirmwareRuntime {
     parent: Scope,
     services: FirmwareServices,
     keywords: readonly { name: string; value: Value }[] = [],
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     /*
      * `len` needs the scope to find what it is measuring, so it cannot live
      * with the other pure arithmetic builtins.
@@ -1430,6 +1504,37 @@ export class FirmwareRuntime {
     }
 
     const scope = new Scope(parent);
+    this.bindCallArguments(scope, declaration, args, keywords);
+    if (this.isGenerator(declaration)) {
+      /*
+       * A generator hands its values over one at a time, so the call builds
+       * the body without running it: the first value is asked for when the
+       * loop asks, and nothing at all happens until then.
+       */
+      return new GeneratorValue(this.execute(declaration.body, scope, services));
+    }
+
+    const flow = yield* this.execute(declaration.body, scope, services);
+    return flow.kind === 'return' ? flow.value : 0;
+  }
+
+  /**
+   * Binds a call's arguments to a function's parameters.
+   *
+   * The named parameters take the arguments by position, a parameter the
+   * caller left out takes its default, a `*args` parameter takes what is
+   * left, and a keyword argument binds the parameter of that name wherever
+   * the argument sits. A name the function does not have is left alone: the
+   * built-ins take what they know and ignore the rest, and a sketch that
+   * spells a call the way its documentation does should not stop at the
+   * spelling.
+   */
+  private bindCallArguments(
+    scope: Scope,
+    declaration: FunctionDecl,
+    args: Value[],
+    keywords: readonly { name: string; value: Value }[],
+  ): void {
     const varargs = declaration.varargs;
     declaration.parameters.forEach((parameter, index) => {
       // The `*args` parameter is bound below, to the arguments the named
@@ -1451,23 +1556,20 @@ export class FirmwareRuntime {
       const named = declaration.parameters.filter((parameter) => parameter.name !== varargs).length;
       scope.values.set(varargs, args.slice(named));
     }
-    /*
-     * A keyword argument binds the parameter of that name, wherever the
-     * argument sits. A name the function does not have is left alone: the
-     * built-ins take what they know and ignore the rest, and a sketch that
-     * spells a call the way its documentation does should not stop at the
-     * spelling.
-     */
     for (const keyword of keywords) {
       if (declaration.parameters.some((parameter) => parameter.name === keyword.name)) {
         scope.values.set(keyword.name, keyword.value);
       }
     }
+  }
 
-    const flow = yield* this.execute(declaration.body, scope, services);
-    // The body's `return` carries the value out; falling off the end, as C
-    // does, yields whatever the last expression left behind.
-    return flow.kind === 'return' ? flow.value : 0;
+  /** Whether a function yields, and is therefore a generator. */
+  private isGenerator(declaration: FunctionDecl): boolean {
+    const cached = this.generators.get(declaration);
+    if (cached !== undefined) return cached;
+    const found = containsYield(declaration.body);
+    this.generators.set(declaration, found);
+    return found;
   }
 
   /**
@@ -1527,7 +1629,7 @@ export class FirmwareRuntime {
     name: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, void, void> {
+  ): Generator<Produced, void, void> {
     const instance = new Instance(className, this.globals);
     const declaration = this.classes.get(className);
     for (const field of declaration?.fields ?? []) {
@@ -1592,7 +1694,7 @@ export class FirmwareRuntime {
     declaration: FunctionDecl,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, void, void> {
+  ): Generator<Produced, void, void> {
     let index = 0;
     /*
      * A Python method's first parameter is the object itself, and the caller
@@ -1634,7 +1736,7 @@ export class FirmwareRuntime {
     declaration: FunctionDecl,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     const frame = new Scope(instance.scope);
     yield* this.bindMethodParameters(frame, instance, declaration, args, services);
     /*
@@ -1668,7 +1770,7 @@ export class FirmwareRuntime {
     method: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     /*
      * A global RTC (`RTC_DS1307 rtc; rtc.now()`): the class is never declared
      * in a tab -- the library owns it -- so the handle answers directly
@@ -1820,7 +1922,7 @@ export class FirmwareRuntime {
     expression: Expr,
     scope: Scope,
     services: FirmwareServices,
-  ): Generator<DelayRequest, boolean, void> {
+  ): Generator<Produced, boolean, void> {
     if (expression.kind !== 'call' || expression.callee.kind !== 'identifier') return false;
     const className = expression.callee.name;
     if (!this.classes.has(className)) return false;
@@ -1837,7 +1939,7 @@ export class FirmwareRuntime {
     name: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     switch (name) {
       /*
        * Python's `print`, which is where a Pi program writes. It goes to the
@@ -1978,7 +2080,7 @@ export class FirmwareRuntime {
     statement: Stmt,
     scope: Scope,
     services: FirmwareServices,
-  ): Generator<DelayRequest, Flow, void> {
+  ): Generator<Produced, Flow, void> {
     switch (statement.kind) {
       case 'empty':
         return NORMAL;
@@ -2114,6 +2216,63 @@ export class FirmwareRuntime {
           if (statement.update) yield* this.evaluate(statement.update, loopScope, services);
         }
         return NORMAL;
+      }
+
+      /*
+       * A loop over anything iterable: a list, a dictionary's keys, or a
+       * generator.
+       *
+       * A generator hands its values over one at a time, so the loop asks for
+       * one, runs the body, and asks for the next -- which is what lets a
+       * sketch write `while True: yield sensor.read()` without the bench
+       * ever running out of values to wait for. A wait inside the generator
+       * is the bench's own time to spend, so it is handed on rather than
+       * swallowed.
+       *
+       * The body is not a scope of its own -- Python's indentation does not
+       * open one -- so a name the body binds is a name the program can still
+       * see.
+       */
+      case 'forEach': {
+        const iterable = (yield* this.evaluate(statement.iterable, scope, services)) as Value;
+        if (iterable instanceof GeneratorValue) {
+          for (;;) {
+            const step = iterable.generator.next();
+            if (step.done) break;
+            const produced = step.value;
+            if (typeof produced === 'number') {
+              yield produced;
+              continue;
+            }
+            scope.values.set(statement.variable, produced.yielded);
+            const flow = yield* this.execute(statement.body, scope, services);
+            if (flow.kind === 'break') break;
+            if (flow.kind === 'return') return flow;
+          }
+          return NORMAL;
+        }
+        if (Array.isArray(iterable)) {
+          for (const item of iterable) {
+            scope.values.set(statement.variable, item);
+            const flow = yield* this.execute(statement.body, scope, services);
+            if (flow.kind === 'break') break;
+            if (flow.kind === 'return') return flow;
+          }
+          return NORMAL;
+        }
+        // A dictionary iterates its keys, the way Python does.
+        if (iterable instanceof Map) {
+          for (const key of iterable.keys()) {
+            scope.values.set(statement.variable, key);
+            const flow = yield* this.execute(statement.body, scope, services);
+            if (flow.kind === 'break') break;
+            if (flow.kind === 'return') return flow;
+          }
+          return NORMAL;
+        }
+        // Something that cannot be walked is said so: a loop that quietly
+        // did nothing is worse than one that stopped with a reason.
+        throw new PythonError('TypeError', `${formatValue(iterable)} is not iterable`);
       }
 
       case 'break':
@@ -2290,7 +2449,7 @@ export class FirmwareRuntime {
     expression: Expr,
     scope: Scope,
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     switch (expression.kind) {
       case 'number':
         return expression.value;
@@ -2300,6 +2459,22 @@ export class FirmwareRuntime {
 
       case 'boolean':
         return expression.value ? 1 : 0;
+
+      /*
+       * The value a generator hands over.
+       *
+       * It goes *up* to whoever is iterating the generator, which is what
+       * stops the body where it is: the wait the driver is handed is a
+       * number of milliseconds, and a generator hands over a value. The wrap
+       * keeps the two apart.
+       */
+      case 'yield': {
+        const value = expression.value
+          ? ((yield* this.evaluate(expression.value, scope, services)) as Value)
+          : 0;
+        yield { yielded: value };
+        return 0;
+      }
 
       case 'list': {
         /*
@@ -2773,7 +2948,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     /*
      * `machine.ADC` answers in sixteen-bit counts on every port, while the
      * host's `analogRead` answers in the board's own (ten or twelve bits).
@@ -3012,7 +3187,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     const wire = services.wire;
 
     switch (member) {
@@ -3347,7 +3522,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     const wire = services.wire;
 
     switch (member) {
@@ -3390,7 +3565,7 @@ export class FirmwareRuntime {
     services: FirmwareServices,
     port?: WirePort,
     pins?: I2cBusPins,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     const wire = port ?? services.wire;
     /*
      * A buffer is an array, and a single byte is accepted where a one-byte
@@ -3659,7 +3834,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<DelayRequest, Value, void> {
+  ): Generator<Produced, Value, void> {
     const spi = services.spi;
 
     switch (member) {
@@ -3851,7 +4026,7 @@ export class FirmwareRunner {
   readonly runtime: FirmwareRuntime;
   readonly output: string[] = [];
 
-  private readonly generator: Generator<DelayRequest, void, void>;
+  private readonly generator: Generator<Produced, void, void>;
   private finished = false;
   constructor(
     source: string | FirmwareProject,
@@ -3892,7 +4067,13 @@ export class FirmwareRunner {
       this.finished = true;
       return null;
     }
-    return result.value > 0 ? result.value : NON_BLOCKING_QUANTUM_MS;
+    const produced = result.value;
+    if (typeof produced !== 'number') {
+      // A value yielded outside a generator: the sketch asked for something
+      // that has no meaning outside one, and saying so beats swallowing it.
+      throw new PythonError('SyntaxError', 'yield outside a function');
+    }
+    return produced > 0 ? produced : NON_BLOCKING_QUANTUM_MS;
   }
 
   /** Stops the program at the next opportunity to block. */
