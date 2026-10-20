@@ -592,6 +592,9 @@ class PythonParser {
       );
     }
     if (token.kind === 'keyword') {
+      // A `yield` is an expression, so it is read as one: whether it means
+      // anything is the VM's business, not the parser's.
+      if (token.text === 'yield') return this.readSimpleStatement();
       throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
     }
     return this.readSimpleStatement();
@@ -707,6 +710,17 @@ class PythonParser {
     const location = this.expectKeyword('for').location;
     const name = this.expectIdentifier().text;
     this.expectKeyword('in');
+    /*
+     * A range is a counter loop the VM already has, so it keeps that shape.
+     * Anything else -- a list, a generator -- is iterated by the loop that
+     * asks for one item at a time.
+     */
+    const callee = this.peek();
+    if (callee.kind !== 'identifier' || callee.text !== 'range') {
+      const iterable = this.readExpression();
+      this.expectPunctuation(':');
+      return { kind: 'forEach', variable: name, iterable, body: this.readSuite(location), location };
+    }
     const bounds = this.readRangeBounds(location);
     this.expectPunctuation(':');
 
@@ -1034,8 +1048,21 @@ class PythonParser {
         location: token.location,
       };
     }
-    if (token.kind === 'keyword' && (token.text === 'lambda' || token.text === 'yield')) {
+    if (token.kind === 'keyword' && token.text === 'lambda') {
       throw new FirmwareSyntaxError(`'${token.text}' is not supported`, token.location, this.file);
+    }
+    /*
+     * `yield`: the value a generator hands over. A bare `yield` hands over
+     * nothing, and the value after it is the whole of the rest of the
+     * expression -- so `yield a + b` hands over the sum, not the `a`.
+     */
+    if (token.kind === 'keyword' && token.text === 'yield') {
+      this.next();
+      const value =
+        this.at('newline') || this.at('eof') || this.atPunctuation(')') || this.atPunctuation('}')
+          ? null
+          : this.readExpression();
+      return { kind: 'yield', value, location: token.location };
     }
     return this.readPostfix();
   }
