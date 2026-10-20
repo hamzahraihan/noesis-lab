@@ -1,7 +1,8 @@
 import type { ExecutionBackend } from '../avr/backend';
 import { ESP32_CLOCK_HZ, ESP32_MAX_STEP_MS, cyclesPerMs, type Esp32Hooks } from './backend';
-import { bootEsp32, type Esp32Emulator } from './emulator';
+import { bootEsp32, type Esp32Emulator, type Esp32SpiBus } from './emulator';
 import { esp32I2cDevice } from './i2c';
+import { esp32SpiDevice } from './spi';
 
 /** The pieces the chip boots from. */
 export interface Esp32Firmware {
@@ -68,12 +69,30 @@ export class Esp32Backend implements ExecutionBackend {
         },
         this.firmware.filesystem,
         esp32I2cDevice(this.hooks.i2c),
+        this.spiBus(),
       );
       this.failed = null;
     } catch (error) {
       this.failed = `esp32 boot failed: ${String(error)}`;
       this.chip = null;
     }
+  }
+
+  /**
+   * The chip's SPI bus, when the board has one.
+   *
+   * The board's own table says which GPIOs carry chip-select and the D/C
+   * line: the chip drives both as ordinary pins, and the host has to know
+   * their levels for every byte it shifts.
+   */
+  private spiBus(): Esp32SpiBus | undefined {
+    const [chipSelect, dataSelect] = this.hooks.mcu.spiPins;
+    if (chipSelect === undefined || dataSelect === undefined) return undefined;
+    return {
+      device: esp32SpiDevice(this.hooks.spi),
+      dataSelect,
+      chipSelect,
+    };
   }
 
   step(budgetMs: number): void {
