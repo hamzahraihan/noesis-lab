@@ -4,9 +4,9 @@
  * The bench already opens with every board's starter project wired (a
  * blinking LED, an SSD1306 OLED on I2C, an ILI9341 TFT on SPI) and its
  * sketch loaded, so these entries describe that project in per-board words
- * rather than inventing seven new ones. `tryNext` names bench examples by
- * their EXAMPLES id; the Pi names none, because those examples are C++
- * sketches and its bench speaks Python.
+ * rather than inventing new ones. `tryNext` names bench examples by their
+ * EXAMPLES id; the Python boards name none, because those examples are C++
+ * sketches and their benches speak (Micro)Python.
  */
 
 import type { BoardId } from './boardRegistry';
@@ -80,6 +80,17 @@ export const PROJECTS: readonly BoardProject[] = [
     youWillSee: [
       'The LED on GPIO17 blinks on and off twice a second',
       'The wired OLED and TFT stay dark — this sketch drives no bus',
+    ],
+    tryNext: [],
+  },
+  {
+    board: 'pico',
+    project: 'MicroPython blink on GP2',
+    tagline: 'The RP2040 in its own 40-pin shape, driven from MicroPython.',
+    why: 'The same chip as the Nano RP2040 Connect, in the Pico footprint: 26 GPIO across two headers, 12-bit conversion on three ADC channels (GP26–28), and 3.3 V logic. The bench opens in MicroPython here, so the C++ examples stay closed and the Pi’s Python transfers.',
+    youWillSee: [
+      'The serial prints "pico online" once, then the loop runs',
+      'The LED on GP2 blinks on and off twice a second',
     ],
     tryNext: [],
   },
