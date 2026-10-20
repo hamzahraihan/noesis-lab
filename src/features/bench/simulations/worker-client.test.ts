@@ -14,12 +14,18 @@ import {
   lcdFromSnapshot,
   remapWithBench,
   sevenSegmentFromSnapshot,
+  ssd1306FromSnapshot,
   tftFromSnapshot,
   tftImageDataFromFrame,
   tftRgbaFromFrame,
   WorkerClientImpl,
   type MirrorState,
 } from './worker-client';
+import {
+  SSD1306_FLAG_LIT,
+  SSD1306_FLAG_MIRRORED,
+  SSD1306_FRAME_BYTES,
+} from '@/features/parts';
 
 function blankMirror(): MirrorState {
   return {
@@ -150,6 +156,23 @@ describe('mirror remap', () => {
     expect(state.values.get('horn')).toEqual([120]);
     expect(state.colon.get('clock')).toBe(true);
   });
+
+  it('splits an OLED frame and its flags per part', () => {
+    const bench = benchWith([
+      { id: 'oled', def: partDef('display', { controller: 'ssd1306' }), pins: [] },
+    ]);
+    const buf = allocSnapshot(layoutFor(1, 0, SSD1306_FRAME_BYTES + 1));
+    displayView(buf).write(0, 0x01);
+    displayView(buf).write(SSD1306_FRAME_BYTES, SSD1306_FLAG_LIT);
+    headerView(buf).generation = 4;
+    const state = blankMirror();
+    expect(ingestSnapshot(state, buf)).toBe('ok');
+    remapWithBench(state, bench);
+    const bytes = state.values.get('oled');
+    expect(bytes).toHaveLength(SSD1306_FRAME_BYTES + 1);
+    expect(bytes?.[0]).toBe(0x01);
+    expect(bytes?.[SSD1306_FRAME_BYTES]).toBe(SSD1306_FLAG_LIT);
+  });
 });
 
 describe('display adapters', () => {
@@ -171,6 +194,17 @@ describe('display adapters', () => {
     expect(panel?.shape).toEqual({ columns: 16, rows: 2 });
     expect(panel?.text().split('\n')[0]?.slice(0, 5)).toBe('hello');
     expect(panel?.backlightOn).toBe(true);
+  });
+
+  it('rebuilds an OLED frame and the state that goes with it', () => {
+    const frame = new Uint8Array(SSD1306_FRAME_BYTES);
+    // The pixel at column 0, page 0, the top row.
+    frame[0] = 0x01;
+    const panel = ssd1306FromSnapshot(frame, SSD1306_FLAG_LIT | SSD1306_FLAG_MIRRORED);
+    expect(panel.isLit(0, 0)).toBe(true);
+    expect(panel.isLit(1, 0)).toBe(false);
+    expect(panel.lit).toBe(true);
+    expect(panel.mirrored).toBe(true);
   });
 });
 
