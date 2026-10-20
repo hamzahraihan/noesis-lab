@@ -14,6 +14,7 @@
 
 import { ESP32_FILESYSTEM_OFFSET } from './image';
 import type { Esp32I2cDevice } from './i2c';
+import type { Esp32SpiDevice } from './spi';
 
 /** The bytes the emulator boots from: the module, the mask ROM and the image. */
 export interface Esp32Assets {
@@ -46,6 +47,31 @@ const FLASH_MB = 4;
 const I2C_BUS = 0;
 
 /**
+ * The chip's SPI bus the bench's devices sit on.
+ *
+ * The classic ESP32 has two SPI masters: HSPI and VSPI. VSPI is the one the
+ * board brings out on GPIO18 and GPIO23, which is the pair the board model
+ * declares as its bus, and the emulator numbers the masters 2 and 3.
+ */
+const SPI_BUS = 3;
+
+/**
+ * The host's side of the chip's SPI bus.
+ *
+ * The device answers the master's bytes; the two pin numbers say which of the
+ * chip's GPIOs carry the D/C and chip-select lines the host has to know
+ * about.
+ */
+export interface Esp32SpiBus {
+  /** The device the chip's master talks to. */
+  readonly device: Esp32SpiDevice;
+  /** The chip's GPIO that carries the D/C line. */
+  readonly dataSelect: number;
+  /** The chip's GPIO that carries the chip-select line. */
+  readonly chipSelect: number;
+}
+
+/**
  * The module's exports, as far as the boot and the console need them.
  *
  * The module is a C ABI over the emulator, so the types are the ABI's: a
@@ -70,6 +96,12 @@ interface Esp32SimExports {
   esp32sim_gpio_oe(emu: number): bigint;
   esp32sim_gpio_set_input(emu: number, pin: number, level: number): number;
   esp32sim_i2c_attach_host(emu: number, bus: number): number;
+  esp32sim_spi_attach_host(
+    emu: number,
+    host: number,
+    dataSelect: number,
+    chipSelect: number,
+  ): number;
   esp32sim_cycles(emu: number): number;
   esp32sim_cpu_hz(emu: number): number;
 }
@@ -133,6 +165,7 @@ export async function bootEsp32(
   assets: Esp32Assets,
   files?: Uint8Array,
   i2c?: Esp32I2cDevice,
+  spi?: Esp32SpiBus,
 ): Promise<Esp32Emulator> {
   const module = await WebAssembly.compile(assets.wasm);
   let exports: Esp32SimExports | null = null;
@@ -153,6 +186,21 @@ export async function bootEsp32(
       host_i2c_read: (address: number) => (i2c ? i2c.read(address) : 0xff),
       host_i2c_stop: (address: number) => {
         i2c?.stop(address);
+      },
+      // The chip's SPI master shifts bytes out on MOSI and reads MISO back.
+      // The host's devices answer: the byte goes to the bench's bus with the
+      // level of the D/C line, and whatever the bus answers comes back.
+      host_spi_begin: (host: number) => {
+        if (spi && host === SPI_BUS) spi.device.begin();
+      },
+      host_spi_byte: (host: number, byte: number, flags: number) => {
+        if (!spi || host !== SPI_BUS) return 0xff;
+        // Bit 0: the D/C line is high, so the byte is data. Bit 1: the
+        // chip-select line is low, so the device is selected.
+        return spi.device.byte(byte, (flags & 1) !== 0, (flags & 2) !== 0);
+      },
+      host_spi_end: (host: number) => {
+        if (spi && host === SPI_BUS) spi.device.end();
       },
     },
   });
@@ -186,6 +234,17 @@ export async function bootEsp32(
   // on GPIO21 and GPIO22.
   if (exports.esp32sim_i2c_attach_host(emu, I2C_BUS) !== 0) {
     throw new Error('esp32: the emulator would not take the host onto its I2C bus');
+  }
+  // The chip's SPI master is a master that exchanges bytes with the devices
+  // on the bus, and the bench's devices live in the host: the host's device
+  // is what the master talks to. VSPI is the bus the ESP32 board declares, on
+  // GPIO18 and GPIO23.
+  if (spi) {
+    if (
+      exports.esp32sim_spi_attach_host(emu, SPI_BUS, spi.dataSelect, spi.chipSelect) !== 0
+    ) {
+      throw new Error('esp32: the emulator would not take the host onto its SPI bus');
+    }
   }
 
   const rom = new Uint8Array(assets.rom);
