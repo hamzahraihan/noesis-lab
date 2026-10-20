@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSimCore } from './core';
-import { serialRing, tftView } from './protocol';
+import { serialRing, displayView, tftView } from './protocol';
 import {
   ingestSnapshot,
   tftFromMirror,
@@ -12,7 +12,14 @@ import { Simulation } from '@/features/bench/simulations/simulation';
 import { boardOption } from '@/features/learn/boardRegistry';
 import { exerciseById } from '@/features/learn';
 import { CIRCUITS } from '@/features/learn/circuits';
-import { esp32DevKitV1, ili9341Definition, type Ili9341 } from '@/features/parts';
+import { STARTER_CIRCUITS } from '@/features/learn/benches';
+import {
+  esp32DevKitV1,
+  ili9341Definition,
+  SSD1306_FLAG_LIT,
+  SSD1306_FRAME_BYTES,
+  type Ili9341,
+} from '@/features/parts';
 import type { NetAnswer, NetFetcher } from '@/features/simulation';
 import { clearReportedFaults } from '../scripted/diagnostics';
 
@@ -229,6 +236,51 @@ describe('tft snapshot transport', () => {
     expect(ingestSnapshot(state, buf)).toBe('ok');
     expect(tftFromMirror(state)).toBeNull();
     expect(tftFromSnapshot(frame.width, frame.height, frame.rgb565)).toBeNull();
+  });
+});
+
+describe('oled snapshot transport', () => {
+  /*
+   * The OLED is a panel the bench can see, so what it shows has to travel
+   * with the rest of the bench's state. Its memory is the panel's own -- one
+   * byte per column per page -- and the flags say whether the glass is lit
+   * and whether the image is mirrored.
+   */
+  const oledSketch = {
+    language: 'python',
+    activeName: 'main.py',
+    files: [
+      {
+        name: 'main.py',
+        content: [
+          'from machine import I2C',
+          'i2c = I2C(0, 21, 22)',
+          // The in-page front end has no bytes literal, so the register
+          // spelling is how a buffer is written there.
+          'i2c.writeto_mem(0x3c, 0, 175)',
+          'i2c.writeto_mem(0x3c, 64, 1)',
+          '',
+        ].join('\n'),
+      },
+    ],
+  } as never;
+
+  it('carries the panel frame in the display region', () => {
+    const simulation = new Simulation(esp32DevKitV1());
+    expect(simulation.loadCircuit(STARTER_CIRCUITS.esp32)).toEqual([]);
+
+    const core = createSimCore(boardOption('esp32').make());
+    core.rebuild(simulation.bench, oledSketch, 'interpreter');
+    expect(core.fault).toBeNull();
+    core.step(16);
+    core.step(16);
+
+    const region = displayView(core.snapshot());
+    expect(region.length).toBe(SSD1306_FRAME_BYTES + 1);
+    // The pixel the sketch lit: column 0, page 0, the top row.
+    expect(region.read(0)).toBe(0x01);
+    // The glass is lit, and the image is not mirrored.
+    expect(region.read(SSD1306_FRAME_BYTES)).toBe(SSD1306_FLAG_LIT);
   });
 });
 
