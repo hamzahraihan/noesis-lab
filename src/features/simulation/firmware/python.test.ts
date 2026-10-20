@@ -125,10 +125,6 @@ describe('control flow', () => {
     expect(new Set(counters).size).toBe(2);
   });
 
-  it('refuses an iterable that is not a range', () => {
-    expect(() => parsePython('for i in pins:\n    x = 1\n')).toThrow(/range/);
-  });
-
   it('reads break, continue, return and pass', () => {
     const program = parsePython(
       [
@@ -465,6 +461,48 @@ describe('a guarded block', () => {
     const statement = program.globals[0];
     if (statement.kind !== 'raise') throw new Error('expected a raise');
     expect(statement.error).toBeNull();
+  });
+});
+
+describe('a generator', () => {
+  it('reads a yield as the value it hands over', () => {
+    const program = parsePython(['def counter():', '    yield 7'].join('\n'));
+
+    const declaration = program.functions.get('counter');
+    const body = declaration?.body;
+    if (body?.kind !== 'suite') throw new Error('expected a suite');
+    const statement = body.statements[0];
+    if (statement.kind !== 'expression') throw new Error('expected an expression');
+    expect(statement.value.kind).toBe('yield');
+    if (statement.value.kind !== 'yield') return;
+    expect(statement.value.value).toMatchObject({ kind: 'number', value: 7 });
+  });
+
+  it('reads a bare yield as handing over nothing', () => {
+    const program = parsePython(['def counter():', '    yield'].join('\n'));
+
+    const declaration = program.functions.get('counter');
+    const body = declaration?.body;
+    if (body?.kind !== 'suite') throw new Error('expected a suite');
+    const statement = body.statements[0];
+    if (statement.kind !== 'expression') throw new Error('expected an expression');
+    if (statement.value.kind !== 'yield') throw new Error('expected a yield');
+    expect(statement.value.value).toBeNull();
+  });
+
+  it('reads a loop over anything but a range as a loop over an iterable', () => {
+    const program = parsePython(['for value in readings():', '    print(value)'].join('\n'));
+
+    const statement = program.globals[0];
+    if (statement.kind !== 'forEach') throw new Error('expected a for over an iterable');
+    expect(statement.variable).toBe('value');
+    expect(statement.iterable).toMatchObject({ kind: 'call' });
+  });
+
+  it('keeps a range loop as the counter loop the VM has', () => {
+    const program = parsePython(['for value in range(4):', '    print(value)'].join('\n'));
+
+    expect(program.globals[0].kind).toBe('for');
   });
 });
 
