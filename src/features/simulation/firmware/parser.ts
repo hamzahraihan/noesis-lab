@@ -405,6 +405,28 @@ export type Stmt =
       location: SourceLocation;
     }
   | { kind: 'return'; value: Expr | null; location: SourceLocation }
+  /**
+   * A guarded block: `try:` with its handlers, an optional `else` and an
+   * optional `finally`.
+   *
+   * The handlers are the `except` clauses in the order they were written. A
+   * handler with no types catches everything; one with types catches the
+   * errors of those names.
+   */
+  | {
+      kind: 'try';
+      body: Stmt;
+      handlers: readonly {
+        types: readonly string[];
+        name: string | null;
+        body: Stmt;
+      }[];
+      otherwise: Stmt | null;
+      final: Stmt | null;
+      location: SourceLocation;
+    }
+  /** `raise`, with or without a value to raise. */
+  | { kind: 'raise'; error: Expr | null; location: SourceLocation }
   | { kind: 'break'; location: SourceLocation }
   | { kind: 'continue'; location: SourceLocation }
   | { kind: 'block'; statements: Stmt[]; location: SourceLocation }
@@ -423,6 +445,13 @@ export interface FunctionDecl {
   readonly name: string;
   readonly returnType: string;
   readonly parameters: ReadonlyArray<{ name: string; type: string; defaultValue?: Expr }>;
+  /**
+   * The name a `*args` parameter collects the extra arguments into.
+   *
+   * Python's spelling for "and whatever else the caller passed", which a
+   * helper that forwards a list of bytes needs.
+   */
+  readonly varargs?: string;
   /** Constructor initializer list (`: _pin(pin)`); absent on plain functions. */
   readonly initList?: ReadonlyArray<{ field: string; value: Expr }>;
   readonly body: Stmt;
