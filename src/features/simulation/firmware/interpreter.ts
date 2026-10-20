@@ -1731,6 +1731,23 @@ export class FirmwareRuntime {
           Math.max(asNumber(args[1] ?? 0), asNumber(args[0] ?? 0)),
         );
       /*
+       * The numbers a range covers, as an array: `range(3)` is 0, 1, 2. A
+       * `for` loop over a range is desugared by the parser, so this is the
+       * range as a value -- which is what a list comprehension walks.
+       */
+      case 'range': {
+        const start = args.length > 1 ? asNumber(args[0] ?? 0) : 0;
+        const stop = args.length > 1 ? asNumber(args[1] ?? 0) : asNumber(args[0] ?? 0);
+        const step = args.length > 2 ? asNumber(args[2] ?? 1) : 1;
+        const items: number[] = [];
+        if (step > 0) {
+          for (let value = start; value < stop; value += step) items.push(value);
+        } else if (step < 0) {
+          for (let value = start; value > stop; value += step) items.push(value);
+        }
+        return items;
+      }
+      /*
        * `abort()` ends the sketch on hardware (Clock::begin calls it when no
        * RTC answers). The VM has no halt state for a missing part, so it is
        * a no-op and execution continues past it; the begin probe still
@@ -1970,6 +1987,24 @@ export class FirmwareRuntime {
         const items: number[] = [];
         for (const item of expression.items) {
           items.push(asNumber((yield* this.evaluate(item, scope, services)) as Value));
+        }
+        return items;
+      }
+
+      case 'comprehension': {
+        /*
+         * A list comprehension: the element is evaluated once per item, with
+         * the name bound to it, and the list is what those came to. The name
+         * lives in a scope of its own, so it does not outlive the list.
+         */
+        const iterable = (yield* this.evaluate(expression.iterable, scope, services)) as Value;
+        const items: number[] = [];
+        if (Array.isArray(iterable)) {
+          const inner = new Scope(scope);
+          for (const item of iterable) {
+            inner.values.set(expression.variable, item);
+            items.push(asNumber((yield* this.evaluate(expression.element, inner, services)) as Value));
+          }
         }
         return items;
       }
