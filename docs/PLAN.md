@@ -373,10 +373,10 @@ has to say so rather than do nothing.
 
 **Shipped (2026-10-20).** A guarded block (`try:` with `except`, `else` and
 `finally`, and `raise`), a `machine.I2C` that honours the pins a sketch names,
-a starred parameter (`def cmd(*bytes)`), and the two bugs that made the
-ordinary `for` loop useless: `range(n)` was read as a *start* rather than a
-*stop*, so the loop never ran, and the loop body was given a scope of its
-own, so the names it bound were lost when the loop ended.
+a starred parameter (`def cmd(*bytes)`), a generator (`yield`), and the two
+bugs that made the ordinary `for` loop useless: `range(n)` was read as a
+*start* rather than a *stop*, so the loop never ran, and the loop body was
+given a scope of its own, so the names it bound were lost when the loop ended.
 
 **A guarded block needs something to guard.** `raise` is the sketch's own
 error, and the bench's own failure is the one a guard is for: a read from a
@@ -394,8 +394,18 @@ the interpreter and the emulated chip had disagreed: the chip honours its
 pins, so a sketch that named the wrong pair talked to nothing there and to
 everything here.
 
-**Still open.** No generators: `yield` is still refused, and a sketch that
-wants a lazy sequence has to build a list instead. The `machine` module is
-global to the language rather than gated per board, so `import machine` works
-on a Raspberry Pi that has no such module.
+**A generator is lazy, and that is the whole of it.** A function that yields
+hands its values over one at a time, and *nothing runs until the first value
+is asked for* -- which is what lets a sketch write `while True: yield
+sensor.read()` without the bench running out of values to wait for. The
+driver is handed a number of milliseconds to wait; a generator hands over a
+value; the two travel apart, and a wait inside a generator is still the
+bench's own time to spend. A loop over anything that cannot be walked says
+so (`TypeError`) rather than doing nothing quietly.
+
+**Still open.** The `machine` module is global to the language rather than
+gated per board, so `import machine` works on a Raspberry Pi that has no
+such module. A generator cannot be sent values back (`send`), and there is
+no `yield from`.
+
 
