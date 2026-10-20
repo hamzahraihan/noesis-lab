@@ -973,11 +973,28 @@ class PythonParser {
       return { kind: 'list', items, location: token.location };
     }
     if (token.kind === 'punctuation' && token.text === '[') {
-      const items: Expr[] = [];
-      if (!this.atPunctuation(']')) {
-        do {
-          items.push(this.readExpression());
-        } while (this.acceptPunctuation(','));
+      const first = this.readExpression();
+      /*
+       * A comprehension: `[element for name in iterable]`. The `for` is what
+       * tells the two apart, and it comes straight after the element.
+       */
+      if (this.atKeyword('for')) {
+        this.next();
+        const variable = this.expectIdentifier().text;
+        this.expectKeyword('in');
+        const iterable = this.readExpression();
+        this.expectPunctuation(']');
+        return {
+          kind: 'comprehension',
+          element: first,
+          variable,
+          iterable,
+          location: token.location,
+        };
+      }
+      const items: Expr[] = [first];
+      while (this.acceptPunctuation(',')) {
+        items.push(this.readExpression());
       }
       this.expectPunctuation(']');
       return { kind: 'list', items, location: token.location };
