@@ -358,7 +358,12 @@ describe('map sketch parity', () => {
       g.createImageBitmap = saved.cib;
       g.OffscreenCanvas = saved.oc;
     }
-  });
+    /*
+     * Two 400-frame runs over a 480x320 panel, pixel-compared one at a time:
+     * deterministic, but seconds of work. The default 5 s cap turns a loaded
+     * machine into a red suite, so the leg buys the time it actually needs.
+     */
+  }, 30_000);
 
   /*
    * The bench network runs in whichever side owns the sketch, so both sides

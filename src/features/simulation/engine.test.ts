@@ -76,10 +76,25 @@ function buttonBench(withPullDown: boolean) {
   const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
 
   const inputPin = esp32.definition.pins.find((pin) => pin.id === 'L_GPIO27')!;
-  builder.addWire(inputPin.x, inputPin.y, holeX(10), holeY(8));
-
-  builder.addPart(buttonDefinition(), holeX(10), holeY(8) - 3);
-  builder.addWire(holeX(12), holeY(8), holeX(12), railRowY(BOTTOM_NEGATIVE_RAIL));
+  /*
+   * The button's leads follow its artwork rather than two breadboard pitches,
+   * and they have moved once already (the Wokwi pushbutton draws them at the
+   * top of each side). Place the part so lead `a` sits on the hole the input
+   * drops to, then wire the leads where the builder actually put them -- a
+   * hand-computed origin silently stops pressing the button when the artwork
+   * changes, and the test then proves nothing about the engine.
+   */
+  const buttonDef = buttonDefinition();
+  const leadA = buttonDef.pins.find((pin) => pin.id === 'a')!;
+  const leadB = buttonDef.pins.find((pin) => pin.id === 'b')!;
+  const button = builder.addPart(buttonDef, holeX(10) - leadA.x, holeY(8) - leadA.y);
+  builder.addWire(inputPin.x, inputPin.y, button.x + leadA.x, button.y + leadA.y);
+  builder.addWire(
+    button.x + leadB.x,
+    button.y + leadB.y,
+    holeX(12),
+    railRowY(BOTTOM_NEGATIVE_RAIL),
+  );
 
   if (withPullDown) {
     builder.addPart(resistorDefinition(10_000), holeX(10), holeY(8) - 2.54);
