@@ -353,3 +353,49 @@ the stimulus. Two of the five bring no analogue tap out at all -- the PIR and
 the heart board are three-pin modules -- and those are declared three-pin,
 because a pin with no hole drawn is a terminal a jumper can reach but can never
 see.
+
+**Both panels light on the emulated ESP32, in the browser.** The colour TFT
+and the OLED are on the starter ESP32 bench, and a MicroPython sketch on the
+emulated chip drives each of them: the TFT over the chip's SPI master, the
+OLED over the chip's I2C controller, and both through the worker's own
+transport into the page. Checked on the canvas, not only in a test -- an
+earlier pass reported the panels dark, and the reason was that the bench had
+no sketch driving them: the starter sketch blinks an LED and says nothing to
+a display.
+
+### 6.5 The Python front end, and what it still cannot say
+
+The interpreter runs one virtual machine; the Python front end is a second
+grammar over the same AST. That is why every Python feature is a decision
+about *spelling*, and the bench's own rule applies: a sketch written the way
+its documentation writes it has to run, and a sketch that cannot say something
+has to say so rather than do nothing.
+
+**Shipped (2026-10-20).** A guarded block (`try:` with `except`, `else` and
+`finally`, and `raise`), a `machine.I2C` that honours the pins a sketch names,
+a starred parameter (`def cmd(*bytes)`), and the two bugs that made the
+ordinary `for` loop useless: `range(n)` was read as a *start* rather than a
+*stop*, so the loop never ran, and the loop body was given a scope of its
+own, so the names it bound were lost when the loop ended.
+
+**A guarded block needs something to guard.** `raise` is the sketch's own
+error, and the bench's own failure is the one a guard is for: a read from a
+device that is not wired raises `OSError`, the way a controller that was not
+acknowledged raises on real hardware. The error the sketch does not catch
+stops the sketch and says why, in the Problems panel, rather than escaping
+into the page.
+
+**The pins a sketch names are the bus it talks on.** `machine.I2C(0,
+sda=21, scl=22)` gets the bus on those two pins, so a panel wired to another
+pair is not answered -- the same silence a wire to the wrong hole gives. A
+sketch that names no pins keeps the board's own bus, which is what the
+MicroPython examples that write `I2C(0)` mean. This is the one place where
+the interpreter and the emulated chip had disagreed: the chip honours its
+pins, so a sketch that named the wrong pair talked to nothing there and to
+everything here.
+
+**Still open.** No generators: `yield` is still refused, and a sketch that
+wants a lazy sequence has to build a list instead. The `machine` module is
+global to the language rather than gated per board, so `import machine` works
+on a Raspberry Pi that has no such module.
+
