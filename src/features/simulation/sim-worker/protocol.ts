@@ -183,7 +183,13 @@ function regionOffsets(d: Dims): Omit<Resolved, keyof Dims> {
   const netBase = HEADER_BYTES;
   const pinBase = netBase + d.netFloats * 8;
   const displayBase = pinBase + d.pinNodeUints * 4;
-  const tftBase = displayBase + d.displayBytes;
+  /*
+   * The colour panel's region is read as 32-bit words, so it starts on a word
+   * boundary. A display region of an odd length -- an OLED's frame and its
+   * flags are 1025 bytes -- would otherwise push the frame off one, and the
+   * view would refuse to exist.
+   */
+  const tftBase = (displayBase + d.displayBytes + 3) & ~3;
   const serialBase = tftBase + TFT_FRAME_BYTES;
   return { netBase, pinBase, displayBase, tftBase, serialBase, total: serialBase + d.serialBytes };
 }
