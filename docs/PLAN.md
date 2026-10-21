@@ -429,6 +429,23 @@ has no element for a barometer, a current monitor, a converter or a one-wire
 sensor, so their artwork is drawn here, on the same 2.54 mm grid as the modules
 the library does draw -- which is what makes the header a jumper can reach.
 
+**The SPI bus is a bus now, and a shift register is on it.** It used to reach
+panels and nothing else: the engine delivered a byte to the displays, and a
+device that was not a display never heard it. The 74HC595 is the first thing
+that is neither, and it needed three things the panels had not needed. Its
+clock and data in are the bus's own wires, so the engine checks the two pins
+land on the SPI nets before it hands over a byte. Its latch is a plain output
+the sketch drives, because on the chip the latch and the data are separate
+wires, and the outputs take the byte the moment the line is high. And its
+outputs are not in the netlist: the chip drives them, from the byte it holds,
+so the engine stamps them around the netlist the way it stamps a servo's load.
+
+The bit order is the chip's and not the bus's: the shift register moves
+toward Q7, so the first bit to arrive ends up there and the last on Q0. A
+sketch that sends a byte most significant bit first therefore lights Q7 with
+the byte's highest bit -- the gotcha every sketch that lights a chain in order
+has to know, and the reason the bench says so on the part.
+
 **The comparator sensor family is one part, not five.** A PIR, a sound, a
 heart-rate, a gas and a flame board are all the same LM393 with a trimmer
 across a sensor and a pull-up on the output, so they share a component kind, a
