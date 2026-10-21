@@ -1719,6 +1719,60 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Shift Register — eight outputs from two wires
+ * ------------------------------------------------------------------ */
+
+const SHIFT_REGISTER: GalleryProject = {
+  id: 'shift-register',
+  title: 'Shift Register',
+  blurb:
+    'A 74HC595 turns two pins into eight. The byte goes in over the SPI bus, the latch line copies it to the outputs, and a row of LEDs chases along behind it.',
+  parts: [
+    { name: '74HC595 Shift Register', qty: 1 },
+    { name: 'Red LED', qty: 8 },
+    { name: '220 Resistor', qty: 8 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+// The chip's latch, and the line that turns its outputs on.
+const byte LATCH = 12;
+const byte ENABLE = 10;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LATCH, OUTPUT);
+  pinMode(ENABLE, OUTPUT);
+  digitalWrite(ENABLE, HIGH);
+  SPI.begin();
+  Serial.println("chase up");
+}
+
+void loop() {
+  for (byte bit = 0; bit < 8; bit++) {
+    // Latch low, shift the byte in, latch high: the outputs take the new
+    // byte all at once, the way the chip does it.
+    digitalWrite(LATCH, LOW);
+    SPI.transfer(1 << bit);
+    digitalWrite(LATCH, HIGH);
+    delay(150);
+  }
+}
+`,
+      circuit: CIRCUITS['shift-register'],
+    },
+  ],
+  working: [
+    'The eight LEDs chase from Q0 to Q7, one every 150 milliseconds.',
+    "The chip's register moves the bits toward Q7, so the byte that lights the first LED is the one with its lowest bit set.",
+    'The serial log says when the chase starts.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Reaction Timer — one button, one LED, one latency number
  * ------------------------------------------------------------------ */
 
@@ -2356,6 +2410,7 @@ export const GALLERY: readonly GalleryProject[] = [
   DASHBOARD,
   PARKING,
   WEATHER,
+  SHIFT_REGISTER,
   REACTION,
   NET_CLOCK,
   SENSOR_FEED,

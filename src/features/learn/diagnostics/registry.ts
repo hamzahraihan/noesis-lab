@@ -123,6 +123,10 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
       serialText: () => sim.serialLines().join(''),
       scriptedReady: () => sim.scriptedReady(),
       readGpio: (gpio: number) => sim.engine.readDigital(gpio),
+      partVolts: (partId: string, pinId: string) => {
+        const net = sim.engine.currentNetlist.pinNode.get(`${partId}:${pinId}`);
+        return net === undefined ? 0 : sim.engine.voltageOfNet(net);
+      },
       resetAvrCore: () => {
         const core = (sim as unknown as { avrBackend: { reset(): void } | null }).avrBackend;
         if (core === null) return false;
@@ -913,6 +917,54 @@ const instrumentBenchChecks: CheckDef[] = [
   },
 ];
 
+/* ------------------------------------------------------------------ *
+ * shift-register on uno: a byte goes in over SPI and the outputs follow.
+ *
+ * The chase moves one LED per step, so the row is watched over a whole
+ * cycle: every output has to be driven at some point, and only one at a
+ * time, because the chip holds one byte and not eight.
+ * ------------------------------------------------------------------ */
+
+function shiftRegisterChecks(build: GalleryBuild): CheckDef[] {
+  const register = build.circuit.parts?.find((part) => part.type === 'shift595')?.id;
+  return [
+    {
+      name: 'the byte shifts in and the outputs follow it',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the byte shifts in and the outputs follow it';
+        const read = sim.partVolts;
+        if (read === undefined || register === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read a part pin');
+        }
+        const lit = new Set<string>();
+        let together = 0;
+        for (let frame = 0; frame < 40; frame++) {
+          sim.tick(0.05);
+          let on = 0;
+          for (let index = 0; index < 8; index++) {
+            if (read(register, `Q${index}`) > 1) {
+              lit.add(`Q${index}`);
+              on += 1;
+            }
+          }
+          if (on > 1) together = on;
+        }
+        if (lit.size === 0) {
+          return verdict(name, started, 'fail', 'no output was ever driven');
+        }
+        if (lit.size < 8) {
+          return verdict(name, started, 'fail', `only ${lit.size} of the eight outputs were driven`);
+        }
+        if (together > 1) {
+          return verdict(name, started, 'fail', `${together} outputs were driven at once`);
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -927,6 +979,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'live-weather') return liveWeatherChecks;
   if (projectId === 'soil-probe') return soilProbeChecks;
   if (projectId === 'instrument-bench') return instrumentBenchChecks;
+  if (projectId === 'shift-register') return shiftRegisterChecks(build);
   return [];
 }
 

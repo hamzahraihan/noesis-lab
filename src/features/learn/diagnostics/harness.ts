@@ -16,6 +16,15 @@ export interface HarnessSim {
   /** Scripted benches only: resolves once the QuickJS runtime is installed. */
   scriptedReady?(): Promise<void>;
   readGpio(gpio: number): boolean;
+  /**
+   * The voltage on a part's own pin, in volts.
+   *
+   * For the parts a sketch reaches over a bus rather than over a board pin:
+   * a shift register's outputs, a sensor's data line. A check that wants to
+   * know what a part is driving asks here, because the part's pin is not on
+   * the board's pin namespace.
+   */
+  partVolts?(partId: string, pinId: string): number;
   resetAvrCore?(): boolean;
   stageArmedAlarm?(): void;
   tryCompile?(): Promise<{ status: 'ready' } | { status: 'skip' | 'fail'; detail: string }>;
