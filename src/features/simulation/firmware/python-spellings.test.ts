@@ -318,6 +318,57 @@ describe('a guarded block', () => {
  * lets a sketch write `while True: yield sensor.read()` without the bench
  * running out of values to wait for.
  */
+describe('the time module', () => {
+  it('waits the unit the member names', () => {
+    const target = host();
+    const runner = new FirmwareRunner('import time\ntime.sleep_ms(50)\n', target.services, 'python');
+
+    // The step reports the wait it wants; 50 milliseconds is not 50 seconds.
+    expect(runner.step()).toBe(50);
+  });
+
+  it('counts milliseconds from the bench clock', () => {
+    const { serial } = run('import time\nprint(time.ticks_ms())\n');
+
+    expect(serial).toBe('0\n');
+  });
+
+  it("measures the gap the way ticks_diff does", () => {
+    const { serial } = run(
+      ['import time', 'start = 10', 'print(time.ticks_diff(35, start))'].join('\n'),
+    );
+
+    expect(serial).toBe('25\n');
+  });
+
+  it('says so for a member it does not have', () => {
+    const target = host();
+    const runner = new FirmwareRunner('import time\ntime.warp(2)\n', target.services, 'python');
+
+    expect(() => runner.step()).toThrow(/time.*has no attribute 'warp'/);
+  });
+});
+
+describe('an I2C bus a sketch scans', () => {
+  it('lists the address the bench answers at', () => {
+    const target = host();
+    const services = {
+      ...target.services,
+      i2cHasDevice: (address: number) => address === 0x3c,
+    };
+    const runner = new FirmwareRunner(
+      ['from machine import I2C', 'i2c = I2C(0)', 'print(i2c.scan())'].join('\n'),
+      services,
+      'python',
+    );
+    for (let step = 0; step < 40; step++) {
+      if (runner.step() === null) break;
+    }
+
+    expect(target.serial.join('')).toBe('[60]\n');
+  });
+});
+
 describe('a generator', () => {
   it('hands its values over one at a time', () => {
     const { serial } = run(
