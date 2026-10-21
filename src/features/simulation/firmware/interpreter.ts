@@ -68,7 +68,7 @@ function pinArgument(expression: Expr | undefined, scope?: Scope): number | null
 }
 
 /** What kind of GPIO device a name in a Python program is holding. */
-type DeviceKind = 'led' | 'switch' | 'output' | 'input' | 'pwm' | 'adc' | 'i2c';
+type DeviceKind = 'led' | 'switch' | 'output' | 'input' | 'pwm' | 'adc' | 'i2c' | 'uart';
 
 /**
  * A GPIO device a Python program built with `LED(17)` and kept in a name.
@@ -150,6 +150,13 @@ const MACHINE_CONSTRUCTORS: Readonly<Record<string, DeviceKind>> = {
   ADC: 'adc',
   PWM: 'pwm',
   I2C: 'i2c',
+  /*
+   * `SoftI2C` is `I2C` bit-banged on the pins it names. The bench has one
+   * bus and answers whichever pins a sketch points it at, so the two
+   * spellings are the same device.
+   */
+  SoftI2C: 'i2c',
+  UART: 'uart',
 };
 
 import {
@@ -772,6 +779,24 @@ export interface PixelsPort {
 export const PIN_INPUT = 0;
 export const PIN_OUTPUT = 1;
 export const PIN_INPUT_PULLUP = 2;
+
+/**
+ * The constants a `machine` class carries: `Pin.OUT`, `ADC.ATTN_11DB`.
+ *
+ * The constructors already read the ones they take straight off the syntax,
+ * but a sketch may keep one in a name or pass it to a method, and then it is
+ * an expression like any other and has to have a value.
+ */
+const MACHINE_CONSTANTS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  Pin: {
+    IN: PIN_INPUT,
+    OUT: PIN_OUTPUT,
+    PULL_UP: PIN_INPUT_PULLUP,
+  },
+  // MicroPython's four attenuation settings, in the order it numbers them.
+  ADC: { ATTN_0DB: 0, ATTN_2_5DB: 1, ATTN_6DB: 2, ATTN_11DB: 3 },
+};
+
 export const LEVEL_LOW = 0;
 export const LEVEL_HIGH = 1;
 
@@ -2036,6 +2061,15 @@ export class FirmwareRuntime {
       return true;
     }
 
+    if (kind === 'uart') {
+      /*
+       * A UART has no pin of its own: its bytes go to the host's serial port,
+       * which on a bench is the one place a sketch's output is drawn.
+       */
+      scope.bindDevice(name, { pin: 0, kind });
+      return true;
+    }
+
     const pin = pinArgument(expression.args[0], scope);
     if (pin === null) return false;
 
@@ -3080,6 +3114,15 @@ export class FirmwareRuntime {
         // `button.is_pressed` is a reading of the pin, not a call.
         if (expression.target.kind === 'identifier') {
           const name = expression.target.name;
+          /*
+           * A class constant (`Pin.OUT`, `ADC.ATTN_11DB`) is read off the
+           * class, not a device: a sketch that keeps one in a name or passes
+           * it to a method needs a value where one is spelled.
+           */
+          if (this.language === 'python') {
+            const constant = MACHINE_CONSTANTS[name]?.[expression.member];
+            if (constant !== undefined) return constant;
+          }
           const device = scope.deviceFor(name);
           if (device) return this.readDevice(device, expression.member, services);
           /*
@@ -3428,8 +3471,44 @@ export class FirmwareRuntime {
         }
         case 'read':
           return services.analogRead(device.pin);
-        default:
+        /*
+         * The attenuation only widens the range the ADC can accept. The bench
+         * reads a fraction of the reference it already knows, so the setting
+         * changes nothing the sketch can see -- but a sketch that sets it is
+         * setting the range it expects to read, not asking for a value.
+         */
+        case 'atten':
           return 0;
+        default:
+          throw unknownError('member', member, 'ADC', this.language);
+      }
+    }
+
+    if (device.kind === 'uart') {
+      switch (member) {
+        case 'init':
+        case 'deinit':
+          return 0;
+        case 'write':
+          /*
+           * `UART.write` puts its bytes on the port the monitor draws, which
+           * is the same port `print` uses: a board's REPL and its first UART
+           * are one wire.
+           */
+          services.serialWrite(formatValue(args[0] ?? ''));
+          return typeof args[0] === 'string' ? args[0].length : 1;
+        /*
+         * Nothing types into the bench's monitor, so nothing is ever waiting:
+         * `any` is zero and `read` is the -1 MicroPython answers when there
+         * is nothing to read.
+         */
+        case 'any':
+          return 0;
+        case 'read':
+        case 'readline':
+          return -1;
+        default:
+          throw unknownError('member', member, 'UART', this.language);
       }
     }
 

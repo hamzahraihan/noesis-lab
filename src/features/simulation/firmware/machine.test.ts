@@ -150,6 +150,75 @@ describe('machine.ADC', () => {
 
     expect(target.serial).toEqual(['1024\n']);
   });
+
+  it('takes the attenuation without changing a reading it already answers', () => {
+    const target = host();
+    target.analog.set(34, 2048);
+    run(
+      [
+        'from machine import ADC',
+        'probe = ADC(34)',
+        'probe.atten(ADC.ATTN_11DB)',
+        'print(probe.read_u16())',
+      ].join('\n'),
+      target,
+    );
+
+    expect(target.serial).toEqual(['32776\n']);
+  });
+
+  it('says so for a member it does not have', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      'from machine import ADC\nADC(34).bleep()\n',
+      target.services,
+      'python',
+    );
+
+    expect(() => runner.step()).toThrow(/has no attribute 'bleep'/);
+  });
+});
+
+describe('machine.SoftI2C', () => {
+  it('is the same bus on the pins it names', () => {
+    const target = host();
+    target.reply.push(0x5a);
+    run(
+      [
+        'from machine import SoftI2C, Pin',
+        'i2c = SoftI2C(sda=Pin(21), scl=Pin(22))',
+        'print(i2c.readfrom_mem(0x68, 0, 1)[0])',
+      ].join('\n'),
+      target,
+    );
+
+    expect(target.bus).toEqual(['start 104', 'write 0', 'end', 'request 104 1']);
+    expect(target.serial).toEqual(['90\n']);
+  });
+});
+
+describe('machine.UART', () => {
+  it('writes to the port the monitor draws', () => {
+    const target = host();
+    run('from machine import UART\nlink = UART(0, 9600)\nlink.write("hi")\n', target);
+
+    expect(target.serial).toEqual(['hi']);
+  });
+
+  it('answers nothing waiting, the way an unread port does', () => {
+    const target = host();
+    run(
+      [
+        'from machine import UART',
+        'link = UART(0, 9600)',
+        'print(link.any())',
+        'print(link.read())',
+      ].join('\n'),
+      target,
+    );
+
+    expect(target.serial).toEqual(['0\n', '-1\n']);
+  });
 });
 
 describe('machine.PWM', () => {
