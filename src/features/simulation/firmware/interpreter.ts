@@ -4430,6 +4430,15 @@ const BUILTIN_CONSTANTS: Readonly<Record<string, number>> = {
 /** Native helpers that are pure arithmetic and need no host access. */
 const BUILTINS: Readonly<Record<string, (args: number[]) => Value>> = {
   abs: (args) => Math.abs(args[0] ?? 0),
+  /*
+   * The pair a sketch that picks a random value always writes together:
+   * `randomSeed(analogRead(0))` then `random(...)`. The seed has nothing to
+   * seed here -- the generator is the host's -- but the line has to run,
+   * because a sketch that stops on it never reaches the value it wanted.
+   */
+  randomSeed: () => 0,
+  // The bit `bitRead` reads is the one every register tutorial names.
+  bitRead: (args) => ((args[0] ?? 0) >> (args[1] ?? 0)) & 1,
   min: (args) => Math.min(...args),
   max: (args) => Math.max(...args),
   sq: (args) => (args[0] ?? 0) ** 2,
