@@ -453,6 +453,18 @@ nothing to seed here, but a sketch that stopped on it never reached the value
 it wanted. `bitRead` takes a number apart, which is what a register tutorial
 does with it.
 
+**A character literal is a number, and a printed number has the field the
+call names.** `'A'` did not lex at all, so the first line of every
+serial-command sketch -- read a byte, compare it to a letter -- was a syntax
+error. A single-quoted literal is the character's code in C and a string in
+Python, which is why the tokenizer keeps the text and each front end decides.
+The serial monitor also writes what the library would: a whole number in the
+base a second argument names (`print(255, HEX)` is `FF`), a fraction to the
+places it asks for (`print(3.14159, 4)` is `3.1416`). Both used to read the
+field as decimal places, so `HEX` printed `255.0000000000000000` -- in the one
+panel a learner is reading carefully. A Python string with an escaped quote
+(`'it\'s'`) ended at the escaped quote; it ends at the closing one now.
+
 **A lesson's stated limit is a claim, and it gets checked too.** Module 4
 teaches interrupts by teaching why polling fails, and its sketches told the
 learner why: no `volatile`, `const byte` rejected at file scope, and an
