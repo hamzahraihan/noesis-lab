@@ -37,8 +37,9 @@ sensors over I²C and one-wire, and a breadboard whose holes are the ones the
 wires actually land in.
 
 **Instruments** — an oscilloscope, an 8-channel logic analyser, a multimeter, a
-bus monitor and a serial monitor. The analyser draws the square wave the
-solver produced, not the samples between edges.
+bus monitor, a serial monitor and a serial plotter. The analyser draws the
+square wave the solver produced, not the samples between edges, and a capture
+leaves as a VCD that PulseView reads.
 
 **A debugger.** Set a stop in the editor's margin and the sketch stops there:
 the panel says where it is, what it can see from there, and carries on, steps
@@ -77,7 +78,7 @@ or individually:
 | `npm run dev` | The dev server, with the worker path's isolation headers already set |
 | `npm run build` | Typecheck and a production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle the way a static host would |
-| `npm test` | The full Vitest suite — 199 files, 1,659 tests |
+| `npm test` | The full Vitest suite — 201 files, 1,675 tests |
 | `npm run test:watch` | The same, in watch mode |
 | `npm run typecheck` | `tsc -b` |
 | `npm run lint` | oxlint |

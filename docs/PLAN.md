@@ -286,6 +286,17 @@ transactions the bus models already report, so it shows the byte sequence a
 sketch sends even when the device on the other end is unwired and every write
 goes nowhere.
 
+**The plotter answers "what did the program say", and a capture leaves as a
+file.** The serial monitor shows the sketch's output as text; the plotter
+reads the same output as numbers, and a line that is a number -- or several
+numbers, separated by tabs -- is a sample, so a sketch that prints a reading
+every second draws a line. The x axis is the sample and not the second: the
+bench knows when a reading was taken on a pin, but the serial output carries
+no time of its own, and a plot that pretended otherwise would be lying about
+the sketch. **A capture leaves as a VCD**, the format PulseView reads, so a
+bench that caught a clock edge can be opened in the tool a hardware engineer
+already has.
+
 **Three firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306
 command bytes over `Wire` by hand, and `WirePort` had no read half at all. So

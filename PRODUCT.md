@@ -35,7 +35,7 @@ A neighboring product could not truthfully copy these together:
 - Eight boards: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano RP2040 Connect, Raspberry Pi Pico, Franzininho, Raspberry Pi 4. Eight boards, each with its own pin numbering and buses.
 - Editor is Monaco (bundled, no CDN) with an `arduino-cpp` language whose completions are exactly the interpreter's supported subset.
 - Component artwork is `@wokwi/elements` (MIT, 50+ SVG parts) integrated at true millimetre scale, plus hand-authored breadboard, capacitor, and I2C OLED.
-- Instruments on the bench: multimeter, oscilloscope, logic analyser, bus monitor, serial terminal, and a debugger for the interpreted sketch.
+- Instruments on the bench: multimeter, oscilloscope, logic analyser, bus monitor, serial terminal, serial plotter, and a debugger for the interpreted sketch.
 
 ## Capabilities and Constraints
 
@@ -45,6 +45,7 @@ Confirmed capabilities:
 - Real-firmware backends alongside the interpreter: the Uno runs compiled AVR machine code (in-browser toolchain, Wasm core); the Nano RP2040 Connect and the Raspberry Pi Pico boot the pinned MicroPython UF2 on `rp2040js`, mounting the project's files as a littlefs image; the ESP32 boots an emulated Xtensa chip running its own MicroPython. Run re-mounts the current code and starts a fresh machine; Reset is the same clean boot. Selected per run from the backend selector, which refuses a mode the board or the sketch cannot use and says why.
 - Arduino APIs the interpreter implements: pinMode, digitalWrite, analogWrite, Serial, Wire (including requestFrom/read), SPI, delay, millis, and board-specific interrupts; character LCD (HD44780), servos, and a `tft` convenience layer.
 - A bench-local network: `WiFi.begin`/`status`/`localIP` with Arduino's `WL_*` codes, and a poll-based `net` port — `get`/`read` for HTTP and `subscribe`/`available`/`message` for a sensor that publishes. It is simulated, so it is deterministic and needs no internet; the answer arrives on simulated time, which is why a sketch polls for it.
+- A serial plotter, which reads the sketch's own output as numbers — a line that is a number, or several numbers separated by tabs, is a sample — and a capture that leaves as a VCD, the format PulseView reads. The x axis is the sample, not the second: the serial output carries no time of its own.
 - A debugger on the interpreted sketch: a stop set in the editor's margin, the program held there with the names in scope and what each holds, and three ways on — continue, step over the call, step into it. The stops travel with the sketch into the worker, which is the realm that holds the program. Nothing on a compiled core: no GDB, no memory view, no watchpoints.
 - Guided exercise ladder: 12 exercises (0.1 first circuit; 1.1–1.2 GPIO; 2.1–2.2 analog; 3.1–3.2 bus protocols; 4.1–4.2 interrupts; 5.1 maps; 5.2 single-board computers; 5.3 networks).
 - Project gallery per board; glossary; references page; diagnostics harness.

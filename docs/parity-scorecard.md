@@ -57,7 +57,7 @@ than about arithmetic.
 | 2. Parts catalogue | 14% | 45 | 45 | **57 bench-placed entries** — 40 named in `parts/catalogue.ts` plus 5 resistors, 4 capacitors, 5 LEDs and 3 pots — over **38 component kinds** (`parts/catalog.ts:95-147`). Wokwi lists ~62. Velxio's two public figures disagree — 150+ parts across the catalog, 48+ on the free Maker canvas — and 57 sits between them. |
 | 3. Electrical solver | 10% | **85** | 60 | A real per-timestep resistive-network solve (`simulation/circuit.ts`, `engine.ts`), not logic levels: pins modelled behind their real output impedance, PWM switched rather than averaged, a GL5528's logarithmic lux curve, an NTC's B = 3950, internal pull-ups and floating inputs. **Ahead of Wokwi**, which does not model a resistive network; behind Velxio, whose ngspice-WASM is true SPICE with diodes, transistors and op-amps. |
 | 4. Board & architecture coverage | 9% | 40 | 20 | **8 boards** (`learn/boardRegistry.ts:75`) across **3 execution paths** — AVR, RP2040, ESP32. Wokwi: 18 MCUs over 4 architectures. Velxio: 40 boards over 5 families, of which 30+ are on the free plan. |
-| 5. Instruments | 9% | 65 | **70** | Scope, 8-lane logic analyser, multimeter, bus monitor, serial monitor, problems — the six bottom tabs at `bench/store/shell-state.ts:8`. **No plotter and no waveform export.** Wokwi has the plotter and a logic analyser that exports VCD to PulseView; Velxio has an oscilloscope and meters but **no logic analyser and no bus monitor**, so on instrument *breadth* Noesis is ahead of it — Velxio's advantage is the SPICE layer underneath, which is pillar 3. |
+| 5. Instruments | 9% | 78 | **82** | Scope, 8-lane logic analyser, multimeter, bus monitor, serial monitor, **serial plotter**, problems — the bottom tabs at `bench/store/shell-state.ts:8`. The plotter reads the sketch's own output as numbers (`simulation/plot.ts`), and a capture leaves as a **VCD**, the format PulseView reads (`simulation/vcd.ts`). Wokwi has the plotter and the VCD export too, and an 8-channel analyser at 1 GHz where this one samples at the solver's rate; Velxio has an oscilloscope and meters but **no logic analyser, no bus monitor, no plotter and no export**, so on instrument *breadth* Noesis is well ahead of it — Velxio's advantage is the SPICE layer underneath, which is pillar 3. |
 | 6. Curriculum & examples | 10% | 45 | 35 | **12 graded exercises** (`learn/exercises/`) over ~45,000 words of long-form worksheets (`docs/exercises/`), each with hints and worked solutions, plus a glossary, a references page, 10 gallery projects (`learn/gallery.ts`) and 20 committed circuits in `learn/circuits/`. Velxio ships 400+ examples and no curriculum. |
 | 7. Persistence & sharing | 7% | 70 | 55 | A `CircuitDocument` is the source of truth (`simulation/circuit-doc.ts`); the bench autosaves it per board (`bench/store/circuit-store.ts`), carries it in a `?circuit=` link (`bench/utils/circuit-codec.ts`) and reads and writes it as a `.json` file (`bench/utils/circuit-file.ts`). **No accounts and no cloud** — which is what the static-hosting constraint buys. |
 | 8. Debugging | 8% | 42 | **60** | **A debugger, on the interpreted sketch.** A stop in the editor's margin, a program that stops on it, the names in scope and what they hold, and three ways to move on: carry on, step over, step into (`simulation/firmware/debugger.ts`, `simulation/firmware/interpreter.ts`, `instruments/DebugPanel.tsx`). The stops ride with the sketch into the worker, which is the realm that holds the program (`sim-worker/worker.ts`). **Nothing on a compiled core** — no GDB, no memory view, no watchpoints, no expression evaluation. Wokwi debugs compiled firmware over GDB; Velxio documents no debugger at all, its docs carrying an AI assistant in that space instead. |
@@ -65,15 +65,15 @@ than about arithmetic.
 | 10. Extension API | 5% | 55 | 60 | A part may arrive as a `.part.json` (`parts/custom.ts`) or carry **behaviour** as a script — QuickJS compiled to Wasm, one context per part, inside the simulation worker (`simulation/scripted/`). Definitions **travel with the circuit** (`CircuitDocument.definitions`), so a file opens on a machine that imported nothing. Wokwi and Velxio use a C→Wasm chip ABI instead. |
 | 11. Ecosystem & workflow | 5% | 33 | 33 | Monaco, multi-file tabs, an Arduino library manager with tier-2 libraries (`instruments/library-manager.ts`, `simulation/avr/libraries/`), GitHub CI running typecheck, lint, boundary checks and tests (`.github/workflows/ci.yml`), and a real `README.md`. **No VS Code extension, no simulation CI, no i18n, no community, and no licence.** Velxio has simulation CI with a GitHub Action, an MCP server, an AI assistant, GitHub Sync, BOM export and docs in 9 languages — and accounts, a paid tier and a Discord. Both targets gate their best workflow features behind a subscription, so the free tiers are closer to Noesis than the price pages suggest. |
 
-**Weighted total: 54.8% of Wokwi · 47.3% of Velxio.**
+**Weighted total: 55.9% of Wokwi · 48.4% of Velxio.**
 
 The arithmetic, so it can be checked:
 
 ```
-Wokwi   18×.63 + 14×.45 + 10×.85 +  9×.40 +  9×.65 + 10×.45
-       +  7×.70 +  8×.42 +  5×.40 +  5×.55 +  5×.33  =  54.8
-Velxio  18×.48 + 14×.45 + 10×.60 +  9×.20 +  9×.70 + 10×.35
-       +  7×.55 +  8×.60 +  5×.30 +  5×.60 +  5×.33  =  47.3
+Wokwi   18×.63 + 14×.45 + 10×.85 +  9×.40 +  9×.78 + 10×.45
+       +  7×.70 +  8×.42 +  5×.40 +  5×.55 +  5×.33  =  55.9
+Velxio  18×.48 + 14×.45 + 10×.60 +  9×.20 +  9×.82 + 10×.35
+       +  7×.55 +  8×.60 +  5×.30 +  5×.60 +  5×.33  =  48.4
 ```
 
 **What the targets' numbers rest on.** Wokwi's are from
@@ -93,9 +93,10 @@ feature it has but has not written down would not show.
 - **The solver.** Wokwi models logic levels; Noesis solves a resistive network,
   so a shorted pin draws the current it really would and an LED's brightness
   falls out over successive steps rather than being asserted.
-- **Instrument breadth against Velxio.** A logic analyser and a bus monitor
-  are Noesis's, and Velxio's docs list neither — it has an oscilloscope and
-  meters over a SPICE layer, which is deeper, not broader.
+- **Instrument breadth against Velxio.** A logic analyser, a bus monitor, a
+  serial plotter and a VCD export are Noesis's, and Velxio's docs list none of
+  them — it has an oscilloscope and meters over a SPICE layer, which is
+  deeper, not broader.
 - **Curriculum depth per project.** ~45,000 words of worksheets behind 12
   graded exercises with hints and worked solutions beats Wokwi's shallower
   tutorials, and has no equivalent in Velxio at all.
@@ -104,8 +105,8 @@ feature it has but has not written down would not show.
 - **A debugger against Velxio.** Velxio's docs list no debugger at all; its
   docs carry an AI assistant in that space instead. Noesis stops a sketch on
   a line, shows what the program can see there, and steps through it.
-- **Engineering rigour.** 199 test files and 1,659 tests across 30,308 lines
-  of test against 67,325 lines of source in 238 files; CI with typecheck, lint
+- **Engineering rigour.** 201 test files and 1,675 tests across 30,459 lines
+  of test against 67,702 lines of source in 242 files; CI with typecheck, lint
   and boundary checks. The risky parts — the AVR Wasm core, the RP2040
   firmware path, the circuit document, the interpreter's Python front end —
   each have dedicated parity tests rather than smoke checks.
@@ -119,22 +120,18 @@ feature it has but has not written down would not show.
 2. **Architectures** (40%). **ATtiny85 is nearly free** — `avr8js` 0.21.1 is
    already a dependency and Wokwi ships the same part. Then ESP32-C3/S3 and
    STM32F103.
-3. **A serial plotter and waveform export** (part of 65). The scope already
-   captures the data; this is a rendering and panel addition, and Wokwi has
-   both. Wokwi's logic analyser also exports VCD for PulseView, which Noesis
-   cannot — worth the same work, since the capture is already there.
-4. **Network depth** (40 against Wokwi, 30 against Velxio). MQTT
+3. **Network depth** (40 against Wokwi, 30 against Velxio). MQTT
    publish/subscribe and NTP on the existing virtual network would close most
    of what Wokwi's Wi-Fi simulation offers; reaching the real internet the way
    Velxio does is a different and larger thing.
-5. **Simulation CI** (part of 30). The repo's CI already runs the suite;
+4. **Simulation CI** (part of 30). The repo's CI already runs the suite;
    adding "run this firmware and assert on its output" reuses that harness,
    and is what Wokwi CI and Velxio CI both do.
-6. **Debugging on a compiled core** (part of 42). The debugger reads the
+5. **Debugging on a compiled core** (part of 42). The debugger reads the
    interpreter, because a program the bench can read is a program it can
    stop. A compiled core is a machine it cannot read that way: GDB over the
    AVR Wasm core is the same work Wokwi does, and a much larger one.
-7. **ESP32 machine code** (part of 63/48). The largest lift with the least
+6. **ESP32 machine code** (part of 63/48). The largest lift with the least
    certain payoff. No maintained open Xtensa core exists to drop in, and
    the interpreter already covers the curriculum. Treat as its own spike only
    if instruction-level ESP32 fidelity becomes a product goal.
@@ -190,7 +187,7 @@ ls src/features/learn/benches | wc -l
 # Instruments — the bottom tabs, and what is missing
 grep -n "BottomKey" src/features/bench/store/shell-state.ts
 
-# The debugger, and the plotter that is still missing
+# The debugger and the plotter
 grep -rl "breakpoint" src --include=*.tsx | wc -l
 grep -rni "plotter" src --include=*.tsx -l | wc -l
 
