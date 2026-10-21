@@ -295,7 +295,8 @@ bench knows when a reading was taken on a pin, but the serial output carries
 no time of its own, and a plot that pretended otherwise would be lying about
 the sketch. **A capture leaves as a VCD**, the format PulseView reads, so a
 bench that caught a clock edge can be opened in the tool a hardware engineer
-already has.
+already has, and the scope's own capture leaves as a CSV table of the time
+and the voltage at every sample.
 
 **Four firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306
