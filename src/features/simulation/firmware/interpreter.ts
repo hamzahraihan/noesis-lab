@@ -5353,11 +5353,17 @@ export class FirmwareRuntime {
 
     switch (member) {
       case 'begin':
-        return 0;
       case 'beginTransaction':
       case 'setClockDivider':
       case 'setBitOrder':
       case 'setDataMode':
+        /*
+         * `SPI.begin()` used to do nothing, and the bus only carries a byte
+         * while it has been begun -- so a sketch that said `SPI.begin()` and
+         * then `SPI.transfer(...)` had every byte dropped on the floor, with
+         * nothing to say so. The panels hid it, because they begin a
+         * transaction first.
+         */
         spi.begin();
         return 0;
       case 'end': {
