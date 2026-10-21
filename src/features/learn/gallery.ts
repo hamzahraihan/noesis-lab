@@ -2131,6 +2131,216 @@ const SOIL_PROBE: GalleryProject = {
   ],
 };
 
+/* ------------------------------------------------------------------ *
+ * Instrument Bench — barometer, current monitor and converter on one bus
+ * ------------------------------------------------------------------ */
+
+const INSTRUMENT_BENCH_SKETCH = `#include <Arduino.h>
+#include <Wire.h>
+
+// An instrument bench: a barometer, a current monitor and a sixteen-bit
+// converter, all three answering on the same two wires.
+//
+// The barometer speaks the register protocol rather than a library, so the
+// compensation the datasheet prints is here in the sketch: the raw counts
+// come off the chip, and the eleven coefficients in its E2PROM are what turn
+// them into pascals and degrees.
+
+byte BAROMETER = 0x77;
+byte MONITOR = 0x40;
+byte CONVERTER = 0x48;
+
+// The chip's own calibration, read out of its E2PROM at startup.
+int words[11];
+int ac1, ac2, ac3, ac4, ac5, ac6, b1, b2, mb, mc, md;
+
+// A register that holds two bytes, most significant first.
+int readWord(int address, int register) {
+  Wire.beginTransmission(address);
+  Wire.write(register);
+  Wire.endTransmission();
+  Wire.requestFrom(address, 2);
+  int high = Wire.read();
+  int low = Wire.read();
+  return (high << 8) | low;
+}
+
+// A signed register: the current and the shunt voltage can both be negative.
+int readSignedWord(int address, int register) {
+  int word = readWord(address, register);
+  if (word > 32767) { word = word - 65536; }
+  return word;
+}
+
+void readCalibration() {
+  Wire.beginTransmission(BAROMETER);
+  Wire.write(0xAA);
+  Wire.endTransmission();
+  Wire.requestFrom(BAROMETER, 22);
+  for (int index = 0; index < 11; index++) {
+    int high = Wire.read();
+    int low = Wire.read();
+    int word = (high << 8) | low;
+    if (word > 32767) { word = word - 65536; }
+    words[index] = word;
+  }
+  ac1 = words[0]; ac2 = words[1]; ac3 = words[2]; ac4 = words[3];
+  ac5 = words[4]; ac6 = words[5]; b1 = words[6]; b2 = words[7];
+  mb = words[8]; mc = words[9]; md = words[10];
+}
+
+// The raw temperature count: start a measurement, then read the two bytes it
+// lands in.
+int temperatureCounts() {
+  Wire.beginTransmission(BAROMETER);
+  Wire.write(0xF4);
+  Wire.write(0x2E);
+  Wire.endTransmission();
+  Wire.beginTransmission(BAROMETER);
+  Wire.write(0xF6);
+  Wire.endTransmission();
+  Wire.requestFrom(BAROMETER, 2);
+  int high = Wire.read();
+  int low = Wire.read();
+  return (high << 8) | low;
+}
+
+// The raw pressure count: three bytes, left-aligned.
+int pressureCounts() {
+  Wire.beginTransmission(BAROMETER);
+  Wire.write(0xF4);
+  Wire.write(0x34);
+  Wire.endTransmission();
+  Wire.beginTransmission(BAROMETER);
+  Wire.write(0xF6);
+  Wire.endTransmission();
+  Wire.requestFrom(BAROMETER, 3);
+  int msb = Wire.read();
+  int lsb = Wire.read();
+  int xlsb = Wire.read();
+  return ((msb << 16) | (lsb << 8) | xlsb) >> 8;
+}
+
+// The datasheet's temperature compensation, in tenths of a degree.
+int compensateTemperature(int ut) {
+  int x1 = ((ut - ac6) * ac5) >> 15;
+  int x2 = idiv(mc << 11, x1 + md);
+  int b5 = x1 + x2;
+  return (b5 + 8) >> 4;
+}
+
+// The datasheet's pressure compensation, in pascals.
+int compensatePressure(int up, int ut) {
+  int x1 = ((ut - ac6) * ac5) >> 15;
+  int x2 = idiv(mc << 11, x1 + md);
+  int b6 = x1 + x2 - 4000;
+
+  int bx1 = (b2 * ((b6 * b6) >> 12)) >> 11;
+  int bx2 = (ac2 * b6) >> 11;
+  int b3 = ((ac1 * 4 + bx1 + bx2) + 2) >> 2;
+  int by1 = (ac3 * b6) >> 13;
+  int by2 = (b1 * ((b6 * b6) >> 12)) >> 16;
+  int b4 = (ac4 * (((by1 + by2 + 2) >> 2) + 32768)) >> 15;
+
+  int b7 = (up - b3) * 50000;
+  int p = idiv(b7 * 2, b4);
+  int px1 = (((p >> 8) * (p >> 8)) * 3038) >> 16;
+  int px2 = (-7357 * p) >> 16;
+  return p + ((px1 + px2 + 3791) >> 4);
+}
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();
+  readCalibration();
+  /*
+   * The current register is only as good as the calibration the sketch
+   * writes: 4096 is the datasheet's own worked example, a hundred
+   * microamps a bit.
+   */
+  Wire.beginTransmission(MONITOR);
+  Wire.write(0x05);
+  Wire.write(0x10);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  Serial.println("instrument bench up");
+}
+
+void loop() {
+  int ut = temperatureCounts();
+  int up = pressureCounts();
+  int tenths = compensateTemperature(ut);
+  int pascals = compensatePressure(up, ut);
+
+  int shunt = readSignedWord(MONITOR, 0x01);
+  int busMillivolts = (readWord(MONITOR, 0x02) >> 3) * 4;
+  int current = readSignedWord(MONITOR, 0x04);
+  int power = readWord(MONITOR, 0x03);
+
+  /*
+   * The converter: tell it which channel to look at and how much of the
+   * range to give it, then read the counts back.
+   */
+  Wire.beginTransmission(CONVERTER);
+  Wire.write(0x01);
+  Wire.write(0xC2);
+  Wire.write(0x02);
+  Wire.endTransmission();
+  int counts = readSignedWord(CONVERTER, 0x00);
+
+  int whole = idiv(tenths, 10);
+  int fraction = tenths - whole * 10;
+  if (fraction < 0) { fraction = 0 - fraction; }
+
+  Serial.print("barometer ");
+  Serial.print(idiv(pascals, 100));
+  Serial.print(" hPa  temperature ");
+  Serial.print(whole);
+  Serial.print(".");
+  Serial.print(fraction);
+  Serial.println(" C");
+
+  Serial.print("monitor ");
+  Serial.print(idiv(current * 100, 1000));
+  Serial.print(" mA  shunt ");
+  Serial.print(idiv(shunt * 10, 1000));
+  Serial.print(" mV  bus ");
+  Serial.print(idiv(busMillivolts, 1000));
+  Serial.print(" V  power ");
+  Serial.print(power * 2);
+  Serial.print(" mW  converter ");
+  Serial.print(counts);
+  Serial.println(" counts");
+
+  delay(1000);
+}
+`;
+
+const INSTRUMENT_BENCH: GalleryProject = {
+  id: 'instrument-bench',
+  title: 'Instrument Bench',
+  blurb:
+    'Three instruments on one pair of wires: a barometer for the weather, a current monitor for the supply, and a sixteen-bit converter for whatever analogue signal you have. The barometer speaks the register protocol, so the compensation the datasheet prints is in the sketch.',
+  parts: [
+    { name: 'BMP180 Barometer', qty: 1 },
+    { name: 'INA219 Current Monitor', qty: 1 },
+    { name: 'ADS1115 16-bit ADC', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: INSTRUMENT_BENCH_SKETCH,
+      circuit: CIRCUITS['instrument-bench'],
+    },
+  ],
+  working: [
+    'The serial log prints one line a reading: the pressure and temperature off the barometer, the current and the power off the monitor, and the converter counts.',
+    'Turn the Pressure and Temperature knobs on the barometer and both numbers move: the chip reports raw counts and the sketch does the arithmetic.',
+    'Turn the Current knob on the monitor and the current and the power move together, because the power is the current times the bus voltage.',
+  ],
+};
+
 export const GALLERY: readonly GalleryProject[] = [
   ALARM_CLOCK,
   SAFE,
@@ -2142,6 +2352,7 @@ export const GALLERY: readonly GalleryProject[] = [
   SENSOR_FEED,
   LIVE_WEATHER,
   SOIL_PROBE,
+  INSTRUMENT_BENCH,
 ];
 
 export function galleryById(id: string): GalleryProject | null {

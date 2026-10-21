@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "bmp180-barometer",
+      "x": 95,
+      "y": 20,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "ina219-current-monitor",
+      "x": 95,
+      "y": 62,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "ads1115-adc",
+      "x": 95,
+      "y": 104,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:A4",
+      "to": "p2:SDA",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:A5",
+      "to": "p2:SCL",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:5V",
+      "to": "p2:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:J1_GND",
+      "to": "p2:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p1:A4",
+      "to": "p3:SDA",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p1:A5",
+      "to": "p3:SCL",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p1:5V",
+      "to": "p3:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p1:J1_GND",
+      "to": "p3:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "p1:A4",
+      "to": "p4:SDA",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p1:A5",
+      "to": "p4:SCL",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p1:5V",
+      "to": "p4:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "p1:J1_GND",
+      "to": "p4:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

@@ -790,6 +790,39 @@ void loop() {
     expect(readPercent()).toBeLessThan(20);
   }, 60_000);
 
+  it('runs the instrument bench live: three instruments on one bus', () => {
+    const build = galleryById('instrument-bench')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    // The sketch reads for a second before its first line, so the bench has
+    // to run for longer than that.
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+    // Serial.print fragments concatenate; only println breaks the line, so
+    // the stream is joined the way the monitor joins it.
+    const log = simulation.serialLines().join('');
+
+    /*
+     * The barometer reports raw counts and the sketch does the datasheet's
+     * arithmetic, so what it prints is what the operator dialled in.
+     */
+    expect(log).toContain('barometer 1013 hPa');
+    expect(log).toContain('temperature 20.0 C');
+    /*
+     * The monitor's own registers: the current, the voltage across its
+     * shunt, the bus it watches and the power, all read over the bus.
+     */
+    expect(log).toContain('monitor 100 mA');
+    expect(log).toContain('shunt 10 mV');
+    expect(log).toContain('bus 5 V');
+    expect(log).toContain('power 500 mW');
+    // The converter is pointed at channel zero, which is at zero volts.
+    expect(log).toContain('converter 0 counts');
+  }, 60_000);
+
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
       const build = galleryById('alarm-clock')!.builds[0];
