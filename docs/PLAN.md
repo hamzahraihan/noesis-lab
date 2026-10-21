@@ -415,6 +415,19 @@ non-blocking sketch uses -- answered zero. `i2c.scan()` lists the addresses
 the bench answers at, so an empty scan means an empty bus rather than a bus
 nobody asked.
 
+**An import names a library or a tab, and the bench knows which.** `import
+helpers` means `helpers.py` and that tab has to be there; `import gc` means
+the interpreter itself and there is no file to look for. The loader used to
+treat both as tabs, so a sketch that opened with `import gc` or `from
+micropython import const` -- two lines a great many MicroPython sketches open
+with -- failed to load at all, and the error never reached the serial because
+it was a problem with the *project* rather than the program. `gc.collect()`
+does nothing (there is nothing to collect) and `const(x)` is `x`; `utime` is
+`time` under its older name. A PWM channel remembers what it was told, so
+`freq()` and `duty_u16()` read back -- the duty quantised to the eight bits
+it really has, so `duty_u16(32768)` reads as 32896 rather than the number
+that was asked for.
+
 **A call the bench cannot make says so.** It used to answer `0`, which is the
 worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
 learner believes the data was zero rather than the bench missing the call. A
