@@ -88,12 +88,14 @@ describe('a device is what the program named it', () => {
     expect(target.modes[0].mode).not.toBe(target.modes[1].mode);
   });
 
-  it('does not treat a constructor call as a value', () => {
-    // `x = LED(17)` leaves no number behind, so reading `x` cannot yield one.
+  it('says a device constructor is not a value', () => {
+    // `x = LED(17)` leaves no number behind, so reading `LED` cannot yield
+    // one: the bench says what the name holds rather than handing over a
+    // zero that reads like a pin number.
     const target = host();
-    run('from gpiozero import LED\nlamp = LED(17)\nprint(LED)\n', target);
-
-    expect(target.serial).toEqual(['0\n']);
+    expect(() =>
+      run('from gpiozero import LED\nlamp = LED(17)\nprint(LED)\n', target),
+    ).toThrow(/'LED' is a device, not a value/);
   });
 });
 
