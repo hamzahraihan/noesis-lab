@@ -210,10 +210,45 @@ export type Value =
  * write `while True: yield sensor.read()` without taking the bench with it.
  */
 export class GeneratorValue {
-  readonly generator: Generator<Produced, Flow, void>;
+  readonly generator: Generator<Produced, Flow, Value | undefined>;
+  /**
+   * Whether the body has begun running.
+   *
+   * A generator that has not started cannot be sent a value: there is no
+   * `yield` for the value to reach, and Python refuses it for that reason.
+   */
+  started = false;
+  /**
+   * Whether the body is running right now.
+   *
+   * A generator that is already running cannot be advanced again: a sketch
+   * that sends into a generator from inside that generator's own body is
+   * asking a generator to talk to itself, and Python calls that an error.
+   */
+  running = false;
 
-  constructor(generator: Generator<Produced, Flow, void>) {
+  constructor(generator: Generator<Produced, Flow, Value | undefined>) {
     this.generator = generator;
+  }
+
+  /**
+   * Advances the generator, so that it hands over its next value.
+   *
+   * `sent` is the value the generator's suspended `yield` expression answers
+   * with, so `x = yield 1` binds what was sent. Nothing is sent when the
+   * generator is merely advanced, which is what `next` does.
+   */
+  advance(sent?: Value): IteratorResult<Produced, Flow> {
+    if (this.running) {
+      throw new PythonError('ValueError', 'generator already executing');
+    }
+    this.started = true;
+    this.running = true;
+    try {
+      return this.generator.next(sent);
+    } finally {
+      this.running = false;
+    }
   }
 }
 
@@ -353,7 +388,7 @@ export type DelayRequest = number;
  */
 export type Produced = DelayRequest | Yielded;
 
-export type Evaluator = Generator<Produced, Value, void>;
+export type Evaluator = Generator<Produced, Value, Value | undefined>;
 
 export interface FirmwareServices {
   nowMs(): number;
@@ -1586,7 +1621,7 @@ export class FirmwareRuntime {
   }
 
   /** Runs `setup()` once, then `loop()` forever. Yields each blocking wait. */
-  *main(services: FirmwareServices): Generator<Produced, void, void> {
+  *main(services: FirmwareServices): Generator<Produced, void, Value | undefined> {
     /*
      * The `A0`..`A5` constants belong to the board, not to the Uno: an ESP32
      * names its analog pins by the GPIO behind them and a Mega numbers them
@@ -1630,7 +1665,7 @@ export class FirmwareRuntime {
     parent: Scope,
     services: FirmwareServices,
     keywords: readonly { name: string; value: Value }[] = [],
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     /*
      * `len` measures what it is handed: a string's characters, a list's
      * elements, a dictionary's keys. It used to look the argument up as a
@@ -1696,6 +1731,90 @@ export class FirmwareRuntime {
 
     const flow = yield* this.execute(declaration.body, scope, services);
     return flow.kind === 'return' ? flow.value : 0;
+  }
+
+  /**
+   * A method called on a generator: `send(value)` puts a value into it.
+   *
+   * `send` is the other half of `yield`: the generator takes a value back
+   * as readily as it hands one over, which is what makes a generator a
+   * coroutine -- a sketch can hand it a command and read what comes back.
+   */
+  private *generatorMember(
+    generator: GeneratorValue,
+    member: string,
+    args: Value[],
+  ): Generator<Produced, Value, Value | undefined> {
+    switch (member) {
+      case 'send': {
+        if (args.length !== 1) {
+          throw new PythonError('TypeError', 'send() takes exactly one argument');
+        }
+        return (yield* this.advanceGenerator(generator, args[0])) as Value;
+      }
+      case '__next__':
+        return (yield* this.advanceGenerator(generator)) as Value;
+      case 'close':
+      case 'throw':
+        /*
+         * Python's generator has both, and the bench models neither: a
+         * generator here is a channel that hands values over and takes them
+         * back, and it has no way to be closed or to be given an error.
+         * Saying so is better than the AttributeError, which would claim
+         * Python has no such member.
+         */
+        throw new PythonError(
+          'Error',
+          `this bench models no generator ${member}: a generator here hands values over and takes them back, and that is the whole of it`,
+        );
+      default:
+        throw unknownError('member', member, 'generator', this.language);
+    }
+  }
+
+  /**
+   * Advances a generator and hands back the value it yields.
+   *
+   * A generator is a two-way channel: it hands values over, and it takes
+   * them back. `sent` is what the generator's suspended `yield` expression
+   * answers with, so `x = yield 1` binds what was sent -- and a generator
+   * that asks for time inside its body has that wait spent here, on the
+   * bench's own clock, exactly as a sketch's own wait is.
+   *
+   * A generator that has run out raises `StopIteration`, the way Python
+   * does, so a sketch can catch it.
+   */
+  private *advanceGenerator(
+    generator: GeneratorValue,
+    sent?: Value,
+  ): Generator<Produced, Value, Value | undefined> {
+    if (sent !== undefined && !generator.started && sent !== 0) {
+      /*
+       * A value sent into a generator that has not started has nowhere to
+       * land: the body has not reached its first `yield`, so the value
+       * would be dropped without a word. Python refuses it, and so does
+       * this -- a zero is None here, and None is what a fresh generator is
+       * started with.
+       */
+      throw new PythonError(
+        'TypeError',
+        "can't send a value to a generator that has not started: start it with next() first, or send nothing (zero)",
+      );
+    }
+    for (;;) {
+      const step = generator.advance(sent);
+      sent = undefined;
+      if (step.done) {
+        throw new PythonError('StopIteration', 'the generator has finished');
+      }
+      const produced = step.value;
+      if (typeof produced === 'number') {
+        // A wait inside the generator: the bench spends it and asks again.
+        yield produced;
+        continue;
+      }
+      return produced.yielded;
+    }
   }
 
   /**
@@ -1809,7 +1928,7 @@ export class FirmwareRuntime {
     name: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, void, void> {
+  ): Generator<Produced, void, Value | undefined> {
     const instance = new Instance(className, this.globals);
     const declaration = this.classes.get(className);
     for (const field of declaration?.fields ?? []) {
@@ -1874,7 +1993,7 @@ export class FirmwareRuntime {
     declaration: FunctionDecl,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, void, void> {
+  ): Generator<Produced, void, Value | undefined> {
     let index = 0;
     /*
      * A Python method's first parameter is the object itself, and the caller
@@ -1916,7 +2035,7 @@ export class FirmwareRuntime {
     declaration: FunctionDecl,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     const frame = new Scope(instance.scope);
     yield* this.bindMethodParameters(frame, instance, declaration, args, services);
     /*
@@ -1950,7 +2069,7 @@ export class FirmwareRuntime {
     method: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     /*
      * A global RTC (`RTC_DS1307 rtc; rtc.now()`): the class is never declared
      * in a tab -- the library owns it -- so the handle answers directly
@@ -2111,7 +2230,7 @@ export class FirmwareRuntime {
     expression: Expr,
     scope: Scope,
     services: FirmwareServices,
-  ): Generator<Produced, boolean, void> {
+  ): Generator<Produced, boolean, Value | undefined> {
     if (expression.kind !== 'call' || expression.callee.kind !== 'identifier') return false;
     const className = expression.callee.name;
     if (!this.classes.has(className)) return false;
@@ -2128,7 +2247,7 @@ export class FirmwareRuntime {
     name: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     switch (name) {
       /*
        * Python's `print`, which is where a Pi program writes. It goes to the
@@ -2140,6 +2259,40 @@ export class FirmwareRuntime {
         const separator = args.length > 1 ? ' ' : '';
         services.serialWrite(args.map(formatValue).join(separator) + '\n');
         return 0;
+      }
+
+      /*
+       * `next(gen)`: the builtin that advances a generator.
+       *
+       * It sends nothing, so a `yield` inside the generator answers with
+       * None -- which is zero here, the same as everywhere else. A generator
+       * that has run out raises `StopIteration`, the way Python does, and a
+       * second argument is the value to answer with instead of raising.
+       */
+      case 'next': {
+        if (this.language !== 'python') {
+          throw unknownError('call', name, '', this.language);
+        }
+        const source = args[0];
+        if (source === undefined) {
+          throw new PythonError('TypeError', 'next() expects a generator');
+        }
+        if (!(source instanceof GeneratorValue)) {
+          throw new PythonError(
+            'TypeError',
+            `'${pythonTypeName(source)}' object is not an iterator`,
+          );
+        }
+        try {
+          return (yield* this.advanceGenerator(source)) as Value;
+        } catch (error) {
+          const exhausted =
+            error instanceof PythonError && error.typeName === 'StopIteration';
+          if (exhausted && args.length > 1) {
+            return args[1];
+          }
+          throw error;
+        }
       }
 
       /*
@@ -2307,7 +2460,7 @@ export class FirmwareRuntime {
     statement: Stmt,
     scope: Scope,
     services: FirmwareServices,
-  ): Generator<Produced, Flow, void> {
+  ): Generator<Produced, Flow, Value | undefined> {
     switch (statement.kind) {
       case 'empty':
         return NORMAL;
@@ -2464,7 +2617,7 @@ export class FirmwareRuntime {
         const iterable = (yield* this.evaluate(statement.iterable, scope, services)) as Value;
         if (iterable instanceof GeneratorValue) {
           for (;;) {
-            const step = iterable.generator.next();
+            const step = iterable.advance();
             if (step.done) break;
             const produced = step.value;
             if (typeof produced === 'number') {
@@ -2693,7 +2846,7 @@ export class FirmwareRuntime {
     expression: Expr,
     scope: Scope,
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     switch (expression.kind) {
       case 'number':
         return expression.value;
@@ -2716,8 +2869,16 @@ export class FirmwareRuntime {
         const value = expression.value
           ? ((yield* this.evaluate(expression.value, scope, services)) as Value)
           : 0;
-        yield { yielded: value };
-        return 0;
+        /*
+         * The value handed over goes up; the value sent back comes down.
+         *
+         * They are two different things, and a generator is the one place
+         * both travel: `x = yield 1` binds whatever was sent, and hands over
+         * the 1 to whoever is iterating. Nothing sent means None, which is
+         * zero here.
+         */
+        const sent = (yield { yielded: value }) as Value | undefined;
+        return sent === undefined ? 0 : sent;
       }
 
       /*
@@ -2728,15 +2889,22 @@ export class FirmwareRuntime {
       case 'yieldFrom': {
         const source = (yield* this.evaluate(expression.value, scope, services)) as Value;
         if (source instanceof GeneratorValue) {
+          /*
+           * What is sent to a `yield from` is forwarded to the generator it
+           * delegates to, the way Python forwards it: the outer generator has
+           * no `yield` of its own to deliver it to.
+           */
+          let pending: Value | undefined = undefined;
           for (;;) {
-            const step = source.generator.next();
+            const step = source.advance(pending);
+            pending = undefined;
             if (step.done) {
               return step.value.kind === 'return' ? step.value.value : 0;
             }
             if (typeof step.value === 'number') {
-              yield step.value;
+              pending = (yield step.value) as Value | undefined;
             } else {
-              yield { yielded: step.value.yielded };
+              pending = (yield { yielded: step.value.yielded }) as Value | undefined;
             }
           }
         }
@@ -3281,6 +3449,9 @@ export class FirmwareRuntime {
           const bound = scope.lookup(callee.target.name);
           if (bound instanceof DateTimeValue) return dateTimeMember(bound, callee.member);
           if (bound instanceof TimeSpanValue) return timeSpanMember(bound, callee.member);
+          if (bound instanceof GeneratorValue) {
+            return (yield* this.generatorMember(bound, callee.member, args)) as Value;
+          }
           if (bound instanceof RtcHandle) {
             return (yield* this.evaluateRtcCall(callee.member, args, services)) as Value;
           }
@@ -3436,6 +3607,18 @@ export class FirmwareRuntime {
           throw new PythonError('Error', 'a call has no name to call');
         }
         const target = (yield* this.evaluate(callee.target, scope, services)) as Value;
+        /*
+         * A generator held in a list or in a field, asked a question of:
+         * `tasks[0].send(1)` and `self.task.send(1)` are the same call as
+         * `task.send(1)`, and the generator answers either way.
+         */
+        if (target instanceof GeneratorValue) {
+          const args: Value[] = [];
+          for (const argument of expression.args) {
+            args.push((yield* this.evaluate(argument, scope, services)) as Value);
+          }
+          return (yield* this.generatorMember(target, callee.member, args)) as Value;
+        }
         throw unknownError('member', callee.member, pythonTypeName(target), this.language);
       }
     }
@@ -3468,7 +3651,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     /*
      * `machine.ADC` answers in sixteen-bit counts on every port, while the
      * host's `analogRead` answers in the board's own (ten or twelve bits).
@@ -3595,6 +3778,23 @@ export class FirmwareRuntime {
         const level = this.readDevice(device, 'value', services);
         this.writeLevel(device, asNumber(level) !== 0 ? LEVEL_LOW : LEVEL_HIGH, services);
         return 0;
+      }
+      /*
+       * `blink` runs until something stops it: gpiozero's is a loop, so a
+       * sketch that calls one never reaches its next line. Answering zero
+       * used to turn a blinking program into a dead one without a word. The
+       * waits are yields, which is what keeps the rest of the bench moving
+       * while the program sits inside the loop.
+       */
+      case 'blink': {
+        const on = Math.max(0, asNumber(args[0] ?? 1));
+        const off = Math.max(0, asNumber(args[1] ?? args[0] ?? 1));
+        for (;;) {
+          this.writeLevel(device, LEVEL_HIGH, services);
+          yield Math.max(1, Math.round(on * 1000));
+          this.writeLevel(device, LEVEL_LOW, services);
+          yield Math.max(1, Math.round(off * 1000));
+        }
       }
       case 'close':
         this.writeLevel(device, LEVEL_LOW, services);
@@ -3815,7 +4015,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     const wire = services.wire;
 
     switch (member) {
@@ -4158,7 +4358,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     const wire = services.wire;
 
     switch (member) {
@@ -4201,7 +4401,7 @@ export class FirmwareRuntime {
     services: FirmwareServices,
     port?: WirePort,
     pins?: I2cBusPins,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     const wire = port ?? services.wire;
     /*
      * A buffer is an array, and a single byte is accepted where a one-byte
@@ -4475,7 +4675,7 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
-  ): Generator<Produced, Value, void> {
+  ): Generator<Produced, Value, Value | undefined> {
     const spi = services.spi;
 
     switch (member) {
@@ -4732,7 +4932,7 @@ export class FirmwareRunner {
   readonly runtime: FirmwareRuntime;
   readonly output: string[] = [];
 
-  private readonly generator: Generator<Produced, void, void>;
+  private readonly generator: Generator<Produced, void, Value | undefined>;
   private finished = false;
   constructor(
     source: string | FirmwareProject,
