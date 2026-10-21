@@ -406,6 +406,15 @@ another generator's values in turn -- or a list's -- and its last value
 becomes the expression's value, which is what lets one generator finish
 another's work.
 
+**The clock a sketch reads is the bench's clock.** `time.ticks_ms()` and
+`ticks_diff` are how a MicroPython sketch measures an interval without
+blocking, and `sleep_ms`/`sleep_us` say their unit in their own names. They
+used to be one thing: every `time` member was read as a wait in *seconds*,
+so `sleep_ms(50)` slept fifty seconds and `ticks_ms()` -- the idiom every
+non-blocking sketch uses -- answered zero. `i2c.scan()` lists the addresses
+the bench answers at, so an empty scan means an empty bus rather than a bus
+nobody asked.
+
 **A call the bench cannot make says so.** It used to answer `0`, which is the
 worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
 learner believes the data was zero rather than the bench missing the call. A
