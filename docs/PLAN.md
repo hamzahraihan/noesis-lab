@@ -401,7 +401,10 @@ sensor.read()` without the bench running out of values to wait for. The
 driver is handed a number of milliseconds to wait; a generator hands over a
 value; the two travel apart, and a wait inside a generator is still the
 bench's own time to spend. A loop over anything that cannot be walked says
-so (`TypeError`) rather than doing nothing quietly.
+so (`TypeError`) rather than doing nothing quietly. `yield from` hands over
+another generator's values in turn -- or a list's -- and its last value
+becomes the expression's value, which is what lets one generator finish
+another's work.
 
 **A call the bench cannot make says so.** It used to answer `0`, which is the
 worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
@@ -427,9 +430,9 @@ something the sketch cannot read as a number -- a device, an object, a
 function, a class -- says what it holds rather than claiming the name was
 unknown.
 
-**Still open.** A generator cannot be sent values back (`send`), and there is
-no `yield from`. And in the C++ front end a field that was never set still
-reads as zero: the interpreter cannot tell a field nobody assigned from a
-field nobody wrote, and zero is what C++ gives a field it knows about.
+**Still open.** A generator cannot be sent values back (`send`). And in the
+C++ front end a field that was never set still reads as zero: the
+interpreter cannot tell a field nobody assigned from a field nobody wrote,
+and zero is what C++ gives a field it knows about.
 
 
