@@ -1,7 +1,8 @@
 # Parity scorecard — how close Noesis is to Wokwi and Velxio
 
 Captured 2026-10-21 · measured at commit `11af7c5` · rubric v1 · the
-debugging pillar re-measured after the debugger shipped
+debugging pillar re-measured after the debugger shipped · the parts pillar
+re-measured after the bus instruments landed
 
 **What this measures.** Two apps are the yardstick for this project: Wokwi,
 because it is the closest thing to the product being built, and Velxio,
@@ -54,7 +55,7 @@ than about arithmetic.
 | Pillar | Weight | vs Wokwi | vs Velxio | Evidence |
 | --- | --- | --- | --- | --- |
 | 1. Firmware execution & CPU fidelity | 18% | 65 | 48 | AVR runs **real compiled machine code** — an in-browser `avr-gcc-wasm` toolchain plus a home-built AssemblyScript→Wasm core (`simulation/avr/wasm-core.ts`, cross-checked against the `avr8js` reference path). RP2040 boots **real MicroPython** on `rp2040js` (`simulation/rp2040/backend.ts`). The ESP32 boots an **emulated chip** running its own MicroPython (`simulation/esp32/`), which is refused for a C++ sketch with the reason shown (`bench/simulations/avr-mode.ts`). Everything else — ESP32, Mega, Nano, Franzininho C++ and the Python boards — runs on the **interpreter** (`simulation/firmware/interpreter.ts`), which answers the libraries the Arduino way (`Servo myServo; myServo.attach(9); myServo.write(90);`) as well as the bench's own. |
-| 2. Parts catalogue | 14% | 45 | 45 | **57 bench-placed entries** — 40 named in `parts/catalogue.ts` plus 5 resistors, 4 capacitors, 5 LEDs and 3 pots — over **38 component kinds** (`parts/catalog.ts:95-147`). Wokwi lists ~62. Velxio's two public figures disagree — 150+ parts across the catalog, 48+ on the free Maker canvas — and 57 sits between them. |
+| 2. Parts catalogue | 14% | 50 | 47 | **60 bench-placed entries** — 43 named in `parts/catalogue.ts` plus 5 resistors, 4 capacitors, 5 LEDs and 3 pots — over **38 component kinds** (`parts/catalog.ts:95-147`), and every one of them a sketch can talk to. Three of the new entries are bus instruments with no element in the Wokwi library and no new firmware API: a **BMP180 barometer**, an **INA219 current monitor** and an **ADS1115 sixteen-bit converter** (`parts/devices/bmp180.ts`, `ina219.ts`, `ads1115.ts`), each speaking its own register protocol. Wokwi lists ~62, of which the BMP180 is one the bench now has; Velxio's two public figures disagree — 150+ parts across the catalog, 48+ on the free Maker canvas — and 60 sits between them. |
 | 3. Electrical solver | 10% | **85** | 60 | A real per-timestep resistive-network solve (`simulation/circuit.ts`, `engine.ts`), not logic levels: pins modelled behind their real output impedance, PWM switched rather than averaged, a GL5528's logarithmic lux curve, an NTC's B = 3950, internal pull-ups and floating inputs. **Ahead of Wokwi**, which does not model a resistive network; behind Velxio, whose ngspice-WASM is true SPICE with diodes, transistors and op-amps. |
 | 4. Board & architecture coverage | 9% | 40 | 20 | **8 boards** (`learn/boardRegistry.ts:75`) across **3 execution paths** — AVR, RP2040, ESP32. Wokwi: 18 MCUs over 4 architectures. Velxio: 40 boards over 5 families, of which 30+ are on the free plan. |
 | 5. Instruments | 9% | 78 | **82** | Scope, 8-lane logic analyser, multimeter, bus monitor, serial monitor, **serial plotter**, problems — the bottom tabs at `bench/store/shell-state.ts:8`. The plotter reads the sketch's own output as numbers (`simulation/plot.ts`), a capture leaves as a **VCD**, the format PulseView reads (`simulation/vcd.ts`), and the scope's capture leaves as a CSV table (`simulation/probe.ts`). Wokwi has the plotter and the VCD export too, and an 8-channel analyser at 1 GHz where this one samples at the solver's rate; Velxio has an oscilloscope and meters but **no logic analyser, no bus monitor, no plotter and no export**, so on instrument *breadth* Noesis is well ahead of it — Velxio's advantage is the SPICE layer underneath, which is pillar 3. |
@@ -65,15 +66,15 @@ than about arithmetic.
 | 10. Extension API | 5% | 55 | 60 | A part may arrive as a `.part.json` (`parts/custom.ts`) or carry **behaviour** as a script — QuickJS compiled to Wasm, one context per part, inside the simulation worker (`simulation/scripted/`). Definitions **travel with the circuit** (`CircuitDocument.definitions`), so a file opens on a machine that imported nothing. Wokwi and Velxio use a C→Wasm chip ABI instead. |
 | 11. Ecosystem & workflow | 5% | 33 | 33 | Monaco, multi-file tabs, an Arduino library manager with tier-2 libraries (`instruments/library-manager.ts`, `simulation/avr/libraries/`), GitHub CI running typecheck, lint, boundary checks and tests (`.github/workflows/ci.yml`), and a real `README.md`. **No VS Code extension, no simulation CI, no i18n, no community, and no licence.** Velxio has simulation CI with a GitHub Action, an MCP server, an AI assistant, GitHub Sync, BOM export and docs in 9 languages — and accounts, a paid tier and a Discord. Both targets gate their best workflow features behind a subscription, so the free tiers are closer to Noesis than the price pages suggest. |
 
-**Weighted total: 56.5% of Wokwi · 48.7% of Velxio.**
+**Weighted total: 57.2% of Wokwi · 49.0% of Velxio.**
 
 The arithmetic, so it can be checked:
 
 ```
-Wokwi   18×.65 + 14×.45 + 10×.85 +  9×.40 +  9×.78 + 10×.45
-       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.33  =  56.5
-Velxio  18×.48 + 14×.45 + 10×.60 +  9×.20 +  9×.82 + 10×.35
-       +  7×.55 +  8×.60 +  5×.35 +  5×.60 +  5×.33  =  48.7
+Wokwi   18×.65 + 14×.50 + 10×.85 +  9×.40 +  9×.78 + 10×.45
+       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.33  =  57.2
+Velxio  18×.48 + 14×.47 + 10×.60 +  9×.20 +  9×.82 + 10×.35
+       +  7×.55 +  8×.60 +  5×.35 +  5×.60 +  5×.33  =  49.0
 ```
 
 **What the targets' numbers rest on.** Wokwi's are from
@@ -105,20 +106,24 @@ feature it has but has not written down would not show.
 - **A debugger against Velxio.** Velxio's docs list no debugger at all; its
   docs carry an AI assistant in that space instead. Noesis stops a sketch on
   a line, shows what the program can see there, and steps through it.
-- **Engineering rigour.** 203 test files and 1,692 tests across 30,970 lines
-  of test against 68,122 lines of source in 242 files; CI with typecheck, lint
+- **Engineering rigour.** 203 test files and 1,709 tests across 31,354 lines
+  of test against 69,516 lines of source in 245 files; CI with typecheck, lint
   and boundary checks. The risky parts — the AVR Wasm core, the RP2040
   firmware path, the circuit document, the interpreter's Python front end —
   each have dedicated parity tests rather than smoke checks.
 
 ## The gaps, ranked by leverage
 
-1. **Parts breadth** (45%). The cheap half of a part is the modelling, and
+1. **Parts breadth** (50%). The cheap half of a part is the modelling, and
    the cheap half is not the whole: a part needs artwork too, and the Wokwi
-   library the bench draws from has no DS18B20, BMP180, MFRC522, 74HC595,
-   MAX7219, TM1637, Nokia 5110 or A4988 among its elements — so each of those
-   is a hand-drawn part as well as a model. A part that needs no new firmware
-   API is the cheap case: the keypad is the precedent (`docs/PLAN.md` §6.4).
+   library the bench draws from has no DS18B20, MFRC522, 74HC595, MAX7219,
+   TM1637, Nokia 5110 or A4988 among its elements — so each of those is a
+   hand-drawn part as well as a model. The BMP180 is on the bench now, which
+   closed one of the eight. A part that needs no new firmware API is the cheap
+   case, and there are two precedents: the keypad (`docs/PLAN.md` §6.4) and
+   the bus instruments — a chip that answers on the I2C bus needs a model and
+   a drawing and nothing else, because `Wire` is already there and the
+   protocol is the exercise.
 2. **Architectures** (40%). **ATtiny85 is nearly free** — `avr8js` 0.21.1 is
    already a dependency and Wokwi ships the same part — though the compiled
    path is Uno-only (`tryFlashAvr` refuses any other board), so it would run

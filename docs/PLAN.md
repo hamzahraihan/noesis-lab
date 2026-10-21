@@ -379,6 +379,33 @@ version of one is a picture of a part that does nothing. The keypad is the
 exception that proves the rule: it is a matrix of switches and nothing else,
 so a sketch scans it the way real code does, and no API was invented for it.
 
+**An instrument that answers on the bus needs no firmware of its own.** The
+bus is already there -- `Wire` moves the bytes and `requestFrom` reads them
+back -- so a new chip on the I2C bus is a model and a drawing, and the
+*protocol* is the exercise. The bench carries six of them now: a clock, an
+accelerometer, a load-cell amplifier, a barometer, a current monitor and a
+sixteen-bit converter. The first three answer with the register map their
+datasheet prints. The barometer answers with raw counts and the eleven
+calibration coefficients in its E2PROM, and the compensation the datasheet
+prints is the arithmetic that turns them into pascals -- so it is in the
+sketch and not in a library, because the arithmetic *is* the part. The current
+monitor's current register is only as good as the calibration the sketch
+wrote, and its shunt saturates when the current passes the range its gain
+setting gives it. The converter is told which channel to look at and how much
+of the range to give it, and answers in counts.
+
+**What the world is doing is the operator's to set.** The pressure the
+barometer sits in, the current through the monitor's shunt, the voltage on the
+converter's channels: each is a knob, which is the convention the load cell's
+load and the soil probe's moisture already follow. The chip's registers are
+recomputed from the knob rather than from a number the operator typed in, so
+what a sketch reads back is what the operator dialled in.
+
+**Three of the six instruments are the bench's own drawings.** The Wokwi
+library has no element for a barometer, a current monitor or a converter, so
+their artwork is drawn here, on the same 2.54 mm grid as the modules the
+library does draw -- which is what makes the header a jumper can reach.
+
 **The comparator sensor family is one part, not five.** A PIR, a sound, a
 heart-rate, a gas and a flame board are all the same LM393 with a trimmer
 across a sensor and a pull-up on the output, so they share a component kind, a
