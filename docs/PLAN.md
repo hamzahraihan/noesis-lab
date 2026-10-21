@@ -403,9 +403,10 @@ value; the two travel apart, and a wait inside a generator is still the
 bench's own time to spend. A loop over anything that cannot be walked says
 so (`TypeError`) rather than doing nothing quietly.
 
-**Still open.** The `machine` module is global to the language rather than
-gated per board, so `import machine` works on a Raspberry Pi that has no
-such module. A generator cannot be sent values back (`send`), and there is
-no `yield from`.
+**Still open.** A generator cannot be sent values back (`send`), and there is
+no `yield from`. And a call the interpreter does not know answers `0` rather
+than saying it does not know: `len(data)`, `d.get('a')` and `sorted(xs)` all
+read as zero on a Python sketch, quietly, where the bench's own rule says a
+sketch that cannot say something has to say so.
 
 
