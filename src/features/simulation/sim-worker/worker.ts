@@ -147,7 +147,13 @@ function handle(port: Port, msg: Incoming): void {
       ok(msg.id, { fault: core?.fault ?? null });
       break;
     case 'faults':
-      ok(msg.id, { rows: core?.faults() ?? [] });
+      /*
+       * The rows are the per-part script faults; the fault text is the
+       * firmware's own verdict, latched when a sketch raised an error it did
+       * not catch. Both travel together, so the page can say why the sketch
+       * stopped rather than showing a bench that has quietly gone quiet.
+       */
+      ok(msg.id, { rows: core?.faults() ?? [], fault: core?.fault ?? null });
       break;
   }
 }
