@@ -406,6 +406,15 @@ another generator's values in turn -- or a list's -- and its last value
 becomes the expression's value, which is what lets one generator finish
 another's work.
 
+**A generator takes a value back as readily as it hands one over.** `send`
+is the other half of `yield`: `x = yield 1` binds whatever was sent, which
+is what makes a generator a coroutine -- a sketch can hand it a command and
+read what comes back. `next(gen)` is the other spelling of the same
+advance, and a second argument to it is the value to answer with rather
+than raising. A generator that has run out raises `StopIteration`, the way
+Python does, so a sketch can catch it; one that has not started cannot be
+sent a value, because there is no `yield` for it to reach.
+
 **The clock a sketch reads is the bench's clock.** `time.ticks_ms()` and
 `ticks_diff` are how a MicroPython sketch measures an interval without
 blocking, and `sleep_ms`/`sleep_us` say their unit in their own names. They
@@ -501,9 +510,8 @@ something the sketch cannot read as a number -- a device, an object, a
 function, a class -- says what it holds rather than claiming the name was
 unknown.
 
-**Still open.** A generator cannot be sent values back (`send`). And in the
-C++ front end a field that was never set still reads as zero: the
-interpreter cannot tell a field nobody assigned from a field nobody wrote,
-and zero is what C++ gives a field it knows about.
+**Still open.** In the C++ front end a field that was never set still reads as
+zero: the interpreter cannot tell a field nobody assigned from a field
+nobody wrote, and zero is what C++ gives a field it knows about.
 
 
