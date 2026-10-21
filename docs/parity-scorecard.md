@@ -127,7 +127,12 @@ feature it has but has not written down would not show.
 2. **Architectures** (40%). **ATtiny85 is nearly free** — `avr8js` 0.21.1 is
    already a dependency and Wokwi ships the same part — though the compiled
    path is Uno-only (`tryFlashAvr` refuses any other board), so it would run
-   on the interpreter. Then ESP32-C3/S3 and STM32F103.
+   on the interpreter. A DIP-8's pins land in the breadboard's holes the way
+   they do on the real thing: its 0.1 in pitch along a row is the hole pitch,
+   and its 0.3 in spacing between the rows is the width of the centre channel
+   (`parts/breadboard.ts`: 2.54 mm holes, a 7.62 mm channel, and one strip per
+   column), so the chip is plugged in rather than fly-wired. Then ESP32-C3/S3
+   and STM32F103.
 3. **Network depth** (45 against Wokwi, 35 against Velxio). The Arduino
    libraries are in — `HTTPClient`, `PubSubClient`, `WiFiUdp` — and the
    bench's own hosts answer, so what is left is the internet itself: Wokwi's
