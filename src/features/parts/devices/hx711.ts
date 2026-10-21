@@ -34,7 +34,7 @@ export const HX711_ADDRESS = 0x28;
  * figures below. Change the cell and this is the one line in the model that
  * moves with it.
  */
-const COUNTS_PER_GRAM = 2148;
+export const COUNTS_PER_GRAM = 2148;
 
 /**
  * The reading of an unloaded cell, in counts.
@@ -66,6 +66,15 @@ export class Hx711 implements I2cDevice {
 
   /** The load on the cell, in grams, as the bench last set it. */
   private grams = 0;
+  /**
+   * Where the load is.
+   *
+   * The amplifier reads the world when it reports rather than being told
+   * about it, so a knob turned between two reads is seen by the very next
+   * one -- in the page and in the worker alike, which is where a pushed
+   * value would have gone stale.
+   */
+  private world: (() => number) | null = null;
 
   /**
    * Puts a load on the cell.
@@ -76,6 +85,18 @@ export class Hx711 implements I2cDevice {
    */
   setLoad(grams: number): void {
     this.grams = grams;
+  }
+
+  /** Points the amplifier at the load the bench is carrying. */
+  setLoadSource(read: () => number): void {
+    this.world = read;
+  }
+
+  /** The load on the cell, as the world describes it. */
+  private load(): number {
+    if (this.world === null) return this.grams;
+    this.grams = this.world();
+    return this.grams;
   }
 
   /**
@@ -101,7 +122,7 @@ export class Hx711 implements I2cDevice {
    * way to say a device has nothing more to give.
    */
   read(count: number): readonly number[] {
-    const counts = Math.round(this.grams * COUNTS_PER_GRAM) + ZERO_COUNTS;
+    const counts = Math.round(this.load() * COUNTS_PER_GRAM) + ZERO_COUNTS;
     const word = (Math.max(-FULL_SCALE, Math.min(FULL_SCALE, counts)) & FULL_SCALE) | DATA_READY;
     return repeatLast([(word >> 16) & 0xff, (word >> 8) & 0xff, word & 0xff], count);
   }

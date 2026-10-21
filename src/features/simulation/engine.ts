@@ -35,6 +35,8 @@ import { Ds1307 } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
+import { Hx711 } from '@/features/parts';
+import { HX711_LOAD_KNOB } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import { SevenSegment } from '@/features/parts';
 
@@ -514,6 +516,10 @@ export class Engine {
         device.setChannelsSource(() =>
           ADS1115_CHANNEL_KNOBS.map((knob) => this.dynamicState.knob(part.id, knob)),
         );
+      } else if (device instanceof Hx711) {
+        // The load on the cell was a knob the amplifier never heard about:
+        // it read the tare for as long as the bench existed.
+        device.setLoadSource(() => this.dynamicState.knob(part.id, HX711_LOAD_KNOB));
       }
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       const lcd = previousLcds.get(part.id) ?? createLcd(part.definition);

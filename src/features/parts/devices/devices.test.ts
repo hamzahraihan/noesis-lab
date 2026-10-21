@@ -22,6 +22,8 @@ import {
   compensateTemperature,
 } from '../devices/bmp180';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB, INA219_SHUNT_OHMS } from '../devices/ina219';
+import { COUNTS_PER_GRAM } from '../devices/hx711';
+import { HX711_LOAD_KNOB } from '../devices/sensors';
 import { ADS1115_CHANNEL_KNOBS } from '../devices/ads1115';
 import { Servo, servoDefinition } from '../devices/servo';
 import { Lcd1602 } from '../devices/lcd1602';
@@ -191,6 +193,23 @@ describe('an I2C sensor on the bench', () => {
     expect(bus.requestFrom(0x28, 3)).toBe(3);
     // A fresh reading each time, so the bytes differ from an empty response.
     expect(bus.read() | bus.read() | bus.read()).not.toBe(-1);
+  });
+
+  it('reads the load the operator dialled in', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(hx711Definition());
+    engine.step(0.05);
+
+    const counts = (): number => {
+      const bytes = readBytes(bus, 0x28, 3);
+      const word = ((bytes[0] << 16) | (bytes[1] << 8) | bytes[2]) & 0xffffff;
+      // Bit 23 is the ready flag; the reading is the 23 bits below it.
+      return word & 0x7fffff;
+    };
+
+    // An unloaded cell reads its tare, and the knob is the load on it.
+    const tare = counts();
+    dynamicState.setKnob(device.id, HX711_LOAD_KNOB, 500);
+    expect(counts() - tare).toBe(Math.round(500 * COUNTS_PER_GRAM));
   });
 });
 
