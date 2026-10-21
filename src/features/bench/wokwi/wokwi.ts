@@ -291,8 +291,14 @@ export function wokwiPartFor(definition: PartDefinition): WokwiPart | null {
         WOKWI_PARTS[`7segment${digits > 1 ? `-${digits}digit` : ''}`] ?? WOKWI_PARTS['7segment']
       );
     }
-    case 'i2c-sensor':
-      return WOKWI_PARTS[definition.component.device];
+    case 'i2c-sensor': {
+      /*
+       * Three of the I2C modules are drawn by Wokwi's own elements; the rest
+       * are the bench's own drawings and have no element behind them.
+       */
+      const element: WokwiPart | undefined = WOKWI_PARTS[definition.component.device];
+      return element ?? null;
+    }
     case 'lcd':
       return definition.component.variant === '1602' ? WOKWI_PARTS.lcd1602 : WOKWI_PARTS.lcd2004;
     case 'servo':

@@ -9,8 +9,11 @@
 import type { PartDefinition } from '../catalog';
 import type { I2cDevice, ScriptedI2cSlave } from './device';
 import { Ssd1306 } from '../display/ssd1306';
+import { Ads1115 } from './ads1115';
+import { Bmp180 } from './bmp180';
 import { Ds1307 } from './ds1307';
 import { Hx711 } from './hx711';
+import { Ina219 } from './ina219';
 import { Mpu6050 } from './mpu6050';
 import { ScriptedI2cDevice } from './scripted';
 
@@ -49,6 +52,9 @@ export function createI2cDevice(
     case 'i2c-sensor':
       if (component.device === 'ds1307') return new Ds1307();
       if (component.device === 'mpu6050') return new Mpu6050();
+      if (component.device === 'bmp180') return new Bmp180();
+      if (component.device === 'ina219') return new Ina219();
+      if (component.device === 'ads1115') return new Ads1115();
       return new Hx711();
     default:
       return null;

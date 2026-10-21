@@ -27,8 +27,14 @@ import {
 } from '@/features/parts';
 import { Servo } from '@/features/parts';
 import { createLcd, type Lcd1602 } from '@/features/parts';
+import { Ads1115 } from '@/features/parts';
+import { ADS1115_CHANNEL_KNOBS } from '@/features/parts';
+import { Bmp180 } from '@/features/parts';
+import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
+import { Ina219 } from '@/features/parts';
+import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import { SevenSegment } from '@/features/parts';
 
@@ -487,6 +493,28 @@ export class Engine {
         this.seededRtcParts.add(part.id);
       }
       if (device) this.devices.set(part.id, device);
+      /*
+       * The instruments read the world themselves, at the moment they report,
+       * rather than being told about it on a tick: what the operator has
+       * dialled in is what the world is doing, and a knob turned between two
+       * reads is seen by the very next one. The page and the worker both hold
+       * the knobs, so this is where the two meet.
+       */
+      if (device instanceof Bmp180) {
+        device.setConditionsSource(() => ({
+          pascals: this.dynamicState.knob(part.id, BMP180_PRESSURE_KNOB) * 100,
+          celsius: this.dynamicState.knob(part.id, BMP180_TEMPERATURE_KNOB),
+        }));
+      } else if (device instanceof Ina219) {
+        device.setConditionsSource(() => ({
+          busVolts: this.dynamicState.knob(part.id, INA219_BUS_KNOB),
+          amps: this.dynamicState.knob(part.id, INA219_CURRENT_KNOB) / 1000,
+        }));
+      } else if (device instanceof Ads1115) {
+        device.setChannelsSource(() =>
+          ADS1115_CHANNEL_KNOBS.map((knob) => this.dynamicState.knob(part.id, knob)),
+        );
+      }
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       const lcd = previousLcds.get(part.id) ?? createLcd(part.definition);
       if (lcd) this.lcds.set(part.id, lcd);

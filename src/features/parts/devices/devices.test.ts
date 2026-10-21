@@ -5,8 +5,24 @@ import { esp32DevKitV1 } from '../boards';
 import { Engine } from '@/features/simulation';
 import { McuRuntime } from '@/features/simulation';
 import { I2CBus } from '@/features/simulation';
-import { DynamicState } from '../catalog';
-import { ds1307Definition, hx711Definition, mpu6050Definition } from '../devices/sensors';
+import { DynamicState, type PartDefinition } from '../catalog';
+import {
+  ads1115Definition,
+  bmp180Definition,
+  ds1307Definition,
+  hx711Definition,
+  ina219Definition,
+  mpu6050Definition,
+} from '../devices/sensors';
+import {
+  BMP180_CALIBRATION,
+  BMP180_PRESSURE_KNOB,
+  BMP180_TEMPERATURE_KNOB,
+  compensatePressure,
+  compensateTemperature,
+} from '../devices/bmp180';
+import { INA219_BUS_KNOB, INA219_CURRENT_KNOB, INA219_SHUNT_OHMS } from '../devices/ina219';
+import { ADS1115_CHANNEL_KNOBS } from '../devices/ads1115';
 import { Servo, servoDefinition } from '../devices/servo';
 import { Lcd1602 } from '../devices/lcd1602';
 import { LcdDriver } from '../devices/lcd-driver';
@@ -25,7 +41,7 @@ const holeY = (row: number): number => stripRowY(row);
  * only by being wired there -- which is the mistake worth being able to make,
  * and the reason every test here routes the header rather than assuming it.
  */
-function i2cBench(definition: ReturnType<typeof ds1307Definition>) {
+function i2cBench(definition: PartDefinition) {
   const builder = new BenchBuilder();
   builder.addPart(breadboardDefinition(), BOARD_ORIGIN_X, 0);
   const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
@@ -48,13 +64,14 @@ function i2cBench(definition: ReturnType<typeof ds1307Definition>) {
   wire(headerPin('GND'), boardPin('L_GND'));
 
   const mcu = new McuRuntime(esp32.definition);
-  const engine = new Engine({ bench: builder.build(), mcu, dynamicState: new DynamicState() });
+  const dynamicState = new DynamicState();
+  const engine = new Engine({ bench: builder.build(), mcu, dynamicState });
   engine.rebuild();
   const bus = new I2CBus(
     (address, byte, isControl) => engine.writeI2C(address, byte, isControl),
     (address, count) => engine.requestI2C(address, count),
   );
-  return { bus, engine, device, esp32 };
+  return { bus, engine, device, esp32, dynamicState };
 }
 
 describe('an I2C sensor on the bench', () => {
@@ -521,5 +538,314 @@ describe('ds1307 preset', () => {
     rtc.setTime(new Date(epoch + 3000));
     rtc.receive(0x00, true);
     expect([...rtc.read(3)]).toEqual([0x03, 0x00, 0x15]);
+  });
+});
+
+/** The bytes a read asks the bus for, in order. */
+function readBytes(bus: I2CBus, address: number, count: number): number[] {
+  const bytes: number[] = [];
+  bus.requestFrom(address, count);
+  for (let index = 0; index < count; index++) bytes.push(bus.read());
+  return bytes;
+}
+
+/** Points the chip at a register and reads from there. */
+function readRegister(bus: I2CBus, address: number, register: number, count: number): number[] {
+  bus.beginTransmission(address);
+  bus.write(register);
+  bus.endTransmission();
+  return readBytes(bus, address, count);
+}
+
+describe('a barometer on the bench', () => {
+  it('identifies itself and hands over the calibration in its E2PROM', () => {
+    const { bus } = i2cBench(bmp180Definition());
+    // The chip's identification register never changes.
+    expect(readRegister(bus, 0x77, 0xd0, 1)).toEqual([0x55]);
+
+    // Eleven words, most significant byte first, in the datasheet's order.
+    const bytes = readRegister(bus, 0x77, 0xaa, 22);
+    expect(bytes).toHaveLength(22);
+    const words: number[] = [];
+    for (let index = 0; index < 11; index++) {
+      const word = (bytes[index * 2] << 8) | bytes[index * 2 + 1];
+      words.push((word << 16) >> 16);
+    }
+    expect(words).toEqual([
+      BMP180_CALIBRATION.ac1,
+      BMP180_CALIBRATION.ac2,
+      BMP180_CALIBRATION.ac3,
+      BMP180_CALIBRATION.ac4,
+      BMP180_CALIBRATION.ac5,
+      BMP180_CALIBRATION.ac6,
+      BMP180_CALIBRATION.b1,
+      BMP180_CALIBRATION.b2,
+      BMP180_CALIBRATION.mb,
+      BMP180_CALIBRATION.mc,
+      BMP180_CALIBRATION.md,
+    ]);
+  });
+
+  it('reports the air the operator has dialled in, as raw counts', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(bmp180Definition());
+    dynamicState.setKnob(device.id, BMP180_PRESSURE_KNOB, 1013);
+    dynamicState.setKnob(device.id, BMP180_TEMPERATURE_KNOB, 20);
+    engine.step(0.05);
+
+    // A temperature measurement: write the control register, then read the
+    // two data bytes the counts land in.
+    bus.beginTransmission(0x77);
+    bus.write(0xf4);
+    bus.write(0x2e);
+    bus.endTransmission();
+    const temperature = readRegister(bus, 0x77, 0xf6, 2);
+    const rawTemperature = (temperature[0] << 8) | temperature[1];
+    // The chip's own count for twenty degrees, which the datasheet's
+    // compensation turns back into twenty degrees.
+    expect(rawTemperature).toBe(25606);
+    expect(compensateTemperature(rawTemperature)).toBe(200);
+
+    // A pressure measurement, whose count is three bytes wide.
+    bus.beginTransmission(0x77);
+    bus.write(0xf4);
+    bus.write(0x34);
+    bus.endTransmission();
+    const pressure = readRegister(bus, 0x77, 0xf6, 3);
+    const rawPressure = ((pressure[0] << 16) | (pressure[1] << 8) | pressure[2]) >> 8;
+    // The chip's own count for the pressure the operator dialled in: 1013
+    // hectopascals is 101300 pascals.
+    expect(rawPressure).toBe(33617);
+    // The count is what the converter reported, and the compensation is what
+    // turns it back into the pressure: a pascal either way is the chip's own
+    // resolution.
+    expect(compensatePressure(rawPressure, rawTemperature, 0)).toBeGreaterThan(101_295);
+    expect(compensatePressure(rawPressure, rawTemperature, 0)).toBeLessThan(101_305);
+  });
+
+  it('follows the operator when the weather changes', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(bmp180Definition());
+    dynamicState.setKnob(device.id, BMP180_PRESSURE_KNOB, 980);
+    dynamicState.setKnob(device.id, BMP180_TEMPERATURE_KNOB, 5);
+    engine.step(0.05);
+
+    bus.beginTransmission(0x77);
+    bus.write(0xf4);
+    bus.write(0x2e);
+    bus.endTransmission();
+    const temperature = readRegister(bus, 0x77, 0xf6, 2);
+    const rawTemperature = (temperature[0] << 8) | temperature[1];
+    expect(compensateTemperature(rawTemperature)).toBe(50);
+
+    bus.beginTransmission(0x77);
+    bus.write(0xf4);
+    bus.write(0x34);
+    bus.endTransmission();
+    const pressure = readRegister(bus, 0x77, 0xf6, 3);
+    const rawPressure = ((pressure[0] << 16) | (pressure[1] << 8) | pressure[2]) >> 8;
+    const pascals = compensatePressure(rawPressure, rawTemperature, 0);
+    expect(pascals).toBeGreaterThan(97_900);
+    expect(pascals).toBeLessThan(98_100);
+  });
+
+  it('sees a knob turned between two reads', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(bmp180Definition());
+    engine.step(0.05);
+
+    const counts = (): number => {
+      bus.beginTransmission(0x77);
+      bus.write(0xf4);
+      bus.write(0x2e);
+      bus.endTransmission();
+      const bytes = readRegister(bus, 0x77, 0xf6, 2);
+      return (bytes[0] << 8) | bytes[1];
+    };
+
+    const before = counts();
+    expect(compensateTemperature(before)).toBe(200);
+    // The operator turns the knob, and the next read sees it -- with no step
+    // in between, because the chip reads the world when it reports.
+    dynamicState.setKnob(device.id, BMP180_TEMPERATURE_KNOB, 5);
+    const after = counts();
+    expect(after).not.toBe(before);
+    expect(compensateTemperature(after)).toBe(50);
+  });
+
+  it('counts finer when the sketch asks for more samples', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(bmp180Definition());
+    dynamicState.setKnob(device.id, BMP180_PRESSURE_KNOB, 1013);
+    dynamicState.setKnob(device.id, BMP180_TEMPERATURE_KNOB, 20);
+    engine.step(0.05);
+
+    const pressureAt = (command: number, oss: number): number => {
+      bus.beginTransmission(0x77);
+      bus.write(0xf4);
+      bus.write(command);
+      bus.endTransmission();
+      const bytes = readRegister(bus, 0x77, 0xf6, 3);
+      // The count is left-aligned in the three bytes, and the oversampling
+      // says how much of that space it fills.
+      return ((bytes[0] << 16) | (bytes[1] << 8) | bytes[2]) >> (8 - oss);
+    };
+    const low = pressureAt(0x34, 0);
+    const high = pressureAt(0xf4, 3);
+    // Eight times the samples, and the same pressure in a count eight times as
+    // long: the oversampling buys resolution.
+    expect(high).toBeGreaterThan(low * 7);
+    expect(high).toBeLessThan(low * 9);
+  });
+});
+
+describe('a current monitor on the bench', () => {
+  it('reports the voltage across its shunt and the bus it watches', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ina219Definition());
+    dynamicState.setKnob(device.id, INA219_BUS_KNOB, 5);
+    dynamicState.setKnob(device.id, INA219_CURRENT_KNOB, 100);
+    engine.step(0.05);
+
+    // A hundred milliamps through a tenth of an ohm is ten millivolts, and
+    // the shunt register counts in ten microvolts.
+    const shunt = readRegister(bus, 0x40, 0x01, 2);
+    expect((shunt[0] << 8) | shunt[1]).toBe(Math.round(((100 / 1000) * INA219_SHUNT_OHMS) / 10e-6));
+
+    // The bus register holds the reading in four-millivolt steps, left
+    // aligned, with the conversion flag below it.
+    const busVoltage = readRegister(bus, 0x40, 0x02, 2);
+    expect((busVoltage[0] << 8) | busVoltage[1]).toBe((1250 << 3) | 0x02);
+  });
+
+  it('has no current to report until a sketch calibrates it', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ina219Definition());
+    dynamicState.setKnob(device.id, INA219_BUS_KNOB, 5);
+    dynamicState.setKnob(device.id, INA219_CURRENT_KNOB, 100);
+    engine.step(0.05);
+
+    // The current register is invalid until the calibration is written, which
+    // is what the real chip says about its own registers.
+    expect(readRegister(bus, 0x40, 0x04, 2)).toEqual([0x00, 0x00]);
+
+    // The calibration the datasheet's own worked example uses: a hundred
+    // microamps a bit.
+    bus.beginTransmission(0x40);
+    bus.write(0x05);
+    bus.write(0x10);
+    bus.write(0x00);
+    bus.endTransmission();
+
+    const current = readRegister(bus, 0x40, 0x04, 2);
+    expect((current[0] << 8) | current[1]).toBe(1000);
+    // Five volts and a tenth of an amp is half a watt, and the power
+    // register counts in two milliwatts.
+    const power = readRegister(bus, 0x40, 0x03, 2);
+    expect((power[0] << 8) | power[1]).toBe(250);
+  });
+
+  it('keeps the last reading while it is asleep', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ina219Definition());
+    dynamicState.setKnob(device.id, INA219_BUS_KNOB, 5);
+    dynamicState.setKnob(device.id, INA219_CURRENT_KNOB, 100);
+    engine.step(0.05);
+    const before = readRegister(bus, 0x40, 0x01, 2);
+
+    // Power-down is the lowest three bits of the configuration, and a chip in
+    // it takes no new measurements.
+    bus.beginTransmission(0x40);
+    bus.write(0x00);
+    bus.write(0x00);
+    bus.write(0x00);
+    bus.endTransmission();
+
+    dynamicState.setKnob(device.id, INA219_CURRENT_KNOB, 500);
+    engine.step(0.05);
+    expect(readRegister(bus, 0x40, 0x01, 2)).toEqual(before);
+  });
+
+  it('says so when the current is past the range the gain gives it', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ina219Definition());
+    dynamicState.setKnob(device.id, INA219_BUS_KNOB, 5);
+    dynamicState.setKnob(device.id, INA219_CURRENT_KNOB, 100);
+    engine.step(0.05);
+
+    // The finest range is forty millivolts across the shunt, which is four
+    // hundred milliamps: a hundred and a half amps' worth of shunt voltage
+    // is past it. The gain bits sit above the mode, and the mode stays on.
+    bus.beginTransmission(0x40);
+    bus.write(0x00);
+    bus.write(0x00);
+    bus.write(0x07);
+    bus.endTransmission();
+    dynamicState.setKnob(device.id, INA219_CURRENT_KNOB, 1500);
+    engine.step(0.05);
+
+    const shunt = readRegister(bus, 0x40, 0x01, 2);
+    expect((shunt[0] << 8) | shunt[1]).toBe(4000);
+    const busVoltage = readRegister(bus, 0x40, 0x02, 2);
+    // The overflow flag is the low bit of the bus voltage register.
+    expect(busVoltage[1] & 0x01).toBe(1);
+  });
+});
+
+describe('a converter on the bench', () => {
+  const readConversion = (bus: I2CBus): number => {
+    const bytes = readRegister(bus, 0x48, 0x00, 2);
+    return (((bytes[0] << 8) | bytes[1]) << 16) >> 16;
+  };
+
+  it('reads a channel as counts against the chip\u2019s own reference', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ads1115Definition());
+    dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[0], 1);
+    engine.step(0.05);
+
+    // Single-shot on channel zero, with the gain that gives a volt a
+    // thousand counts of headroom.
+    bus.beginTransmission(0x48);
+    bus.write(0x01);
+    bus.write(0xc2);
+    bus.write(0x02);
+    bus.endTransmission();
+
+    // A volt against a range of 1.024 volts, which is most of the scale.
+    expect(readConversion(bus)).toBe(Math.round((1 / 1.024) * 32767));
+  });
+
+  it('measures the difference between two channels when it is told to', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ads1115Definition());
+    dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[0], 2);
+    dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[1], 0.5);
+    engine.step(0.05);
+
+    // The difference of the first two channels, on the widest range.
+    bus.beginTransmission(0x48);
+    bus.write(0x01);
+    bus.write(0x80);
+    bus.write(0x00);
+    bus.endTransmission();
+
+    // 1.5 volts against a range of 4.096 volts.
+    expect(readConversion(bus)).toBe(Math.round((1.5 / 4.096) * 32767));
+  });
+
+  it('gains resolution on the narrowest range', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(ads1115Definition());
+    dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[0], 0.1);
+    engine.step(0.05);
+
+    // The widest range first: a tenth of a volt out of four.
+    bus.beginTransmission(0x48);
+    bus.write(0x01);
+    bus.write(0xc0);
+    bus.write(0x00);
+    bus.endTransmission();
+    const wide = readConversion(bus);
+
+    // Then the narrowest, where the same voltage is most of the range.
+    bus.beginTransmission(0x48);
+    bus.write(0x01);
+    bus.write(0xc0);
+    bus.write(0x04);
+    bus.endTransmission();
+    const narrow = readConversion(bus);
+
+    expect(narrow).toBeGreaterThan(wide * 15);
+    expect(narrow).toBeLessThan(wide * 17);
   });
 });

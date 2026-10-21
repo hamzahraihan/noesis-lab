@@ -170,6 +170,11 @@ function shapeFor(
       return <PotentiometerBody definition={definition} state={state} part={part} />;
     case 'display':
       return <DisplayBody definition={definition} state={state} part={part} />;
+    case 'i2c-sensor':
+      // The modules the bench draws itself: Wokwi's library has no element
+      // for a barometer, a current monitor or a converter, so these are
+      // drawn here from the definition's own pins.
+      return <I2cModuleBody definition={definition} />;
   }
 }
 
@@ -1075,6 +1080,73 @@ const CapacitorBody = staticBody(function CapacitorBody({
         opacity={0.95}
       >
         +
+      </text>
+    </g>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Sensors
+
+/**
+ * An I2C module the bench draws itself.
+ *
+ * The three of them -- a barometer, a current monitor and a converter -- have
+ * no element in Wokwi's library, so the board is drawn here: the sensor in
+ * the middle of its own board, the header down the left edge with the pin
+ * names a wiring tutorial uses, and the part's name along the bottom.
+ *
+ * The pads are drawn at the definition's own pin coordinates, so the artwork
+ * and the holes a jumper can reach cannot disagree.
+ */
+const I2cModuleBody = staticBody(function I2cModuleBody({
+  definition,
+}: {
+  definition: PartDefinition;
+}) {
+  const width = definition.widthMm;
+  const height = definition.heightMm;
+  return (
+    <g filter="url(#nz-lift)">
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        rx={1.4}
+        fill={definition.bodyColour}
+        stroke="#0c1018"
+        strokeWidth={0.2}
+      />
+      <rect x={0} y={0} width={width} height={height} rx={1.4} fill="url(#nz-body)" />
+      {/* The sensor, in the middle of its own board. */}
+      <Chip x={9.5} y={4.5} width={7} height={7} legs={4} textColour={definition.legendColour} />
+      {/* The header down the left edge, and the names a tutorial calls it. */}
+      {definition.pins.map((pin) => (
+        <g key={pin.id}>
+          <SolderPad x={pin.x} y={pin.y} />
+          <text
+            x={pin.x + 1.9}
+            y={pin.y + 0.55}
+            fontSize={1.35}
+            fill={definition.legendColour}
+            fontFamily={SILKSCREEN_FONT}
+            opacity={0.9}
+          >
+            {pin.label}
+          </text>
+        </g>
+      ))}
+      <text
+        x={width / 2}
+        y={height - 2.2}
+        fontSize={1.7}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+        opacity={0.95}
+      >
+        {definition.name}
       </text>
     </g>
   );

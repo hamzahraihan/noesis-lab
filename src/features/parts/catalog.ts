@@ -162,7 +162,7 @@ export type SensorVariant = 'pir' | 'sound' | 'soundSmall' | 'heartbeat' | 'gas'
  * contribute no circuit of their own, they answer at an address, and what a
  * device does with a read is the device's business.
  */
-export type I2cSensorVariant = 'ds1307' | 'mpu6050' | 'hx711';
+export type I2cSensorVariant = 'ds1307' | 'mpu6050' | 'hx711' | 'bmp180' | 'ina219' | 'ads1115';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

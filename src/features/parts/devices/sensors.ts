@@ -9,6 +9,9 @@
  */
 
 import type { I2cSensorVariant, KnobSpec, PartDefinition, PinSpec } from '../catalog';
+import { ADS1115_CHANNEL_KNOBS } from './ads1115';
+import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
+import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
 
 /** The hole pitch, and the grid every module's header is snapped to. */
 const PITCH = 2.54;
@@ -92,6 +95,43 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 1.27, y: 7.62, names: ['GND', 'SDA', 'SCL', 'VCC'], alongColumn: true },
     knobs: [HX711_LOAD_KNOB],
   },
+  /*
+   * The three below are the bench's own drawings rather than Wokwi's: the
+   * library has no element for a barometer, a current monitor or an
+   * analogue-to-digital converter, so the artwork is drawn here and the
+   * header is on the same grid the others sit on.
+   */
+  bmp180: {
+    id: 'bmp180-barometer',
+    name: 'BMP180 Barometer',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1b1f2a',
+    legendColour: '#e8e8e8',
+    // Four holes down the left edge, the way every I2C breakout carries them.
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB],
+  },
+  ina219: {
+    id: 'ina219-current-monitor',
+    name: 'INA219 Current Monitor',
+    widthMm: 25,
+    heightMm: 22,
+    bodyColour: '#123b2e',
+    legendColour: '#f2f2ee',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [INA219_BUS_KNOB, INA219_CURRENT_KNOB],
+  },
+  ads1115: {
+    id: 'ads1115-adc',
+    name: 'ADS1115 16-bit ADC',
+    widthMm: 25,
+    heightMm: 25,
+    bodyColour: '#12203b',
+    legendColour: '#e8e8e8',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [...ADS1115_CHANNEL_KNOBS],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -142,4 +182,19 @@ export function mpu6050Definition(): PartDefinition {
 /** HX711 load-cell amplifier, with the load cell connector along the top. */
 export function hx711Definition(): PartDefinition {
   return i2cSensorDefinition('hx711');
+}
+
+/** BMP180 barometer: pressure and temperature over I2C. */
+export function bmp180Definition(): PartDefinition {
+  return i2cSensorDefinition('bmp180');
+}
+
+/** INA219 current monitor: the voltage on a bus and the current through it. */
+export function ina219Definition(): PartDefinition {
+  return i2cSensorDefinition('ina219');
+}
+
+/** ADS1115 converter: four channels read as sixteen-bit counts. */
+export function ads1115Definition(): PartDefinition {
+  return i2cSensorDefinition('ads1115');
 }

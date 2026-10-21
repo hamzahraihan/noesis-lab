@@ -36,7 +36,14 @@ import {
   ssd1306Definition,
   ssd1306SpiDefinition,
 } from './display/part';
-import { ds1307Definition, hx711Definition, mpu6050Definition } from './devices/sensors';
+import {
+  ads1115Definition,
+  bmp180Definition,
+  ds1307Definition,
+  hx711Definition,
+  ina219Definition,
+  mpu6050Definition,
+} from './devices/sensors';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
 import {
@@ -405,6 +412,27 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Turns a load cell\u2019s four-wire bridge into one 24-bit number. It has no registers at all: a read is a fresh reading.',
     make: hx711Definition,
+  },
+  {
+    id: 'bmp180-barometer',
+    name: 'BMP180 Barometer',
+    group: 'input',
+    note: 'Pressure and temperature as raw counts, with the calibration in the chip\u2019s own E2PROM. A sketch applies the datasheet\u2019s compensation to get pascals.',
+    make: bmp180Definition,
+  },
+  {
+    id: 'ina219-current-monitor',
+    name: 'INA219 Current Monitor',
+    group: 'input',
+    note: 'The voltage across its own hundredth-of-an-ohm shunt, and the bus it watches. The current register is only as good as the calibration a sketch wrote.',
+    make: ina219Definition,
+  },
+  {
+    id: 'ads1115-adc',
+    name: 'ADS1115 16-bit ADC',
+    group: 'input',
+    note: 'Four channels read against the chip\u2019s own reference, in sixteen-bit counts. The gain setting says how much of the range a channel gets.',
+    make: ads1115Definition,
   },
   {
     id: 'lcd-16x2',
