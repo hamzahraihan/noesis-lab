@@ -478,6 +478,17 @@ describe('a generator', () => {
     expect(statement.value.value).toMatchObject({ kind: 'number', value: 7 });
   });
 
+  it('reads yield from as handing over another generator', () => {
+    const program = parsePython(['def outer():', '    yield from inner()'].join('\n'));
+
+    const declaration = program.functions.get('outer');
+    const body = declaration?.body;
+    if (body?.kind !== 'suite') throw new Error('expected a suite');
+    const statement = body.statements[0];
+    if (statement.kind !== 'expression') throw new Error('expected an expression');
+    expect(statement.value.kind).toBe('yieldFrom');
+  });
+
   it('reads a bare yield as handing over nothing', () => {
     const program = parsePython(['def counter():', '    yield'].join('\n'));
 

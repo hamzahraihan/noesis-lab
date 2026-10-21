@@ -380,6 +380,72 @@ describe('a generator', () => {
     expect(serial).toContain('6');
   });
 
+  it("hands over another generator's values in turn", () => {
+    const { serial } = run(
+      [
+        'def inner():',
+        '    yield 1',
+        '    yield 2',
+        '',
+        'def outer():',
+        '    yield 0',
+        '    yield from inner()',
+        '    yield 3',
+        '',
+        'for value in outer():',
+        '    print(value)',
+      ].join('\n'),
+    );
+
+    expect(serial).toBe('0\n1\n2\n3\n');
+  });
+
+  it('keeps the last value the generator it delegates to returned', () => {
+    const { serial } = run(
+      [
+        'def inner():',
+        '    yield 1',
+        '    return 7',
+        '',
+        'def outer():',
+        '    got = yield from inner()',
+        '    print(got)',
+        '',
+        'for value in outer():',
+        '    print(value)',
+      ].join('\n'),
+    );
+
+    expect(serial).toBe('1\n7\n');
+  });
+
+  it('hands over a list with yield from', () => {
+    const { serial } = run(
+      ['def all_of():', '    yield from [1, 2]', '', 'for value in all_of():', '    print(value)'].join(
+        '\n',
+      ),
+    );
+
+    expect(serial).toBe('1\n2\n');
+  });
+
+  it('says so when there is nothing to delegate to', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      ['def broken():', '    yield from 7', '', 'for value in broken():', '    print(value)'].join(
+        '\n',
+      ),
+      target.services,
+      'python',
+    );
+
+    expect(() => {
+      for (let step = 0; step < 60; step++) {
+        if (runner.step() === null) break;
+      }
+    }).toThrow(/is not iterable/);
+  });
+
   it('refuses a yield outside a function', () => {
     const target = host();
     const runner = new FirmwareRunner('yield 1\n', target.services, 'python');
