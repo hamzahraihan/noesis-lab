@@ -27,6 +27,7 @@ export * from './relay';
 export * from './encoder';
 export * from './sonar';
 export * from './dht';
+export * from './ds18b20';
 export * from './remote';
 export * from './dialer';
 export * from './sdcard';

@@ -221,12 +221,18 @@ const ARDUINO_FUNCTIONS: ReadonlyArray<[signature: string, doc: string]> = [
   ['floor(x)', 'The largest whole number below x.'],
   ['ceil(x)', 'The smallest whole number above x.'],
   ['round(x)', 'The nearest whole number.'],
-  ['randomSeed(seed)', 'Seed the random numbers. The sketch always starts from the same seed, so a run is repeatable.'],
+  [
+    'randomSeed(seed)',
+    'Seed the random numbers. The sketch always starts from the same seed, so a run is repeatable.',
+  ],
   ['bitRead(value, bit)', 'One bit of a number, counting from the least significant.'],
   ['pulseIn(pin, state)', 'How long a pulse on a pin lasts, in microseconds.'],
   ['tone(pin, frequency)', 'Sound a piezo on the pin, without waiting for the note to end.'],
   ['noTone(pin)', 'Stop the note.'],
-  ['noInterrupts()', 'Turn interrupts off for a while. Nothing here raises one, so it changes nothing.'],
+  [
+    'noInterrupts()',
+    'Turn interrupts off for a while. Nothing here raises one, so it changes nothing.',
+  ],
   ['interrupts()', 'Turn them back on.'],
 ];
 
@@ -287,6 +293,13 @@ const ARDUINO_OBJECTS: ReadonlyArray<
     ],
   ],
   [
+    'onewire',
+    [
+      ['getTemp()', 'The temperature, in degrees Celsius.'],
+      ['temperature(pin)', 'The temperature on a named pin, in degrees Celsius.'],
+    ],
+  ],
+  [
     'sd',
     [
       ['begin(cs)', 'Say which pin is chip select.'],
@@ -336,15 +349,16 @@ const ARDUINO_OBJECTS: ReadonlyArray<
  * are the ones a person can lean on.
  */
 const ARDUINO_CLASSES: ReadonlyArray<[name: string, declaration: string, doc: string]> = [
-  [
-    'Servo',
-    'Servo ${1:myServo};',
-    'A hobby servo. attach() says which pin it is on.',
-  ],
+  ['Servo', 'Servo ${1:myServo};', 'A hobby servo. attach() says which pin it is on.'],
   [
     'DHT',
     'DHT ${1:mySensor}(${2:2}, ${3:DHT22});',
     'A temperature and humidity sensor. The pin is in the declaration.',
+  ],
+  [
+    'OneWire',
+    'OneWire ${1:mySensor}(${2:2});',
+    'A one-wire temperature sensor. The pin is in the declaration.',
   ],
   ['SD', 'SD ${1:myCard};', 'A microSD card. begin() says which pin is chip select.'],
   [
@@ -352,21 +366,9 @@ const ARDUINO_CLASSES: ReadonlyArray<[name: string, declaration: string, doc: st
     'LiquidCrystal ${1:myDisplay};',
     'A character LCD. begin() says the size of the glass.',
   ],
-  [
-    'HTTPClient',
-    'HTTPClient ${1:http};',
-    'A client for a url. GET() waits for the answer.',
-  ],
-  [
-    'PubSubClient',
-    "PubSubClient ${1:mqtt};",
-    "A client for the network's topics.",
-  ],
-  [
-    'WiFiUdp',
-    'WiFiUdp ${1:udp};',
-    'A time client. config() says which server to ask.',
-  ],
+  ['HTTPClient', 'HTTPClient ${1:http};', 'A client for a url. GET() waits for the answer.'],
+  ['PubSubClient', 'PubSubClient ${1:mqtt};', "A client for the network's topics."],
+  ['WiFiUdp', 'WiFiUdp ${1:udp};', 'A time client. config() says which server to ask.'],
 ];
 
 function registerArduinoLanguage(): void {
@@ -435,6 +437,7 @@ function registerArduinoLanguage(): void {
       // The libraries a sketch declares, which read as types where they are.
       'Servo',
       'DHT',
+      'OneWire',
       'SD',
       'LiquidCrystal',
       'HTTPClient',

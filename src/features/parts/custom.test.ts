@@ -55,10 +55,10 @@ describe('the derivation', () => {
     expect(kinds).toContain('ir-remote');
     expect(kinds).not.toContain('mcu');
     expect(kinds).not.toContain('breadboard');
-    // 35 shipped kinds plus `scripted`, which ships no part on purpose: the
+    // 36 shipped kinds plus `scripted`, which ships no part on purpose: the
     // whole point of that kind is that the host has no model for it.
     expect(kinds).toContain('scripted');
-    expect(kinds.length).toBe(36);
+    expect(kinds.length).toBe(37);
   });
 
   it("reads a kind's pins from the shipped part of that kind", () => {

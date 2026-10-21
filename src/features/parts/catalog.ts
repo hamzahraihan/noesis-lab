@@ -115,6 +115,7 @@ export type ComponentSpec =
   | { readonly kind: 'stepper' }
   | { readonly kind: 'biaxial-stepper' }
   | { readonly kind: 'dht' }
+  | { readonly kind: 'ds18b20' }
   | { readonly kind: 'neopixel' }
   | { readonly kind: 'neopixel-matrix' }
   | { readonly kind: 'led-ring' }

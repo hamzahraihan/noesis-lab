@@ -501,6 +501,13 @@ export interface FirmwareServices {
    */
   dht?: DhtPort;
   /**
+   * A one-wire sensor, by the pin its data line is wired to.
+   *
+   * Optional for the same reason `dht` is: a host with no sensor on the
+   * bench has nothing to read.
+   */
+  onewire?: OneWirePort;
+  /**
    * IR receiver, by the pin its data line is wired to.
    *
    * Optional because a host with no receiver on the bench has nothing to
@@ -766,6 +773,18 @@ export interface DhtPort {
   temperature(pin: number): number;
   /** Percent relative humidity from the part's humidity knob. */
   humidity(pin: number): number;
+}
+
+/**
+ * A one-wire sensor, by the pin its data line is wired to.
+ *
+ * The DS18B20 answers through this port rather than over a bus the bench
+ * decodes: the waveform is deliberately not modelled, the same way the DHT's
+ * is not, and what the part carries is the one thing a sketch asks it for.
+ */
+export interface OneWirePort {
+  /** Degrees Celsius from the part's temperature knob. */
+  temperature(pin: number): number;
 }
 
 /**
@@ -1036,6 +1055,8 @@ const LIBRARY_OBJECTS: Readonly<Record<string, true>> = {
   Servo: true,
   dht: true,
   DHT: true,
+  onewire: true,
+  OneWire: true,
   pixels: true,
   Pixels: true,
   ir: true,
@@ -1123,9 +1144,7 @@ function formatValue(value: Value): string {
   if (Array.isArray(value)) return `[${value.join(', ')}]`;
   // A dictionary prints the way Python prints one: the keys in quotes.
   if (value instanceof Map) {
-    const entries = [...value.entries()].map(
-      ([key, item]) => `'${key}': ${formatValue(item)}`,
-    );
+    const entries = [...value.entries()].map(([key, item]) => `'${key}': ${formatValue(item)}`);
     return `{${entries.join(', ')}}`;
   }
   // A generator prints as what it is; a value on its way out of one prints
@@ -1232,12 +1251,22 @@ const LIBRARY_OWNED_INSTANCES = new Set([
   'RTC_DS1307',
   'Servo',
   'DHT',
+  'OneWire',
   'SD',
   'LiquidCrystal',
   'HTTPClient',
   'PubSubClient',
   'WiFiUdp',
 ]);
+
+/**
+ * The libraries whose constructor takes the pin, the way Arduino's do.
+ *
+ * `DHT dht(2, DHT22);` and `OneWire ow(2);` both name the pin where the
+ * object is made, so the object has to remember it from there: a later call
+ * carries it on, and a `begin()` with no pin of its own keeps it.
+ */
+const LIBRARIES_PINNED_IN_CONSTRUCTOR = new Set(['DHT', 'OneWire']);
 /**
  * The library a bare name in a sketch stands for.
  *
@@ -1251,6 +1280,7 @@ const LIBRARY_NAMES: Readonly<Record<string, string>> = {
   servo: 'Servo',
   Servo: 'Servo',
   dht: 'DHT',
+  onewire: 'OneWire',
   DHT: 'DHT',
   sd: 'SD',
   SD: 'SD',
@@ -2212,8 +2242,7 @@ export class FirmwareRuntime {
    */
   private readMemberField(instance: Instance, name: string): Value {
     const value =
-      instance.scope.values.get(name) ??
-      this.classStatics.get(instance.className)?.get(name);
+      instance.scope.values.get(name) ?? this.classStatics.get(instance.className)?.get(name);
     if (value !== undefined) return value;
     throw new PythonError('Error', `field '${name}' of '${instance.className}' was never set`);
   }
@@ -2266,7 +2295,7 @@ export class FirmwareRuntime {
      * carries the pin in the constructor, which is where Arduino's library
      * takes it, and `begin()` then has no pin of its own to give.
      */
-    if (className === 'DHT' && args.length > 0) {
+    if (LIBRARIES_PINNED_IN_CONSTRUCTOR.has(className) && args.length > 0) {
       this.libraryPins.set(instance, this.pinOf(services, asNumber(args[0] ?? -1)));
     }
     const methods = this.classMethods.get(className);
@@ -2279,8 +2308,7 @@ export class FirmwareRuntime {
     const previous = this.currentInstance;
     this.currentInstance = instance;
     const previousSelf = this.currentSelfName;
-    this.currentSelfName =
-      this.language === 'python' ? (ctor.parameters[0]?.name ?? null) : null;
+    this.currentSelfName = this.language === 'python' ? (ctor.parameters[0]?.name ?? null) : null;
     try {
       const frame = new Scope(instance.scope, true);
       frame.memberOf = instance;
@@ -2418,13 +2446,7 @@ export class FirmwareRuntime {
      * class is the library's, and the call is the library's, so it answers
      * the way the bench's own name for that library does.
      */
-    const library = yield* this.libraryCall(
-      instance,
-      instance.className,
-      method,
-      args,
-      services,
-    );
+    const library = yield* this.libraryCall(instance, instance.className, method, args, services);
     if (library !== null) return library;
     const declaration = this.classMethods.get(instance.className)?.get(method);
     if (!declaration) return 0;
@@ -2625,8 +2647,7 @@ export class FirmwareRuntime {
         try {
           return (yield* this.advanceGenerator(source)) as Value;
         } catch (error) {
-          const exhausted =
-            error instanceof PythonError && error.typeName === 'StopIteration';
+          const exhausted = error instanceof PythonError && error.typeName === 'StopIteration';
           if (exhausted && args.length > 1) {
             return args[1];
           }
@@ -2663,10 +2684,7 @@ export class FirmwareRuntime {
       case 'String': {
         const value = args[0] ?? 0;
         if (typeof value !== 'number') return formatValue(value);
-        return formatPrintValue(
-          value,
-          args[1] === undefined ? undefined : asNumber(args[1]),
-        );
+        return formatPrintValue(value, args[1] === undefined ? undefined : asNumber(args[1]));
       }
       case 'delay': {
         const ms = Math.max(0, asNumber(args[0] ?? 0));
@@ -3186,10 +3204,7 @@ export class FirmwareRuntime {
   private handlerCatches(types: readonly string[], error: PythonError): boolean {
     if (types.length === 0) return true;
     return types.some(
-      (type) =>
-        type === 'Exception' ||
-        type === 'BaseException' ||
-        type === error.typeName,
+      (type) => type === 'Exception' || type === 'BaseException' || type === error.typeName,
     );
   }
 
@@ -3201,7 +3216,11 @@ export class FirmwareRuntime {
    * else is an `Exception` carrying the value it was given.
    */
   private raisedError(expression: Expr | null, value: Value | undefined): PythonError {
-    if (expression !== null && expression.kind === 'call' && expression.callee.kind === 'identifier') {
+    if (
+      expression !== null &&
+      expression.kind === 'call' &&
+      expression.callee.kind === 'identifier'
+    ) {
       const typeName = expression.callee.name;
       const message =
         expression.args.length === 0 ? typeName : formatValue(value === undefined ? '' : value);
@@ -3303,10 +3322,7 @@ export class FirmwareRuntime {
           for (const item of source) yield { yielded: item };
           return 0;
         }
-        throw new PythonError(
-          'TypeError',
-          `'${pythonTypeName(source)}' object is not iterable`,
-        );
+        throw new PythonError('TypeError', `'${pythonTypeName(source)}' object is not iterable`);
       }
 
       case 'list': {
@@ -3349,7 +3365,9 @@ export class FirmwareRuntime {
           const inner = new Scope(scope);
           for (const item of iterable) {
             inner.values.set(expression.variable, item);
-            items.push(asNumber((yield* this.evaluate(expression.element, inner, services)) as Value));
+            items.push(
+              asNumber((yield* this.evaluate(expression.element, inner, services)) as Value),
+            );
           }
         }
         return items;
@@ -3572,11 +3590,7 @@ export class FirmwareRuntime {
               expression.operator === '+=' &&
               (typeof current === 'string' || typeof value === 'string')
                 ? joinValues(this.language, current, value)
-                : applyBinary(
-                    expression.operator.slice(0, -1),
-                    asNumber(current),
-                    asNumber(value),
-                  );
+                : applyBinary(expression.operator.slice(0, -1), asNumber(current), asNumber(value));
             instance.scope.values.set(expression.target.member, combined);
             return combined;
           }
@@ -3600,19 +3614,13 @@ export class FirmwareRuntime {
            */
           const member = this.memberInstanceFor(name, scope);
           if (expression.operator !== '=') {
-            const current = member
-              ? this.readMemberField(member, name)
-              : (scope.lookup(name) ?? 0);
+            const current = member ? this.readMemberField(member, name) : (scope.lookup(name) ?? 0);
             // `msg += "x"` on a `String` is the same join as `msg = msg + "x"`.
             const combined =
               expression.operator === '+=' &&
               (typeof current === 'string' || typeof value === 'string')
                 ? joinValues(this.language, current, value)
-                : applyBinary(
-                    expression.operator.slice(0, -1),
-                    asNumber(current),
-                    asNumber(value),
-                  );
+                : applyBinary(expression.operator.slice(0, -1), asNumber(current), asNumber(value));
             if (member) {
               member.scope.values.set(name, combined);
               return combined;
@@ -3785,7 +3793,10 @@ export class FirmwareRuntime {
           if (held instanceof Map) {
             const value = held.get(expression.member);
             if (value !== undefined) return value;
-            throw new PythonError('KeyError', `key '${expression.member}' is not in the dictionary`);
+            throw new PythonError(
+              'KeyError',
+              `key '${expression.member}' is not in the dictionary`,
+            );
           }
           /*
            * `Button::RELEASED`: static consts live in the class table, since
@@ -4942,11 +4953,7 @@ export class FirmwareRuntime {
    * this bench answers only for a device that is really on it, so the answer
    * is the honest one -- and a host that cannot say is left alone.
    */
-  private requireI2cDevice(
-    services: FirmwareServices,
-    address: number,
-    pins?: I2cBusPins,
-  ): void {
+  private requireI2cDevice(services: FirmwareServices, address: number, pins?: I2cBusPins): void {
     if (services.i2cHasDevice === undefined) return;
     if (services.i2cHasDevice(address, pins)) return;
     throw new PythonError('OSError', `[Errno 5] no device at 0x${(address & 0x7f).toString(16)}`);
@@ -5028,9 +5035,7 @@ export class FirmwareRuntime {
               args.length > 0 ? this.pinOf(services, asNumber(args[0] ?? -1)) : pin,
             );
           case 'detach':
-            servo.detach(
-              args.length > 0 ? this.pinOf(services, asNumber(args[0] ?? -1)) : pin,
-            );
+            servo.detach(args.length > 0 ? this.pinOf(services, asNumber(args[0] ?? -1)) : pin);
             return 0;
           default:
             return 0;
@@ -5052,6 +5057,23 @@ export class FirmwareRuntime {
             return dht.temperature(this.pinOf(services, asNumber(args[0] ?? -1)));
           case 'humidity':
             return dht.humidity(this.pinOf(services, asNumber(args[0] ?? -1)));
+          default:
+            return 0;
+        }
+      }
+      case 'OneWire': {
+        const onewire = services.onewire;
+        if (!onewire) return 0;
+        // The pin is the constructor's: `OneWire ow(2);` binds it, and the
+        // library's own `getTemp(float *t)` cannot be spelled here because
+        // the bench's subset has no pointers -- so the bench's own shape
+        // answers the temperature outright.
+        const pin = this.libraryPins.get(owner) ?? -1;
+        switch (member) {
+          case 'getTemp':
+            return onewire.temperature(pin);
+          case 'temperature':
+            return onewire.temperature(this.pinOf(services, asNumber(args[0] ?? -1)));
           default:
             return 0;
         }

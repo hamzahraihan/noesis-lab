@@ -1656,6 +1656,7 @@ const WEATHER: GalleryProject = {
     'A temperature-humidity sensor reports to a character LCD and the serial log. Turn the knobs on the part — or warm it with a fingertip on the bench — and watch both numbers move.',
   parts: [
     { name: 'DHT22 Temp/Humidity', qty: 1 },
+    { name: 'DS18B20 Temperature Sensor', qty: 1 },
     { name: 'LCD 16x2 (HD44780)', qty: 1 },
   ],
   builds: [
@@ -1665,6 +1666,11 @@ const WEATHER: GalleryProject = {
       sketch: `#include <Arduino.h>
 
 byte SENSOR_PIN = 10;
+byte ONEWIRE_PIN = 9;
+
+// The one-wire sensor takes its pin in the constructor, the way Arduino's
+// library takes it.
+OneWire ow(ONEWIRE_PIN);
 
 void setup() {
   Serial.begin(115200);
@@ -1677,6 +1683,7 @@ void setup() {
 void loop() {
   float temperature = dht.temperature(SENSOR_PIN);
   float humidity = dht.humidity(SENSOR_PIN);
+  float outside = ow.getTemp();
 
   int percent = humidity;
   if (percent < 0) { percent = 0; }
@@ -1695,7 +1702,9 @@ void loop() {
   Serial.print(temperature);
   Serial.print(" C rh ");
   Serial.print(percent);
-  Serial.println(" %");
+  Serial.print(" %  outside ");
+  Serial.print(outside);
+  Serial.println(" C");
   delay(2000);
 }
 `,
@@ -1705,7 +1714,7 @@ void loop() {
   working: [
     'The LCD shows temperature on line one and humidity on line two.',
     'Turning the part knobs moves both numbers within a couple of seconds.',
-    'The serial monitor logs one line per reading, never a scroll of repeats.',
+    'The serial monitor logs one line per reading: the DHT’s temperature and humidity, and the one-wire sensor’s own.',
   ],
 };
 

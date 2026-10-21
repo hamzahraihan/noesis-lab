@@ -28,6 +28,13 @@
       "x": 100,
       "y": 112,
       "rotation": 0
+    },
+    {
+      "id": "p5",
+      "type": "ds18b20",
+      "x": 100,
+      "y": 154,
+      "rotation": 0
     }
   ],
   "wires": [
@@ -60,6 +67,30 @@
       "from": "p1:D10",
       "to": "p4:SDA",
       "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w13",
+      "from": "p1:D9",
+      "to": "p5:DQ",
+      "colour": "#f59e0b",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w14",
+      "from": "p1:5V",
+      "to": "p5:VCC",
+      "colour": "#a3e635",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w15",
+      "from": "p1:J1_GND",
+      "to": "p5:GND",
+      "colour": "#06b6d4",
       "gaugeAwg": 26,
       "bends": []
     },

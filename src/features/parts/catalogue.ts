@@ -67,6 +67,7 @@ import { relayDefinition } from './relay';
 import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
+import { ds18b20Definition } from './ds18b20';
 import { remoteDefinition } from './remote';
 import { dialerDefinition } from './dialer';
 import { microsdDefinition } from './sdcard';
@@ -275,6 +276,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Temp and humidity over one wire; read with dht.temperature/humidity. Turn the climate knobs to change the weather.',
     make: dhtDefinition,
+  },
+  {
+    id: 'ds18b20',
+    name: 'DS18B20 Temperature Sensor',
+    group: 'input',
+    note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
+    make: ds18b20Definition,
   },
   {
     id: 'neopixel',

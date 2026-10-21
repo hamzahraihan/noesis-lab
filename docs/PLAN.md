@@ -144,7 +144,8 @@ works with no network, which matters for something that is otherwise entirely lo
 `arduino-cpp` language whose completion list is *exactly* the set the firmware
 interpreter implements -- `pinMode`, `digitalWrite`, `analogWrite`, `Serial`, `Wire`,
 `SPI`, `delay`, `tone`, the maths helpers, the libraries a sketch declares
-(`Servo`, `DHT`, `SD`, `LiquidCrystal`, `HTTPClient`, `PubSubClient`, `WiFiUdp`)
+(`Servo`, `DHT`, `OneWire`, `SD`, `LiquidCrystal`, `HTTPClient`,
+`PubSubClient`, `WiFiUdp`)
 and the pin constants. It does not offer `attachInterrupt`, because the bench
 models no interrupts. An autocomplete that silently suggests a call the
 simulator will reject teaches the wrong thing; this one only ever promises
@@ -414,10 +415,19 @@ load and the soil probe's moisture already follow. The chip's registers are
 recomputed from the knob rather than from a number the operator typed in, so
 what a sketch reads back is what the operator dialled in.
 
-**Three of the six instruments are the bench's own drawings.** The Wokwi
-library has no element for a barometer, a current monitor or a converter, so
-their artwork is drawn here, on the same 2.54 mm grid as the modules the
-library does draw -- which is what makes the header a jumper can reach.
+**A one-wire sensor is a knob and a library, and the waveform between them is
+not modelled.** The DS18B20 answers through the `OneWire` library, the way the
+DHT answers through `DHT`: the part carries the temperature and the library
+carries the pin. The library's own `getTemp(float *t)` cannot be spelled in the
+bench's subset, which has no pointers, so the bench's own shape answers the
+temperature outright -- and the object still takes its pin in the constructor,
+the way Arduino's library takes it, so `OneWire ow(2);` is the spelling a
+sketch writes.
+
+**Four of the instruments are the bench's own drawings.** The Wokwi library
+has no element for a barometer, a current monitor, a converter or a one-wire
+sensor, so their artwork is drawn here, on the same 2.54 mm grid as the modules
+the library does draw -- which is what makes the header a jumper can reach.
 
 **The comparator sensor family is one part, not five.** A PIR, a sound, a
 heart-rate, a gas and a flame board are all the same LM393 with a trimmer

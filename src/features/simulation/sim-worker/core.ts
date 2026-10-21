@@ -76,11 +76,7 @@ import {
   type FirmwareServices,
   type WirePort,
 } from '../firmware/interpreter';
-import {
-  FirmwareDebugger,
-  type Breakpoint,
-  type DebugFrame,
-} from '../firmware/debugger';
+import { FirmwareDebugger, type Breakpoint, type DebugFrame } from '../firmware/debugger';
 import { pythonModulesFor } from '../firmware/python-modules';
 import { FirmwareSyntaxError } from '../firmware/parser';
 import {
@@ -103,6 +99,7 @@ import {
   DISTANCE_KNOB,
   DynamicState,
   HUMIDITY_KNOB,
+  DS18B20_TEMPERATURE_KNOB,
   LcdDriver,
   SSD1306_FLAG_LIT,
   SSD1306_FLAG_MIRRORED,
@@ -752,9 +749,7 @@ class SimCore implements CoreHandle {
         // panel that is on the bench, even one whose jumpers are pulled.
         const frame = panel ? panel.frame() : new Uint8Array(0);
         for (let i = 0; i < SSD1306_FRAME_BYTES; i++) put(frame[i] ?? 0);
-        put(
-          (panel?.lit ? SSD1306_FLAG_LIT : 0) | (panel?.mirrored ? SSD1306_FLAG_MIRRORED : 0),
-        );
+        put((panel?.lit ? SSD1306_FLAG_LIT : 0) | (panel?.mirrored ? SSD1306_FLAG_MIRRORED : 0));
       } else if (component.kind === 'servo') {
         const servo = this.engine.servo(part.id);
         put(servo ? Math.max(0, Math.min(180, Math.round(servo.angle))) : 0);
@@ -1152,6 +1147,19 @@ class SimCore implements CoreHandle {
     return null;
   }
 
+  /** The one-wire sensor whose data pin is wired to a board pin, if there is one. */
+  private oneWireOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'ds18b20') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:DQ`) === net) return part;
+    }
+    return null;
+  }
+
   /** The IR receiver whose data pin is wired to a board pin, if there is one. */
   private irReceiverOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -1469,6 +1477,12 @@ class SimCore implements CoreHandle {
         humidity: (pin) => {
           const part = this.dhtOnPin(pin);
           return part ? this.controls.knob(part.id, HUMIDITY_KNOB) : 0;
+        },
+      },
+      onewire: {
+        temperature: (pin) => {
+          const part = this.oneWireOnPin(pin);
+          return part ? this.controls.knob(part.id, DS18B20_TEMPERATURE_KNOB) : 0;
         },
       },
       ir: {

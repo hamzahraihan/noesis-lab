@@ -830,6 +830,21 @@ function elementsForPart(
       ];
     }
 
+    case 'ds18b20': {
+      // The one-wire waveform is deliberately not modeled, the same way the
+      // DHT's is not: the data line idles high behind the module's pull-up
+      // and the sketch reads the temperature through the `onewire` port.
+      return [
+        {
+          kind: 'resistor',
+          a: nodeAt('DQ'),
+          b: nodeAt('VCC'),
+          ohms: MODULE_PULLUP_OHMS,
+          label: 'pull-up',
+        },
+      ];
+    }
+
     case 'neopixel':
     case 'neopixel-matrix':
     case 'led-ring':

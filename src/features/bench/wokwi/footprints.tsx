@@ -177,10 +177,11 @@ function shapeFor(
     case 'display':
       return <DisplayBody definition={definition} state={state} part={part} />;
     case 'i2c-sensor':
+    case 'ds18b20':
       // The modules the bench draws itself: Wokwi's library has no element
-      // for a barometer, a current monitor or a converter, so these are
-      // drawn here from the definition's own pins.
-      return <I2cModuleBody definition={definition} />;
+      // for a barometer, a current monitor, a converter or a one-wire
+      // sensor, so these are drawn here from the definition's own pins.
+      return <ModuleBody definition={definition} />;
   }
 }
 
@@ -1103,11 +1104,7 @@ const CapacitorBody = staticBody(function CapacitorBody({
  * it: a DIP-8 has no USB, no barrel jack and no indicators, and the silkscreen
  * a real one carries is the part's name and a dot.
  */
-const DipBody = staticBody(function DipBody({
-  definition,
-}: {
-  definition: PartDefinition;
-}) {
+const DipBody = staticBody(function DipBody({ definition }: { definition: PartDefinition }) {
   const width = definition.widthMm;
   const height = definition.heightMm;
   return (
@@ -1155,21 +1152,17 @@ const DipBody = staticBody(function DipBody({
 });
 
 /**
- * An I2C module the bench draws itself.
+ * A module the bench draws itself.
  *
- * The three of them -- a barometer, a current monitor and a converter -- have
- * no element in Wokwi's library, so the board is drawn here: the sensor in
+ * The parts with no element in Wokwi's library -- a barometer, a current
+ * monitor, a converter and a one-wire sensor -- are boards: the sensor in
  * the middle of its own board, the header down the left edge with the pin
  * names a wiring tutorial uses, and the part's name along the bottom.
  *
  * The pads are drawn at the definition's own pin coordinates, so the artwork
  * and the holes a jumper can reach cannot disagree.
  */
-const I2cModuleBody = staticBody(function I2cModuleBody({
-  definition,
-}: {
-  definition: PartDefinition;
-}) {
+const ModuleBody = staticBody(function ModuleBody({ definition }: { definition: PartDefinition }) {
   const width = definition.widthMm;
   const height = definition.heightMm;
   return (

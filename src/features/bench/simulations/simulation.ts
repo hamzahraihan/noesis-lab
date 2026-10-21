@@ -79,6 +79,7 @@ import { nextAutomaticWireColour } from '../wiring/wire-colours';
 import { GROUND } from '@/features/simulation';
 import { DISTANCE_KNOB, echoMicroseconds } from '@/features/parts';
 import { HUMIDITY_KNOB } from '@/features/parts';
+import { DS18B20_TEMPERATURE_KNOB } from '@/features/parts';
 import { pixelCount, type PixelColor } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
@@ -2025,6 +2026,19 @@ export class Simulation {
     return null;
   }
 
+  /** The one-wire sensor whose data pin is wired to a board pin, if there is one. */
+  private oneWireOnPin(pin: number): PartInstance | null {
+    const pinId = this.mcu.pinIdForGpio(pin);
+    if (pinId === undefined) return null;
+    const net = this.engine.netOfMcuPin(pinId);
+    if (net === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'ds18b20') continue;
+      if (this.engine.currentNetlist.pinNode.get(`${part.id}:DQ`) === net) return part;
+    }
+    return null;
+  }
+
   /** The IR receiver whose data pin is wired to a board pin, if there is one. */
   private irReceiverOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -2253,6 +2267,12 @@ export class Simulation {
         humidity: (pin) => {
           const part = this.dhtOnPin(pin);
           return part ? this.controls.knob(part.id, HUMIDITY_KNOB) : 0;
+        },
+      },
+      onewire: {
+        temperature: (pin) => {
+          const part = this.oneWireOnPin(pin);
+          return part ? this.controls.knob(part.id, DS18B20_TEMPERATURE_KNOB) : 0;
         },
       },
       ir: {
