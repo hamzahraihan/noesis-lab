@@ -412,8 +412,9 @@ is what makes a generator a coroutine -- a sketch can hand it a command and
 read what comes back. `next(gen)` is the other spelling of the same
 advance, and a second argument to it is the value to answer with rather
 than raising. A generator that has run out raises `StopIteration`, the way
-Python does, so a sketch can catch it; one that has not started cannot be
-sent a value, because there is no `yield` for it to reach.
+Python does, so a sketch can catch it; one that has not started refuses a
+value, because there is no `yield` for it to reach -- though nothing at
+all, which is None here, starts it as it does in Python.
 
 **The clock a sketch reads is the bench's clock.** `time.ticks_ms()` and
 `ticks_diff` are how a MicroPython sketch measures an interval without
