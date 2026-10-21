@@ -12,11 +12,13 @@ import {
   decodeUart,
   measureDutyCycle,
   measureFrequency,
+  scopeToCsv,
   type TraceSample,
 } from '@/features/simulation';
 import type { BoardPin } from '@/features/parts';
-import { ActivityLogIcon, Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
+import { ActivityLogIcon, Crosshair1Icon, DownloadIcon, StopwatchIcon } from '@radix-ui/react-icons';
 import {
+  Button,
   CardTitle,
   Select,
   SelectContent,
@@ -24,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components';
+import { downloadText } from './download';
 
 const TRACE_HEIGHT_MM = 60;
 /** Simulated milliseconds shown across the trace. */
@@ -125,6 +128,16 @@ export function ScopePanel({
             ))}
           </SelectContent>
         </Select>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => downloadText(scopeToCsv(samples), 'noesis-scope.csv', 'text/csv')}
+          disabled={samples.length === 0}
+          title="Save the capture as a CSV table"
+          aria-label="Save the capture as CSV"
+        >
+          <DownloadIcon className="icon-sm" aria-hidden="true" />
+        </Button>
       </div>
 
       <div className="relative">

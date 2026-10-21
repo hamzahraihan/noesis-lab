@@ -5,6 +5,7 @@ import {
   decodeUart,
   measureDutyCycle,
   measureFrequency,
+  scopeToCsv,
   type TraceSample,
 } from './probe';
 
@@ -153,5 +154,19 @@ describe('UART decoding', () => {
   it('ignores a line that never returns high', () => {
     const held: TraceSample[] = Array.from({ length: 200 }, (_, i) => ({ t: i * 0.05, v: 0 }));
     expect(decodeUart(held, 9600)).toEqual([]);
+  });
+});
+
+describe('a capture as a table', () => {
+  it('names the columns and carries every sample', () => {
+    const csv = scopeToCsv([
+      { t: 0, v: 0 },
+      { t: 1.5, v: 3.3 },
+    ]);
+    expect(csv).toBe('time_ms,volts\n0,0\n1.5,3.3');
+  });
+
+  it('is a header and nothing else when there was no capture', () => {
+    expect(scopeToCsv([])).toBe('time_ms,volts');
   });
 });

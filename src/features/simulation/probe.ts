@@ -174,6 +174,21 @@ export function decodeUart(
 }
 
 /**
+ * A capture as CSV: the time and the voltage at every sample.
+ *
+ * The scope's capture is what the solver produced, so the table is the
+ * measurement rather than the sketch's own account of it -- which is the
+ * point of putting a scope next to a sketch in the first place.
+ */
+export function scopeToCsv(samples: readonly TraceSample[]): string {
+  const lines = ['time_ms,volts'];
+  for (const sample of samples) {
+    lines.push(`${sample.t},${sample.v}`);
+  }
+  return lines.join('\n');
+}
+
+/**
  * Frequency of the trace, in hertz.
  *
  * Measured from the captured edges rather than assumed, so it reflects the PWM
