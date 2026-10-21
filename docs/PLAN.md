@@ -453,6 +453,18 @@ nothing to seed here, but a sketch that stopped on it never reached the value
 it wanted. `bitRead` takes a number apart, which is what a register tutorial
 does with it.
 
+**A lesson's stated limit is a claim, and it gets checked too.** Module 4
+teaches interrupts by teaching why polling fails, and its sketches told the
+learner why: no `volatile`, `const byte` rejected at file scope, and an
+`attachInterrupt` call that "would load, run, and quietly decode nothing".
+The last of those was the silent zero, which is gone; the first two had
+already stopped being true. A sketch that calls `attachInterrupt` now stops
+*before its handler is read* -- evaluating it first would fail on "'isr' is a
+function, not a value", which blames the sketch for a limit of the bench --
+and says the thing the module teaches. `digitalPinToInterrupt` still maps a
+pin to its number, and a critical section around nothing is the code inside
+it.
+
 **A call the bench cannot make says so.** It used to answer `0`, which is the
 worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
 learner believes the data was zero rather than the bench missing the call. A
