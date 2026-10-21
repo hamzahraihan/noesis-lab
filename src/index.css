@@ -309,6 +309,18 @@
   outline-offset: 2px;
 }
 
+/*
+ * The margin a stop is set on.
+ *
+ * A dot rather than a word: the margin is narrow, and the dot is the shape
+ * every debugger has used for thirty years. Red, because a stop is the one
+ * thing on the bench that is not live.
+ */
+.breakpoint-glyph {
+  background: radial-gradient(circle at 50% 50%, #f87171 0 42%, transparent 46%);
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

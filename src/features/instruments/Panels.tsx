@@ -48,7 +48,7 @@ import {
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './editor-constants';
-import type { FirmwareLanguage, FirmwareProject } from '@/features/simulation';
+import type { Breakpoint, FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import type { Example } from '@/features/learn';
 import {
   CaretRightIcon,
@@ -484,6 +484,8 @@ export function FirmwareEditor({
   examples,
   activeExampleId,
   onLoadExample,
+  stops,
+  onToggleStop,
 }: {
   project: FirmwareProject;
   onProjectChange(next: FirmwareProject): void;
@@ -516,10 +518,28 @@ export function FirmwareEditor({
   examples: readonly Example[];
   activeExampleId: string | null;
   onLoadExample(id: string): void;
+  /**
+   * The stops set on the sketch, and the call that sets or takes one off.
+   *
+   * The margin of the editor is where a stop is set, so the editor needs to
+   * know which lines carry one and who to tell when the margin is clicked.
+   */
+  stops: readonly Breakpoint[];
+  onToggleStop(file: string, line: number): void;
 }) {
   const active = project.files.find((f) => f.name === project.activeName) ?? project.files[0];
   const activeName = active?.name;
   const entry = ENTRY_BY_LANGUAGE[project.language];
+  /*
+   * The stops on the file the editor is showing, so the margin draws them
+   * and a click names the file it was set on. Memoised, because the editor
+   * redraws its margin whenever this array changes -- and the bench renders
+   * every frame while the program runs.
+   */
+  const fileStops = useMemo(
+    () => stops.filter((stop) => stop.file === activeName).map((stop) => stop.line),
+    [stops, activeName],
+  );
 
   /*
    * Declared libraries and custom slot contents, read off the project the
@@ -1334,6 +1354,10 @@ export function FirmwareEditor({
               language={language === 'python' ? PYTHON_LANGUAGE : FIRMWARE_LANGUAGE}
               theme={FIRMWARE_THEME}
               value={active?.content ?? ''}
+              stops={fileStops}
+              onToggleStop={(line) => {
+                if (activeName) onToggleStop(activeName, line);
+              }}
               onChange={(next) => {
                 if (active) handleContentChange(active.name, next ?? '');
               }}

@@ -11,6 +11,7 @@ import { createSimCore, type CoreHandle } from './core';
 import { clearReportedFaults } from '../scripted/diagnostics';
 import { ACK_STALE_MS, headerView, shouldThrottle } from './protocol';
 import type { Bench } from '../bench';
+import type { Breakpoint, DebugFrame } from '../firmware/debugger';
 import type { FirmwareProject } from '../firmware/project';
 import type { KnobSpec } from '@/features/parts';
 
@@ -28,6 +29,13 @@ type Incoming =
       wasm?: boolean;
       /** Whether this bench's network may bridge to real hosts. */
       liveNetwork?: boolean;
+      /**
+       * The stops the debugger holds.
+       *
+       * They ride with the sketch, because a stop that arrives after the
+       * program has started is a stop the sketch has already passed.
+       */
+      stops?: Breakpoint[];
     }
   | { id: number; type: 'start' }
   | { id: number; type: 'stop' }
@@ -38,7 +46,10 @@ type Incoming =
   | { id: number; type: 'flash'; words: Uint16Array }
   | { id: number; type: 'speed'; scale: number }
   | { id: number; type: 'ack'; generation: number }
-  | { id: number; type: 'faults' };
+  | { id: number; type: 'faults' }
+  | { id: number; type: 'debug-stops'; stops: Breakpoint[] }
+  | { id: number; type: 'debug-resume' }
+  | { id: number; type: 'debug-step'; mode: 'over' | 'into' };
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
 let execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
@@ -52,6 +63,14 @@ let running = false;
 let speed = 1;
 let unread = 0;
 let lastAckMs = 0;
+/**
+ * The frame the program is stopped on, as the page last heard it.
+ *
+ * The frame is pushed when the program stops and again when it stops
+ * somewhere new, so a bench that is stopped is not posting the same frame
+ * sixty times a second.
+ */
+let pausedFrame: DebugFrame | null = null;
 type Port = { postMessage(message: unknown): void };
 function handle(port: Port, msg: Incoming): void {
   const ok = (id: number, extra?: Record<string, unknown>): void =>
@@ -75,6 +94,10 @@ function handle(port: Port, msg: Incoming): void {
         wasm = msg.wasm ?? false;
         running = false;
         unread = 0;
+        pausedFrame = null;
+        // The stops are set before the rebuild, so the runner the rebuild
+        // builds is watched from its first statement.
+        core.setStops(msg.stops ?? []);
         core.rebuild(msg.bench, msg.firmware, msg.execution, wasm);
         ok(msg.id, { buffer: core.snapshot(), fault: core.fault });
       } catch (error) {
@@ -155,6 +178,23 @@ function handle(port: Port, msg: Incoming): void {
        */
       ok(msg.id, { rows: core?.faults() ?? [], fault: core?.fault ?? null });
       break;
+    case 'debug-stops':
+      /*
+       * The stops the person set on the sketch. The worker holds them
+       * because the program runs here: a stop the page kept would be a stop
+       * nothing could honour.
+       */
+      core?.setStops(msg.stops);
+      ok(msg.id);
+      break;
+    case 'debug-resume':
+      core?.resumeDebug();
+      ok(msg.id);
+      break;
+    case 'debug-step':
+      core?.stepDebug(msg.mode);
+      ok(msg.id);
+      break;
   }
 }
 if (typeof self !== 'undefined' && 'postMessage' in self) {
@@ -179,5 +219,22 @@ if (typeof self !== 'undefined' && 'postMessage' in self) {
     core.step(TICK_MS * speed);
     core.snapshot();
     unread += 1;
+    /*
+     * The program stopped. The page has to hear about it, because the
+     * program is not moving and the panel that says where it is has nothing
+     * to show until it does. The frame is pushed rather than polled, so the
+     * stop appears as soon as it happens -- and it is pushed again when the
+     * frame changes, because a step stops somewhere new.
+     */
+    if (core.debugPaused()) {
+      const frame = core.debugFrame();
+      if (frame !== pausedFrame) {
+        pausedFrame = frame;
+        port.postMessage({ type: 'debug-paused', frame });
+      }
+    } else if (pausedFrame !== null) {
+      pausedFrame = null;
+      port.postMessage({ type: 'debug-resumed' });
+    }
   }, TICK_MS);
 }

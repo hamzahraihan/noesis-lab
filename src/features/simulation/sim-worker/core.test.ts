@@ -40,6 +40,37 @@ describe('sim core', () => {
     expect(core.fault).toBeNull();
   });
 
+  it('stops the program at a stop, and lets it go again', () => {
+    const core = createSimCore(boardOption('uno').make());
+    const sketch = {
+      language: 'arduino-cpp',
+      activeName: 'main.ino',
+      files: [
+        {
+          name: 'main.ino',
+          content:
+            'int blinks = 0;\nint other = blinks + 1;\nvoid setup() { blinks = 1; }\nvoid loop() { blinks = blinks + 1; }\n',
+        },
+      ],
+    } as never;
+    // The stops are set before the rebuild, so the runner is watched from
+    // its first statement -- the way the worker sets them.
+    core.setStops([{ file: 'main.ino', line: 2 }]);
+    core.rebuild({ parts: [], wires: [], terminals: [] } as never, sketch, 'interpreter');
+    core.step(16);
+    expect(core.debugPaused()).toBe(true);
+    expect(core.debugFrame()?.line).toBe(2);
+    // The names the program can see at the stop: the global it declared.
+    expect(core.debugFrame()?.variables).toContainEqual({
+      name: 'blinks',
+      value: '0',
+      scope: 'global',
+    });
+    core.resumeDebug();
+    core.step(16);
+    expect(core.debugPaused()).toBe(false);
+  });
+
   it('reports a script fault from the worker realm as a Problems row', async () => {
     clearReportedFaults();
     const sim = new Simulation(boardOption('uno').make());

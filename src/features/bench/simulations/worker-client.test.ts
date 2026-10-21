@@ -485,6 +485,44 @@ describe('worker port protocol', () => {
     client.dispose();
   });
 
+  it('carries the stops with the sketch, and takes the frame the worker pushes', () => {
+    const port = fakePort();
+    const client = portClient(port, vi.fn());
+    replyInitOk(port);
+    client.setStops([{ file: 'main.ino', line: 3 }]);
+    // The stops ride with the next sketch the worker builds: a stop that
+    // arrived after the build would be a stop the sketch had passed.
+    client.loadFirmware(plainProject());
+    const init = port.sent
+      .filter((msg) => (msg as { type?: string }).type === 'init')
+      .at(-1) as { stops?: unknown } | undefined;
+    expect(init?.stops).toEqual([{ file: 'main.ino', line: 3 }]);
+    // The worker pushes the frame when the program stops.
+    port.reply({
+      type: 'debug-paused',
+      frame: {
+        file: 'main.ino',
+        line: 3,
+        column: 1,
+        depth: 0,
+        variables: [{ name: 'x', value: '1', scope: 'global' }],
+      },
+    });
+    expect(client.debugPaused()).toBe(true);
+    expect(client.debugFrame()?.line).toBe(3);
+    expect(client.debugFrame()?.variables).toEqual([{ name: 'x', value: '1', scope: 'global' }]);
+    // The three questions the panel's buttons ask.
+    client.resumeDebug();
+    client.stepDebug('over');
+    client.stepDebug('into');
+    const types = port.sent.map((msg) => (msg as { type?: string }).type);
+    expect(types).toContain('debug-resume');
+    expect(types).toContain('debug-step');
+    port.reply({ type: 'debug-resumed' });
+    expect(client.debugPaused()).toBe(false);
+    client.dispose();
+  });
+
   it('reports the firmware verdict when a sketch stops with an error', () => {
     const port = fakePort();
     const client = portClient(port, vi.fn());

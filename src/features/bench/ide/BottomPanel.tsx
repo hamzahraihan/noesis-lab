@@ -8,6 +8,7 @@ const TABS: ReadonlyArray<{ id: BottomKey; label: string }> = [
   { id: 'logic', label: 'Logic' },
   { id: 'bus', label: 'Bus' },
   { id: 'meter', label: 'Multimeter' },
+  { id: 'debug', label: 'Debug' },
   { id: 'problems', label: 'Problems' },
 ];
 
@@ -24,6 +25,7 @@ export function BottomPanel({
   bus,
   meter,
   problems,
+  debug,
 }: {
   tab: BottomKey;
   open: boolean;
@@ -38,6 +40,7 @@ export function BottomPanel({
   bus: ReactNode;
   meter: ReactNode;
   problems: ReactNode;
+  debug: ReactNode;
 }) {
   const body =
     tab === 'serial'
@@ -50,7 +53,9 @@ export function BottomPanel({
             ? bus
             : tab === 'meter'
               ? meter
-              : problems;
+              : tab === 'debug'
+                ? debug
+                : problems;
   return (
     <section
       style={open ? { height } : undefined}

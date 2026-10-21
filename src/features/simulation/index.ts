@@ -17,6 +17,7 @@ export * from './bus/spi';
 export * from './bus/log';
 export * from './firmware/interpreter';
 export * from './firmware/parser';
+export * from './firmware/debugger';
 export * from './firmware/python';
 export * from './firmware/project';
 export * from './firmware/python-modules';

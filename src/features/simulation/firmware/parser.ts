@@ -2,11 +2,11 @@
  * Lexer and parser for the C subset the firmware VM understands.
  *
  * The grammar covers what real Arduino sketches use: globals with initialisers,
- * functions, all the ordinary control flow, arrays, the full operator set, and
- * `#define` constants. It deliberately does not cover pointers, structs,
- * classes, heap allocation or templates. That is not a shortcut so much as a
- * decision about what the simulator is for -- every one of those features is
- * about memory layout, and this tool is about wiring.
+ * functions, all the ordinary control flow, arrays, classes with methods and
+ * fields, the full operator set, and `#define` constants. It deliberately does
+ * not cover pointers, structs, heap allocation or templates. That is not a
+ * shortcut so much as a decision about what the simulator is for -- every one
+ * of those features is about memory layout, and this tool is about wiring.
  *
  * Parse errors carry the source line, because the most common thing a learner
  * will do here is type something the parser has never seen.
@@ -15,6 +15,13 @@
 export interface SourceLocation {
   readonly line: number;
   readonly column: number;
+  /**
+   * The file the node was read from.
+   *
+   * A breakpoint names a line in a tab, and two tabs can both have a line
+   * twelve, so where a node is includes which file it came from.
+   */
+  readonly file: string;
 }
 
 export class FirmwareSyntaxError extends Error {
@@ -157,7 +164,7 @@ export function tokenize(source: string, file = 'main.ino'): Token[] {
   let line = 1;
   let column = 1;
 
-  const here = (): SourceLocation => ({ line, column });
+  const here = (): SourceLocation => ({ line, column, file });
 
   const advance = (count: number) => {
     for (let i = 0; i < count; i++) {

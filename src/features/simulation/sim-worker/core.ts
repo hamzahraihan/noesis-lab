@@ -76,6 +76,11 @@ import {
   type FirmwareServices,
   type WirePort,
 } from '../firmware/interpreter';
+import {
+  FirmwareDebugger,
+  type Breakpoint,
+  type DebugFrame,
+} from '../firmware/debugger';
 import { pythonModulesFor } from '../firmware/python-modules';
 import { FirmwareSyntaxError } from '../firmware/parser';
 import {
@@ -166,6 +171,21 @@ export interface CoreHandle {
   readonly fault: string | null;
   /** Script faults latched in this realm, for the Problems panel. */
   faults(): readonly ScriptFault[];
+  /**
+   * The stops the debugger holds, set by the page.
+   *
+   * The stops are the page's to set and the worker's to keep: the sketch
+   * runs here, so this is the only place that can hold the program still.
+   */
+  setStops(stops: readonly Breakpoint[]): void;
+  /** The frame the program stopped on, while it is stopped. */
+  debugFrame(): DebugFrame | null;
+  /** Whether the debugger has the program stopped. */
+  debugPaused(): boolean;
+  /** Lets the program carry on from where it stopped. */
+  resumeDebug(): void;
+  /** Runs the program to the next statement, over a call or into it. */
+  stepDebug(mode: 'over' | 'into'): void;
   /** Resolves once the scripted runtime is installed, for benches with scripts. */
   scriptedReady(): Promise<void>;
   readonly wasmAttached: boolean;
@@ -226,6 +246,13 @@ class SimCore implements CoreHandle {
   private readonly textEncoder = new TextEncoder();
   private bench: Bench;
   private runner: FirmwareRunner | null = null;
+  /**
+   * The debugger watching the sketch this realm runs.
+   *
+   * The page sets the stops and the worker holds them, because the program
+   * runs here: a stop the page kept would be a stop nothing could honour.
+   */
+  private debugger: FirmwareDebugger | null = null;
   private avrBackend: AvrBackend | null = null;
   private avrSettledRevision = -1;
   private wantWasm = false;
@@ -396,6 +423,36 @@ class SimCore implements CoreHandle {
     return reportedFaults();
   }
 
+  setStops(stops: readonly Breakpoint[]): void {
+    const watcher = (this.debugger ??= new FirmwareDebugger());
+    watcher.clear();
+    for (const stop of stops) watcher.toggleBreakpoint(stop.file, stop.line);
+    this.runner?.runtime.attachDebugger(watcher);
+  }
+
+  debugFrame(): DebugFrame | null {
+    return this.runner?.stoppedAt ?? null;
+  }
+
+  debugPaused(): boolean {
+    return this.runner?.paused === true;
+  }
+
+  resumeDebug(): void {
+    this.runner?.resume();
+  }
+
+  stepDebug(mode: 'over' | 'into'): void {
+    const frame = this.debugFrame();
+    if (mode === 'over') {
+      if (frame === null) return;
+      this.debugger?.stepOver(frame.depth);
+    } else {
+      this.debugger?.stepInto();
+    }
+    this.runner?.resume();
+  }
+
   /** Resolves once the scripted runtime is installed (or immediately, if idle). */
   scriptedReady(): Promise<void> {
     this.ensureScriptedRuntime();
@@ -443,6 +500,9 @@ class SimCore implements CoreHandle {
 
     try {
       this.runner = new FirmwareRunner(firmware, this.services(), firmware.language);
+      // The stops belong to the sketch, not to the run: a fresh runner is
+      // still watched by the debugger the page set.
+      this.runner.runtime.attachDebugger(this.debugger);
       this.faultText = null;
     } catch (error) {
       this.runner = null;

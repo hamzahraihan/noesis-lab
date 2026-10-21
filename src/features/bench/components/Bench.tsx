@@ -40,6 +40,7 @@ import { ResizeHandle } from '../ide/ResizeHandle';
 import { WokwiLibrary } from '../wokwi/WokwiLibrary';
 import { bottomTabForError, centerKeyForFile, resolveErrorCenter } from '../store/shell-state';
 import { persistLayoutSoon, useBenchShellStore, useLayoutStore } from '../store/bench-store';
+import { useDebugStore } from '../store/debug-store';
 import { useWorkbenchStore } from '../store/workbench-store';
 import { applyTheme, storedTheme, watchSystemTheme, type ThemeChoice } from '@/lib/theme';
 import { benchBounds } from '../wiring/bounds';
@@ -58,6 +59,7 @@ import { WIRE_COLOURS } from '../wiring/wire-colours';
 import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
 import { MultimeterPanel } from '@/features/instruments';
+import { DebugPanel } from '@/features/instruments';
 import { LogicAnalyser } from '@/features/instruments';
 import { BusMonitor } from '@/features/instruments';
 import {
@@ -414,6 +416,15 @@ export default function Bench(props: BenchProps) {
     setMeterBlackPin,
   } = useBenchShellStore();
   const { layout, nudge: nudgeLayout, resetKey: resetLayoutKey } = useLayoutStore();
+  /*
+   * The stops the person set, and the debugger that holds them. The debugger
+   * is the bench's, not the run's: a stop set on line 12 is still a stop when
+   * the sketch is run again.
+   */
+  const stops = useDebugStore((state) => state.stops);
+  const toggleStop = useDebugStore((state) => state.toggleStop);
+  const clearStops = useDebugStore((state) => state.clearStops);
+  const watcher = useDebugStore((state) => state.watcher);
   /* The center key must name the canvas or a live file; repaired centrally. */
   useEffect(() => {
     repairCenter(project.files, project.activeName);
@@ -610,6 +621,14 @@ export default function Bench(props: BenchProps) {
   useEffect(() => {
     seededDocRef.current = JSON.stringify(simulation.document);
   }, [simulation]);
+  /*
+   * The watcher is handed to the simulation, which attaches it to the sketch
+   * it runs -- and to every sketch loaded after it, so a stop set before a
+   * run is still set when the run starts.
+   */
+  useEffect(() => {
+    simulation.attachDebugger(watcher);
+  }, [simulation, watcher]);
 
   /*
    * Frame the circuit when it arrives.
@@ -749,6 +768,17 @@ export default function Bench(props: BenchProps) {
   const workerActive = workerLive && workerClient !== null;
   const isRunning = workerActive ? workerClient.running : simulation.running;
   /*
+   * Where the debugger has the program stopped. The worker owns the sketch
+   * once it is live, so the frame comes from whichever realm is running it.
+   */
+  const debugFrame = workerActive ? workerClient.debugFrame() : simulation.debugFrame();
+  const debugPaused = debugFrame !== null;
+  /*
+   * The debugger reads the sketch the interpreter runs, so a compiled core
+   * has nothing in it for the debugger to stop at.
+   */
+  const debugWatchable = (runSession.current?.backend ?? 'interpreter') === 'interpreter';
+  /*
    * The bench layout is frozen while the core steps: moving, turning, or
    * rewiring a part mid-run unclips its jumpers and the firmware is suddenly
    * driving a circuit nobody wired. Every layout edit below refuses while this
@@ -761,6 +791,25 @@ export default function Bench(props: BenchProps) {
     if (workerActive) workerClient.stop();
     else simulation.stop();
   }, [simulation, workerClient, workerActive]);
+  /*
+   * The debugger's three questions, asked of whichever realm is running the
+   * sketch: carry on, step over the call, or step into it.
+   */
+  const continueDebug = useCallback(() => {
+    if (workerActive && workerClient) workerClient.resumeDebug();
+    else simulation.resumeDebug();
+    forceRender((n) => n + 1);
+  }, [workerActive, workerClient, simulation]);
+  const stepDebugOver = useCallback(() => {
+    if (workerActive && workerClient) workerClient.stepDebug('over');
+    else simulation.stepDebugOver();
+    forceRender((n) => n + 1);
+  }, [workerActive, workerClient, simulation]);
+  const stepDebugInto = useCallback(() => {
+    if (workerActive && workerClient) workerClient.stepDebug('into');
+    else simulation.stepDebugInto();
+    forceRender((n) => n + 1);
+  }, [workerActive, workerClient, simulation]);
   /* Firmware verdict from the owning backend (worker fault travels by
    * message; the parse/fallback verdicts stay in-page). */
   const activeFirmwareError = workerActive
@@ -870,6 +919,29 @@ export default function Bench(props: BenchProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      /*
+       * The debugger's keys, before the field guard: F5 is the browser's
+       * reload, and a person stepping through a sketch expects it to carry
+       * on rather than throw the page away. They only mean something while
+       * the program is stopped, so F5 is the browser's own everywhere else.
+       */
+      if (debugPaused && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key === 'F5') {
+          event.preventDefault();
+          continueDebug();
+          return;
+        }
+        if (event.key === 'F10') {
+          event.preventDefault();
+          stepDebugOver();
+          return;
+        }
+        if (event.key === 'F11') {
+          event.preventDefault();
+          stepDebugInto();
+          return;
+        }
+      }
       if (
         target?.isContentEditable ||
         target instanceof HTMLInputElement ||
@@ -955,6 +1027,10 @@ export default function Bench(props: BenchProps) {
     isRunning,
     layoutLocked,
     activeStop,
+    debugPaused,
+    continueDebug,
+    stepDebugOver,
+    stepDebugInto,
     paletteFor,
     selectedId,
     selectedWireId,
@@ -1260,6 +1336,13 @@ export default function Bench(props: BenchProps) {
   );
 
   const clearBusLog = useCallback(() => simulation.clearBusLog(), [simulation]);
+  /*
+   * The stops travel to the realm that is running the sketch. The worker
+   * keeps its own copy of them, because the program runs there.
+   */
+  useEffect(() => {
+    if (workerClient !== null) workerClient.setStops(stops);
+  }, [stops, workerClient]);
 
   /*
    * The examples whose circuit exists for this board. Their sketches are
@@ -2307,6 +2390,8 @@ export default function Bench(props: BenchProps) {
                 examples={examplesForBoard}
                 activeExampleId={exampleId}
                 onLoadExample={loadExample}
+                stops={stops}
+                onToggleStop={toggleStop}
               />
             }
           />
@@ -2387,6 +2472,17 @@ export default function Bench(props: BenchProps) {
                 rangeId={simulation.meterRangeId}
                 onMode={(mode) => simulation.setMeterMode(mode)}
                 onRange={(rangeId: string) => simulation.setMeterRange(rangeId)}
+              />
+            }
+            debug={
+              <DebugPanel
+                frame={debugFrame}
+                stops={stops}
+                watchable={debugWatchable}
+                onContinue={continueDebug}
+                onStepOver={stepDebugOver}
+                onStepInto={stepDebugInto}
+                onClear={clearStops}
               />
             }
             problems={

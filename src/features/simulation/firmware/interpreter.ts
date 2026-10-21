@@ -14,6 +14,7 @@
 
 import { parsePython } from './python';
 import type { PythonModule } from './python-modules';
+import { type DebugFrame, type DebugVariable, FirmwareDebugger } from './debugger';
 import type { ArduinoPins } from '@/features/parts';
 import type { I2cBusPins } from '../engine';
 import {
@@ -384,9 +385,28 @@ export type DelayRequest = number;
 /**
  * What a running program hands back to its driver.
  *
- * A wait is a number of milliseconds; a value a generator yields is wrapped.
+ * A wait is a number of milliseconds; a value a generator yields is wrapped;
+ * a checkpoint says the program is at a statement boundary and the debugger
+ * wants the bench to have it.
  */
-export type Produced = DelayRequest | Yielded;
+export type Produced = DelayRequest | Yielded | Checkpoint;
+
+/**
+ * A statement boundary the debugger asked the program to stop at.
+ *
+ * It travels with the program's other hand-backs rather than beside them,
+ * because the driver is the only thing that pulls the program forward: a
+ * checkpoint that the driver does not recognise would be read as a value a
+ * generator yielded, and the program would run on past the stop.
+ */
+export interface Checkpoint {
+  readonly checkpoint: true;
+}
+
+/** Whether a hand-back is a checkpoint rather than a wait or a yielded value. */
+export function isCheckpoint(produced: Produced): produced is Checkpoint {
+  return typeof produced === 'object' && produced !== null && 'checkpoint' in produced;
+}
 
 export type Evaluator = Generator<Produced, Value, Value | undefined>;
 
@@ -887,10 +907,18 @@ class Scope {
    * frame is not a member frame, so this is null there.
    */
   memberOf: Instance | null = null;
+  /**
+   * Whether this scope holds an object's fields.
+   *
+   * The debugger's variable list says where a name came from, and a field is
+   * neither a local of the running function nor a global.
+   */
+  readonly fieldFrame: boolean;
 
-  constructor(parent: Scope | null = null, functionFrame = false) {
+  constructor(parent: Scope | null = null, functionFrame = false, fieldFrame = false) {
     this.parent = parent;
     this.functionFrame = functionFrame;
+    this.fieldFrame = fieldFrame;
   }
 
   lookup(name: string): Value | undefined {
@@ -966,7 +994,7 @@ export class Instance {
   readonly scope: Scope;
   constructor(className: string, globals: Scope) {
     this.className = className;
-    this.scope = new Scope(globals);
+    this.scope = new Scope(globals, false, true);
   }
 }
 
@@ -1277,6 +1305,28 @@ export class FirmwareRuntime {
    */
   private currentInstance!: Instance | null;
   /**
+   * The debugger watching this run, or null when nobody is.
+   *
+   * It is asked one question at every statement -- should I stop here? --
+   * and its answer is what makes the program stop. Null costs nothing: the
+   * question is not asked at all.
+   */
+  private debugger!: FirmwareDebugger | null;
+  /**
+   * The frame the program stopped on, while it is stopped.
+   *
+   * The names are read out of the scope the statement runs in, so what the
+   * panel shows is what the program itself could see at that line.
+   */
+  private debugFrame!: DebugFrame | null;
+  /**
+   * How many calls deep the program is.
+   *
+   * A step that stays at this level stops at the next statement that is not
+   * deeper than this, which is what stepping over a call means.
+   */
+  private callDepth!: number;
+  /**
    * The name a Python method binds its object to, the `self` of
    * `def bump(self)`.
    *
@@ -1350,6 +1400,9 @@ export class FirmwareRuntime {
     this.tones = new Map();
     this.sevseg = new Map();
     this.rtcNowCache = null;
+    this.debugger = null;
+    this.debugFrame = null;
+    this.callDepth = 0;
     this.globals = new Scope();
     this.functions = new Map();
     this.instances = new Map();
@@ -1613,6 +1666,50 @@ export class FirmwareRuntime {
   }
 
   /**
+   * Watches this run, or stops watching with null.
+   *
+   * The debugger is asked its question at every statement, so a run with one
+   * attached is slower than a run without -- which is why it is attached
+   * only while somebody is watching.
+   */
+  attachDebugger(watcher: FirmwareDebugger | null): void {
+    this.debugger = watcher;
+    this.debugFrame = null;
+  }
+
+  /**
+   * The frame the program stopped on, while it is stopped.
+   *
+   * Null the moment the program moves on, so a stale frame cannot be read
+   * as the place the program is.
+   */
+  get stoppedAt(): DebugFrame | null {
+    return this.debugFrame;
+  }
+
+  /**
+   * The names the program can see from a scope, innermost first.
+   *
+   * The walk is the one the program itself makes: a local of the running
+   * function, then a field of the object it works on, then a global. A name
+   * nearer the front wins, because that is the one the program would read.
+   */
+  private visibleNames(scope: Scope): readonly DebugVariable[] {
+    const variables: DebugVariable[] = [];
+    const seen = new Set<string>();
+    for (const frame of chainFrom(scope)) {
+      const kind: DebugVariable['scope'] =
+        frame === this.globals ? 'global' : frame.fieldFrame ? 'field' : 'local';
+      for (const [name, value] of frame.values) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        variables.push({ name, value: formatValue(value), scope: kind });
+      }
+    }
+    return variables;
+  }
+
+  /**
    * The GPIO a pin number names, in the namespace this program speaks.
    *
    * A C++ sketch names Arduino pin indexes, and on a board whose header and
@@ -1744,10 +1841,10 @@ export class FirmwareRuntime {
        * the body without running it: the first value is asked for when the
        * loop asks, and nothing at all happens until then.
        */
-      return new GeneratorValue(this.execute(declaration.body, scope, services));
+      return new GeneratorValue(this.oneDeeper(this.execute(declaration.body, scope, services)));
     }
 
-    const flow = yield* this.execute(declaration.body, scope, services);
+    const flow = yield* this.oneDeeper(this.execute(declaration.body, scope, services));
     return flow.kind === 'return' ? flow.value : 0;
   }
 
@@ -1828,6 +1925,12 @@ export class FirmwareRuntime {
       const produced = step.value;
       if (typeof produced === 'number') {
         // A wait inside the generator: the bench spends it and asks again.
+        yield produced;
+        continue;
+      }
+      if (isCheckpoint(produced)) {
+        // The debugger stopped the generator here, and the stop is the
+        // bench's to answer, not the generator's.
         yield produced;
         continue;
       }
@@ -2055,7 +2158,7 @@ export class FirmwareRuntime {
        * name in it writes the field: `n = 41` there sets the member rather
        * than a local of the constructor.
        */
-      yield* this.execute(ctor.body, frame, services);
+      yield* this.oneDeeper(this.execute(ctor.body, frame, services));
     } finally {
       this.currentInstance = previous;
       this.currentSelfName = previousSelf;
@@ -2131,7 +2234,7 @@ export class FirmwareRuntime {
      * the member.
      */
     try {
-      const flow = yield* this.execute(declaration.body, frame, services);
+      const flow = yield* this.oneDeeper(this.execute(declaration.body, frame, services));
       return flow.kind === 'return' ? flow.value : 0;
     } finally {
       this.currentSelfName = previousSelf;
@@ -2539,6 +2642,24 @@ export class FirmwareRuntime {
     }
   }
 
+  /**
+   * Runs a body one call deeper than the caller.
+   *
+   * The depth is what a step that stays at this level measures itself
+   * against, so it counts the calls the program makes and not the statements
+   * it runs.
+   */
+  private *oneDeeper<T>(
+    body: Generator<Produced, T, Value | undefined>,
+  ): Generator<Produced, T, Value | undefined> {
+    this.callDepth++;
+    try {
+      return yield* body;
+    } finally {
+      this.callDepth--;
+    }
+  }
+
   // -- statements ----------------------------------------------------------
 
   private *execute(
@@ -2546,6 +2667,30 @@ export class FirmwareRuntime {
     scope: Scope,
     services: FirmwareServices,
   ): Generator<Produced, Flow, Value | undefined> {
+    /*
+     * The debugger's question, asked at every statement. It is the only
+     * place the program can stop, so its answer is what decides whether the
+     * run carries on -- and the frame is read here, while the scope the
+     * statement runs in is the one the program itself would see.
+     *
+     * A block is not a statement of its own: it carries the line of the
+     * first statement inside it, so asking about it would stop the program
+     * twice on one line.
+     */
+    if (this.debugger !== null && statement.kind !== 'block' && statement.kind !== 'suite') {
+      const location = statement.location;
+      if (this.debugger.shouldStop(location.file, location.line, this.callDepth)) {
+        this.debugFrame = {
+          file: location.file,
+          line: location.line,
+          column: location.column,
+          depth: this.callDepth,
+          variables: this.visibleNames(scope),
+        };
+        yield { checkpoint: true } satisfies Checkpoint;
+        this.debugFrame = null;
+      }
+    }
     switch (statement.kind) {
       case 'empty':
         return NORMAL;
@@ -2706,6 +2851,12 @@ export class FirmwareRuntime {
             if (step.done) break;
             const produced = step.value;
             if (typeof produced === 'number') {
+              yield produced;
+              continue;
+            }
+            if (isCheckpoint(produced)) {
+              // The debugger stopped the generator here, and the stop is the
+              // bench's to answer, not the loop's.
               yield produced;
               continue;
             }
@@ -2988,6 +3139,10 @@ export class FirmwareRuntime {
             }
             if (typeof step.value === 'number') {
               pending = (yield step.value) as Value | undefined;
+            } else if (isCheckpoint(step.value)) {
+              // The debugger stopped the generator here, and the stop is the
+              // bench's to answer, not the delegation's.
+              yield step.value;
             } else {
               pending = (yield { yielded: step.value.yielded }) as Value | undefined;
             }
@@ -5079,6 +5234,8 @@ export class FirmwareRunner {
 
   private readonly generator: Generator<Produced, void, Value | undefined>;
   private finished = false;
+  /** The frame the debugger stopped the program on, while it is stopped. */
+  private pauseFrame: DebugFrame | null = null;
   constructor(
     source: string | FirmwareProject,
     services: FirmwareServices,
@@ -5102,6 +5259,32 @@ export class FirmwareRunner {
   }
 
   /**
+   * Whether the debugger has the program stopped.
+   *
+   * A stopped program is not a finished one: the bench keeps its circuit
+   * live and the panel keeps showing where it stopped, and the program moves
+   * on only when somebody says so.
+   */
+  get paused(): boolean {
+    return this.pauseFrame !== null;
+  }
+
+  /** The frame the program stopped on, while it is stopped. */
+  get stoppedAt(): DebugFrame | null {
+    return this.pauseFrame;
+  }
+
+  /**
+   * Lets the program carry on from where the debugger stopped it.
+   *
+   * The next step pulls the generator again, and the statement the debugger
+   * stopped at runs then -- the stop is before the statement, not on it.
+   */
+  resume(): void {
+    this.pauseFrame = null;
+  }
+
+  /**
    * Runs the program until it next blocks, reporting how long it wants to wait.
    *
    * The runner deliberately does not spend that time itself. Handing the wait
@@ -5109,16 +5292,27 @@ export class FirmwareRunner {
    * is what keeps simulated time tracking wall-clock time instead of racing away
    * at whatever rate the solver happens to manage.
    *
-   * Returns null once the program has finished.
+   * Returns null once the program has finished, and while the debugger holds
+   * it stopped.
    */
   step(): number | null {
     if (this.finished) return null;
+    if (this.pauseFrame !== null) return null;
     const result = this.generator.next();
     if (result.done) {
       this.finished = true;
       return null;
     }
     const produced = result.value;
+    if (isCheckpoint(produced)) {
+      /*
+       * The debugger stopped the program here. The bench holds it there
+       * until somebody says to carry on, and the frame it stopped on is
+       * what the panel shows.
+       */
+      this.pauseFrame = this.runtime.stoppedAt;
+      return null;
+    }
     if (typeof produced !== 'number') {
       // A value yielded outside a generator: the sketch asked for something
       // that has no meaning outside one, and saying so beats swallowing it.

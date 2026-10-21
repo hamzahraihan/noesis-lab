@@ -74,7 +74,10 @@ import {
   tftView,
   validateLibraries,
   type Bench,
+  type Breakpoint,
   type CompileResult,
+  type DebugFrame,
+  type DebugVariable,
   type FirmwareProject,
   type ProjectLibraryContext,
   type ScriptFault,
@@ -524,6 +527,21 @@ export interface WorkerClient {
   status(): WorkerStatus;
   /** Script faults the worker has latched, as of the last refresh. */
   faults(): readonly ScriptFault[];
+  /**
+   * The stops the debugger holds, set by the page.
+   *
+   * The worker keeps them: the sketch runs there, so a stop the page held
+   * would be a stop nothing could honour.
+   */
+  setStops(stops: readonly Breakpoint[]): void;
+  /** The frame the program stopped on, while it is stopped. */
+  debugFrame(): DebugFrame | null;
+  /** Whether the debugger has the program stopped. */
+  debugPaused(): boolean;
+  /** Lets the program carry on from where it stopped. */
+  resumeDebug(): void;
+  /** Runs the program to the next statement, over a call or into it. */
+  stepDebug(mode: 'over' | 'into'): void;
   readonly fault: string | null;
   readonly timeMs: number;
   readonly serialOverflow: boolean;
@@ -559,6 +577,46 @@ function asFaultRows(value: unknown): readonly ScriptFault[] | null {
   return rows;
 }
 
+/**
+ * A debug frame as the worker sends it, or null for anything else.
+ *
+ * The frame crosses a realm boundary, so it is shaped data rather than a
+ * type: the guard is the boundary, and the panel renders only what it
+ * passed.
+ */
+function asDebugFrame(value: unknown): DebugFrame | null {
+  if (value === null || typeof value !== 'object') return null;
+  if (!('file' in value) || !('line' in value) || !('variables' in value)) return null;
+  const frame = value as {
+    file: unknown;
+    line: unknown;
+    column: unknown;
+    depth: unknown;
+    variables: unknown;
+  };
+  if (typeof frame.file !== 'string' || typeof frame.line !== 'number') return null;
+  if (typeof frame.column !== 'number' || typeof frame.depth !== 'number') return null;
+  if (!Array.isArray(frame.variables)) return null;
+  const variables: DebugVariable[] = [];
+  for (const entry of frame.variables) {
+    if (entry === null || typeof entry !== 'object') return null;
+    if (!('name' in entry) || !('value' in entry) || !('scope' in entry)) return null;
+    const variable = entry as { name: unknown; value: unknown; scope: unknown };
+    if (typeof variable.name !== 'string' || typeof variable.value !== 'string') return null;
+    if (variable.scope !== 'local' && variable.scope !== 'field' && variable.scope !== 'global') {
+      return null;
+    }
+    variables.push({ name: variable.name, value: variable.value, scope: variable.scope });
+  }
+  return {
+    file: frame.file,
+    line: frame.line,
+    column: frame.column,
+    depth: frame.depth,
+    variables,
+  };
+}
+
 class WorkerClientImpl implements WorkerClient {
   readonly controls = new DynamicState();
   private readonly boardDef: PartDefinition;
@@ -586,6 +644,10 @@ class WorkerClientImpl implements WorkerClient {
   private faultText: string | null = null;
   private faultRows: readonly ScriptFault[] = [];
   private faultPolls = 0;
+  /** The frame the worker stopped the program on, while it is stopped. */
+  private debugRow: DebugFrame | null = null;
+  /** The stops the page set, kept so a fresh worker can be told them again. */
+  private stops: readonly Breakpoint[] = [];
   private compileAbort: AbortController | null = null;
   private stagedHex: Uint16Array | null = null;
   private overflowSticky = false;
@@ -848,6 +910,27 @@ class WorkerClientImpl implements WorkerClient {
     return this.faultRows;
   }
 
+  setStops(stops: readonly Breakpoint[]): void {
+    this.stops = stops;
+    this.post('debug-stops', { stops });
+  }
+
+  debugFrame(): DebugFrame | null {
+    return this.debugRow;
+  }
+
+  debugPaused(): boolean {
+    return this.debugRow !== null;
+  }
+
+  resumeDebug(): void {
+    this.post('debug-resume');
+  }
+
+  stepDebug(mode: 'over' | 'into'): void {
+    this.post('debug-step', { mode });
+  }
+
   status(): WorkerStatus {
     const now = performance.now();
     this.pruneSamples(now);
@@ -916,6 +999,10 @@ class WorkerClientImpl implements WorkerClient {
         execution: this.execution,
         wasm: this.wasm,
         liveNetwork: this.liveNetwork,
+        // The stops ride with the sketch: the worker builds the runner from
+        // it, and a stop that arrived after the build would be a stop the
+        // sketch had already passed.
+        stops: this.stops,
       });
     } catch {
       this.demote('sim worker post failed');
@@ -938,6 +1025,8 @@ class WorkerClientImpl implements WorkerClient {
     if (data === null || typeof data !== 'object') return;
     const reply = data as {
       id?: unknown;
+      type?: unknown;
+      frame?: unknown;
       ok?: unknown;
       buffer?: unknown;
       realloc?: unknown;
@@ -945,6 +1034,19 @@ class WorkerClientImpl implements WorkerClient {
       error?: unknown;
       rows?: unknown;
     };
+    /*
+     * The debugger's own notices, which the worker pushes rather than
+     * answering: the program stopped, or it moved on. They carry no id,
+     * because nobody asked for them.
+     */
+    if (reply.type === 'debug-paused') {
+      this.debugRow = asDebugFrame(reply.frame);
+      return;
+    }
+    if (reply.type === 'debug-resumed') {
+      this.debugRow = null;
+      return;
+    }
     if (typeof reply.id !== 'number') return;
     const kind = this.pending.get(reply.id);
     if (reply.ok === false) {

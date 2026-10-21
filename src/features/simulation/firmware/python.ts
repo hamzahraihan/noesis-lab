@@ -267,7 +267,7 @@ export function tokenizePython(source: string, file = 'main.py'): PythonToken[] 
   /** How many brackets are open, which is what makes a newline continuation. */
   let depth = 0;
 
-  const here = (): SourceLocation => ({ line, column });
+  const here = (): SourceLocation => ({ line, column, file });
 
   const advance = (count: number) => {
     for (let i = 0; i < count; i++) {

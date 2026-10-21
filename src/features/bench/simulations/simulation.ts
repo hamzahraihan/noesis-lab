@@ -61,6 +61,7 @@ import {
   type CompileResult,
   type ProjectLibraryContext,
 } from '@/features/simulation';
+import type { DebugFrame, FirmwareDebugger } from '@/features/simulation';
 import {
   FirmwareRunner,
   toSingleFileProject,
@@ -249,6 +250,13 @@ export class Simulation {
   readonly engine: Engine;
 
   runner: FirmwareRunner | null = null;
+  /**
+   * The debugger watching this run, when there is one.
+   *
+   * It is kept across sketch loads, so the stops a person set are still set
+   * when they press Run again.
+   */
+  private debugger: FirmwareDebugger | null = null;
   firmwareError: string | null = null;
   compileState: CompileState = 'idle';
   serial: string[] = [];
@@ -609,6 +617,7 @@ export class Simulation {
 
     try {
       this.runner = new FirmwareRunner(project, this.services(), project.language);
+      this.runner.runtime.attachDebugger(this.debugger);
       this.firmwareError = null;
     } catch (error) {
       this.runner = null;
@@ -903,6 +912,62 @@ export class Simulation {
     if (!this.runner && !this.avrBackend && this.firmwareProject)
       this.loadFirmware(this.firmwareProject);
     this.running = true;
+  }
+
+  /**
+   * Watches this run with a debugger, or stops watching with null.
+   *
+   * The watcher is kept, so a sketch loaded later is watched too: the stops
+   * a person set belong to the sketch, not to the run that happened to be
+   * going when they set them.
+   */
+  attachDebugger(watcher: FirmwareDebugger | null): void {
+    this.debugger = watcher;
+    this.runner?.runtime.attachDebugger(watcher);
+  }
+
+  /**
+   * The frame the program stopped on, while the debugger holds it.
+   *
+   * Null while the program is running, and null again once it carries on --
+   * a frame is where the program *is*, not where it was.
+   */
+  debugFrame(): DebugFrame | null {
+    return this.runner?.stoppedAt ?? null;
+  }
+
+  /** Whether the debugger has the program stopped. */
+  get debugPaused(): boolean {
+    return this.runner?.paused === true;
+  }
+
+  /**
+   * Lets the program carry on from where the debugger stopped it.
+   *
+   * The statement the debugger stopped at runs then: a stop is before the
+   * statement, not on it.
+   */
+  resumeDebug(): void {
+    this.runner?.resume();
+  }
+
+  /**
+   * Runs the program to the next statement at the level it is at.
+   *
+   * A call is stepped over rather than into, so the next statement is the
+   * one after the call and not the one inside it.
+   */
+  stepDebugOver(): void {
+    const frame = this.debugFrame();
+    if (frame === null) return;
+    this.debugger?.stepOver(frame.depth);
+    this.runner?.resume();
+  }
+
+  /** Runs the program to the very next statement, whatever level it is at. */
+  stepDebugInto(): void {
+    this.debugger?.stepInto();
+    this.runner?.resume();
   }
 
   /** Simulated milliseconds per wall-clock millisecond; 1 is real time. */
