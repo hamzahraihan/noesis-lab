@@ -1058,6 +1058,15 @@ class PythonParser {
      */
     if (token.kind === 'keyword' && token.text === 'yield') {
       this.next();
+      /*
+       * `yield from`: hand over whatever another generator (or list) hands
+       * over, in turn. Its own last value becomes the value of the
+       * expression, which is what lets one generator finish another's work.
+       */
+      if (this.atKeyword('from')) {
+        this.next();
+        return { kind: 'yieldFrom', value: this.readExpression(), location: token.location };
+      }
       const value =
         this.at('newline') || this.at('eof') || this.atPunctuation(')') || this.atPunctuation('}')
           ? null
