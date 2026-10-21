@@ -786,7 +786,7 @@ function containsYield(node: unknown): boolean {
   if (Array.isArray(node)) return node.some(containsYield);
   if (node === null || typeof node !== 'object') return false;
   const record = node as Record<string, unknown>;
-  if (record.kind === 'yield') return true;
+  if (record.kind === 'yield' || record.kind === 'yieldFrom') return true;
   for (const key of Object.keys(record)) {
     if (key === 'location') continue;
     if (containsYield(record[key])) return true;
@@ -2630,6 +2630,36 @@ export class FirmwareRuntime {
           : 0;
         yield { yielded: value };
         return 0;
+      }
+
+      /*
+       * `yield from`: hand over whatever the other generator hands over, in
+       * turn, and let its last value become this expression's value. A wait
+       * inside the other generator is still the bench's own time to spend.
+       */
+      case 'yieldFrom': {
+        const source = (yield* this.evaluate(expression.value, scope, services)) as Value;
+        if (source instanceof GeneratorValue) {
+          for (;;) {
+            const step = source.generator.next();
+            if (step.done) {
+              return step.value.kind === 'return' ? step.value.value : 0;
+            }
+            if (typeof step.value === 'number') {
+              yield step.value;
+            } else {
+              yield { yielded: step.value.yielded };
+            }
+          }
+        }
+        if (Array.isArray(source)) {
+          for (const item of source) yield { yielded: item };
+          return 0;
+        }
+        throw new PythonError(
+          'TypeError',
+          `'${pythonTypeName(source)}' object is not iterable`,
+        );
       }
 
       case 'list': {
