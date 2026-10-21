@@ -349,6 +349,77 @@ describe('the time module', () => {
   });
 });
 
+describe('the idioms a MicroPython sketch opens with', () => {
+  it('treats const as the value it promises', () => {
+    const { serial } = run('from micropython import const\nX = const(5)\nprint(X)\n');
+
+    expect(serial).toBe('5\n');
+  });
+
+  it('collects without complaining', () => {
+    const { serial } = run('import gc\ngc.collect()\nprint("done")\n');
+
+    expect(serial).toBe('done\n');
+  });
+
+  it('loads a project whose imports name libraries rather than tabs', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      {
+        language: 'python',
+        activeName: 'main.py',
+        files: [
+          {
+            name: 'main.py',
+            content: [
+              'from micropython import const',
+              'import gc',
+              'import time',
+              'X = const(5)',
+              'gc.collect()',
+              'print(X, time.ticks_ms())',
+            ].join('\n'),
+          },
+        ],
+      },
+      target.services,
+      'python',
+    );
+    for (let step = 0; step < 20; step++) {
+      if (runner.step() === null) break;
+    }
+
+    expect(target.serial.join('')).toBe('5 0\n');
+  });
+
+  it('takes utime as the older name for time', () => {
+    const { serial } = run('import utime\nprint(utime.ticks_ms())\n');
+
+    expect(serial).toBe('0\n');
+  });
+
+  it('reads back the PWM setting it was given', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      [
+        'from machine import PWM, Pin',
+        'p = PWM(Pin(4))',
+        'p.freq(1000)',
+        'p.duty_u16(32768)',
+        'print(p.freq(), p.duty_u16())',
+      ].join('\n'),
+      target.services,
+      'python',
+    );
+    for (let step = 0; step < 40; step++) {
+      if (runner.step() === null) break;
+    }
+
+    // The channel is eight bits wide, so the duty reads back quantised.
+    expect(target.serial.join('')).toBe('1000 32896\n');
+  });
+});
+
 describe('an I2C bus a sketch scans', () => {
   it('lists the address the bench answers at', () => {
     const target = host();

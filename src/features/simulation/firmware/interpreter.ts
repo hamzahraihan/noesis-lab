@@ -92,6 +92,15 @@ interface Device {
   readonly i2cPort?: WirePort;
   /** The pins the sketch named, when it named any. */
   readonly i2cPins?: I2cBusPins;
+  /**
+   * The frequency and the duty of a PWM channel, as the sketch last set them.
+   *
+   * MicroPython's `freq()` and `duty_u16()` read back what the channel is
+   * doing when they are called with no argument, so the setting has to stay
+   * on the device rather than being spent and forgotten.
+   */
+  frequency?: number;
+  duty?: number;
 }
 
 /**
@@ -934,6 +943,8 @@ const LIBRARY_OBJECTS: Readonly<Record<string, true>> = {
   tft: true,
   TFT: true,
   time: true,
+  utime: true,
+  gc: true,
   WiFi: true,
   wifi: true,
   net: true,
@@ -1113,16 +1124,40 @@ function localIncludes(content: string): string[] {
     .map((line) => LOCAL_INCLUDE.exec(line.trim())?.[1])
     .filter((name): name is string => Boolean(name));
 }
-function pythonImports(content: string): string[] {
+
+function pythonModuleImports(content: string): string[] {
   const names: string[] = [];
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
     const direct = /^import\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(trimmed)?.[1];
     const from = /^from\s+([A-Za-z_][A-Za-z0-9_]*)\s+import\s+/.exec(trimmed)?.[1];
     const candidate = direct ?? from;
-    if (candidate && candidate !== 'time') names.push(candidate);
+    if (candidate) names.push(candidate);
   }
   return names;
+}
+
+/**
+ * The modules a bench provides as libraries rather than as project tabs.
+ *
+ * `import helper` names a tab, and the tab has to be there; `import gc` names
+ * the interpreter itself, and there is no file to look for. The runtime
+ * modules are listed too because the *board* decides which of those a sketch
+ * may use; the rest are MicroPython's own, and every Python board here has
+ * them.
+ */
+const LIBRARY_MODULES: ReadonlySet<string> = new Set([
+  'machine',
+  'gpiozero',
+  'time',
+  'utime',
+  'gc',
+  'micropython',
+]);
+
+/** The imports that name a project tab rather than a library. */
+function pythonProjectImports(content: string): string[] {
+  return pythonModuleImports(content).filter((name) => !LIBRARY_MODULES.has(name));
 }
 
 /**
@@ -1139,7 +1174,7 @@ function isRuntimeModule(name: string): name is PythonModule {
 }
 
 function pythonRuntimeImports(content: string): PythonModule[] {
-  return pythonImports(content).filter(isRuntimeModule);
+  return pythonModuleImports(content).filter(isRuntimeModule);
 }
 
 export class FirmwareRuntime {
@@ -1375,9 +1410,7 @@ export class FirmwareRuntime {
       const content = byName.get(name) ?? '';
       const rawEdges =
         project.language === 'python'
-          ? pythonImports(content)
-              .filter((mod) => !isRuntimeModule(mod))
-              .map((mod) => `${mod}.py`)
+          ? pythonProjectImports(content).map((mod) => `${mod}.py`)
           : localIncludes(content);
       // Quoted system headers ride through like packager.ts (they resolve
       // via the toolchain -I roots): only project tabs are edges here.
@@ -2088,6 +2121,13 @@ export class FirmwareRuntime {
         return asNumber(args[0] ?? 0);
       case 'bool':
         return isTruthy(args[0] ?? 0) ? 1 : 0;
+      /*
+       * `const(5)`: MicroPython's promise to its own compiler that a value
+       * never changes, and nothing at all at run time. A sketch that writes
+       * `X = const(5)` gets five.
+       */
+      case 'const':
+        return args[0] ?? 0;
       case 'delay': {
         const ms = Math.max(0, asNumber(args[0] ?? 0));
         if (ms > 0) yield ms;
@@ -3170,6 +3210,15 @@ export class FirmwareRuntime {
           if (callee.target.name === 'sd' || callee.target.name === 'SD') {
             return this.evaluateSdCall(callee.member, args, services);
           }
+          if (callee.target.name === 'gc') {
+            /*
+             * `gc.collect()`: a courtesy here rather than work. The VM
+             * allocates nothing the sketch can see, so collecting is the
+             * no-op the promise asks for.
+             */
+            if (callee.member === 'collect') return 0;
+            throw unknownError('member', callee.member, 'gc', this.language);
+          }
 
           /*
            * `time`: the waits and the clock the module is actually for.
@@ -3182,7 +3231,9 @@ export class FirmwareRuntime {
            * seconds and `time.ticks_ms()`, the idiom every non-blocking
            * sketch uses, answered zero.
            */
-          if (callee.target.name === 'time') {
+          // `utime` is the same module under MicroPython's older name, and
+          // sketches written against it still say so.
+          if (callee.target.name === 'time' || callee.target.name === 'utime') {
             switch (callee.member) {
               case 'sleep': {
                 const seconds = Math.max(0, asNumber(args[0] ?? 0));
@@ -3354,16 +3405,24 @@ export class FirmwareRuntime {
     if (device.kind === 'pwm') {
       switch (member) {
         case 'duty_u16': {
+          if (args.length === 0) return Math.round(((device.duty ?? 0) / 255) * 65535);
           const duty = Math.min(65535, Math.max(0, asNumber(args[0] ?? 0)));
-          services.analogWrite(device.pin, Math.round((duty / 65535) * 255));
+          device.duty = Math.round((duty / 65535) * 255);
+          services.analogWrite(device.pin, device.duty);
           return 0;
         }
         case 'duty': {
+          if (args.length === 0) return Math.round(((device.duty ?? 0) / 255) * 1023);
           const duty = Math.min(1023, Math.max(0, asNumber(args[0] ?? 0)));
-          services.analogWrite(device.pin, Math.round((duty / 1023) * 255));
+          device.duty = Math.round((duty / 1023) * 255);
+          services.analogWrite(device.pin, device.duty);
           return 0;
         }
-        case 'freq':
+        case 'freq': {
+          if (args.length === 0) return device.frequency ?? 0;
+          device.frequency = Math.max(1, asNumber(args[0] ?? 0));
+          return 0;
+        }
         case 'deinit':
           return 0;
       }

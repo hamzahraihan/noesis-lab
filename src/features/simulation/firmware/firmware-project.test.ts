@@ -79,6 +79,31 @@ describe('fromProject', () => {
     expect(runtime.hasFunction('setup')).toBe(true);
   });
 
+  it('resolves a library import without a tab, and wants a tab for the rest', () => {
+    const runtime = FirmwareRuntime.fromProject({
+      language: 'python',
+      activeName: 'main.py',
+      files: [
+        {
+          name: 'main.py',
+          content: 'import gc\nimport time\nfrom micropython import const\nimport helpers\n',
+        },
+        { name: 'helpers.py', content: 'def wave():\n  return 1\n' },
+      ],
+    });
+    expect(runtime.hasFunction('wave')).toBe(true);
+  });
+
+  it('still calls an import with neither a tab nor a library a missing file', () => {
+    expect(() =>
+      FirmwareRuntime.fromProject({
+        language: 'python',
+        activeName: 'main.py',
+        files: [{ name: 'main.py', content: 'import helpers\n' }],
+      }),
+    ).toThrow(/import helpers not found/);
+  });
+
   it('rejects include cycles', () => {
     expect(() =>
       FirmwareRuntime.fromProject({
