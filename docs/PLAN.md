@@ -143,10 +143,12 @@ works with no network, which matters for something that is otherwise entirely lo
 **Language support is deliberately narrower than real Arduino.** Monaco registers an
 `arduino-cpp` language whose completion list is *exactly* the set the firmware
 interpreter implements -- `pinMode`, `digitalWrite`, `analogWrite`, `Serial`, `Wire`,
-`SPI`, `delay`, the maths helpers and the pin constants. It does not offer
-`attachInterrupt` or `tone`, because those do not run here. An autocomplete that
-silently suggests a call the simulator will reject teaches the wrong thing; this
-one only ever promises something that works.
+`SPI`, `delay`, `tone`, the maths helpers, the libraries a sketch declares
+(`Servo`, `DHT`, `SD`, `LiquidCrystal`, `HTTPClient`, `PubSubClient`, `WiFiUdp`)
+and the pin constants. It does not offer `attachInterrupt`, because the bench
+models no interrupts. An autocomplete that silently suggests a call the
+simulator will reject teaches the wrong thing; this one only ever promises
+something that works.
 
 ### 6.2 Component artwork: Wokwi's, at true millimetre scale
 
