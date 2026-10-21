@@ -485,6 +485,34 @@ describe('worker port protocol', () => {
     client.dispose();
   });
 
+  it('reports the firmware verdict when a sketch stops with an error', () => {
+    const port = fakePort();
+    const client = portClient(port, vi.fn());
+    const buf = replyInitOk(port);
+    const frame = (generation: number): void => {
+      headerView(buf).generation = generation;
+      client.poll();
+    };
+    for (let i = 0; i < 30; i++) frame(i + 2);
+    const ask = port.sent.find(
+      (msg): msg is { id: number; type: string } =>
+        typeof msg === 'object' && msg !== null && 'type' in msg && msg.type === 'faults',
+    );
+    /*
+     * A sketch that raised an error it did not catch stops in the worker,
+     * and the reason travels with the rows: the page says why the bench went
+     * quiet instead of showing a sketch that simply stopped.
+     */
+    port.reply({
+      id: ask?.id,
+      ok: true,
+      rows: [],
+      fault: "NameError: name 'sorted' is not defined",
+    });
+    expect(client.fault).toBe("NameError: name 'sorted' is not defined");
+    client.dispose();
+  });
+
   it('sends the rp2040 execution when the build asks for it', () => {
     const port = fakePort();
     const client = createWorkerClient({
