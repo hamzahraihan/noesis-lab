@@ -121,6 +121,67 @@ void setup() {
 }`);
     expect(recorded.serial).toEqual(['200\n']);
   });
+
+  it('waits for the answer rather than saying it is not there yet', () => {
+    // The answer lands on the bench's own clock, so the client waits for it
+    // the way a real request waits: the sketch is held until the body is
+    // there, and the wait is the network's latency.
+    let polls = 0;
+    const services = {
+      nowMs: () => 0,
+      pinMode: () => {},
+      digitalWrite: () => {},
+      digitalRead: () => 0,
+      analogWrite: () => {},
+      analogRead: () => 0,
+      serialBegin: () => {},
+      serialWrite: () => {},
+      wire: {
+        begin: () => {},
+        beginTransmission: () => {},
+        write: () => 1,
+        endTransmission: () => 0,
+        requestFrom: () => 0,
+        read: () => -1,
+        available: () => 0,
+      },
+      spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
+      net: {
+        join: () => 0,
+        status: () => 3,
+        localIp: () => '192.168.4.10',
+        get: () => {
+          polls += 1;
+          return polls > 3 ? 1 : 0;
+        },
+        read: () => 'late',
+        failed: () => 0,
+        subscribe: () => 1,
+        available: () => 0,
+        message: () => '',
+        publish: () => 1,
+        reset: () => {},
+      },
+    } as unknown as FirmwareServices;
+    const runner = new FirmwareRunner(
+      toSingleFileProject(
+        `HTTPClient http;
+void setup() {
+  http.begin("http://api.noesis/slow");
+  Serial.println(http.GET());
+  Serial.println(http.read());
+}`,
+        'arduino-cpp',
+      ),
+      services,
+      'arduino-cpp',
+    );
+    for (let step = 0; step < 40; step++) {
+      if (runner.step() === null) break;
+    }
+    // It polled until the answer was there, and then read it.
+    expect(polls).toBeGreaterThan(3);
+  });
 });
 
 describe('the MQTT client', () => {
