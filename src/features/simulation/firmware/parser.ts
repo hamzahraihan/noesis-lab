@@ -374,7 +374,9 @@ export type Expr =
    * Only meaningful inside a function that yields, which is what makes that
    * function a generator.
    */
-  | { kind: 'yield'; value: Expr | null; location: SourceLocation };
+  | { kind: 'yield'; value: Expr | null; location: SourceLocation }
+  /** `yield from`: hand over another generator's values, one at a time. */
+  | { kind: 'yieldFrom'; value: Expr; location: SourceLocation };
 
 export type Stmt =
   | { kind: 'varDecl'; name: string; init: Expr | null; location: SourceLocation }
