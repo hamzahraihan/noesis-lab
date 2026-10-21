@@ -45,9 +45,28 @@ function host(): { services: FirmwareServices; bus: string[]; serial: string[] }
   return { services, bus, serial };
 }
 
+/**
+ * A sketch as the bench actually runs it: a project with a `main.py` tab.
+ *
+ * A bare source string skips the project loader, and the loader is where an
+ * import is resolved -- as `import gc` proved when it was looked for as a
+ * tab. Tests that never touch the loader cannot see that.
+ */
+function python(source: string, services: FirmwareServices): FirmwareRunner {
+  return new FirmwareRunner(
+    {
+      language: 'python',
+      activeName: 'main.py',
+      files: [{ name: 'main.py', content: source }],
+    },
+    services,
+    'python',
+  );
+}
+
 function run(source: string): { serial: string; bus: string[] } {
   const target = host();
-  const runner = new FirmwareRunner(source, target.services, 'python');
+  const runner = python(source, target.services);
   for (let step = 0; step < 60; step++) {
     const wait = runner.step();
     if (wait === null) break;
@@ -250,10 +269,9 @@ describe('a guarded block', () => {
 
   it('leaves an error of another type to travel on', () => {
     const target = host();
-    const runner = new FirmwareRunner(
+    const runner = python(
       ['try:', "    raise ValueError('boom')", 'except OSError:', "    print('caught')"].join('\n'),
       target.services,
-      'python',
     );
 
     expect(() => runner.step()).toThrow(/boom/);
@@ -321,7 +339,7 @@ describe('a guarded block', () => {
 describe('the time module', () => {
   it('waits the unit the member names', () => {
     const target = host();
-    const runner = new FirmwareRunner('import time\ntime.sleep_ms(50)\n', target.services, 'python');
+    const runner = python('import time\ntime.sleep_ms(50)\n', target.services);
 
     // The step reports the wait it wants; 50 milliseconds is not 50 seconds.
     expect(runner.step()).toBe(50);
@@ -343,7 +361,7 @@ describe('the time module', () => {
 
   it('says so for a member it does not have', () => {
     const target = host();
-    const runner = new FirmwareRunner('import time\ntime.warp(2)\n', target.services, 'python');
+    const runner = python('import time\ntime.warp(2)\n', target.services);
 
     expect(() => runner.step()).toThrow(/time.*has no attribute 'warp'/);
   });
@@ -400,7 +418,7 @@ describe('the idioms a MicroPython sketch opens with', () => {
 
   it('reads back the PWM setting it was given', () => {
     const target = host();
-    const runner = new FirmwareRunner(
+    const runner = python(
       [
         'from machine import PWM, Pin',
         'p = PWM(Pin(4))',
@@ -409,7 +427,6 @@ describe('the idioms a MicroPython sketch opens with', () => {
         'print(p.freq(), p.duty_u16())',
       ].join('\n'),
       target.services,
-      'python',
     );
     for (let step = 0; step < 40; step++) {
       if (runner.step() === null) break;
@@ -427,10 +444,9 @@ describe('an I2C bus a sketch scans', () => {
       ...target.services,
       i2cHasDevice: (address: number) => address === 0x3c,
     };
-    const runner = new FirmwareRunner(
+    const runner = python(
       ['from machine import I2C', 'i2c = I2C(0)', 'print(i2c.scan())'].join('\n'),
       services,
-      'python',
     );
     for (let step = 0; step < 40; step++) {
       if (runner.step() === null) break;
@@ -553,12 +569,11 @@ describe('a generator', () => {
 
   it('says so when there is nothing to delegate to', () => {
     const target = host();
-    const runner = new FirmwareRunner(
+    const runner = python(
       ['def broken():', '    yield from 7', '', 'for value in broken():', '    print(value)'].join(
         '\n',
       ),
       target.services,
-      'python',
     );
 
     expect(() => {
@@ -570,17 +585,16 @@ describe('a generator', () => {
 
   it('refuses a yield outside a function', () => {
     const target = host();
-    const runner = new FirmwareRunner('yield 1\n', target.services, 'python');
+    const runner = python('yield 1\n', target.services);
 
     expect(() => runner.step()).toThrow(/yield outside a function/);
   });
 
   it('says so when the thing being walked cannot be walked', () => {
     const target = host();
-    const runner = new FirmwareRunner(
+    const runner = python(
       ['for value in 7:', '    print(value)'].join('\n'),
       target.services,
-      'python',
     );
 
     expect(() => runner.step()).toThrow(/not iterable/);
