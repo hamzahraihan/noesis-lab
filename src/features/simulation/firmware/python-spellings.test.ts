@@ -614,3 +614,173 @@ describe('a generator', () => {
     expect(() => runner.step()).toThrow(/not iterable/);
   });
 });
+
+describe('a generator that is spoken to', () => {
+  it('takes a value back through the yield that is waiting for it', () => {
+    const { serial } = run(
+      [
+        'def counter():',
+        '    received = yield 1',
+        '    print("got", received)',
+        '    yield received + 1',
+        '',
+        'it = counter()',
+        'print(next(it))',
+        'print(it.send(5))',
+      ].join('\n'),
+    );
+
+    // The first advance hands over the 1; the send puts the 5 into the
+    // yield that was waiting, and the generator hands back 6.
+    expect(serial).toBe('1\ngot 5\n6\n');
+  });
+
+  it('advances by a value of its own when it is only asked for one', () => {
+    const { serial } = run(
+      ['def counter():', '    yield 1', '    yield 2', '', 'it = counter()', 'print(next(it))', 'print(next(it))'].join(
+        '\n',
+      ),
+    );
+
+    expect(serial).toBe('1\n2\n');
+  });
+
+  it('raises StopIteration when it has run out, so a sketch can catch it', () => {
+    const { serial } = run(
+      [
+        'def counter():',
+        '    yield 1',
+        '',
+        'it = counter()',
+        'print(next(it))',
+        'try:',
+        '    next(it)',
+        'except StopIteration:',
+        '    print("finished")',
+      ].join('\n'),
+    );
+
+    expect(serial).toBe('1\nfinished\n');
+  });
+
+  it('answers with the default the caller gave when it has run out', () => {
+    const { serial } = run(
+      [
+        'def counter():',
+        '    yield 1',
+        '',
+        'it = counter()',
+        'print(next(it))',
+        'print(next(it, "none"))',
+      ].join('\n'),
+    );
+
+    expect(serial).toBe('1\nnone\n');
+  });
+
+  it('refuses a value sent to a generator that has not started', () => {
+    const target = host();
+    const runner = python(
+      ['def counter():', '    yield 1', '', 'it = counter()', 'it.send(5)'].join('\n'),
+      target.services,
+    );
+
+    expect(() => {
+      for (let step = 0; step < 60; step++) {
+        if (runner.step() === null) break;
+      }
+    }).toThrow(/has not started/);
+  });
+
+  it('starts a generator that is sent nothing, the way None does', () => {
+    const { serial } = run(
+      ['def counter():', '    yield 1', '', 'it = counter()', 'print(it.send(0))'].join('\n'),
+    );
+
+    expect(serial).toBe('1\n');
+  });
+
+  it('refuses a send with no value in it', () => {
+    const target = host();
+    const runner = python(
+      ['def counter():', '    yield 1', '', 'it = counter()', 'it.send()'].join('\n'),
+      target.services,
+    );
+
+    expect(() => {
+      for (let step = 0; step < 60; step++) {
+        if (runner.step() === null) break;
+      }
+    }).toThrow(/exactly one argument/);
+  });
+
+  it('says so when what is asked for is not a generator at all', () => {
+    const target = host();
+    const runner = python('next(7)\n', target.services);
+
+    expect(() => runner.step()).toThrow(/not an iterator/);
+  });
+
+  it('leaves a sketch its own `next` to do what it likes with', () => {
+    const { serial } = run(
+      ['def next(value):', '    return 42', '', 'print(next(7))'].join('\n'),
+    );
+
+    expect(serial).toBe('42\n');
+  });
+
+  it('passes a value sent to it on to the generator it delegates to', () => {
+    const { serial } = run(
+      [
+        'def inner():',
+        '    received = yield 1',
+        '    yield received * 2',
+        '',
+        'def outer():',
+        '    yield from inner()',
+        '',
+        'it = outer()',
+        'print(next(it))',
+        'print(it.send(4))',
+      ].join('\n'),
+    );
+
+    expect(serial).toBe('1\n8\n');
+  });
+
+  it('refuses a value sent to a generator that is already running', () => {
+    const target = host();
+    const runner = python(
+      [
+        'it = None',
+        'def g():',
+        '    it.send(1)',
+        '    yield 1',
+        '',
+        'it = g()',
+        'next(it)',
+      ].join('\n'),
+      target.services,
+    );
+
+    expect(() => {
+      for (let step = 0; step < 60; step++) {
+        if (runner.step() === null) break;
+      }
+    }).toThrow(/already executing/);
+  });
+
+  it('says so when a generator is asked for something the bench does not model', () => {
+    const target = host();
+    const runner = python(
+      ['def g():', '    yield 1', '', 'it = g()', 'it.close()'].join('\n'),
+      target.services,
+    );
+
+    expect(() => {
+      for (let step = 0; step < 60; step++) {
+        if (runner.step() === null) break;
+      }
+    }).toThrow(/models no generator close/);
+  });
+});
