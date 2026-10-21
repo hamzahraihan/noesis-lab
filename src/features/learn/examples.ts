@@ -494,6 +494,36 @@ while True:
 `;
 
 /**
+ * The ATtiny85's own starter sketch.
+ *
+ * The shared blink sketch drives an OLED over I2C and a panel over SPI, and
+ * this chip has neither: five I/O pins, no bus and no header. So the bench it
+ * opens with is one LED and a count.
+ */
+export const ATTINY85_BLINK_SKETCH = `#include <Arduino.h>
+
+// One LED on PB2, the pin the Arduino core calls D2.
+#define LED_PIN 2
+
+int blinks = 0;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(LED_PIN, OUTPUT);
+}
+
+void loop() {
+  blinks = blinks + 1;
+  digitalWrite(LED_PIN, HIGH);
+  Serial.print("blink ");
+  Serial.println(blinks);
+  delay(500);
+  digitalWrite(LED_PIN, LOW);
+  delay(500);
+}
+`;
+
+/**
  * The sketch a bench opens with: the board's own language and idiom.
  *
  * One rule for the three places that seed a project -- mount, board switch and
@@ -506,7 +536,9 @@ export function starterSketchFor(
   boardId: BoardId,
   language: FirmwareLanguage = boardOption(boardId).language,
 ): string {
-  if (language !== 'python') return BLINK_SKETCH;
+  if (language !== 'python') {
+    return boardId === 'attiny85' ? ATTINY85_BLINK_SKETCH : BLINK_SKETCH;
+  }
   if (boardId === 'pico') return PICO_BLINK_SKETCH;
   if (boardId === 'rp2040') return RP2040_BLINK_SKETCH;
   if (boardId === 'esp32') return ESP32_BLINK_SKETCH;

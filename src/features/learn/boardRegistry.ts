@@ -17,6 +17,7 @@ import {
   arduinoMega2560,
   arduinoNano,
   arduinoUnoR3,
+  attiny85Chip,
   esp32DevKitV1,
   franzininhoBoard,
   nanoRp2040Connect,
@@ -32,7 +33,8 @@ export type BoardId =
   | 'rp2040'
   | 'franzininho'
   | 'raspberry-pi'
-  | 'pico';
+  | 'pico'
+  | 'attiny85';
 
 export interface BoardOption {
   readonly id: BoardId;
@@ -162,6 +164,16 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
       'A small RP2040 board with 26 GPIO pins and no analogue input beyond three ADC channels.',
     bestFor:
       'Modern embedded Python on a cheap board. Same RP2040 as the Nano RP2040 Connect, so the MicroPython backend transfers; the header is a 2x20 DIP block rather than a Nano footprint.',
+  },
+  {
+    id: 'attiny85',
+    name: 'ATtiny85',
+    make: attiny85Chip,
+    language: 'arduino-cpp',
+    languages: ['arduino-cpp'],
+    summary: 'The bare chip: eight leads, five of them I/O, and no board under it at all.',
+    bestFor:
+      'The smallest thing a bench can be built around, and the limits that come with it. Five I/O pins, no header, a reset pin that shares a lead with PB5, and a package whose two rows of leads are 6.35 mm apart where the breadboard’s channel is 7.62 mm wide — so the chip is wired to the board rather than plugged into it.',
   },
 ];
 

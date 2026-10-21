@@ -258,13 +258,26 @@ and a convincing one, and it costs about a hundred lines rather than a dependenc
 
 ### 6.4 Boards, panels and what else is on the bench
 
-**Five boards, each with its own pin numbering and its own buses.** The ESP32
+**Nine boards, each with its own pin numbering and its own buses.** The ESP32
 DevKit V1 and the Arduino Uno came first; the Mega 2560, the Nano and the Nano
-RP2040 Connect joined them. They are not interchangeable, and the differences
-are the point -- A0 is pin 54 on a Mega and pin 14 on an Uno, the Mega's SPI
-sits on its own 50-53 block rather than the 10-13 an Uno sketch names, and the
-RP2040 runs at 3.3 V where everything else runs at 5. A sketch that moves
-between boards has to move with them, which is what a bench is for.
+RP2040 Connect joined them, and the Raspberry Pi Pico and the Pi 4 after
+that. They are not interchangeable, and the differences are the point -- A0 is
+pin 54 on a Mega and pin 14 on an Uno, the Mega's SPI sits on its own 50-53
+block rather than the 10-13 an Uno sketch names, and the RP2040 runs at 3.3 V
+where everything else runs at 5. A sketch that moves between boards has to
+move with them, which is what a bench is for.
+
+**The ATtiny85 is a chip, not a board, and the bench draws it as one.** The
+bare part in its 8-lead PDIP package, with the package's own geometry: the
+leads 2.54 mm apart along a row, the two rows 6.35 mm apart, and the body
+9.27 mm by 7.87 mm. The Franzininho is the same silicon on a carrier, and the
+differences between them are the point too -- five I/O pins against the
+carrier's six, no header, a reset pin that shares a lead with PB5, and the
+analogue names landing on the chip's four ADC channels, which sit on PB0, PB2,
+PB4 and PB3 rather than in pin order. Its leads cannot straddle the
+breadboard's centre channel, because the channel is 7.62 mm wide and the
+package's rows are 6.35 mm apart, so the chip sits beside the board and is
+wired to it.
 
 **A board's own header aliases carry no pin number.** The Uno and the Mega both
 silkscreen an SDA and SCL beside the numbered 4/5 and 20/21 they duplicate.

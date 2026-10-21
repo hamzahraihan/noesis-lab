@@ -1419,6 +1419,126 @@ export function raspberryPi4(): PartDefinition {
 }
 
 /*
+ * ATtiny85, the bare chip in its 8-lead PDIP package.
+ *
+ * This is the smallest thing the bench can be built around: eight leads, five
+ * of them usable as I/O, and no board under them at all. The Franzininho
+ * further up is the same silicon on a carrier, and the reasons a carrier
+ * exists are the reasons this chip is awkward on its own -- five I/O pins, no
+ * header, and a reset pin that shares a lead with PB5.
+ *
+ * The geometry is Atmel's 8P3 drawing, and the one number that matters to the
+ * bench is E1: the two rows of leads are 6.35 mm apart, where the
+ * breadboard's centre channel is 7.62 mm wide. A DIP-8 therefore cannot
+ * straddle the channel the way it does on a real board -- its leads are half
+ * a hole-pitch narrower than the gap -- so the chip sits beside the
+ * breadboard and is wired to it, rather than plugged into it.
+ */
+
+/** The lead pitch along a row, in millimetres. */
+const ATTINY85_PITCH_MM = 2.54;
+/** The distance between the two rows of leads, in millimetres (E1). */
+const ATTINY85_ROW_SPACING_MM = 6.35;
+/** The body across the rows, in millimetres (E). */
+const ATTINY85_BODY_WIDTH_MM = 7.87;
+/** The body along a row, in millimetres (D). */
+const ATTINY85_BODY_LENGTH_MM = 9.27;
+/**
+ * How far in from the body's edge the leads sit.
+ *
+ * The package is wider than the span of its leads, so the rows sit inside the
+ * body's outline: a quarter of a millimetre of mould on each side of a row.
+ */
+const ATTINY85_ROW_INSET_MM = (ATTINY85_BODY_WIDTH_MM - ATTINY85_ROW_SPACING_MM) / 2;
+/** The same for the ends of a row, where four leads span three pitches. */
+const ATTINY85_LEAD_INSET_MM =
+  (ATTINY85_BODY_LENGTH_MM - 3 * ATTINY85_PITCH_MM) / 2;
+
+/**
+ * The eight leads, in the package's own order: one to four down the left,
+ * five to eight up the right, with pin one marked by the notch.
+ */
+const ATTINY85_LEADS: ReadonlyArray<
+  readonly [id: string, label: string, gpio: number | -1, adc: number | -1]
+> = [
+  ['PB5', 'PB5/RESET', 5, -1],
+  ['PB3', 'PB3', 3, 3],
+  ['PB4', 'PB4', 4, 2],
+  ['GND', 'GND', -1, -1],
+  ['PB0', 'PB0', 0, 0],
+  ['PB1', 'PB1', 1, -1],
+  ['PB2', 'PB2', 2, 1],
+  ['VCC', 'VCC', -1, -1],
+];
+
+function attiny85Definition(): PartDefinition {
+  const pins: PinSpec[] = [];
+  const boardPins: BoardPin[] = [];
+
+  ATTINY85_LEADS.forEach(([id, label, gpio, adc], index) => {
+    // One to four run down the left edge, five to eight up the right.
+    const left = index < 4;
+    const row = left ? index : 7 - index;
+    const x = ATTINY85_LEAD_INSET_MM + row * ATTINY85_PITCH_MM;
+    const y = ATTINY85_ROW_INSET_MM + (left ? 0 : ATTINY85_ROW_SPACING_MM);
+    pins.push({
+      id,
+      label,
+      x,
+      y,
+      net: id === 'GND' ? 'GND' : id === 'VCC' ? '5V' : undefined,
+    });
+    boardPins.push({
+      id,
+      label,
+      role: id === 'GND' ? 'ground' : id === 'VCC' ? 'power' : adc >= 0 ? 'adc' : 'gpio',
+      gpio: gpio >= 0 ? gpio : undefined,
+      adc: adc >= 0 ? adc : undefined,
+    });
+  });
+
+  return {
+    id: 'attiny85',
+    name: 'ATtiny85',
+    category: 'board',
+    widthMm: ATTINY85_BODY_LENGTH_MM,
+    heightMm: ATTINY85_BODY_WIDTH_MM,
+    component: {
+      kind: 'mcu',
+      board: {
+        id: 'attiny85',
+        name: 'ATtiny85',
+        logicVolts: 5,
+        serialPrefix: 'ATtiny85',
+        // The AVR output stage the ATmega boards above run at, on a smaller
+        // current: the datasheet allows ten milliamps either way at 5 V.
+        sourceOhms: 25,
+        sinkOhms: 50,
+        pwmHz: 490,
+        adcBits: 10,
+        /*
+         * The analogue names are the core's, and the core's A0 is the chip's
+         * ADC0 -- which is PB0, not PB2. The four ADC channels sit on PB0,
+         * PB2, PB4 and PB3, so the aliases are not in pin order.
+         */
+        arduinoPins: {
+          aliases: { A0: 0, A1: 2, A2: 4, A3: 3 },
+        },
+      },
+    },
+    pins,
+    boardPins,
+    bodyColour: '#17191d',
+    legendColour: '#c9ccd2',
+  };
+}
+
+let attiny85: PartDefinition | null = null;
+export function attiny85Chip(): PartDefinition {
+  return (attiny85 ??= attiny85Definition());
+}
+
+/*
  * Raspberry Pi Pico, the RP2040-based board. Same chip as the Nano RP2040
  * Connect, so the firmware backend and the pin model transfer unchanged; only
  * the header layout and the artwork differ. GPIO numbering is the Pico's own,

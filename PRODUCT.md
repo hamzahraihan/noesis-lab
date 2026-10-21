@@ -32,7 +32,7 @@ A neighboring product could not truthfully copy these together:
 - Runs entirely in the browser as static files; hosted anywhere that can serve static assets. HashRouter (no server rewrites). Dev and preview servers are Vite.
 - Optional worker path offloads the simulation engine to a Web Worker over a SharedArrayBuffer snapshot; requires cross-origin isolation (COOP/COEP headers) on the host. Falls back silently to in-page simulation without it.
 - Firmware is compiled in-browser via an AVR toolchain fetched from a CDN (requires `cross-origin-resource-policy`); works offline for everything except that compile step once cached.
-- Eight boards: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano RP2040 Connect, Raspberry Pi Pico, Franzininho, Raspberry Pi 4. Eight boards, each with its own pin numbering and buses.
+- Nine boards: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano RP2040 Connect, Raspberry Pi Pico, Franzininho, Raspberry Pi 4, and the bare ATtiny85 in its 8-lead package. Nine boards, each with its own pin numbering and buses.
 - Editor is Monaco (bundled, no CDN) with an `arduino-cpp` language whose completions are exactly the interpreter's supported subset.
 - Component artwork is `@wokwi/elements` (MIT, 50+ SVG parts) integrated at true millimetre scale, plus hand-authored breadboard, capacitor, I2C OLED, and the three bus instruments the library has no element for (barometer, current monitor, 16-bit converter).
 - Instruments on the bench: multimeter, oscilloscope, logic analyser, bus monitor, serial terminal, serial plotter, and a debugger for the interpreted sketch.
@@ -64,7 +64,7 @@ Explicitly undecided:
 ## Brand Commitments
 
 - Name: Noesis (also shown as "Noesis Lab" in the UI heading).
-- Assets: Wokwi component library (MIT), board definitions for eight boards, the exercise ladder (0.1–5.3), long-form worksheets in docs/exercises/, project gallery data.
+- Assets: Wokwi component library (MIT), board definitions for nine boards, the exercise ladder (0.1–5.3), long-form worksheets in docs/exercises/, project gallery data.
 - No voice, personality, or visual identity is formally committed here. Visual world, palette, typography, and components belong in DESIGN.md and are owned by new-work/document, not init.
 - References the user explicitly made binding: none beyond the above.
 

@@ -57,7 +57,7 @@ than about arithmetic.
 | 1. Firmware execution & CPU fidelity | 18% | 65 | 48 | AVR runs **real compiled machine code** — an in-browser `avr-gcc-wasm` toolchain plus a home-built AssemblyScript→Wasm core (`simulation/avr/wasm-core.ts`, cross-checked against the `avr8js` reference path). RP2040 boots **real MicroPython** on `rp2040js` (`simulation/rp2040/backend.ts`). The ESP32 boots an **emulated chip** running its own MicroPython (`simulation/esp32/`), which is refused for a C++ sketch with the reason shown (`bench/simulations/avr-mode.ts`). Everything else — ESP32, Mega, Nano, Franzininho C++ and the Python boards — runs on the **interpreter** (`simulation/firmware/interpreter.ts`), which answers the libraries the Arduino way (`Servo myServo; myServo.attach(9); myServo.write(90);`) as well as the bench's own. |
 | 2. Parts catalogue | 14% | 50 | 47 | **60 bench-placed entries** — 43 named in `parts/catalogue.ts` plus 5 resistors, 4 capacitors, 5 LEDs and 3 pots — over **38 component kinds** (`parts/catalog.ts:95-147`), and every one of them a sketch can talk to. Three of the new entries are bus instruments with no element in the Wokwi library and no new firmware API: a **BMP180 barometer**, an **INA219 current monitor** and an **ADS1115 sixteen-bit converter** (`parts/devices/bmp180.ts`, `ina219.ts`, `ads1115.ts`), each speaking its own register protocol. Wokwi lists ~62, of which the BMP180 is one the bench now has; Velxio's two public figures disagree — 150+ parts across the catalog, 48+ on the free Maker canvas — and 60 sits between them. |
 | 3. Electrical solver | 10% | **85** | 60 | A real per-timestep resistive-network solve (`simulation/circuit.ts`, `engine.ts`), not logic levels: pins modelled behind their real output impedance, PWM switched rather than averaged, a GL5528's logarithmic lux curve, an NTC's B = 3950, internal pull-ups and floating inputs. **Ahead of Wokwi**, which does not model a resistive network; behind Velxio, whose ngspice-WASM is true SPICE with diodes, transistors and op-amps. |
-| 4. Board & architecture coverage | 9% | 40 | 20 | **8 boards** (`learn/boardRegistry.ts:75`) across **3 execution paths** — AVR, RP2040, ESP32. Wokwi: 18 MCUs over 4 architectures. Velxio: 40 boards over 5 families, of which 30+ are on the free plan. |
+| 4. Board & architecture coverage | 9% | 42 | 21 | **9 boards** (`learn/boardRegistry.ts:75`) across **3 execution paths** — AVR, RP2040, ESP32 — the newest of them the bare **ATtiny85** in its 8-lead package, the same silicon the Franzininho carries on a carrier. Wokwi: 18 MCUs over 4 architectures. Velxio: 40 boards over 5 families, of which 30+ are on the free plan. |
 | 5. Instruments | 9% | 78 | **82** | Scope, 8-lane logic analyser, multimeter, bus monitor, serial monitor, **serial plotter**, problems — the bottom tabs at `bench/store/shell-state.ts:8`. The plotter reads the sketch's own output as numbers (`simulation/plot.ts`), a capture leaves as a **VCD**, the format PulseView reads (`simulation/vcd.ts`), and the scope's capture leaves as a CSV table (`simulation/probe.ts`). Wokwi has the plotter and the VCD export too, and an 8-channel analyser at 1 GHz where this one samples at the solver's rate; Velxio has an oscilloscope and meters but **no logic analyser, no bus monitor, no plotter and no export**, so on instrument *breadth* Noesis is well ahead of it — Velxio's advantage is the SPICE layer underneath, which is pillar 3. |
 | 6. Curriculum & examples | 10% | 45 | 35 | **12 graded exercises** (`learn/exercises/`) over ~45,000 words of long-form worksheets (`docs/exercises/`), each with hints and worked solutions, plus a glossary, a references page, 10 gallery projects (`learn/gallery.ts`) and 20 committed circuits in `learn/circuits/`. Velxio ships 400+ examples and no curriculum. |
 | 7. Persistence & sharing | 7% | 70 | 55 | A `CircuitDocument` is the source of truth (`simulation/circuit-doc.ts`); the bench autosaves it per board (`bench/store/circuit-store.ts`), carries it in a `?circuit=` link (`bench/utils/circuit-codec.ts`) and reads and writes it as a `.json` file (`bench/utils/circuit-file.ts`). **No accounts and no cloud** — which is what the static-hosting constraint buys. |
@@ -66,14 +66,14 @@ than about arithmetic.
 | 10. Extension API | 5% | 55 | 60 | A part may arrive as a `.part.json` (`parts/custom.ts`) or carry **behaviour** as a script — QuickJS compiled to Wasm, one context per part, inside the simulation worker (`simulation/scripted/`). Definitions **travel with the circuit** (`CircuitDocument.definitions`), so a file opens on a machine that imported nothing. Wokwi and Velxio use a C→Wasm chip ABI instead. |
 | 11. Ecosystem & workflow | 5% | 33 | 33 | Monaco, multi-file tabs, an Arduino library manager with tier-2 libraries (`instruments/library-manager.ts`, `simulation/avr/libraries/`), GitHub CI running typecheck, lint, boundary checks and tests (`.github/workflows/ci.yml`), and a real `README.md`. **No VS Code extension, no simulation CI, no i18n, no community, and no licence.** Velxio has simulation CI with a GitHub Action, an MCP server, an AI assistant, GitHub Sync, BOM export and docs in 9 languages — and accounts, a paid tier and a Discord. Both targets gate their best workflow features behind a subscription, so the free tiers are closer to Noesis than the price pages suggest. |
 
-**Weighted total: 57.2% of Wokwi · 49.0% of Velxio.**
+**Weighted total: 57.4% of Wokwi · 49.0% of Velxio.**
 
 The arithmetic, so it can be checked:
 
 ```
-Wokwi   18×.65 + 14×.50 + 10×.85 +  9×.40 +  9×.78 + 10×.45
-       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.33  =  57.2
-Velxio  18×.48 + 14×.47 + 10×.60 +  9×.20 +  9×.82 + 10×.35
+Wokwi   18×.65 + 14×.50 + 10×.85 +  9×.42 +  9×.78 + 10×.45
+       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.33  =  57.4
+Velxio  18×.48 + 14×.47 + 10×.60 +  9×.21 +  9×.82 + 10×.35
        +  7×.55 +  8×.60 +  5×.35 +  5×.60 +  5×.33  =  49.0
 ```
 
@@ -107,7 +107,7 @@ feature it has but has not written down would not show.
   docs carry an AI assistant in that space instead. Noesis stops a sketch on
   a line, shows what the program can see there, and steps through it.
 - **Engineering rigour.** 203 test files and 1,714 tests across 31,436 lines
-  of test against 69,555 lines of source in 245 files; CI with typecheck, lint
+  of test against 69,800 lines of source in 245 files; CI with typecheck, lint
   and boundary checks. The risky parts — the AVR Wasm core, the RP2040
   firmware path, the circuit document, the interpreter's Python front end —
   each have dedicated parity tests rather than smoke checks.
@@ -124,14 +124,14 @@ feature it has but has not written down would not show.
    the bus instruments — a chip that answers on the I2C bus needs a model and
    a drawing and nothing else, because `Wire` is already there and the
    protocol is the exercise.
-2. **Architectures** (40%). **ATtiny85 is nearly free** — `avr8js` 0.21.1 is
-   already a dependency and Wokwi ships the same part — though the compiled
-   path is Uno-only (`tryFlashAvr` refuses any other board), so it would run
-   on the interpreter. Its pins do not land in the breadboard's holes: the
-   8P3 package puts the two rows 6.35 mm apart (E1 in Atmel's drawing) and
-   the centre channel is 7.62 mm wide (`parts/breadboard.ts`), so the chip
-   cannot straddle it and the starter has to be fly-wired to the board rather
-   than plugged in. Then ESP32-C3/S3 and STM32F103.
+2. **Architectures** (42%). The ATtiny85 is on the bench now — the bare chip
+   in its 8-lead package, the same silicon the Franzininho carries on a
+   carrier — and it is the last of the cheap ones. Its leads cannot straddle
+   the breadboard's centre channel, because the channel is 7.62 mm wide and
+   the package's rows are 6.35 mm apart (E1 in Atmel's 8P3 drawing), so the
+   starter wires it to the board rather than plugging it in. What is left is
+   ESP32-C3/S3 and STM32F103, which are new CPU families rather than new
+   packages.
 3. **Network depth** (45 against Wokwi, 35 against Velxio). The Arduino
    libraries are in — `HTTPClient`, `PubSubClient`, `WiFiUdp` — and the
    bench's own hosts answer, so what is left is the internet itself: Wokwi's

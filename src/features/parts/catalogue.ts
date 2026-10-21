@@ -13,6 +13,7 @@ import { customPartsSource } from './custom-registry';
 import {
   arduinoMega2560,
   arduinoNano,
+  attiny85Chip,
   nanoRp2040Connect,
   arduinoUnoR3,
   esp32DevKitV1,
@@ -538,6 +539,7 @@ const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
   franzininho: franzininhoBoard,
   'raspberry-pi-4': raspberryPi4,
   'raspberry-pi-pico': raspberryPiPico,
+  attiny85: attiny85Chip,
 };
 
 /**

@@ -157,7 +157,13 @@ function shapeFor(
     case 'breadboard':
       return <BreadboardBody definition={definition} />;
     case 'mcu':
-      return <BoardBody definition={definition} part={part} state={state} />;
+      // The ATtiny85 is a bare chip rather than a board, so it is drawn as the
+      // package it comes in: epoxy, a notch for pin one, and eight leads.
+      return definition.id === 'attiny85' ? (
+        <DipBody definition={definition} />
+      ) : (
+        <BoardBody definition={definition} part={part} state={state} />
+      );
     case 'resistor':
       return <ResistorBody definition={definition} />;
     case 'led':
@@ -1087,6 +1093,66 @@ const CapacitorBody = staticBody(function CapacitorBody({
 
 // ---------------------------------------------------------------------------
 // Sensors
+
+/**
+ * A bare chip in a dual-in-line package: the ATtiny85, with no board under it.
+ *
+ * The body is the package's own -- Atmel's 8P3 drawing, 9.27 mm along the row
+ * of leads and 7.87 mm across them -- with the notch that marks pin one and
+ * the eight leads standing where the package puts them. Nothing else is on
+ * it: a DIP-8 has no USB, no barrel jack and no indicators, and the silkscreen
+ * a real one carries is the part's name and a dot.
+ */
+const DipBody = staticBody(function DipBody({
+  definition,
+}: {
+  definition: PartDefinition;
+}) {
+  const width = definition.widthMm;
+  const height = definition.heightMm;
+  return (
+    <g filter="url(#nz-lift)">
+      {/* The epoxy body, with the notch at the pin-one end. */}
+      <path
+        d={`M 1.6 0 H ${width} V ${height} H 1.6 A 1.6 1.6 0 0 1 0 ${height / 2} A 1.6 1.6 0 0 1 1.6 0 Z`}
+        fill={definition.bodyColour}
+        stroke="#05070a"
+        strokeWidth={0.2}
+      />
+      <path
+        d={`M 1.6 0 H ${width} V ${height} H 1.6 A 1.6 1.6 0 0 1 0 ${height / 2} A 1.6 1.6 0 0 1 1.6 0 Z`}
+        fill="url(#nz-body)"
+      />
+      {/* The pin-one dot, the way the package marks it. */}
+      <circle cx={3.4} cy={height / 2} r={0.45} fill="#000000" opacity={0.55} />
+      <text
+        x={width / 2 + 1.2}
+        y={height / 2 + 0.7}
+        fontSize={1.6}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+        opacity={0.85}
+      >
+        {definition.name.toUpperCase()}
+      </text>
+      {/* The leads, standing where the package puts them. */}
+      {definition.pins.map((pin) => (
+        <rect
+          key={pin.id}
+          x={pin.x - 0.5}
+          y={pin.y - 0.35}
+          width={1}
+          height={0.7}
+          rx={0.15}
+          fill="url(#nz-metal)"
+          stroke="#5d6572"
+          strokeWidth={0.1}
+        />
+      ))}
+    </g>
+  );
+});
 
 /**
  * An I2C module the bench draws itself.

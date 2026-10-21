@@ -102,6 +102,17 @@ export const PROJECTS: readonly BoardProject[] = [
     youWillSee: [...STARTER_SEEN],
     tryNext: ['blink'],
   },
+  {
+    board: 'attiny85',
+    project: 'Starter bench: one LED on five pins',
+    tagline: 'The bare chip: a DIP-8 with nothing under it.',
+    why: 'Five I/O pins, no header, no bus, and a reset pin that shares a lead with PB5. Its two rows of leads are 6.35 mm apart where the breadboard’s channel is 7.62 mm wide, so the chip cannot straddle it: the bench wires the chip to the board instead.',
+    youWillSee: [
+      'The LED on PB2 blinks on and off twice a second',
+      'The serial monitor counts along: blink 1, blink 2, …',
+    ],
+    tryNext: [],
+  },
 ];
 
 export function projectFor(boardId: BoardId): BoardProject | null {

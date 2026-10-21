@@ -18,6 +18,7 @@ import { parseCircuit } from '@/features/simulation';
 import type { BoardId } from '../boardRegistry';
 
 import starterEsp32 from './starter-esp32.json';
+import starterAttiny85 from './starter-attiny85.json';
 import starterFranzininho from './starter-franzininho.json';
 import starterMega from './starter-mega.json';
 import starterNano from './starter-nano.json';
@@ -61,6 +62,7 @@ export const STARTER_CIRCUITS: Readonly<Record<BoardId, CircuitDocument>> = {
   franzininho: parseCircuit(starterFranzininho, 'starter-franzininho'),
   'raspberry-pi': parseCircuit(starterRaspberryPi, 'starter-raspberry-pi'),
   pico: parseCircuit(starterPico, 'starter-pico'),
+  attiny85: parseCircuit(starterAttiny85, 'starter-attiny85'),
 };
 
 /** The bench each example sketch assumes, per board. */
