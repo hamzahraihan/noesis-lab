@@ -569,7 +569,9 @@ carries one: a click sets it, a click takes it off, and the sketch stops the
 next time it runs a statement on that line. The panel under the bench says
 where the program is and what it can see there -- the names in scope and what
 each of them holds -- and offers the three things a person can ask of a
-stopped program: carry on, step over the call it is in, or step into it.
+stopped program: carry on, step over the call it is in, or step into it. The
+line itself is marked in the editor, because the editor is where the person is
+looking and the panel is where the detail is.
 
 **The interpreter is where the stops are.** A stop needs a place to stop, and
 the interpreter is a program the bench can read: it asks itself, at every
