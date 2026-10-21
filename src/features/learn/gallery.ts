@@ -2008,6 +2008,11 @@ const SENSOR_FEED: GalleryProject = {
  */
 
 const LIVE_WEATHER_SKETCH = `
+#define BLACK 0x0000
+#define WHITE 0xFFFF
+#define GREEN 0x07E0
+#define SKY   0x867D
+
 void setup() {
   Serial.begin(115200);
   tft.begin();
