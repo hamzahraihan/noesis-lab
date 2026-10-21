@@ -904,7 +904,46 @@ function asNumber(value: Value): number {
 }
 
 /**
- * The name a value has in Python, for the message an error reads as.
+ * The names the bench answers for: the libraries a sketch calls on.
+ *
+ * A library object is a thing that exists without being a value -- `Serial`
+ * is a port, not a number -- so reading one is not an error, it is a zero
+ * with nothing behind it. A name outside this list that a sketch reads is a
+ * name the sketch has never heard of.
+ */
+const LIBRARY_OBJECTS: Readonly<Record<string, true>> = {
+  Serial: true,
+  Wire: true,
+  SPI: true,
+  lcd: true,
+  LiquidCrystal: true,
+  servo: true,
+  Servo: true,
+  dht: true,
+  DHT: true,
+  pixels: true,
+  Pixels: true,
+  ir: true,
+  IR: true,
+  dialer: true,
+  Dialer: true,
+  sd: true,
+  SD: true,
+  map: true,
+  Map: true,
+  tft: true,
+  TFT: true,
+  time: true,
+  WiFi: true,
+  wifi: true,
+  net: true,
+  Net: true,
+  machine: true,
+  gpiozero: true,
+};
+
+/**
+ * The names a value has in Python, for the message an error reads as.
  */
 function pythonTypeName(value: Value): string {
   if (typeof value === 'string') return 'str';
@@ -2154,6 +2193,18 @@ export class FirmwareRuntime {
         return 0;
       default:
         /*
+         * A device constructor with no name to hold it: the call has nowhere
+         * to put the device, so it leaves no number behind, which is what
+         * the sketch sees. Binding one -- `lamp = LED(17)` -- is what puts
+         * it on the bench.
+         */
+        if (
+          Object.prototype.hasOwnProperty.call(DEVICE_CONSTRUCTORS, name) ||
+          Object.prototype.hasOwnProperty.call(MACHINE_CONSTRUCTORS, name)
+        ) {
+          return 0;
+        }
+        /*
          * A call that resolves nowhere. It used to answer 0, which is a
          * wrong answer a sketch cannot see, so it stops with a reason that
          * names the call.
@@ -2533,6 +2584,23 @@ export class FirmwareRuntime {
 
   // -- expressions ---------------------------------------------------------
 
+  /**
+   * What a name holds, when it holds something that is not a value.
+   *
+   * A device, an object, a function or a class cannot be read as a number, so
+   * the message says which of them it is rather than claiming the sketch had
+   * never heard of the name.
+   */
+  private whatHolds(name: string, scope: Scope): string | null {
+    if (scope.deviceFor(name) !== undefined) return 'a device';
+    if (this.instances.has(name)) return 'an object';
+    if (this.functions.has(name)) return 'a function';
+    if (this.classes.has(name)) return 'a class';
+    if (Object.prototype.hasOwnProperty.call(DEVICE_CONSTRUCTORS, name)) return 'a device';
+    if (Object.prototype.hasOwnProperty.call(MACHINE_CONSTRUCTORS, name)) return 'a device';
+    return null;
+  }
+
   private *evaluate(
     expression: Expr,
     scope: Scope,
@@ -2645,7 +2713,31 @@ export class FirmwareRuntime {
             this.macroResolving.pop();
           }
         }
-        return this.defines.get(expression.name) ?? 0;
+        const defined = this.defines.get(expression.name);
+        if (defined !== undefined) return defined;
+        /*
+         * A name the sketch has never heard of. It used to read as zero, so
+         * a typo looked like data: a pin that was not a pin, a reading that
+         * was not a reading, a misspelt constant that measured nothing. The
+         * bench says so instead -- Python raises a NameError, and a C++
+         * compiler refuses to build at all.
+         */
+        const holds = this.whatHolds(expression.name, scope);
+        if (holds !== null) {
+          throw new PythonError('TypeError', `'${expression.name}' is ${holds}, not a value`);
+        }
+        /*
+         * A library object: `Serial`, `Wire`, `tft`. It exists, and it has no
+         * value of its own -- its methods are what a sketch reaches it for --
+         * so reading it is a zero rather than a mistake.
+         */
+        if (Object.prototype.hasOwnProperty.call(LIBRARY_OBJECTS, expression.name)) return 0;
+        throw new PythonError(
+          this.language === 'python' ? 'NameError' : 'Error',
+          this.language === 'python'
+            ? `name '${expression.name}' is not defined`
+            : `'${expression.name}' was not declared in this scope`,
+        );
       }
 
       case 'unary': {
@@ -2843,50 +2935,133 @@ export class FirmwareRuntime {
         const store = this.resolveArray(expression.target, scope);
         if (store) {
           const position = asNumber(index);
-          if (position < 0 || position >= store.length) return 0;
+          if (position < 0 || position >= store.length) {
+            throw new PythonError(
+              'IndexError',
+              `index ${position} is out of range for a list of ${store.length}`,
+            );
+          }
           return store[position];
         }
-        // A dictionary is read by its key: `d['a']`.
         const target = (yield* this.evaluate(expression.target, scope, services)) as Value;
-        if (target instanceof Map) return target.get(formatValue(index)) ?? 0;
-        return 0;
+        /*
+         * A dictionary is read by its key: `d['a']`.
+         */
+        if (target instanceof Map) {
+          const key = formatValue(index);
+          const value = target.get(key);
+          if (value === undefined) {
+            throw new PythonError('KeyError', `key '${key}' is not in the dictionary`);
+          }
+          return value;
+        }
+        /*
+         * A list is a list wherever it was written: `[1, 2, 3][1]` is the
+         * second of them.
+         */
+        if (Array.isArray(target)) {
+          const position = asNumber(index);
+          if (position < 0 || position >= target.length) {
+            throw new PythonError(
+              'IndexError',
+              `index ${position} is out of range for a list of ${target.length}`,
+            );
+          }
+          return target[position];
+        }
+        throw new PythonError(
+          'TypeError',
+          `'${pythonTypeName(target)}' object is not subscriptable`,
+        );
       }
 
       case 'member': {
         // `button.is_pressed` is a reading of the pin, not a call.
         if (expression.target.kind === 'identifier') {
-          const device = scope.deviceFor(expression.target.name);
+          const name = expression.target.name;
+          const device = scope.deviceFor(name);
           if (device) return this.readDevice(device, expression.member, services);
-          // `c.n` reads the instance's own field frame, never globals: writes
-          // store into the frame, so chaining past it would answer a
-          // same-named global and mask a typo'd field. Folded statics back
-          // the read for names the frame never seeded.
-          const instance = this.instances.get(expression.target.name);
+          /*
+           * `c.n` reads the instance's own field frame, never globals: writes
+           * store into the frame, so chaining past it would answer a
+           * same-named global and mask a typo'd field. Folded statics back
+           * the read for names the frame never seeded.
+           */
+          const instance = this.instances.get(name);
           if (instance) {
-            return (
+            const field =
               instance.scope.values.get(expression.member) ??
-              this.classStatics.get(instance.className)?.get(expression.member) ??
-              0
+              this.classStatics.get(instance.className)?.get(expression.member);
+            if (field !== undefined) return field;
+            /*
+             * A field the class never had. In C++ a field that was never set
+             * is zero, and the interpreter cannot tell that from a typo; in
+             * Python an attribute that was never set is an error.
+             */
+            if (this.language === 'python') {
+              throw new PythonError(
+                'AttributeError',
+                `'${instance.className}' object has no attribute '${expression.member}'`,
+              );
+            }
+            return 0;
+          }
+          /*
+           * `self.n` reads the field of the object the running method works
+           * on, which is the object itself rather than a name in scope.
+           */
+          if (this.currentSelfName === name && this.currentInstance) {
+            const field = this.currentInstance.scope.values.get(expression.member);
+            if (field !== undefined) return field;
+            throw new PythonError(
+              'AttributeError',
+              `'${expression.member}' is not a field of this object`,
             );
           }
-          // `self.n` reads the field of the object the running method works
-          // on, which is the object itself rather than a name in scope.
-          if (this.currentSelfName === expression.target.name && this.currentInstance) {
-            return this.currentInstance.scope.values.get(expression.member) ?? 0;
+          /*
+           * A dictionary is read by its key, and Python lets a key that is a
+           * name be written as one: `d.a` is `d['a']`.
+           */
+          const held = scope.lookup(name);
+          if (held instanceof Map) {
+            const value = held.get(expression.member);
+            if (value !== undefined) return value;
+            throw new PythonError('KeyError', `key '${expression.member}' is not in the dictionary`);
           }
-          // A dictionary is read by its key, and Python lets a key that is a
-          // name be written as one: `d.a` is `d['a']`.
-          const held = scope.lookup(expression.target.name);
-          if (held instanceof Map) return held.get(expression.member) ?? 0;
-          // `Button::RELEASED`: static consts live in the class table, since
-          // no instance is involved. Instance-qualified statics (`b.PRESSED`)
-          // already resolved above through the seeded field frame.
-          const statics = this.classStatics.get(expression.target.name);
+          /*
+           * `Button::RELEASED`: static consts live in the class table, since
+           * no instance is involved. Instance-qualified statics (`b.PRESSED`)
+           * already resolved above through the seeded field frame.
+           */
+          const statics = this.classStatics.get(name);
           if (statics?.has(expression.member)) return statics.get(expression.member) ?? 0;
+          if (this.classes.has(name)) {
+            throw new PythonError(
+              'AttributeError',
+              `class '${name}' has no attribute '${expression.member}'`,
+            );
+          }
         }
-        // A bare `Serial`, `Wire` or `SPI` on the right of a dot has no value
-        // of its own; their methods are reached through the `call` branch.
-        return 0;
+        /*
+         * A bare `Serial`, `Wire` or `SPI` on the right of a dot has no value
+         * of its own; their methods are reached through the `call` branch.
+         */
+        if (
+          expression.target.kind === 'identifier' &&
+          Object.prototype.hasOwnProperty.call(LIBRARY_OBJECTS, expression.target.name)
+        ) {
+          return 0;
+        }
+        /*
+         * A plain value -- a number, a string, a list -- has no members, and
+         * a name the sketch never bound is a name it never heard of. Either
+         * way the read says so rather than answering zero.
+         */
+        const target = (yield* this.evaluate(expression.target, scope, services)) as Value;
+        throw new PythonError(
+          'AttributeError',
+          `'${pythonTypeName(target)}' object has no attribute '${expression.member}'`,
+        );
       }
 
       case 'call': {
@@ -3599,7 +3774,10 @@ export class FirmwareRuntime {
       case 'is_released':
         return level ? 0 : 1;
       default:
-        return 0;
+        throw new PythonError(
+          'AttributeError',
+          `'${device.kind}' object has no attribute '${member}'`,
+        );
     }
   }
 
