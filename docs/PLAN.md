@@ -315,17 +315,27 @@ and the answer for eighteen of them was none.
    that split belongs: a display wired to the wrong pins stays blank, because the
    engine decodes RS, D4-D7 and E back off the nets rather than being told what
    the library meant.
-3. **Servos.** `servo.attach` / `write` / `read` by pin. The angle clamps at the
-   real end stops, 10 and 170 degrees, because that is where a servo's are and a
-   sketch asking for more gets the stop.
+3. **Servos.** `servo.attach` / `write` / `read` by pin, or the Arduino way --
+   `myServo.attach(pin)` and then `myServo.write(angle)`. The angle clamps at
+   the real end stops, 10 and 170 degrees, because that is where a servo's are
+   and a sketch asking for more gets the stop.
 4. **A library a sketch declares the Arduino way.** `Servo myServo;` is the
-   spelling every real library sketch uses, and the bench answers only to its
-   own names: `servo.write(pin, angle)`, which is a shape no Arduino sketch
-   writes. **Still open**, and the gap is the shape rather than the dispatch:
-   the bench addresses each part by the pin it is on, so a library object that
-   remembers its own pin -- `attach(pin)`, then `write(angle)` -- needs an
-   adapter per library, and until those exist a sketch written the Arduino way
-   is a sketch the bench refuses.
+   spelling every real library sketch uses, and the bench now answers it: the
+   object remembers the pin it was given and the call carries it on, because
+   the bench's ports address a part by the pin it is on. `DHT dht(2, DHT22);`,
+   `SD card;` and `LiquidCrystal display;` are the same. **The bench's own
+   shape still works** -- `servo.write(pin, angle)` and `servo.write(angle)`
+   are told apart by how many arguments they carry -- so a sketch written for
+   this bench keeps running and a sketch copied from the internet runs too.
+   The libraries whose pin the sketch never binds -- the NeoPixel strip, the
+   IR receiver, the dialer -- still take the bench's own names, because their
+   pin has nowhere else to come from. **The network's libraries are the same
+   case**: `HTTPClient http;`, `PubSubClient mqtt;` and `WiFiUdp udp;` are the
+   three a sketch that talks to a server declares. The HTTP client blocks the
+   way a real request blocks, because the answer arrives on the bench's own
+   clock; the MQTT client talks to the bench's sensor and its broker; and the
+   time client reads the clock the network keeps. The bench's own `net` port
+   stays as it was, because it is a *port* and these are libraries over it.
 
 The row addresses of a 20x4 are the panel's business, not the library's: the
 glass knows that its second half sits *above* the first, and a driver that

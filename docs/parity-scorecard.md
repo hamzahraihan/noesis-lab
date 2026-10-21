@@ -53,7 +53,7 @@ than about arithmetic.
 
 | Pillar | Weight | vs Wokwi | vs Velxio | Evidence |
 | --- | --- | --- | --- | --- |
-| 1. Firmware execution & CPU fidelity | 18% | 63 | 48 | AVR runs **real compiled machine code** — an in-browser `avr-gcc-wasm` toolchain plus a home-built AssemblyScript→Wasm core (`simulation/avr/wasm-core.ts`, cross-checked against the `avr8js` reference path). RP2040 boots **real MicroPython** on `rp2040js` (`simulation/rp2040/backend.ts`). The ESP32 boots an **emulated chip** running its own MicroPython (`simulation/esp32/`), which is refused for a C++ sketch with the reason shown (`bench/simulations/avr-mode.ts`). Everything else — ESP32, Mega, Nano, Franzininho C++ and the Python boards — runs on the **interpreter** (`simulation/firmware/interpreter.ts`). |
+| 1. Firmware execution & CPU fidelity | 18% | 65 | 48 | AVR runs **real compiled machine code** — an in-browser `avr-gcc-wasm` toolchain plus a home-built AssemblyScript→Wasm core (`simulation/avr/wasm-core.ts`, cross-checked against the `avr8js` reference path). RP2040 boots **real MicroPython** on `rp2040js` (`simulation/rp2040/backend.ts`). The ESP32 boots an **emulated chip** running its own MicroPython (`simulation/esp32/`), which is refused for a C++ sketch with the reason shown (`bench/simulations/avr-mode.ts`). Everything else — ESP32, Mega, Nano, Franzininho C++ and the Python boards — runs on the **interpreter** (`simulation/firmware/interpreter.ts`), which answers the libraries the Arduino way (`Servo myServo; myServo.attach(9); myServo.write(90);`) as well as the bench's own. |
 | 2. Parts catalogue | 14% | 45 | 45 | **57 bench-placed entries** — 40 named in `parts/catalogue.ts` plus 5 resistors, 4 capacitors, 5 LEDs and 3 pots — over **38 component kinds** (`parts/catalog.ts:95-147`). Wokwi lists ~62. Velxio's two public figures disagree — 150+ parts across the catalog, 48+ on the free Maker canvas — and 57 sits between them. |
 | 3. Electrical solver | 10% | **85** | 60 | A real per-timestep resistive-network solve (`simulation/circuit.ts`, `engine.ts`), not logic levels: pins modelled behind their real output impedance, PWM switched rather than averaged, a GL5528's logarithmic lux curve, an NTC's B = 3950, internal pull-ups and floating inputs. **Ahead of Wokwi**, which does not model a resistive network; behind Velxio, whose ngspice-WASM is true SPICE with diodes, transistors and op-amps. |
 | 4. Board & architecture coverage | 9% | 40 | 20 | **8 boards** (`learn/boardRegistry.ts:75`) across **3 execution paths** — AVR, RP2040, ESP32. Wokwi: 18 MCUs over 4 architectures. Velxio: 40 boards over 5 families, of which 30+ are on the free plan. |
@@ -61,19 +61,19 @@ than about arithmetic.
 | 6. Curriculum & examples | 10% | 45 | 35 | **12 graded exercises** (`learn/exercises/`) over ~45,000 words of long-form worksheets (`docs/exercises/`), each with hints and worked solutions, plus a glossary, a references page, 10 gallery projects (`learn/gallery.ts`) and 20 committed circuits in `learn/circuits/`. Velxio ships 400+ examples and no curriculum. |
 | 7. Persistence & sharing | 7% | 70 | 55 | A `CircuitDocument` is the source of truth (`simulation/circuit-doc.ts`); the bench autosaves it per board (`bench/store/circuit-store.ts`), carries it in a `?circuit=` link (`bench/utils/circuit-codec.ts`) and reads and writes it as a `.json` file (`bench/utils/circuit-file.ts`). **No accounts and no cloud** — which is what the static-hosting constraint buys. |
 | 8. Debugging | 8% | 42 | **60** | **A debugger, on the interpreted sketch.** A stop in the editor's margin, a program that stops on it, the names in scope and what they hold, and three ways to move on: carry on, step over, step into (`simulation/firmware/debugger.ts`, `simulation/firmware/interpreter.ts`, `instruments/DebugPanel.tsx`). The stops ride with the sketch into the worker, which is the realm that holds the program (`sim-worker/worker.ts`). **Nothing on a compiled core** — no GDB, no memory view, no watchpoints, no expression evaluation. Wokwi debugs compiled firmware over GDB; Velxio documents no debugger at all, its docs carrying an AI assistant in that space instead. |
-| 9. Network & IoT | 5% | 40 | 30 | A bench-owned virtual network — `WiFi.begin`/`status`/`localIP`, a poll-based `net.get`/`read`/`subscribe` (`simulation/net/network.ts`) — plus an opt-in bridge to two real hosts (`net/live-hosts.ts`, `net/bridge.ts`). Wokwi does MQTT, HTTP and NTP; Velxio goes further still, with a local network gateway, four built-in networks that reach the real internet, and flashing firmware to real hardware. |
+| 9. Network & IoT | 5% | 45 | 35 | A bench-owned virtual network — `WiFi.begin`/`status`/`localIP`, a poll-based `net.get`/`read`/`subscribe` (`simulation/net/network.ts`) — plus an opt-in bridge to two real hosts (`net/live-hosts.ts`, `net/bridge.ts`). The Arduino libraries over it answer too: `HTTPClient http;` (blocking, the way a real request blocks), `PubSubClient mqtt;` and `WiFiUdp udp;` for the clock the network keeps. Wokwi does MQTT, HTTP and NTP; Velxio goes further still, with a local network gateway, four built-in networks that reach the real internet, and flashing firmware to real hardware. |
 | 10. Extension API | 5% | 55 | 60 | A part may arrive as a `.part.json` (`parts/custom.ts`) or carry **behaviour** as a script — QuickJS compiled to Wasm, one context per part, inside the simulation worker (`simulation/scripted/`). Definitions **travel with the circuit** (`CircuitDocument.definitions`), so a file opens on a machine that imported nothing. Wokwi and Velxio use a C→Wasm chip ABI instead. |
 | 11. Ecosystem & workflow | 5% | 33 | 33 | Monaco, multi-file tabs, an Arduino library manager with tier-2 libraries (`instruments/library-manager.ts`, `simulation/avr/libraries/`), GitHub CI running typecheck, lint, boundary checks and tests (`.github/workflows/ci.yml`), and a real `README.md`. **No VS Code extension, no simulation CI, no i18n, no community, and no licence.** Velxio has simulation CI with a GitHub Action, an MCP server, an AI assistant, GitHub Sync, BOM export and docs in 9 languages — and accounts, a paid tier and a Discord. Both targets gate their best workflow features behind a subscription, so the free tiers are closer to Noesis than the price pages suggest. |
 
-**Weighted total: 55.9% of Wokwi · 48.4% of Velxio.**
+**Weighted total: 56.5% of Wokwi · 48.7% of Velxio.**
 
 The arithmetic, so it can be checked:
 
 ```
-Wokwi   18×.63 + 14×.45 + 10×.85 +  9×.40 +  9×.78 + 10×.45
-       +  7×.70 +  8×.42 +  5×.40 +  5×.55 +  5×.33  =  55.9
+Wokwi   18×.65 + 14×.45 + 10×.85 +  9×.40 +  9×.78 + 10×.45
+       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.33  =  56.5
 Velxio  18×.48 + 14×.45 + 10×.60 +  9×.20 +  9×.82 + 10×.35
-       +  7×.55 +  8×.60 +  5×.30 +  5×.60 +  5×.33  =  48.4
+       +  7×.55 +  8×.60 +  5×.35 +  5×.60 +  5×.33  =  48.7
 ```
 
 **What the targets' numbers rest on.** Wokwi's are from
@@ -105,8 +105,8 @@ feature it has but has not written down would not show.
 - **A debugger against Velxio.** Velxio's docs list no debugger at all; its
   docs carry an AI assistant in that space instead. Noesis stops a sketch on
   a line, shows what the program can see there, and steps through it.
-- **Engineering rigour.** 201 test files and 1,675 tests across 30,459 lines
-  of test against 67,702 lines of source in 242 files; CI with typecheck, lint
+- **Engineering rigour.** 203 test files and 1,689 tests across 30,894 lines
+  of test against 68,048 lines of source in 242 files; CI with typecheck, lint
   and boundary checks. The risky parts — the AVR Wasm core, the RP2040
   firmware path, the circuit document, the interpreter's Python front end —
   each have dedicated parity tests rather than smoke checks.
@@ -231,8 +231,6 @@ scorecard measures against them rather than inventing new ones.
 | Open item | Where it is written down |
 | --- | --- |
 | A free function sees the caller's scope, fields included — a name it writes reaches the member | `docs/PLAN.md` §6.5, "Still open" |
-| A library a sketch declares the Arduino way (`Servo myServo;`) is refused — the bench's own names are a shape no Arduino sketch writes | `docs/PLAN.md` §6.4, item 4 |
-| NTP as a service, and no `HTTPClient`/`PubSubClient` spelling — the network is "still hollow" on that half | `docs/wokwi-gap-analysis.md` §4 *(local only)* |
 | No `.chip.wasm` ABI; a script is the only extension surface | `docs/wokwi-gap-analysis.md` §5 *(local only)* |
 | No ESP32 machine-code core — an ESP32 sketch is interpreted, not compiled to Xtensa | `docs/wokwi-gap-analysis.md` §1 *(local only)* |
 
