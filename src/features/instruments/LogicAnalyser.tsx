@@ -13,9 +13,10 @@
 
 import { useEffect, useRef } from 'react';
 import type { BoardPin } from '@/features/parts';
-import type { TraceSample } from '@/features/simulation';
-import { Crosshair1Icon, StopwatchIcon } from '@radix-ui/react-icons';
+import { toVcd, type TraceSample } from '@/features/simulation';
+import { Crosshair1Icon, DownloadIcon, StopwatchIcon } from '@radix-ui/react-icons';
 import { Button, CardTitle } from '@/components';
+import { downloadText } from './download';
 
 /** Simulated milliseconds shown across the capture. */
 const WINDOW_MS = 100;
@@ -130,6 +131,16 @@ export function LogicAnalyser({
           Logic analyser
         </CardTitle>
         <span className="num text-xs text-[var(--hd-faint)]">{WINDOW_MS} ms</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => downloadText(toVcd(traces), 'noesis-capture.vcd', 'text/plain')}
+          disabled={traces.length === 0}
+          title="Save the capture as a VCD file, which PulseView reads"
+          aria-label="Save the capture as VCD"
+        >
+          <DownloadIcon className="icon-sm" aria-hidden="true" />
+        </Button>
       </div>
 
       <div className="relative px-3">

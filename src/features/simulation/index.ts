@@ -9,6 +9,8 @@ export * from './mcu';
 export * from './bench';
 export * from './elements';
 export * from './probe';
+export * from './plot';
+export * from './vcd';
 export * from './multimeter';
 export * from './units';
 export * from './matrix';

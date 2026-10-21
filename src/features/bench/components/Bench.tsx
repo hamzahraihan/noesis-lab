@@ -60,8 +60,10 @@ import type { WireEnd } from '@/features/simulation';
 import { ScopePanel } from '@/features/instruments';
 import { MultimeterPanel } from '@/features/instruments';
 import { DebugPanel } from '@/features/instruments';
+import { Plotter } from '@/features/instruments';
 import { LogicAnalyser } from '@/features/instruments';
 import { BusMonitor } from '@/features/instruments';
+import { downloadText } from '@/features/instruments';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -1618,18 +1620,7 @@ export default function Bench(props: BenchProps) {
 
   /** Hands text to the browser as a download, one way for both file kinds. */
   const downloadJson = (text: string, name: string) => {
-    const blob = new Blob([text], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = name;
-    // In the document, because Firefox ignores a click on a detached anchor.
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    // Revoked late: a browser may still be reading the blob when click returns,
-    // and Firefox cancels a download whose URL is revoked under it.
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadText(text, name, 'application/json');
   };
 
   const saveCircuitFile = () => {
@@ -2430,6 +2421,15 @@ export default function Bench(props: BenchProps) {
             onToggle={() => toggleBottom()}
             serial={
               <SerialMonitor
+                lines={
+                  workerClient !== null && workerLive
+                    ? workerClient.serialLines()
+                    : simulation.serialLines()
+                }
+              />
+            }
+            plot={
+              <Plotter
                 lines={
                   workerClient !== null && workerLive
                     ? workerClient.serialLines()

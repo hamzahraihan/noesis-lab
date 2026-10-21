@@ -4,6 +4,7 @@ import type { BottomKey } from '../store/shell-state';
 
 const TABS: ReadonlyArray<{ id: BottomKey; label: string }> = [
   { id: 'serial', label: 'Serial' },
+  { id: 'plot', label: 'Plot' },
   { id: 'scope', label: 'Scope' },
   { id: 'logic', label: 'Logic' },
   { id: 'bus', label: 'Bus' },
@@ -26,6 +27,7 @@ export function BottomPanel({
   meter,
   problems,
   debug,
+  plot,
 }: {
   tab: BottomKey;
   open: boolean;
@@ -41,21 +43,24 @@ export function BottomPanel({
   meter: ReactNode;
   problems: ReactNode;
   debug: ReactNode;
+  plot: ReactNode;
 }) {
   const body =
     tab === 'serial'
       ? serial
-      : tab === 'scope'
-        ? scope
-        : tab === 'logic'
-          ? logic
-          : tab === 'bus'
-            ? bus
-            : tab === 'meter'
-              ? meter
-              : tab === 'debug'
-                ? debug
-                : problems;
+      : tab === 'plot'
+        ? plot
+        : tab === 'scope'
+          ? scope
+          : tab === 'logic'
+            ? logic
+            : tab === 'bus'
+              ? bus
+              : tab === 'meter'
+                ? meter
+                : tab === 'debug'
+                  ? debug
+                  : problems;
   return (
     <section
       style={open ? { height } : undefined}

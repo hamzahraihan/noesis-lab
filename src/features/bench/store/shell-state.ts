@@ -5,7 +5,7 @@
 // plain state transitions.
 export type Activity = 'files' | 'components' | 'library';
 export type CenterKey = 'circuit' | string;
-export type BottomKey = 'serial' | 'scope' | 'logic' | 'bus' | 'meter' | 'problems' | 'debug';
+export type BottomKey = 'serial' | 'plot' | 'scope' | 'logic' | 'bus' | 'meter' | 'problems' | 'debug';
 
 export function centerKeyForFile(name: string): CenterKey {
   return name;
