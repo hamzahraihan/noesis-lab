@@ -428,6 +428,17 @@ does nothing (there is nothing to collect) and `const(x)` is `x`; `utime` is
 it really has, so `duty_u16(32768)` reads as 32896 rather than the number
 that was asked for.
 
+**`String` is a value the bench already had.** Arduino's message type is how
+a tutorial joins a reading onto a label, and it was the one line that stopped
+a sketch compiling at all: `String msg = "T=" + t;` was a syntax error,
+because the statement parser only took a bare identifier as a type for the
+value types it already knew. It knows `String` now -- a declaration binds
+text, `+` and `+=` join, a number keeps the library's two places (`T=21.50`,
+not `T=21.5`), and the mutators (`toUpperCase`, `toLowerCase`, `trim`,
+`replace`) change the string the sketch named rather than answering a new one
+nobody stores. `String(n, HEX)` is `FF`, because the base constants are names
+a sketch can say.
+
 **A call the bench cannot make says so.** It used to answer `0`, which is the
 worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
 learner believes the data was zero rather than the bench missing the call. A
