@@ -418,9 +418,18 @@ button binds to a pin rather than quietly doing nothing. It had been doing
 nothing: the binding wanted a literal, so the lesson's button was never on
 the bench at all.
 
+**A read the bench cannot make says so too.** A name the sketch has never
+heard of raises `NameError` -- and the C++ front end says the name was never
+declared, the way a compiler would -- a member a value does not have raises
+`AttributeError`, a key a dictionary does not hold raises `KeyError`, and an
+index past the end of a list raises `IndexError`. A name that holds
+something the sketch cannot read as a number -- a device, an object, a
+function, a class -- says what it holds rather than claiming the name was
+unknown.
+
 **Still open.** A generator cannot be sent values back (`send`), and there is
-no `yield from`. And a *name* the sketch has never heard of still reads as
-zero rather than as an error: a typo in a variable name is a quiet zero, and
-only a call says anything.
+no `yield from`. And in the C++ front end a field that was never set still
+reads as zero: the interpreter cannot tell a field nobody assigned from a
+field nobody wrote, and zero is what C++ gives a field it knows about.
 
 
