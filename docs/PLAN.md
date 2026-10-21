@@ -437,7 +437,11 @@ text, `+` and `+=` join, a number keeps the library's two places (`T=21.50`,
 not `T=21.5`), and the mutators (`toUpperCase`, `toLowerCase`, `trim`,
 `replace`) change the string the sketch named rather than answering a new one
 nobody stores. `String(n, HEX)` is `FF`, because the base constants are names
-a sketch can say.
+a sketch can say. The pair a random sketch always writes together --
+`randomSeed(analogRead(0))` and then `random(...)` -- run too: the seed has
+nothing to seed here, but a sketch that stopped on it never reached the value
+it wanted. `bitRead` takes a number apart, which is what a register tutorial
+does with it.
 
 **A call the bench cannot make says so.** It used to answer `0`, which is the
 worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
