@@ -403,10 +403,24 @@ value; the two travel apart, and a wait inside a generator is still the
 bench's own time to spend. A loop over anything that cannot be walked says
 so (`TypeError`) rather than doing nothing quietly.
 
+**A call the bench cannot make says so.** It used to answer `0`, which is the
+worst answer there is: `len(data)` and `d.get('a')` read as zero, and the
+learner believes the data was zero rather than the bench missing the call. A
+function the sketch has never heard of raises `NameError`, a member a value
+does not have raises `AttributeError`, a value called as a function raises
+`TypeError`, and the C++ front end says the same in its own words. `len` was
+the worst of them: it looked its argument up as a *name*, so it measured
+nothing at all; it measures a string, a list and a dictionary now.
+
+**A device can be named by a constant.** `MOVE = 4`, then `Button(MOVE)`: the
+pin a constructor names is read through the scope, so the pocket-map lesson's
+button binds to a pin rather than quietly doing nothing. It had been doing
+nothing: the binding wanted a literal, so the lesson's button was never on
+the bench at all.
+
 **Still open.** A generator cannot be sent values back (`send`), and there is
-no `yield from`. And a call the interpreter does not know answers `0` rather
-than saying it does not know: `len(data)`, `d.get('a')` and `sorted(xs)` all
-read as zero on a Python sketch, quietly, where the bench's own rule says a
-sketch that cannot say something has to say so.
+no `yield from`. And a *name* the sketch has never heard of still reads as
+zero rather than as an error: a typo in a variable name is a quiet zero, and
+only a call says anything.
 
 
