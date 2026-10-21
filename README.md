@@ -77,7 +77,7 @@ or individually:
 | `npm run dev` | The dev server, with the worker path's isolation headers already set |
 | `npm run build` | Typecheck and a production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle the way a static host would |
-| `npm test` | The full Vitest suite — 197 files, 1,638 tests |
+| `npm test` | The full Vitest suite — 199 files, 1,659 tests |
 | `npm run test:watch` | The same, in watch mode |
 | `npm run typecheck` | `tsc -b` |
 | `npm run lint` | oxlint |

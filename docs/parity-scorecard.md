@@ -104,8 +104,8 @@ feature it has but has not written down would not show.
 - **A debugger against Velxio.** Velxio's docs list no debugger at all; its
   docs carry an AI assistant in that space instead. Noesis stops a sketch on
   a line, shows what the program can see there, and steps through it.
-- **Engineering rigour.** 197 test files and 1,638 tests across 29,842 lines
-  of test against 66,202 lines of source in 235 files; CI with typecheck, lint
+- **Engineering rigour.** 199 test files and 1,659 tests across 30,308 lines
+  of test against 67,325 lines of source in 238 files; CI with typecheck, lint
   and boundary checks. The risky parts — the AVR Wasm core, the RP2040
   firmware path, the circuit document, the interpreter's Python front end —
   each have dedicated parity tests rather than smoke checks.
