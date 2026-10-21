@@ -939,6 +939,10 @@ class Parser {
         args: [],
         location,
       };
+    } else if (typeName === 'String') {
+      // An unset `String` is empty, not zero: the first `+=` has to start
+      // from nothing rather than from "0".
+      init = { kind: 'string', value: '', location };
     }
     this.expectPunctuation(';');
     return { kind: 'varDecl', name, init, location };
@@ -1168,6 +1172,9 @@ class Parser {
         typeName === 'auto' ||
         typeName === 'DateTime' ||
         typeName === 'TimeSpan' ||
+        // Arduino's `String` is a value the VM already has a spelling for,
+        // which is why it belongs here and a device type does not.
+        typeName === 'String' ||
         this.enumNames.has(typeName)
       ) {
         return this.readValueBinding();

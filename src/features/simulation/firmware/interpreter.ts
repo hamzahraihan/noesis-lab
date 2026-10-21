@@ -1316,8 +1316,8 @@ export class FirmwareRuntime {
       methods.set(method, { ...declaration, name: method, parameters });
     }
 
-    for (const name of ['HIGH', 'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP']) {
-      this.globals.values.set(name, BUILTIN_CONSTANTS[name]);
+    for (const [name, value] of Object.entries(BUILTIN_CONSTANTS)) {
+      this.globals.values.set(name, value);
     }
     /*
      * SevSeg display types, as SevSeg.h numbers them: the gallery's
@@ -2128,6 +2128,24 @@ export class FirmwareRuntime {
        */
       case 'const':
         return args[0] ?? 0;
+      /*
+       * Arduino's `String`: a number as text, or any other value as the
+       * serial monitor would draw it. A whole number's second argument is a
+       * base (`String(255, HEX)` is `FF`); a fraction's is how many places
+       * to keep (`String(3.14159, 2)` is `3.14`).
+       */
+      case 'String': {
+        const value = args[0] ?? 0;
+        const option = args[1];
+        if (typeof value !== 'number') return formatValue(value);
+        if (option === undefined) return arduinoNumberText(value);
+        const count = Math.trunc(asNumber(option));
+        return Number.isInteger(value)
+          ? Math.trunc(value)
+              .toString(Math.min(36, Math.max(2, count)))
+              .toUpperCase()
+          : value.toFixed(Math.min(20, Math.max(0, count)));
+      }
       case 'delay': {
         const ms = Math.max(0, asNumber(args[0] ?? 0));
         if (ms > 0) yield ms;
@@ -2850,15 +2868,19 @@ export class FirmwareRuntime {
 
         /*
          * String joining. A Python f-string is parsed into a `+` chain of
-         * fragments, so this is what turns one back into text. No C sketch
-         * reaches here -- in C, `+` on strings is pointer arithmetic this VM
-         * has never modelled, and it answered zero.
+         * fragments and an Arduino `String` is a value with the same
+         * operator, so both turn back into text here.
+         *
+         * A number joined onto text reads the way the library writes it --
+         * whole numbers bare, fractions to two places -- so `"T=" + t` is
+         * `T=21.50` on a board. In C that expression is pointer arithmetic,
+         * which is not what a sketch that spells it means.
          */
         if (
           expression.operator === '+' &&
           (typeof leftValue === 'string' || typeof rightValue === 'string')
         ) {
-          return `${formatValue(leftValue)}${formatValue(rightValue)}`;
+          return joinValues(this.language, leftValue, rightValue);
         }
 
         /*
@@ -2944,11 +2966,15 @@ export class FirmwareRuntime {
               instance.scope.values.get(expression.target.member) ??
               this.classStatics.get(instance.className)?.get(expression.target.member) ??
               0;
-            const combined = applyBinary(
-              expression.operator.slice(0, -1),
-              asNumber(current),
-              asNumber(value),
-            );
+            const combined =
+              expression.operator === '+=' &&
+              (typeof current === 'string' || typeof value === 'string')
+                ? joinValues(this.language, current, value)
+                : applyBinary(
+                    expression.operator.slice(0, -1),
+                    asNumber(current),
+                    asNumber(value),
+                  );
             instance.scope.values.set(expression.target.member, combined);
             return combined;
           }
@@ -2967,11 +2993,16 @@ export class FirmwareRuntime {
           const name = expression.target.name;
           if (expression.operator !== '=') {
             const current = scope.lookup(name) ?? 0;
-            const combined = applyBinary(
-              expression.operator.slice(0, -1),
-              asNumber(current),
-              asNumber(value),
-            );
+            // `msg += "x"` on a `String` is the same join as `msg = msg + "x"`.
+            const combined =
+              expression.operator === '+=' &&
+              (typeof current === 'string' || typeof value === 'string')
+                ? joinValues(this.language, current, value)
+                : applyBinary(
+                    expression.operator.slice(0, -1),
+                    asNumber(current),
+                    asNumber(value),
+                  );
             scope.assign(name, combined);
             return combined;
           }
@@ -3156,6 +3187,16 @@ export class FirmwareRuntime {
             args.push((yield* this.evaluate(argument, scope, services)) as Value);
           }
 
+          /*
+           * A method on a `String`. A name holding text is not a device, and
+           * the dispatch below would go looking for one anyway.
+           */
+          if (this.language !== 'python') {
+            const held = scope.lookup(callee.target.name);
+            if (typeof held === 'string') {
+              return this.callString(held, callee.target.name, callee.member, args, scope);
+            }
+          }
           /*
            * A method on a device the program built. Checked before the
            * name-based dispatch below, because in Python the name holding a
@@ -3605,6 +3646,70 @@ export class FirmwareRuntime {
   private stopTone(pin: number, services: FirmwareServices): void {
     this.tones.delete(pin);
     services.digitalWrite(pin, LEVEL_LOW);
+  }
+
+  /**
+   * Handles a method on a `String`.
+   *
+   * The library's mutators -- `toUpperCase`, `toLowerCase`, `trim`, `replace`
+   * -- change the string in place and answer nothing, so the new text is
+   * stored back under the name the call came through *and* returned: a sketch
+   * that writes `Serial.println(s.toUpperCase())` would otherwise print
+   * nothing at all, which is a harder bug than the one the mutator was
+   * supposed to raise.
+   */
+  private callString(
+    value: string,
+    name: string,
+    member: string,
+    args: Value[],
+    scope: Scope,
+  ): Value {
+    const store = (next: string): string => {
+      scope.assign(name, next);
+      return next;
+    };
+    const other = (index: number): string => formatValue(args[index] ?? '');
+    switch (member) {
+      case 'length':
+        return value.length;
+      case 'c_str':
+        return value;
+      case 'toInt':
+        return Math.trunc(Number.parseFloat(value) || 0);
+      case 'toFloat':
+        return Number.parseFloat(value) || 0;
+      case 'toUpperCase':
+        return store(value.toUpperCase());
+      case 'toLowerCase':
+        return store(value.toLowerCase());
+      case 'trim':
+        return store(value.trim());
+      case 'replace':
+        return store(value.split(other(0)).join(other(1)));
+      case 'concat':
+        store(value + other(0));
+        return 1;
+      case 'substring': {
+        const from = Math.max(0, Math.trunc(asNumber(args[0] ?? 0)));
+        const to = args[1] === undefined ? value.length : Math.trunc(asNumber(args[1]));
+        return value.slice(from, to);
+      }
+      case 'indexOf':
+        return value.indexOf(other(0));
+      case 'charAt':
+        return value.charCodeAt(Math.trunc(asNumber(args[0] ?? 0))) || 0;
+      case 'equals':
+        return value === other(0) ? 1 : 0;
+      case 'equalsIgnoreCase':
+        return value.toLowerCase() === other(0).toLowerCase() ? 1 : 0;
+      case 'startsWith':
+        return value.startsWith(other(0)) ? 1 : 0;
+      case 'endsWith':
+        return value.endsWith(other(0)) ? 1 : 0;
+      default:
+        throw unknownError('member', member, 'String', this.language);
+    }
   }
 
   /**
@@ -4312,6 +4417,14 @@ const BUILTIN_CONSTANTS: Readonly<Record<string, number>> = {
   INPUT: PIN_INPUT,
   OUTPUT: PIN_OUTPUT,
   INPUT_PULLUP: PIN_INPUT_PULLUP,
+  /*
+   * The bases `String(n, base)` names, and that `Serial.print(n, base)`
+   * would print in. Arduino declares them, so `HEX` is 16.
+   */
+  DEC: 10,
+  HEX: 16,
+  OCT: 8,
+  BIN: 2,
 };
 
 /** Native helpers that are pure arithmetic and need no host access. */
@@ -4358,6 +4471,32 @@ const BUILTINS: Readonly<Record<string, (args: number[]) => Value>> = {
     );
   },
 };
+
+/**
+ * A number as Arduino's `String` writes it.
+ *
+ * Whole numbers are bare and fractions keep two places, which is what the
+ * library does and therefore what a sketch reading its own text back sees.
+ */
+function arduinoNumberText(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+/**
+ * `+` where either side is text: the two values joined.
+ *
+ * Python joins whatever `print` would write; an Arduino `String` writes a
+ * number the way the library does, because the sketch reads its own message
+ * back out. In C, `+` on two strings is pointer arithmetic -- not something a
+ * sketch that spells it means.
+ */
+function joinValues(language: FirmwareLanguage, left: Value, right: Value): string {
+  const text = (value: Value): string =>
+    language === 'python' || typeof value !== 'number'
+      ? formatValue(value)
+      : arduinoNumberText(value);
+  return `${text(left)}${text(right)}`;
+}
 
 function applyBinary(operator: string, left: number, right: number): number {
   switch (operator) {
