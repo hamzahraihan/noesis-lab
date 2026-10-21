@@ -231,6 +231,7 @@ scorecard measures against them rather than inventing new ones.
 | Open item | Where it is written down |
 | --- | --- |
 | A free function sees the caller's scope, fields included — a name it writes reaches the member | `docs/PLAN.md` §6.5, "Still open" |
+| A library a sketch declares the Arduino way (`Servo myServo;`) is refused — the bench's own names are a shape no Arduino sketch writes | `docs/PLAN.md` §6.4, item 4 |
 | NTP as a service, and no `HTTPClient`/`PubSubClient` spelling — the network is "still hollow" on that half | `docs/wokwi-gap-analysis.md` §4 *(local only)* |
 | No `.chip.wasm` ABI; a script is the only extension surface | `docs/wokwi-gap-analysis.md` §5 *(local only)* |
 | No ESP32 machine-code core — an ESP32 sketch is interpreted, not compiled to Xtensa | `docs/wokwi-gap-analysis.md` §1 *(local only)* |

@@ -297,7 +297,7 @@ the sketch. **A capture leaves as a VCD**, the format PulseView reads, so a
 bench that caught a clock edge can be opened in the tool a hardware engineer
 already has.
 
-**Three firmware APIs, and what each one was missing.** The bench had no
+**Four firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306
 command bytes over `Wire` by hand, and `WirePort` had no read half at all. So
 "which parts can be on the bench" was really "which parts can a sketch talk to",
@@ -318,6 +318,14 @@ and the answer for eighteen of them was none.
 3. **Servos.** `servo.attach` / `write` / `read` by pin. The angle clamps at the
    real end stops, 10 and 170 degrees, because that is where a servo's are and a
    sketch asking for more gets the stop.
+4. **A library a sketch declares the Arduino way.** `Servo myServo;` is the
+   spelling every real library sketch uses, and the bench answers only to its
+   own names: `servo.write(pin, angle)`, which is a shape no Arduino sketch
+   writes. **Still open**, and the gap is the shape rather than the dispatch:
+   the bench addresses each part by the pin it is on, so a library object that
+   remembers its own pin -- `attach(pin)`, then `write(angle)` -- needs an
+   adapter per library, and until those exist a sketch written the Arduino way
+   is a sketch the bench refuses.
 
 The row addresses of a 20x4 are the panel's business, not the library's: the
 glass knows that its second half sits *above* the first, and a driver that
