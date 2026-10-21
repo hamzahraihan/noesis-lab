@@ -428,6 +428,16 @@ does nothing (there is nothing to collect) and `const(x)` is `x`; `utime` is
 it really has, so `duty_u16(32768)` reads as 32896 rather than the number
 that was asked for.
 
+**The `machine` vocabulary is the one a sketch's first lines use.** A board's
+`UART(0, 9600)` writes to the port the monitor draws, because a board's REPL
+and its first UART are one wire; `SoftI2C` is `I2C` bit-banged on the pins it
+names, and the bench answers whichever pins a sketch points it at;
+`ADC.atten` sets the range a sketch expects to read and changes nothing it can
+see, because the bench reads a fraction of the reference it knows. `Pin.OUT`
+and `ADC.ATTN_11DB` are values now: the constructors had always read them
+straight off the syntax, so a sketch that kept one in a name, or passed one to
+a method, was told `'Pin' is a device, not a value`.
+
 **`String` is a value the bench already had.** Arduino's message type is how
 a tutorial joins a reading onto a label, and it was the one line that stopped
 a sketch compiling at all: `String msg = "T=" + t;` was a syntax error,
