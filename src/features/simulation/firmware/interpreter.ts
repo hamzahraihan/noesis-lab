@@ -5119,9 +5119,10 @@ export class FirmwareRuntime {
         const net = services.net;
         if (!net) return 0;
         switch (member) {
-          // The bench's network is always there, so a broker on it is too.
+          // The broker is on the bench's network, so the connection is the
+          // network's own: a sketch that has not joined cannot have one.
           case 'connect':
-            return 1;
+            return net.status() === WL_CONNECTED ? 1 : 0;
           case 'publish':
             return net.publish(formatValue(args[0] ?? ''), formatValue(args[1] ?? ''));
           case 'subscribe':

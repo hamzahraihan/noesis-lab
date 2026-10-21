@@ -18,7 +18,11 @@ interface Recorded {
   readonly failed: boolean;
 }
 
-function host(read: string, failed = false): { recorded: Recorded; services: FirmwareServices } {
+function host(
+  read: string,
+  failed = false,
+  status = 3,
+): { recorded: Recorded; services: FirmwareServices } {
   const recorded: Recorded = {
     serial: [],
     asked: [],
@@ -49,7 +53,7 @@ function host(read: string, failed = false): { recorded: Recorded; services: Fir
     spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
     net: {
       join: () => 0,
-      status: () => 3,
+      status: () => status,
       localIp: () => '192.168.4.10',
       get: (url: string) => {
         recorded.asked.push(url);
@@ -74,8 +78,13 @@ function host(read: string, failed = false): { recorded: Recorded; services: Fir
 }
 
 /** Runs a sketch and reports what the network was told. */
-function run(sketch: string, read = 'hello from api.noesis', failed = false): Recorded {
-  const { recorded, services } = host(read, failed);
+function run(
+  sketch: string,
+  read = 'hello from api.noesis',
+  failed = false,
+  status = 3,
+): Recorded {
+  const { recorded, services } = host(read, failed, status);
   const runner = new FirmwareRunner(
     toSingleFileProject(sketch, 'arduino-cpp'),
     services,
@@ -198,6 +207,22 @@ void setup() {
     expect(recorded.subscribed).toEqual(['readings/temp']);
     expect(recorded.published).toEqual([['commands/interval', '5']]);
     expect(recorded.serial).toEqual(['1\n', '1\n', '20.0\n']);
+  });
+
+  it('will not reach a broker on a network it has not joined', () => {
+    // The broker is on the bench's network, so a sketch that has not joined
+    // has no broker to reach -- and a client that said otherwise would take
+    // a sketch down a path that cannot work.
+    const recorded = run(
+      `PubSubClient mqtt;
+void setup() {
+  Serial.println(mqtt.connect("broker.local"));
+}`,
+      '',
+      false,
+      0,
+    );
+    expect(recorded.serial).toEqual(['0\n']);
   });
 });
 

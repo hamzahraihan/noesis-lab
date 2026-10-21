@@ -339,6 +339,8 @@ and the answer for eighteen of them was none.
    clock; the MQTT client talks to the bench's sensor and its broker; and the
    time client reads the clock the network keeps. The bench's own `net` port
    stays as it was, because it is a *port* and these are libraries over it.
+   The broker is on the bench's network, so a client that has not joined has
+   no broker to reach -- and `connect` says so rather than agreeing.
 
 The row addresses of a 20x4 are the panel's business, not the library's: the
 glass knows that its second half sits *above* the first, and a driver that
