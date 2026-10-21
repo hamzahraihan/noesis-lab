@@ -486,6 +486,7 @@ export function FirmwareEditor({
   onLoadExample,
   stops,
   onToggleStop,
+  pausedLine,
 }: {
   project: FirmwareProject;
   onProjectChange(next: FirmwareProject): void;
@@ -526,6 +527,11 @@ export function FirmwareEditor({
    */
   stops: readonly Breakpoint[];
   onToggleStop(file: string, line: number): void;
+  /**
+   * The line the program is stopped on, when the editor is showing the file
+   * it stopped in.
+   */
+  pausedLine?: number | null;
 }) {
   const active = project.files.find((f) => f.name === project.activeName) ?? project.files[0];
   const activeName = active?.name;
@@ -1358,6 +1364,7 @@ export function FirmwareEditor({
               onToggleStop={(line) => {
                 if (activeName) onToggleStop(activeName, line);
               }}
+              pausedLine={pausedLine ?? null}
               onChange={(next) => {
                 if (active) handleContentChange(active.name, next ?? '');
               }}

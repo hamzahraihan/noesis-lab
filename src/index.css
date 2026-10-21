@@ -321,6 +321,16 @@
   cursor: pointer;
 }
 
+/*
+ * The line the program is stopped on.
+ *
+ * The accent, because it is the one colour the bench reserves for what the
+ * operator drives, and this is exactly that: the place the program is.
+ */
+.debug-line {
+  background: color-mix(in srgb, var(--hd-accent) 16%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

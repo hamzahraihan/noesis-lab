@@ -776,6 +776,12 @@ export default function Bench(props: BenchProps) {
   const debugFrame = workerActive ? workerClient.debugFrame() : simulation.debugFrame();
   const debugPaused = debugFrame !== null;
   /*
+   * The line the editor marks, when the editor is showing the file the
+   * program stopped in. A stop in another tab is that tab's to show.
+   */
+  const pausedLine =
+    debugFrame !== null && debugFrame.file === project.activeName ? debugFrame.line : null;
+  /*
    * The debugger reads the sketch the interpreter runs, so a compiled core
    * has nothing in it for the debugger to stop at.
    */
@@ -2383,6 +2389,7 @@ export default function Bench(props: BenchProps) {
                 onLoadExample={loadExample}
                 stops={stops}
                 onToggleStop={toggleStop}
+                pausedLine={pausedLine}
               />
             }
           />

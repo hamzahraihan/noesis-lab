@@ -27,11 +27,22 @@ export interface CodeEditorProps extends EditorProps {
   stops?: readonly number[];
   /** Called with the line of a stop the person set or took off. */
   onToggleStop?: (line: number) => void;
+  /**
+   * The line the program is stopped on, if this file is the one it stopped
+   * in.
+   */
+  pausedLine?: number | null;
 }
 
-export default function CodeEditor({ stops, onToggleStop, ...props }: CodeEditorProps) {
+export default function CodeEditor({
+  stops,
+  onToggleStop,
+  pausedLine = null,
+  ...props
+}: CodeEditorProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const pauseRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   /*
    * The listener is registered once, when the editor mounts, so it reads the
    * callback through a ref: a callback that changes with every render would
@@ -72,6 +83,27 @@ export default function CodeEditor({ stops, onToggleStop, ...props }: CodeEditor
       })),
     );
   }, [stops, props.value]);
+
+  /*
+   * The line the program is stopped on, marked in the text itself: the panel
+   * says where it is, and the editor is where the person is looking.
+   */
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const collection = pauseRef.current ?? editor.createDecorationsCollection([]);
+    pauseRef.current = collection;
+    if (pausedLine === null) {
+      collection.set([]);
+      return;
+    }
+    collection.set([
+      {
+        range: new monaco.Range(pausedLine, 1, pausedLine, 1),
+        options: { isWholeLine: true, className: 'debug-line' },
+      },
+    ]);
+  }, [pausedLine, props.value]);
 
   return (
     <Editor
