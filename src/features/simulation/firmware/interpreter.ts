@@ -3172,16 +3172,50 @@ export class FirmwareRuntime {
           }
 
           /*
-           * `time.sleep`, which waits in seconds where `delay` waits in
-           * milliseconds. Reading `0.5` as half a millisecond would make every
-           * gpiozero blink five hundred times too fast, and the difference is
-           * exactly the kind of thing that only shows up as "why is this
-           * wrong" rather than as an error.
+           * `time`: the waits and the clock the module is actually for.
+           *
+           * `sleep` waits in seconds where `delay` waits in milliseconds --
+           * reading `0.5` as half a millisecond would make every gpiozero
+           * blink five hundred times too fast -- and the other waits say
+           * which unit they mean in their own names. Every member used to be
+           * read as a wait in *seconds*, so `time.sleep_ms(50)` slept fifty
+           * seconds and `time.ticks_ms()`, the idiom every non-blocking
+           * sketch uses, answered zero.
            */
           if (callee.target.name === 'time') {
-            const seconds = Math.max(0, asNumber(args[0] ?? 0));
-            if (seconds > 0) yield seconds * 1000;
-            return 0;
+            switch (callee.member) {
+              case 'sleep': {
+                const seconds = Math.max(0, asNumber(args[0] ?? 0));
+                if (seconds > 0) yield seconds * 1000;
+                return 0;
+              }
+              case 'sleep_ms': {
+                const milliseconds = Math.max(0, asNumber(args[0] ?? 0));
+                if (milliseconds > 0) yield milliseconds;
+                return 0;
+              }
+              case 'sleep_us': {
+                const milliseconds = Math.max(0, asNumber(args[0] ?? 0)) / 1000;
+                if (milliseconds > 0) yield milliseconds;
+                return 0;
+              }
+              case 'ticks_ms':
+              case 'ticks_cpu':
+                return services.nowMs();
+              case 'ticks_us':
+                return services.nowMs() * 1000;
+              case 'ticks_diff':
+                /*
+                 * `ticks_diff(now, then)` is now minus then, in
+                 * MicroPython's own order: the sketch reads the gap as
+                 * "how long ago was that".
+                 */
+                return asNumber(args[0] ?? 0) - asNumber(args[1] ?? 0);
+              case 'ticks_add':
+                return asNumber(args[0] ?? 0) + asNumber(args[1] ?? 0);
+              default:
+                throw unknownError('member', callee.member, 'time', this.language);
+            }
           }
           if (callee.target.name === 'Wire') {
             return (yield* this.evaluateWireCall(callee.member, args, services)) ?? 0;
@@ -3973,15 +4007,20 @@ export class FirmwareRuntime {
         return out;
       }
       /*
-       * A real scan probes addresses from 8 to 119 one transaction at a time.
-       * The bench's bus reports a transfer's timing, not an acknowledgement,
-       * so there is nothing honest to answer here -- an empty scan is the one
-       * answer that does not invent a device.
+       * Every address that answers, the way MicroPython's scan does -- 8 to
+       * 119, the range a real bus can carry. The bench's netlist says which
+       * of them has a device behind it, so an empty list means an empty bus
+       * rather than a bus nobody asked.
        */
-      case 'scan':
-        return [];
+      case 'scan': {
+        const found: number[] = [];
+        for (let address = 8; address < 120; address++) {
+          if (services.i2cHasDevice?.(address, pins) === true) found.push(address);
+        }
+        return found;
+      }
       default:
-        return 0;
+        throw unknownError('member', member, 'machine.I2C', this.language);
     }
   }
 
