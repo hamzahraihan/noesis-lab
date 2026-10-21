@@ -211,7 +211,23 @@ const ARDUINO_FUNCTIONS: ReadonlyArray<[signature: string, doc: string]> = [
   ['max(a, b, ...)', 'The largest argument.'],
   ['abs(x)', 'Absolute value.'],
   ['sq(x)', 'x squared.'],
+  ['sqrt(x)', 'The square root.'],
   ['pow(base, exponent)', 'Raise base to a power.'],
+  ['sin(x)', 'Sine, in radians.'],
+  ['cos(x)', 'Cosine, in radians.'],
+  ['tan(x)', 'Tangent, in radians.'],
+  ['log(x)', 'The natural logarithm.'],
+  ['exp(x)', 'e raised to x.'],
+  ['floor(x)', 'The largest whole number below x.'],
+  ['ceil(x)', 'The smallest whole number above x.'],
+  ['round(x)', 'The nearest whole number.'],
+  ['randomSeed(seed)', 'Seed the random numbers. The sketch always starts from the same seed, so a run is repeatable.'],
+  ['bitRead(value, bit)', 'One bit of a number, counting from the least significant.'],
+  ['pulseIn(pin, state)', 'How long a pulse on a pin lasts, in microseconds.'],
+  ['tone(pin, frequency)', 'Sound a piezo on the pin, without waiting for the note to end.'],
+  ['noTone(pin)', 'Stop the note.'],
+  ['noInterrupts()', 'Turn interrupts off for a while. Nothing here raises one, so it changes nothing.'],
+  ['interrupts()', 'Turn them back on.'],
 ];
 
 const ARDUINO_OBJECTS: ReadonlyArray<
@@ -254,6 +270,43 @@ const ARDUINO_OBJECTS: ReadonlyArray<
     ],
   ],
   [
+    'servo',
+    [
+      ['attach(pin)', 'Say which pin the servo is on.'],
+      ['write(angle)', 'Move it, in degrees. It stops at its real ends.'],
+      ['read()', 'The angle it is at now.'],
+      ['detach()', 'Let it go.'],
+    ],
+  ],
+  [
+    'dht',
+    [
+      ['begin(pin)', 'Say which pin the sensor is on.'],
+      ['readTemperature()', 'The temperature, in degrees Celsius.'],
+      ['readHumidity()', 'The humidity, in percent.'],
+    ],
+  ],
+  [
+    'sd',
+    [
+      ['begin(cs)', 'Say which pin is chip select.'],
+      ['write(name, text)', 'Store text under a name.'],
+      ['read(name)', 'The text under a name.'],
+      ['exists(name)', 'Whether a name is on the card.'],
+      ['remove(name)', 'Delete a name.'],
+    ],
+  ],
+  [
+    'lcd',
+    [
+      ['begin(columns, rows)', 'Say the size of the glass.'],
+      ['setCursor(column, row)', 'Move the cursor.'],
+      ['print(text)', 'Write at the cursor.'],
+      ['createChar(slot, bitmap)', 'Make a character of your own.'],
+      ['clear()', 'Blank the glass and home the cursor.'],
+    ],
+  ],
+  [
     'net',
     [
       ['get(url)', 'Ask for a url. Answers whether the answer has arrived, so poll it.'],
@@ -271,6 +324,48 @@ const ARDUINO_OBJECTS: ReadonlyArray<
       ],
       ['reset()', 'Forget the last request, so a new one starts from nothing.'],
     ],
+  ],
+];
+
+/**
+ * The libraries a sketch declares, with the declaration each one wants.
+ *
+ * A class is not an object: the name it is declared under is the
+ * programmer's, so the completion offers the declaration rather than the
+ * calls -- the calls are offered for the names the bench fixes, and those
+ * are the ones a person can lean on.
+ */
+const ARDUINO_CLASSES: ReadonlyArray<[name: string, declaration: string, doc: string]> = [
+  [
+    'Servo',
+    'Servo ${1:myServo};',
+    'A hobby servo. attach() says which pin it is on.',
+  ],
+  [
+    'DHT',
+    'DHT ${1:mySensor}(${2:2}, ${3:DHT22});',
+    'A temperature and humidity sensor. The pin is in the declaration.',
+  ],
+  ['SD', 'SD ${1:myCard};', 'A microSD card. begin() says which pin is chip select.'],
+  [
+    'LiquidCrystal',
+    'LiquidCrystal ${1:myDisplay};',
+    'A character LCD. begin() says the size of the glass.',
+  ],
+  [
+    'HTTPClient',
+    'HTTPClient ${1:http};',
+    'A client for a url. GET() waits for the answer.',
+  ],
+  [
+    'PubSubClient',
+    "PubSubClient ${1:mqtt};",
+    "A client for the network's topics.",
+  ],
+  [
+    'WiFiUdp',
+    'WiFiUdp ${1:udp};',
+    'A time client. config() says which server to ask.',
   ],
 ];
 
@@ -328,7 +423,24 @@ function registerArduinoLanguage(): void {
       'true',
       'false',
     ],
-    types: ['void', 'int', 'long', 'float', 'double', 'char', 'bool', 'String'],
+    types: [
+      'void',
+      'int',
+      'long',
+      'float',
+      'double',
+      'char',
+      'bool',
+      'String',
+      // The libraries a sketch declares, which read as types where they are.
+      'Servo',
+      'DHT',
+      'SD',
+      'LiquidCrystal',
+      'HTTPClient',
+      'PubSubClient',
+      'WiFiUdp',
+    ],
     builtins: [
       ...ARDUINO_FUNCTIONS.map(([signature]) => signature.slice(0, signature.indexOf('('))),
       'setup',
@@ -426,6 +538,14 @@ function registerArduinoLanguage(): void {
             range,
           })),
         ),
+        ...ARDUINO_CLASSES.map(([name, declaration, doc]) => ({
+          label: name,
+          kind: monaco.languages.CompletionItemKind.Class,
+          insertText: declaration,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          documentation: doc,
+          range,
+        })),
         {
           label: 'setup',
           kind: monaco.languages.CompletionItemKind.Function,
