@@ -32,10 +32,22 @@ import {
  */
 export type FirmwareLanguage = 'arduino-cpp' | 'python';
 
-/** `Pin(26)` or `26`: the pin a machine constructor names. */
-function pinArgument(expression: Expr | undefined): number | null {
+/**
+ * `Pin(26)`, `26`, or the name of a constant holding one: the pin a machine
+ * constructor names.
+ *
+ * A program is free to write the pin down once and use it everywhere --
+ * `MOVE = 4`, then `Button(MOVE)` -- so a name is read through the scope
+ * rather than refused.
+ */
+function pinArgument(expression: Expr | undefined, scope?: Scope): number | null {
   if (expression === undefined) return null;
   if (expression.kind === 'number') return Math.trunc(expression.value);
+  if (expression.kind === 'identifier') {
+    if (scope === undefined) return null;
+    const value = scope.lookup(expression.name);
+    return typeof value === 'number' ? Math.trunc(value) : null;
+  }
   if (expression.kind !== 'call') return null;
   const callee = expression.callee;
   const named =
@@ -47,7 +59,12 @@ function pinArgument(expression: Expr | undefined): number | null {
         callee.member === 'Pin';
   if (!named) return null;
   const pin = expression.args[0];
-  return pin?.kind === 'number' ? Math.trunc(pin.value) : null;
+  if (pin?.kind === 'number') return Math.trunc(pin.value);
+  if (pin?.kind === 'identifier' && scope !== undefined) {
+    const value = scope.lookup(pin.name);
+    return typeof value === 'number' ? Math.trunc(value) : null;
+  }
+  return null;
 }
 
 /** What kind of GPIO device a name in a Python program is holding. */
@@ -886,6 +903,62 @@ function asNumber(value: Value): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/**
+ * The name a value has in Python, for the message an error reads as.
+ */
+function pythonTypeName(value: Value): string {
+  if (typeof value === 'string') return 'str';
+  if (typeof value === 'number') return Number.isInteger(value) ? 'int' : 'float';
+  if (Array.isArray(value)) return 'list';
+  if (value instanceof Map) return 'dict';
+  if (value instanceof DateTimeValue) return 'datetime';
+  if (value instanceof TimeSpanValue) return 'timespan';
+  if (value instanceof RtcHandle) return 'rtc';
+  if (value instanceof GeneratorValue) return 'generator';
+  return 'object';
+}
+
+/**
+ * The errors a call the interpreter does not know raises.
+ *
+ * A call that resolves nowhere used to answer 0. That is a wrong answer a
+ * sketch cannot see: `len(data)` and `d.get('a')` read as zero, and the
+ * learner believes the data was zero rather than the bench missing the call.
+ * The bench's own rule is that a sketch which cannot say something says so,
+ * so the call stops with a reason and the message names what was called.
+ *
+ * The four kinds share one vocabulary, so the Problems panel reads the same
+ * way whichever front end the sketch was written in.
+ */
+function unknownError(
+  kind: 'call' | 'member' | 'object' | 'callable',
+  name: string,
+  typeName: string,
+  language: FirmwareLanguage,
+): PythonError {
+  if (language === 'python') {
+    switch (kind) {
+      case 'call':
+      case 'object':
+        return new PythonError('NameError', `name '${name}' is not defined`);
+      case 'member':
+        return new PythonError('AttributeError', `'${typeName}' object has no attribute '${name}'`);
+      case 'callable':
+        return new PythonError('TypeError', `'${typeName}' object is not callable`);
+    }
+  }
+  switch (kind) {
+    case 'call':
+      return new PythonError('Error', `no function named '${name}'`);
+    case 'object':
+      return new PythonError('Error', `no object named '${name}'`);
+    case 'member':
+      return new PythonError('Error', `no method named '${name}' on a ${typeName}`);
+    case 'callable':
+      return new PythonError('Error', `a ${typeName} is not something that can be called`);
+  }
+}
+
 /** Renders a value the way `print` and an f-string would write it. */
 function formatValue(value: Value): string {
   if (typeof value === 'string') return value;
@@ -1462,15 +1535,16 @@ export class FirmwareRuntime {
     keywords: readonly { name: string; value: Value }[] = [],
   ): Generator<Produced, Value, void> {
     /*
-     * `len` needs the scope to find what it is measuring, so it cannot live
-     * with the other pure arithmetic builtins.
+     * `len` measures what it is handed: a string's characters, a list's
+     * elements, a dictionary's keys. It used to look the argument up as a
+     * *name*, so it measured nothing and answered 0 for every value.
      */
     if (name === 'len') {
-      const key = String(args[0] ?? '');
-      const array = parent.arrayFor(key);
-      const value = parent.lookup(key);
-      if (array) return array.length;
-      return typeof value === 'string' ? value.length : 0;
+      const value = args[0] ?? 0;
+      if (typeof value === 'string') return value.length;
+      if (Array.isArray(value)) return value.length;
+      if (value instanceof Map) return value.size;
+      throw new PythonError('TypeError', `object of type '${pythonTypeName(value)}' has no len()`);
     }
 
     /*
@@ -1500,6 +1574,15 @@ export class FirmwareRuntime {
 
     const declaration = this.functions.get(name);
     if (!declaration) {
+      /*
+       * A name that holds a value is not a function. Calling it used to
+       * answer 0, which reads as a call that returned nothing rather than as
+       * a call that cannot be made.
+       */
+      const held = parent.lookup(name);
+      if (held !== undefined) {
+        throw unknownError('callable', name, pythonTypeName(held), this.language);
+      }
       return yield* this.evaluateCall(name, args, services);
     }
 
@@ -1834,9 +1917,9 @@ export class FirmwareRuntime {
     const gpiozero = called.viaMachine ? undefined : DEVICE_CONSTRUCTORS[called.name];
     if (gpiozero !== undefined) {
       if (!this.hasModule(services, 'gpiozero')) return false;
-      const pin = expression.args[0];
-      if (pin?.kind !== 'number') return false;
-      const device: Device = { pin: pin.value, kind: gpiozero };
+      const pin = pinArgument(expression.args[0], scope);
+      if (pin === null) return false;
+      const device: Device = { pin, kind: gpiozero };
       scope.bindDevice(name, device);
       /*
        * gpiozero's inputs are pulled up by default -- `Button(pin)` means
@@ -1881,7 +1964,7 @@ export class FirmwareRuntime {
       return true;
     }
 
-    const pin = pinArgument(expression.args[0]);
+    const pin = pinArgument(expression.args[0], scope);
     if (pin === null) return false;
 
     if (kind === 'adc') {
@@ -2070,7 +2153,12 @@ export class FirmwareRuntime {
         this.stopTone(asNumber(args[0] ?? 0), services);
         return 0;
       default:
-        return 0;
+        /*
+         * A call that resolves nowhere. It used to answer 0, which is a
+         * wrong answer a sketch cannot see, so it stops with a reason that
+         * names the call.
+         */
+        throw unknownError('call', name, '', this.language);
     }
   }
 
@@ -2914,9 +3002,56 @@ export class FirmwareRuntime {
           if (callee.target.name === 'net' || callee.target.name === 'Net') {
             return this.evaluateNetCall(callee.member, args, services);
           }
-          return this.evaluateSerialCall(callee.member, args, services);
+          /*
+           * A value the sketch is holding, asked for something it does not
+           * have. `'abc'.upper()` used to answer 0, which reads as a value of
+           * zero rather than as a call the bench cannot make. The library
+           * names above are answered before this, so a sketch that owns a
+           * `lcd` still reaches it.
+           */
+          if (bound !== undefined) {
+            throw unknownError('member', callee.member, pythonTypeName(bound), this.language);
+          }
+          /*
+           * `Serial` is the last library a sketch reaches by name, and the
+           * modules the bench answers in its own vocabulary.
+           */
+          if (callee.target.name === 'machine' || callee.target.name === 'gpiozero') {
+            const constructors =
+              callee.target.name === 'machine' ? MACHINE_CONSTRUCTORS : DEVICE_CONSTRUCTORS;
+            if (!Object.prototype.hasOwnProperty.call(constructors, callee.member)) {
+              throw unknownError('member', callee.member, callee.target.name, this.language);
+            }
+            /*
+             * A constructor with no name to hold it: the call has nowhere to
+             * put the device, so it answers nothing. Giving it a name --
+             * `led = machine.Pin(2)` -- is what puts it on the bench.
+             */
+            return 0;
+          }
+          if (callee.target.name === 'Serial') {
+            return this.evaluateSerialCall(callee.member, args, services);
+          }
+          /*
+           * A name the sketch has never heard of. It used to fall through to
+           * the serial call below, where `myLib.begin()` quietly became
+           * `serialBegin(0)`.
+           */
+          throw unknownError('object', callee.target.name, '', this.language);
         }
-        return 0;
+        /*
+         * A call on something that is not a name: a literal or a computed
+         * value. The bench has no member to answer with, so it says so.
+         */
+        if (callee.kind !== 'member') {
+          /*
+           * The parser reads a callee as a name or a member, so this is a
+           * guard rather than a path.
+           */
+          throw new PythonError('Error', 'a call has no name to call');
+        }
+        const target = (yield* this.evaluate(callee.target, scope, services)) as Value;
+        throw unknownError('member', callee.member, pythonTypeName(target), this.language);
       }
     }
   }
@@ -3507,7 +3642,12 @@ export class FirmwareRuntime {
       case 'read':
         return -1;
       default:
-        return 0;
+        /*
+         * A member the port does not have. It used to answer 0, which reads
+         * as a port that had nothing to say rather than as a call the bench
+         * cannot make.
+         */
+        throw unknownError('member', member, 'Serial', this.language);
     }
   }
 
