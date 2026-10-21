@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildFor, galleryById } from '@/features/learn/gallery';
-import { FirmwareRuntime, PIN_INPUT_PULLUP, type FirmwareServices } from './interpreter';
+import {
+  describeFirmwareError,
+  FirmwareRunner,
+  FirmwareRuntime,
+  PIN_INPUT_PULLUP,
+  type FirmwareLanguage,
+  type FirmwareServices,
+} from './interpreter';
 import { FirmwareProjectError, toSingleFileProject, type FirmwareProject } from './project';
 
 function stubServices(serial: string[]): FirmwareServices {
@@ -26,6 +33,20 @@ function stubServices(serial: string[]): FirmwareServices {
     },
     spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
   };
+}
+
+/** Runs a sketch and reports the failure it stopped with, if any. */
+function failure(source: string, language: FirmwareLanguage = 'arduino-cpp'): string {
+  const serial: string[] = [];
+  const runner = new FirmwareRunner(source, stubServices(serial), language);
+  try {
+    for (let step = 0; step < 20; step++) {
+      if (runner.step() === null) break;
+    }
+  } catch (error) {
+    return describeFirmwareError(error);
+  }
+  return '';
 }
 
 describe('class instances', () => {
@@ -80,10 +101,32 @@ describe('class instances', () => {
     expect(() => FirmwareRuntime.fromProject(project)).not.toThrow();
   });
 
-  it('reads a missing member as zero even beside a same-named global', () => {
+  it('says a member the class never had is not a member', () => {
+    // The same-named global is beside it on purpose: a read of the field
+    // frame must not answer with the global's value either.
+    expect(
+      failure(
+        `class Counter { public: int n; };\nCounter c;\nint missing;\n` +
+          'void setup() { missing = 7; c.n = 1; Serial.println(c.missing + c.n); }\nvoid loop() {}',
+        'arduino-cpp',
+      ),
+    ).toBe("Error: class 'Counter' has no member 'missing'");
+  });
+
+  it('says a field nobody set was never set', () => {
+    expect(
+      failure(
+        'class Counter { public: int n; };\nCounter c;\n' +
+          'void setup() { Serial.println(c.n); }\nvoid loop() {}',
+        'arduino-cpp',
+      ),
+    ).toBe("Error: field 'n' of 'Counter' was never set");
+  });
+
+  it('reads a field the constructor set', () => {
     const project = toSingleFileProject(
-      `class Counter { public: int n; };\nCounter c;\nint missing;\n` +
-        'void setup() { missing = 7; c.n = 1; Serial.println(c.missing + c.n); }\nvoid loop() {}',
+      'class Counter { public: int n; Counter() { n = 41; } };\nCounter c;\n' +
+        'void setup() { Serial.println(c.n); }\nvoid loop() {}',
       'arduino-cpp',
     );
     const runtime = FirmwareRuntime.fromProject(project);
@@ -92,8 +135,51 @@ describe('class instances', () => {
     for (let step = 0; step < 10; step++) {
       if (main.next().done) break;
     }
-    // `c.missing` answers the field frame (0), not the global `missing` (7).
-    expect(serial.join('')).toBe('1\n');
+    expect(serial.join('')).toBe('41\n');
+  });
+
+  it('says a method is not a value', () => {
+    expect(
+      failure(
+        'class Counter { public: int bump() { return 1; } };\nCounter c;\n' +
+          'void setup() { Serial.println(c.bump); }\nvoid loop() {}',
+        'arduino-cpp',
+      ),
+    ).toBe("Error: 'bump' is a method of 'Counter', not a value");
+  });
+
+  it('writes the member from inside a method, the way C++ does', () => {
+    // `n = n + 1` names the member without saying so: inside a member
+    // function an unqualified name is the member, not a local.
+    const project = toSingleFileProject(
+      'class Counter { public: int n; int bump() { n = n + 1; return n; } };\nCounter c;\n' +
+        'void setup() { c.n = 41; c.bump(); Serial.println(c.n); }\nvoid loop() {}',
+      'arduino-cpp',
+    );
+    const runtime = FirmwareRuntime.fromProject(project);
+    const serial: string[] = [];
+    const main = runtime.main(stubServices(serial));
+    for (let step = 0; step < 10; step++) {
+      if (main.next().done) break;
+    }
+    expect(serial.join('')).toBe('42\n');
+  });
+
+  it('keeps a local of the same name out of the member', () => {
+    // A local declared in the method is the programmer's own name, and it
+    // is the one the body reads and writes.
+    const project = toSingleFileProject(
+      'class Counter { public: int n; int show() { int n = 5; return n; } };\nCounter c;\n' +
+        'void setup() { c.n = 41; Serial.println(c.show()); Serial.println(c.n); }\nvoid loop() {}',
+      'arduino-cpp',
+    );
+    const runtime = FirmwareRuntime.fromProject(project);
+    const serial: string[] = [];
+    const main = runtime.main(stubServices(serial));
+    for (let step = 0; step < 10; step++) {
+      if (main.next().done) break;
+    }
+    expect(serial.join('')).toBe('5\n41\n');
   });
 });
 

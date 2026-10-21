@@ -870,9 +870,27 @@ class Scope {
   /** Arrays keep their own store so `data[i] = x` writes through. */
   readonly arrays = new Map<string, number[]>();
   readonly parent: Scope | null;
+  /**
+   * Whether this scope is a function's own frame.
+   *
+   * A name in a function body belongs to that function; a name in a block
+   * belongs to the block. The distinction settles one rule: inside a member
+   * function an unqualified name is the member, and inside a free function
+   * it is not -- whatever called it.
+   */
+  readonly functionFrame: boolean;
+  /**
+   * The instance this frame is a member function of, when it is one.
+   *
+   * A member function's frame is where an unqualified name means the
+   * member, so the frame has to say whose member it is. A free function's
+   * frame is not a member frame, so this is null there.
+   */
+  memberOf: Instance | null = null;
 
-  constructor(parent: Scope | null = null) {
+  constructor(parent: Scope | null = null, functionFrame = false) {
     this.parent = parent;
+    this.functionFrame = functionFrame;
   }
 
   lookup(name: string): Value | undefined {
@@ -1718,7 +1736,7 @@ export class FirmwareRuntime {
       return yield* this.evaluateCall(name, args, services);
     }
 
-    const scope = new Scope(parent);
+    const scope = new Scope(parent, true);
     this.bindCallArguments(scope, declaration, args, keywords);
     if (this.isGenerator(declaration)) {
       /*
@@ -1917,11 +1935,62 @@ export class FirmwareRuntime {
   }
 
   /**
-   * Builds a global instance: every field defaults to zero, in-class field
-   * initializers seed their values, then the constructor binds its arguments
-   * (falling back to declared defaults), runs its initializer list, and runs
-   * its body. The list matters because Button constructs entirely in it --
-   * the body alone is empty, so skipping it would leave every field zero.
+   * The instance whose member an unqualified name names, in the C++ front end.
+   *
+   * A member function reaches its members without naming them, so `n = 41` in
+   * a constructor writes the field and not a local. The scope chain cannot
+   * say so on its own: a field that was never set is in no scope at all, so
+   * the write would land in the method's own frame and the field would stay
+   * unset -- and a field the class declares is the only name that means the
+   * member. A name the method has claimed, a parameter or a local of the
+   * same name, is the programmer's own, exactly as it is in C++, and a free
+   * function called from a member body is not a member function at all.
+   */
+  private memberInstanceFor(name: string, scope: Scope): Instance | null {
+    if (this.language === 'python') return null;
+    /*
+     * The nearest frame that is a function's own decides: inside a member
+     * function an unqualified name is the member, inside a free function it
+     * is the function's own -- whatever called it.
+     */
+    let frame: Scope | null = scope;
+    while (frame !== null && !frame.functionFrame) frame = frame.parent;
+    const instance = frame?.memberOf ?? null;
+    if (!instance) return null;
+    /*
+     * A parameter or a local of the member function is the programmer's own
+     * name, exactly as it is in C++.
+     */
+    for (const own of chainFrom(scope)) {
+      if (own.values.has(name)) return null;
+      if (own === frame) break;
+    }
+    const declaration = this.classes.get(instance.className);
+    if (!declaration?.fields.some((field) => field.name === name)) return null;
+    return instance;
+  }
+
+  /**
+   * Reads a field of an instance, saying which field is unset when it is.
+   *
+   * A field the class declares and nobody set has no value to read: in C++
+   * that is an indeterminate one, and the bench names the field rather than
+   * answering a zero for it.
+   */
+  private readMemberField(instance: Instance, name: string): Value {
+    const value =
+      instance.scope.values.get(name) ??
+      this.classStatics.get(instance.className)?.get(name);
+    if (value !== undefined) return value;
+    throw new PythonError('Error', `field '${name}' of '${instance.className}' was never set`);
+  }
+
+  /**
+   * Builds a global instance: in-class field initializers seed their values,
+   * then the constructor binds its arguments (falling back to declared
+   * defaults), runs its initializer list, and runs its body. The list matters
+   * because Button constructs entirely in it -- the body alone is empty, so
+   * skipping it would leave every field unset.
    */
   private *constructInstance(
     className: string,
@@ -1931,9 +2000,14 @@ export class FirmwareRuntime {
   ): Generator<Produced, void, Value | undefined> {
     const instance = new Instance(className, this.globals);
     const declaration = this.classes.get(className);
-    for (const field of declaration?.fields ?? []) {
-      if (!instance.scope.values.has(field.name)) instance.scope.values.set(field.name, 0);
-    }
+    /*
+     * A field the class declares is not given a value here. It takes one
+     * from its own initializer, from the constructor's initializer list, or
+     * from an assignment later on -- and until one of those happens it is
+     * unset, which is what a read of it reports. Seeding every field with a
+     * zero is what made an unset field indistinguishable from a field the
+     * class never had.
+     */
     for (const field of declaration?.fields ?? []) {
       if (!field.init) continue;
       const known = this.classStatics.get(className)?.get(field.name);
@@ -1967,7 +2041,8 @@ export class FirmwareRuntime {
     this.currentSelfName =
       this.language === 'python' ? (ctor.parameters[0]?.name ?? null) : null;
     try {
-      const frame = new Scope(instance.scope);
+      const frame = new Scope(instance.scope, true);
+      frame.memberOf = instance;
       yield* this.bindMethodParameters(frame, instance, ctor, args, services);
       for (const entry of ctor.initList ?? []) {
         instance.scope.values.set(
@@ -1975,6 +2050,11 @@ export class FirmwareRuntime {
           (yield* this.evaluate(entry.value, frame, services)) as Value,
         );
       }
+      /*
+       * The constructor body is a member function's own, so an unqualified
+       * name in it writes the field: `n = 41` there sets the member rather
+       * than a local of the constructor.
+       */
       yield* this.execute(ctor.body, frame, services);
     } finally {
       this.currentInstance = previous;
@@ -1985,7 +2065,7 @@ export class FirmwareRuntime {
   /**
    * Binds call-site arguments over declared defaults. A missing argument
    * evaluates its default in the field frame; with no default it binds zero,
-   * the way an uninitialised field reads.
+   * which is what a C++ call with too few arguments would refuse to compile.
    */
   private *bindMethodParameters(
     frame: Scope,
@@ -2036,7 +2116,8 @@ export class FirmwareRuntime {
     args: Value[],
     services: FirmwareServices,
   ): Generator<Produced, Value, Value | undefined> {
-    const frame = new Scope(instance.scope);
+    const frame = new Scope(instance.scope, true);
+    frame.memberOf = instance;
     yield* this.bindMethodParameters(frame, instance, declaration, args, services);
     /*
      * While a Python method runs, the name its first parameter carries is the
@@ -2045,6 +2126,10 @@ export class FirmwareRuntime {
     const previousSelf = this.currentSelfName;
     this.currentSelfName =
       this.language === 'python' ? (declaration.parameters[0]?.name ?? null) : null;
+    /*
+     * The body is a member function's own, so an unqualified name in it is
+     * the member.
+     */
     try {
       const flow = yield* this.execute(declaration.body, frame, services);
       return flow.kind === 'return' ? flow.value : 0;
@@ -2985,6 +3070,19 @@ export class FirmwareRuntime {
           }
         }
         /*
+         * A member the object has but was never given: in C++ that is an
+         * indeterminate value, and the bench names the field that is unset
+         * rather than answering a zero or claiming the name was never
+         * declared at all.
+         */
+        const member = this.memberInstanceFor(expression.name, scope);
+        if (member) {
+          throw new PythonError(
+            'Error',
+            `field '${expression.name}' of '${member.className}' was never set`,
+          );
+        }
+        /*
          * An expression define (`MINUTE`, `TIMESPAN_DAY`): evaluated where it
          * is used, against the scope that names it. A self-referencing macro
          * answers zero rather than recursing.
@@ -3189,8 +3287,16 @@ export class FirmwareRuntime {
         }
         if (expression.target.kind === 'identifier') {
           const name = expression.target.name;
+          /*
+           * A member write reaches the field frame: in C++ an unqualified
+           * name inside a member function is the member, so `n = 41` in a
+           * constructor writes the field rather than a local of the method.
+           */
+          const member = this.memberInstanceFor(name, scope);
           if (expression.operator !== '=') {
-            const current = scope.lookup(name) ?? 0;
+            const current = member
+              ? this.readMemberField(member, name)
+              : (scope.lookup(name) ?? 0);
             // `msg += "x"` on a `String` is the same join as `msg = msg + "x"`.
             const combined =
               expression.operator === '+=' &&
@@ -3201,8 +3307,16 @@ export class FirmwareRuntime {
                     asNumber(current),
                     asNumber(value),
                   );
+            if (member) {
+              member.scope.values.set(name, combined);
+              return combined;
+            }
             scope.assign(name, combined);
             return combined;
+          }
+          if (member) {
+            member.scope.values.set(name, value);
+            return value;
           }
           scope.assign(name, value);
           return value;
@@ -3302,9 +3416,8 @@ export class FirmwareRuntime {
               this.classStatics.get(instance.className)?.get(expression.member);
             if (field !== undefined) return field;
             /*
-             * A field the class never had. In C++ a field that was never set
-             * is zero, and the interpreter cannot tell that from a typo; in
-             * Python an attribute that was never set is an error.
+             * An attribute the object never got. In Python that is an error,
+             * and it always was.
              */
             if (this.language === 'python') {
               throw new PythonError(
@@ -3312,6 +3425,38 @@ export class FirmwareRuntime {
                 `'${instance.className}' object has no attribute '${expression.member}'`,
               );
             }
+            /*
+             * The class is declared, so the bench knows what members it has,
+             * and it can now tell two failures apart. A field the class
+             * declares and nobody set is a field the sketch left unset: in
+             * C++ that is an indeterminate value, and a zero here would be a
+             * lie about it. A member the class never had is a typo, and a
+             * compiler would have refused the sketch outright.
+             */
+            const declaration = this.classes.get(instance.className);
+            if (declaration) {
+              if (declaration.fields.some((field) => field.name === expression.member)) {
+                throw new PythonError(
+                  'Error',
+                  `field '${expression.member}' of '${instance.className}' was never set`,
+                );
+              }
+              if (this.classMethods.get(instance.className)?.has(expression.member)) {
+                throw new PythonError(
+                  'Error',
+                  `'${expression.member}' is a method of '${instance.className}', not a value`,
+                );
+              }
+              throw new PythonError(
+                'Error',
+                `class '${instance.className}' has no member '${expression.member}'`,
+              );
+            }
+            /*
+             * A library class the sketch did not declare: the bench does not
+             * know what members it has, so it has nothing to say about this
+             * one and answers the only number it can.
+             */
             return 0;
           }
           /*
