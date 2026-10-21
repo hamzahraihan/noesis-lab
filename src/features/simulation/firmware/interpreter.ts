@@ -1951,7 +1951,19 @@ export class FirmwareRuntime {
       return yield* this.evaluateCall(name, args, services);
     }
 
-    const scope = new Scope(parent, true);
+    /*
+     * A free function's own frame, and the scope it can see.
+     *
+     * The frame chains to the globals, not to whoever called it. C++ says a
+     * name in a free function is the function's own or the program's, and
+     * nothing else: a caller's local is not visible, and neither is the
+     * member of an object whose method made the call. The chain used to run
+     * the other way, so a helper could reach into the caller's frame and
+     * write its locals -- and through them, the fields of the object whose
+     * method had called it. A compiler would have refused the whole sketch;
+     * the bench compiled it and let the member take the write.
+     */
+    const scope = new Scope(this.globals, true);
     this.bindCallArguments(scope, declaration, args, keywords);
     if (this.isGenerator(declaration)) {
       /*

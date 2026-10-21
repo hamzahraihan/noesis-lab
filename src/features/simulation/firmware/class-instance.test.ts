@@ -183,6 +183,69 @@ describe('class instances', () => {
   });
 });
 
+/**
+ * A free function's scope.
+ *
+ * C++ says a name in a free function is the function's own or the program's,
+ * and nothing else. The bench used to chain the frame to whoever called it,
+ * so a helper could reach into the caller's frame -- and through it, into the
+ * fields of the object whose method had made the call. A compiler would have
+ * refused the whole sketch.
+ */
+describe('a free function', () => {
+  it('cannot read the caller\u2019s local', () => {
+    expect(
+      failure(
+        'void helper() { x = x + 1; }\nvoid setup() { int x = 41; helper(); }\nvoid loop() {}',
+        'arduino-cpp',
+      ),
+    ).toBe("Error: 'x' was not declared in this scope");
+  });
+
+  it('cannot read a member of the object whose method called it', () => {
+    expect(
+      failure(
+        'class Counter { public: int n; int bump() { helper(); return n; } };\nCounter c;\n' +
+          'void helper() { n = n + 1; }\n' +
+          'void setup() { c.n = 41; c.bump(); }\nvoid loop() {}',
+        'arduino-cpp',
+      ),
+    ).toBe("Error: 'n' was not declared in this scope");
+  });
+
+  it('leaves the caller\u2019s local alone when it writes a name of its own', () => {
+    // The name is the free function's own, where C++ would have refused the
+    // sketch outright. What matters here is that the caller's local is not
+    // what gets written.
+    const project = toSingleFileProject(
+      'void helper() { x = 5; }\nvoid setup() { int x = 41; helper(); Serial.println(x); }\nvoid loop() {}',
+      'arduino-cpp',
+    );
+    const runtime = FirmwareRuntime.fromProject(project);
+    const serial: string[] = [];
+    const main = runtime.main(stubServices(serial));
+    for (let step = 0; step < 10; step++) {
+      if (main.next().done) break;
+    }
+    expect(serial.join('')).toBe('41\n');
+  });
+
+  it('still sees the program\u2019s own names', () => {
+    // The globals are the program's, and a helper is part of the program.
+    const project = toSingleFileProject(
+      'int x;\nvoid helper() { x = x + 1; }\nvoid setup() { x = 41; helper(); Serial.println(x); }\nvoid loop() {}',
+      'arduino-cpp',
+    );
+    const runtime = FirmwareRuntime.fromProject(project);
+    const serial: string[] = [];
+    const main = runtime.main(stubServices(serial));
+    for (let step = 0; step < 10; step++) {
+      if (main.next().done) break;
+    }
+    expect(serial.join('')).toBe('42\n');
+  });
+});
+
 const BUTTON_HIGH = 1;
 const BUTTON_LOW = 0;
 

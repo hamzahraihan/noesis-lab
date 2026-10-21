@@ -588,10 +588,17 @@ in no scope at all, so without this the write would land in the method's own
 frame and the field would stay unset. A local of the same name is the
 programmer's own and stays theirs.
 
-**Still open.** A free function sees the caller's scope, fields included: a
-name it writes is the nearest one the chain holds, and the chain runs
-through the object whose method called it. C++ would refuse to compile that
-at all; the bench compiles it and lets the member take the write.
+**A free function sees the program, not the caller.** C++ says a name in a
+free function is the function's own or the program's, and nothing else: a
+caller's local is not visible, and neither is the member of an object whose
+method made the call. The bench used to chain a free function's frame to
+whoever called it, so a helper could reach into the caller's frame and write
+its locals -- and through them, the fields of the object that had called it.
+A compiler would have refused the whole sketch. The chain runs the other way
+now, to the globals, and a name a free function cannot see is said so rather
+than quietly resolved to the caller's. The one place the bench is more
+forgiving than a compiler is a name a free function *writes* and never
+declares: it becomes its own local, where C++ would refuse the sketch.
 
 ### 6.6 The debugger, and what it can stop at
 
