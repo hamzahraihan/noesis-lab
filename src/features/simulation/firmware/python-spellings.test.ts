@@ -367,6 +367,20 @@ describe('the time module', () => {
   });
 });
 
+describe('a quoted string', () => {
+  it('reads an escaped quote as part of the string', () => {
+    const { serial } = run("print('it\\'s')\nprint(\"a \\\"b\\\" c\")\n");
+
+    expect(serial).toBe("it's\na \"b\" c\n");
+  });
+
+  it('reads a single-quoted string as the same text as a double-quoted one', () => {
+    const { serial } = run("print('a', \"a\")\n");
+
+    expect(serial).toBe('a a\n');
+  });
+});
+
 describe('the idioms a MicroPython sketch opens with', () => {
   it('treats const as the value it promises', () => {
     const { serial } = run('from micropython import const\nX = const(5)\nprint(X)\n');

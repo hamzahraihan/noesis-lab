@@ -37,6 +37,7 @@ export class FirmwareSyntaxError extends Error {
 export type TokenKind =
   | 'number'
   | 'string'
+  | 'char'
   | 'identifier'
   | 'punctuation'
   | 'keyword'
@@ -170,6 +171,24 @@ export function tokenize(source: string, file = 'main.ino'): Token[] {
     }
   };
 
+  /** Reads a quoted run, escapes and all, and leaves the closing quote read. */
+  const readQuoted = (quote: string): string => {
+    advance(1);
+    let text = '';
+    while (index < source.length && source[index] !== quote) {
+      if (source[index] === '\\') {
+        const next = source[index + 1];
+        text += next === 'n' ? '\n' : next === 't' ? '\t' : next === '\\' ? '\\' : next;
+        advance(2);
+        continue;
+      }
+      text += source[index];
+      advance(1);
+    }
+    advance(1);
+    return text;
+  };
+
   while (index < source.length) {
     const char = source[index];
 
@@ -206,21 +225,14 @@ export function tokenize(source: string, file = 'main.ino'): Token[] {
       continue;
     }
 
-    if (char === '"') {
-      advance(1);
-      let text = '';
-      while (index < source.length && source[index] !== '"') {
-        if (source[index] === '\\') {
-          const next = source[index + 1];
-          text += next === 'n' ? '\n' : next === 't' ? '\t' : next === '\\' ? '\\' : next;
-          advance(2);
-          continue;
-        }
-        text += source[index];
-        advance(1);
-      }
-      advance(1);
-      tokens.push({ kind: 'string', text, location });
+    if (char === '"' || char === "'") {
+      /*
+       * A quoted run, escapes and all. The two quotes are the same syntax and
+       * different meanings -- Python's string, C's character -- so the
+       * tokenizer keeps them apart and each front end decides what it is.
+       */
+      const text = readQuoted(char);
+      tokens.push({ kind: char === '"' ? 'string' : 'char', text, location });
       continue;
     }
 
@@ -1483,6 +1495,15 @@ class Parser {
     }
     if (token.kind === 'string') {
       return { kind: 'string', value: token.text, location: token.location };
+    }
+    if (token.kind === 'char') {
+      // A C character literal is a number: `'A'` is 65, and `switch`/`==`
+      // compare it as one.
+      return {
+        kind: 'number',
+        value: token.text.length > 0 ? token.text.charCodeAt(0) : 0,
+        location: token.location,
+      };
     }
     if (token.kind === 'keyword') {
       if (token.text === 'true') return { kind: 'boolean', value: true, location: token.location };

@@ -2170,15 +2170,11 @@ export class FirmwareRuntime {
        */
       case 'String': {
         const value = args[0] ?? 0;
-        const option = args[1];
         if (typeof value !== 'number') return formatValue(value);
-        if (option === undefined) return arduinoNumberText(value);
-        const count = Math.trunc(asNumber(option));
-        return Number.isInteger(value)
-          ? Math.trunc(value)
-              .toString(Math.min(36, Math.max(2, count)))
-              .toUpperCase()
-          : value.toFixed(Math.min(20, Math.max(0, count)));
+        return formatPrintValue(
+          value,
+          args[1] === undefined ? undefined : asNumber(args[1]),
+        );
       }
       case 'delay': {
         const ms = Math.max(0, asNumber(args[0] ?? 0));
@@ -4119,19 +4115,19 @@ export class FirmwareRuntime {
         return 0;
       case 'print':
       case 'println': {
-        let text: string;
         const first = args[0];
-        if (typeof first === 'string') {
-          text = first;
-        } else {
-          text = formatPrintValue(asNumber(first));
-        }
-        // Serial.print(a, b) prints a numeric field.
-        if (member === 'print' && args.length > 1 && typeof first !== 'string') {
-          text = formatPrintValue(asNumber(first), asNumber(args[1]));
-        }
-        if (member === 'println') text += '\n';
-        services.serialWrite(text);
+        // Both spellings take Arduino's numeric field: `print(v, HEX)` and
+        // `println(v, 4)` are the same overload with a newline.
+        const text =
+          typeof first === 'string'
+            ? first
+            : formatPrintValue(
+                asNumber(first ?? 0),
+                args.length > 1 ? asNumber(args[1]) : undefined,
+              );
+        let line = text;
+        if (member === 'println') line += '\n';
+        services.serialWrite(line);
         return 0;
       }
       case 'write':
@@ -4662,11 +4658,26 @@ function applyBinary(operator: string, left: number, right: number): number {
 }
 
 /** Mirrors Arduino's `Serial.print` formatting closely enough to be useful. */
-function formatPrintValue(value: number, decimals?: number): string {
+/**
+ * A number as a sketch's `print` writes it, with its optional field.
+ *
+ * The second argument is Arduino's: a whole number's is a base (`print(255,
+ * HEX)` is `FF`) and a fraction's is how many places to keep (`print(3.14159,
+ * 4)` is `3.1416`). Reading both as decimal places printed
+ * `255.0000000000000000` for `HEX` -- a number nobody asked for, in the one
+ * place a learner is reading carefully.
+ */
+function formatPrintValue(value: number, field?: number): string {
   if (!Number.isFinite(value)) return 'nan';
-  if (decimals !== undefined) return value.toFixed(decimals);
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2);
+  if (field === undefined) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+  const width = Math.trunc(field);
+  return Number.isInteger(value)
+    ? Math.trunc(value)
+        .toString(Math.min(36, Math.max(2, width)))
+        .toUpperCase()
+    : value.toFixed(Math.min(20, Math.max(0, width)));
 }
 
 /**

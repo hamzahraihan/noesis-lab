@@ -237,8 +237,21 @@ function readStringLiteral(source: string, start: number): StringLiteral {
   const quote = source[start];
   const opener = source.startsWith(quote.repeat(3), start) ? quote.repeat(3) : quote;
   const contentStart = start + opener.length;
-  const close = source.indexOf(opener, contentStart);
-  const end = close === -1 ? source.length : close;
+  /*
+   * The closing quote is looked for one character at a time, because an
+   * escaped quote is part of the string: `'it\\'s'` ends at the last quote,
+   * and a plain `indexOf` would have ended it at the escaped one.
+   */
+  let end = contentStart;
+  while (end < source.length) {
+    if (source[end] === '\\') {
+      end += 2;
+      continue;
+    }
+    if (source.startsWith(opener, end)) break;
+    end += 1;
+  }
+  if (end > source.length) end = source.length;
 
   return { body: unescape(source.slice(contentStart, end)), fstring, end: end + opener.length };
 }
