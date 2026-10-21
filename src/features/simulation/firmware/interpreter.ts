@@ -1218,12 +1218,110 @@ const SYSTEM_QUOTED_HEADERS = new Set(['arduino.h', 'wire.h', 'spi.h']);
 /**
  * Library-owned instance types with no tab declaration: the class is never
  * declared in the project (the library owns it), so a global of that type
- * answers through services rather than through method bodies. `SevSeg` and
- * `RTC_DS1307` are the only two the gallery library tabs and the Tier-2
- * fixture instantiate -- every other `Type name` global must name a class
- * the merged tabs declare, or `fromProject` rejects it as a probable typo.
+ * answers through services rather than through method bodies.
+ *
+ * `SevSeg` and `RTC_DS1307` are the two the gallery library tabs and the
+ * Tier-2 fixture instantiate. The rest are the libraries a sketch declares
+ * the Arduino way -- `Servo myServo;`, `DHT sensor(2);` -- which is a
+ * spelling every real library sketch uses, so it has to be a spelling the
+ * bench answers to. Every other `Type name` global must name a class the
+ * merged tabs declare, or `fromProject` rejects it as a probable typo.
  */
-const LIBRARY_OWNED_INSTANCES = new Set(['SevSeg', 'RTC_DS1307']);
+const LIBRARY_OWNED_INSTANCES = new Set([
+  'SevSeg',
+  'RTC_DS1307',
+  'Servo',
+  'DHT',
+  'SD',
+  'LiquidCrystal',
+  'HTTPClient',
+  'PubSubClient',
+  'WiFiUdp',
+]);
+/**
+ * The library a bare name in a sketch stands for.
+ *
+ * The bench's own names (`servo`, `dht`, `sd`, `lcd`) and Arduino's class
+ * names (`Servo`, `DHT`, `SD`, `LiquidCrystal`) are one library under two
+ * spellings, and both reach the same code.
+ */
+const LIBRARY_NAMES: Readonly<Record<string, string>> = {
+  lcd: 'LiquidCrystal',
+  LiquidCrystal: 'LiquidCrystal',
+  servo: 'Servo',
+  Servo: 'Servo',
+  dht: 'DHT',
+  DHT: 'DHT',
+  sd: 'SD',
+  SD: 'SD',
+  HTTPClient: 'HTTPClient',
+  PubSubClient: 'PubSubClient',
+  WiFiUdp: 'WiFiUdp',
+};
+/**
+ * What a library object keeps between calls.
+ *
+ * One per object, so two HTTP clients are two clients: the url one was given
+ * and the status of the answer it last got.
+ */
+interface LibraryState {
+  /** The url it was given, or the server it was pointed at. */
+  url: string;
+  /** The status of the last answer: 200, -1, or 0. */
+  status: number;
+  /** The time the network last answered with, for the NTP client. */
+  clock?: ClockReading;
+}
+
+/** A time the network answered with, read out of its body. */
+interface ClockReading {
+  readonly epoch: number;
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hour: number;
+  readonly minute: number;
+  readonly second: number;
+}
+
+/**
+ * The days from the civil calendar's epoch, so a date can be counted.
+ *
+ * The same arithmetic every calendar uses: the era of four hundred years,
+ * the day of the year, and the day of the era.
+ */
+function daysFromCivil(year: number, month: number, day: number): number {
+  const y = year - (month <= 2 ? 1 : 0);
+  const era = Math.floor(y / 400);
+  const yearOfEra = y - era * 400;
+  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+/**
+ * The time the network answers with, read out of its ISO-8601 body.
+ *
+ * The body is UTC and says so with a `Z`, and the epoch is counted from the
+ * same civil date the body names, so the two agree the way a real clock's
+ * do.
+ */
+function parseIsoClock(body: string): ClockReading | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(body);
+  if (!match) return null;
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  return {
+    epoch: daysFromCivil(year, month, day) * 86400 + hour * 3600 + minute * 60 + second,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+  };
+}
+
 function localIncludes(content: string): string[] {
   return content
     .split('\n')
@@ -1304,6 +1402,24 @@ export class FirmwareRuntime {
    * table. Null outside any method, so plain sketches never consult it.
    */
   private currentInstance!: Instance | null;
+  /**
+   * The pin each library object or instance bound to itself.
+   *
+   * Arduino's libraries are objects: `myServo.attach(9)` binds the pin and
+   * `myServo.write(90)` uses it, where the bench's ports address a part by
+   * the pin it is on. So the object remembers the pin it was given and the
+   * call carries it on -- the shape a sketch writes is the shape the port
+   * wants, and the sketch never has to know the difference.
+   *
+   * Keyed by the name for the bench's own library objects and by the object
+   * itself for the ones a sketch declares, so two servos are two servos.
+   */
+  private libraryPins!: Map<string | Instance, number>;
+  /**
+   * What a library object remembers between calls: the url it was given and
+   * the status of the last answer.
+   */
+  private libraryStates!: Map<string | Instance, LibraryState>;
   /**
    * The debugger watching this run, or null when nobody is.
    *
@@ -1403,6 +1519,8 @@ export class FirmwareRuntime {
     this.debugger = null;
     this.debugFrame = null;
     this.callDepth = 0;
+    this.libraryPins = new Map();
+    this.libraryStates = new Map();
     this.globals = new Scope();
     this.functions = new Map();
     this.instances = new Map();
@@ -2131,6 +2249,14 @@ export class FirmwareRuntime {
       }
     }
     this.instances.set(name, instance);
+    /*
+     * A library the sketch declared the Arduino way: `DHT dht(2, DHT22);`
+     * carries the pin in the constructor, which is where Arduino's library
+     * takes it, and `begin()` then has no pin of its own to give.
+     */
+    if (className === 'DHT' && args.length > 0) {
+      this.libraryPins.set(instance, this.pinOf(services, asNumber(args[0] ?? -1)));
+    }
     const methods = this.classMethods.get(className);
     /*
      * Python's constructor is `__init__`; C++'s is a method named after the
@@ -2275,6 +2401,19 @@ export class FirmwareRuntime {
     if (instance.className === 'SevSeg') {
       return this.evaluateSevSegCall(instance, method, args, services);
     }
+    /*
+     * A library the sketch declared the Arduino way (`Servo myServo;`): the
+     * class is the library's, and the call is the library's, so it answers
+     * the way the bench's own name for that library does.
+     */
+    const library = yield* this.libraryCall(
+      instance,
+      instance.className,
+      method,
+      args,
+      services,
+    );
+    if (library !== null) return library;
     const declaration = this.classMethods.get(instance.className)?.get(method);
     if (!declaration) return 0;
     const previous = this.currentInstance;
@@ -3755,14 +3894,22 @@ export class FirmwareRuntime {
           if (bound instanceof RtcHandle) {
             return (yield* this.evaluateRtcCall(callee.member, args, services)) as Value;
           }
-          if (callee.target.name === 'lcd' || callee.target.name === 'LiquidCrystal') {
-            return this.evaluateLcdCall(callee.member, args, services);
-          }
-          if (callee.target.name === 'servo' || callee.target.name === 'Servo') {
-            return this.evaluateServoCall(callee.member, args, services);
-          }
-          if (callee.target.name === 'dht' || callee.target.name === 'DHT') {
-            return this.evaluateDhtCall(callee.member, args, services);
+          /*
+           * The libraries a sketch names outright: the bench's own name and
+           * Arduino's class name are the same library, and both reach the
+           * same code.
+           */
+          const library = LIBRARY_NAMES[callee.target.name];
+          if (library !== undefined) {
+            return (
+              (yield* this.libraryCall(
+                callee.target.name,
+                library,
+                callee.member,
+                args,
+                services,
+              )) ?? 0
+            );
           }
           if (callee.target.name === 'pixels' || callee.target.name === 'Pixels') {
             return this.evaluatePixelsCall(callee.member, args, services);
@@ -3772,9 +3919,6 @@ export class FirmwareRuntime {
           }
           if (callee.target.name === 'dialer' || callee.target.name === 'Dialer') {
             return this.evaluateDialerCall(callee.member, args, services);
-          }
-          if (callee.target.name === 'sd' || callee.target.name === 'SD') {
-            return this.evaluateSdCall(callee.member, args, services);
           }
           if (callee.target.name === 'gc') {
             /*
@@ -4797,6 +4941,267 @@ export class FirmwareRuntime {
   }
 
   /**
+   * The pin a library object bound to itself, remembering the one it was
+   * given.
+   *
+   * `attach` and `begin` are the calls that bind: the pin they carry is the
+   * one the object remembers, and every call after that uses it. The pin is
+   * remembered in the board's own namespace, because that is the one the
+   * ports take.
+   */
+  private libraryPin(
+    owner: string | Instance,
+    member: string,
+    args: Value[],
+    binds: string,
+    services: FirmwareServices,
+  ): number {
+    if (member === binds) {
+      // A bind with no pin of its own -- `dht.begin();` -- keeps the pin
+      // the constructor gave the object.
+      if (args.length === 0) return this.libraryPins.get(owner) ?? -1;
+      const pin = this.pinOf(services, asNumber(args[0] ?? -1));
+      this.libraryPins.set(owner, pin);
+      return pin;
+    }
+    return this.libraryPins.get(owner) ?? -1;
+  }
+
+  /**
+   * A library the sketch named, answered the way that library answers.
+   *
+   * Arduino's libraries are objects, and the object is what binds the pin:
+   * `myServo.attach(9)` and then `myServo.write(90)`. The bench's ports
+   * address a part by the pin it is on, so the object remembers the pin it
+   * was given and the call carries it on -- the shape a sketch writes is the
+   * shape the port wants, and the sketch never has to know the difference.
+   *
+   * The bench's own shape still works, so a sketch written for this bench
+   * keeps running: `servo.write(pin, angle)` and `servo.write(angle)` are
+   * told apart by how many arguments they carry.
+   *
+   * `owner` is the bench's own name for the library or the instance a sketch
+   * declared, and `className` the library it is. Null when the class is not
+   * one the bench owns, so the caller can go on to the method bodies the
+   * sketch declared itself.
+   */
+  private *libraryCall(
+    owner: string | Instance,
+    className: string,
+    member: string,
+    args: Value[],
+    services: FirmwareServices,
+  ): Generator<Produced, Value | null, Value | undefined> {
+    switch (className) {
+      case 'Servo': {
+        const servo = services.servo;
+        if (!servo) return 0;
+        const pin = this.libraryPin(owner, member, args, 'attach', services);
+        switch (member) {
+          case 'attach':
+            servo.attach(pin);
+            return 0;
+          case 'write':
+            // Two arguments are the bench's own shape -- the pin and the
+            // angle; one is the angle the object remembered its pin for.
+            if (args.length > 1) {
+              servo.write(this.pinOf(services, asNumber(args[0] ?? -1)), asNumber(args[1]));
+              return 0;
+            }
+            servo.write(pin, asNumber(args[0] ?? 0));
+            return 0;
+          case 'read':
+            // The bench's own shape names the pin; the Arduino's does not.
+            return servo.read(
+              args.length > 0 ? this.pinOf(services, asNumber(args[0] ?? -1)) : pin,
+            );
+          case 'detach':
+            servo.detach(
+              args.length > 0 ? this.pinOf(services, asNumber(args[0] ?? -1)) : pin,
+            );
+            return 0;
+          default:
+            return 0;
+        }
+      }
+      case 'DHT': {
+        const dht = services.dht;
+        if (!dht) return 0;
+        const pin = this.libraryPin(owner, member, args, 'begin', services);
+        switch (member) {
+          case 'begin':
+            dht.begin(pin);
+            return 0;
+          case 'readTemperature':
+            return dht.temperature(pin);
+          case 'readHumidity':
+            return dht.humidity(pin);
+          case 'temperature':
+            return dht.temperature(this.pinOf(services, asNumber(args[0] ?? -1)));
+          case 'humidity':
+            return dht.humidity(this.pinOf(services, asNumber(args[0] ?? -1)));
+          default:
+            return 0;
+        }
+      }
+      case 'SD': {
+        const sd = services.sd;
+        if (!sd) return 0;
+        const pin = this.libraryPin(owner, member, args, 'begin', services);
+        const text = (index: number): string => {
+          const arg = args[index];
+          return typeof arg === 'string' ? arg : String(asNumber(arg ?? 0));
+        };
+        switch (member) {
+          case 'begin':
+            return sd.begin(pin) ? 1 : 0;
+          // Two arguments are the card's own shape -- the name and the text;
+          // three are the bench's, the pin and then those two.
+          case 'write':
+            if (args.length > 2) {
+              return sd.write(this.pinOf(services, asNumber(args[0] ?? -1)), text(1), text(2));
+            }
+            return sd.write(pin, text(0), text(1));
+          case 'read':
+            return args.length > 1
+              ? sd.read(this.pinOf(services, asNumber(args[0] ?? -1)), text(1))
+              : sd.read(pin, text(0));
+          case 'exists':
+            return args.length > 1
+              ? sd.exists(this.pinOf(services, asNumber(args[0] ?? -1)), text(1))
+              : sd.exists(pin, text(0));
+          case 'remove':
+            return args.length > 1
+              ? sd.remove(this.pinOf(services, asNumber(args[0] ?? -1)), text(1))
+              : sd.remove(pin, text(0));
+          default:
+            return 0;
+        }
+      }
+      case 'LiquidCrystal':
+        return this.evaluateLcdCall(member, args, services);
+      case 'HTTPClient': {
+        const net = services.net;
+        if (!net) return 0;
+        const state = this.libraryState(owner);
+        switch (member) {
+          case 'begin':
+            state.url = formatValue(args[0] ?? '');
+            state.status = 0;
+            return 0;
+          case 'GET': {
+            /*
+             * The answer arrives on the bench's own clock, so the wait is the
+             * bench's: the sketch blocks the way a real request blocks, and
+             * the time it spends is the time the request took.
+             */
+            for (;;) {
+              if (net.get(state.url)) {
+                state.status = net.failed() ? -1 : 200;
+                return state.status;
+              }
+              yield 1;
+            }
+          }
+          case 'get':
+            return state.status;
+          case 'read':
+            return net.read();
+          case 'end':
+            state.url = '';
+            state.status = 0;
+            return 0;
+          default:
+            return 0;
+        }
+      }
+      case 'PubSubClient': {
+        const net = services.net;
+        if (!net) return 0;
+        switch (member) {
+          // The bench's network is always there, so a broker on it is too.
+          case 'connect':
+            return 1;
+          case 'publish':
+            return net.publish(formatValue(args[0] ?? ''), formatValue(args[1] ?? ''));
+          case 'subscribe':
+            return net.subscribe(formatValue(args[0] ?? ''));
+          // The bench's network needs no pumping: a message that has arrived
+          // is waiting when the sketch asks for it.
+          case 'loop':
+            return 0;
+          case 'available':
+            return net.available();
+          case 'message':
+            return net.message();
+          case 'payloadLength':
+            return net.message().length;
+          default:
+            return 0;
+        }
+      }
+      case 'WiFiUdp': {
+        const net = services.net;
+        if (!net) return 0;
+        const state = this.libraryState(owner);
+        switch (member) {
+          case 'begin':
+            return 0;
+          case 'config':
+            state.url = `http://${formatValue(args[0] ?? '')}/time`;
+            state.status = 0;
+            return 0;
+          case 'update': {
+            // The time the network knows, asked for the way a sketch asks a
+            // server for it: the wait is the network's own latency.
+            for (;;) {
+              if (net.get(state.url)) {
+                state.status = net.failed() ? 0 : 1;
+                break;
+              }
+              yield 1;
+            }
+            state.clock = parseIsoClock(net.read()) ?? undefined;
+            return state.status;
+          }
+          case 'epochTime':
+            return state.clock?.epoch ?? 0;
+          case 'year':
+            return state.clock?.year ?? 0;
+          case 'month':
+            return state.clock?.month ?? 0;
+          case 'day':
+            return state.clock?.day ?? 0;
+          case 'hour':
+            return state.clock?.hour ?? 0;
+          case 'minute':
+            return state.clock?.minute ?? 0;
+          case 'second':
+            return state.clock?.second ?? 0;
+          default:
+            return 0;
+        }
+      }
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * The state a library object keeps between calls.
+   *
+   * One per object, so two HTTP clients are two clients: the url one was
+   * given and the status of the answer it last got.
+   */
+  private libraryState(owner: string | Instance): LibraryState {
+    const existing = this.libraryStates.get(owner);
+    if (existing) return existing;
+    const state: LibraryState = { url: '', status: 0 };
+    this.libraryStates.set(owner, state);
+    return state;
+  }
+
+  /**
    * Handles an `lcd.*` call.
    *
    * Nothing here blocks: an HD44780 is a parallel device whose whole cost is
@@ -4841,48 +5246,6 @@ export class FirmwareRuntime {
       case 'noBacklight':
         lcd.noBacklight();
         return 0;
-      default:
-        return 0;
-    }
-  }
-
-  /** Handles a `servo.*` call, which addresses servos by the pin they are on. */
-  private evaluateServoCall(member: string, args: Value[], services: FirmwareServices): Value {
-    const servo = services.servo;
-    if (!servo) return 0;
-    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
-
-    switch (member) {
-      case 'attach':
-        servo.attach(pin);
-        return 0;
-      case 'write':
-        servo.write(pin, asNumber(args[1] ?? 0));
-        return 0;
-      case 'read':
-        return servo.read(pin);
-      case 'detach':
-        servo.detach(pin);
-        return 0;
-      default:
-        return 0;
-    }
-  }
-
-  /** Handles a `dht.*` call, which addresses sensors by the pin SDA is on. */
-  private evaluateDhtCall(member: string, args: Value[], services: FirmwareServices): Value {
-    const dht = services.dht;
-    if (!dht) return 0;
-    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
-
-    switch (member) {
-      case 'begin':
-        dht.begin(pin);
-        return 0;
-      case 'temperature':
-        return dht.temperature(pin);
-      case 'humidity':
-        return dht.humidity(pin);
       default:
         return 0;
     }
@@ -4938,33 +5301,8 @@ export class FirmwareRuntime {
     }
   }
 
-  /** Handles an `sd.*` call, which addresses cards by their CS pin. */
-  private evaluateSdCall(member: string, args: Value[], services: FirmwareServices): Value {
-    const sd = services.sd;
-    const pin = this.pinOf(services, asNumber(args[0] ?? -1));
-    const text = (index: number): string => {
-      const arg = args[index];
-      return typeof arg === 'string' ? arg : String(asNumber(arg ?? 0));
-    };
-
-    switch (member) {
-      case 'begin':
-        return sd ? (sd.begin(pin) ? 1 : 0) : 0;
-      case 'write':
-        return sd ? sd.write(pin, text(1), text(2)) : 0;
-      case 'read':
-        return sd ? sd.read(pin, text(1)) : '';
-      case 'exists':
-        return sd ? sd.exists(pin, text(1)) : 0;
-      case 'remove':
-        return sd ? sd.remove(pin, text(1)) : 0;
-      default:
-        return 0;
-    }
-  }
-
   /**
-   * Handles an `SPI.*` call.
+   * Handles a `map.*` call: asking for a tile, and drawing one.
    *
    * Only `end()` blocks: it yields the bus time for the whole transfer, so a
    * sketch pushing a 320x240 frame genuinely waits for it. Pushing a full frame
@@ -5015,6 +5353,14 @@ const BUILTIN_CONSTANTS: Readonly<Record<string, number>> = {
   HEX: 16,
   OCT: 8,
   BIN: 2,
+  /*
+   * The sensor types the DHT library names, at the values Arduino gives them.
+   * A sketch writes `DHT dht(2, DHT22);`, and the type is the one thing it
+   * says that the bench does not model -- the part on the bench is the one
+   * kind the catalogue sells.
+   */
+  DHT11: 11,
+  DHT22: 22,
 };
 
 /** Native helpers that are pure arithmetic and need no host access. */
