@@ -3218,6 +3218,21 @@ export class FirmwareRuntime {
           });
         }
         if (callee.kind === 'identifier') {
+          /*
+           * `attachInterrupt` is refused before its arguments are read. A
+           * handler is a function, and a function is not a value here, so
+           * evaluating the call would stop on "'isr' is a function, not a
+           * value" -- which blames the sketch for something the bench does
+           * not model. The lesson modules teach polling precisely because
+           * this is missing, and a learner who tries the real spelling
+           * deserves to be told that rather than corrected.
+           */
+          if (callee.name === 'attachInterrupt') {
+            throw new PythonError(
+              'Error',
+              'this bench models no interrupts: read the pin in loop() instead, which sees the same edges',
+            );
+          }
           const args: Value[] = [];
           for (const argument of expression.args) {
             args.push((yield* this.evaluate(argument, scope, services)) as Value);
@@ -4518,6 +4533,13 @@ const BUILTINS: Readonly<Record<string, (args: number[]) => Value>> = {
   randomSeed: () => 0,
   // The bit `bitRead` reads is the one every register tutorial names.
   bitRead: (args) => ((args[0] ?? 0) >> (args[1] ?? 0)) & 1,
+  // `digitalPinToInterrupt` maps a pin to its interrupt number, which only
+  // `attachInterrupt` would read -- and that one is refused with a sentence.
+  digitalPinToInterrupt: (args) => args[0] ?? 0,
+  // A critical section around an interrupt that never fires is already the
+  // code inside it.
+  interrupts: () => 0,
+  noInterrupts: () => 0,
   min: (args) => Math.min(...args),
   max: (args) => Math.max(...args),
   sq: (args) => (args[0] ?? 0) ** 2,

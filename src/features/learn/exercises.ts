@@ -321,9 +321,8 @@ const FIRST_CIRCUIT: Exercise = {
 /*
  * Module 0 twin -- three LEDs on three pins.
  *
- * The pin numbers are plain globals rather than "const byte": the
- * interpreter's parser rejects const at file scope. Inside a function
- * const is perfectly fine.
+ * The pin numbers are plain globals, the way an Arduino sketch usually names
+ * them; "const byte" works at file scope here too.
  */
 
 byte RED   = 8;

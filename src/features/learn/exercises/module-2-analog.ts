@@ -182,11 +182,9 @@ const PRECISION_DIMMER: Exercise = {
 /*
  * Module 2 twin for 2.1 -- one pot on A0, one PWM channel on D3.
  *
- * Three dialect facts this sketch is built around:
+ * Two dialect facts this sketch is built around:
  *   - there are no A0..A5 aliases, so A0 is named as the GPIO it actually is
  *     (14 on the ATmega328P; A1..A5 are 15..19);
- *   - constants are plain globals rather than "const byte", because the
- *     parser rejects const at file scope;
  *   - D3 is one of the six pins the hardware can do PWM on (3, 5, 6, 9, 10,
  *     11). Anywhere else analogWrite does nothing at all.
  */

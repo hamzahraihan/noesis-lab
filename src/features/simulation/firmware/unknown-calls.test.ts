@@ -97,6 +97,40 @@ describe('a call the bench cannot make', () => {
   });
 });
 
+describe('a call the bench deliberately does not model', () => {
+  it('stops an interrupt before its handler is read, and says why', () => {
+    expect(
+      failure('void isr() {}\nvoid setup() { attachInterrupt(0, isr, CHANGE); }', 'arduino-cpp'),
+    ).toBe(
+      'Error: this bench models no interrupts: read the pin in loop() instead, which sees the same edges',
+    );
+  });
+
+  it('still maps a pin to its interrupt number, which is only a name for it', () => {
+    // `digitalPinToInterrupt` is a pure mapping; nothing here reads the number
+    // except the call that is refused.
+    const target = host();
+    const runner = new FirmwareRunner(
+      'void setup() { Serial.println(digitalPinToInterrupt(2)); }',
+      target.services,
+      'arduino-cpp',
+    );
+    for (let step = 0; step < 20; step++) if (runner.step() === null) break;
+    expect(target.serial.join('')).toBe('2\n');
+  });
+
+  it('lets a critical section around nothing be the code inside it', () => {
+    const target = host();
+    const runner = new FirmwareRunner(
+      'void setup() { noInterrupts(); Serial.println("a"); interrupts(); }',
+      target.services,
+      'arduino-cpp',
+    );
+    for (let step = 0; step < 20; step++) if (runner.step() === null) break;
+    expect(target.serial.join('')).toBe('a\n');
+  });
+});
+
 describe('a name the sketch has never heard of', () => {
   it('says so in the Python front end', () => {
     expect(failure('print(pins)')).toBe("NameError: name 'pins' is not defined");

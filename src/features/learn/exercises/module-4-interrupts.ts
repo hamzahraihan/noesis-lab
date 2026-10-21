@@ -2,15 +2,12 @@
  * Module 4 -- Hardware Interrupts & Low-Level Control.
  *
  * Both exercises here have something the interpreter cannot give the learner,
- * and neither hides it. The simulator models no interrupts: there is no
- * `attachInterrupt` to call, no pin-change interrupt, no `ATOMIC_BLOCK`, and
- * `volatile` lexes as a keyword the declaration grammar will not accept. A
- * sketch that called `attachInterrupt` anyway would load, run, and quietly
- * decode nothing -- an unknown call in the interpreter's builtin dispatch
- * returns 0 rather than failing. So the twins are written in the dialect that
- * works, and each one says in a comment, a hint and a reference exactly what
- * the real hardware buys and why the bench version is not a smaller version of
- * the twin.
+ * and neither hides it. The simulator models no interrupts: there is no pin
+ * change interrupt and no `ATOMIC_BLOCK`, and a sketch that calls
+ * `attachInterrupt` is stopped with the reason rather than quietly decoding
+ * nothing. So the twins are written in the dialect that works, and each one
+ * says in a comment, a hint and a reference exactly what the real hardware
+ * buys and why the bench version is not a smaller version of the twin.
  *
  * Everything else the module is about survives intact. 4.1 drives the real
  * quadrature transition table -- the part learners get wrong, and the part an
@@ -175,19 +172,17 @@ const ROTARY_ENCODER: Exercise = {
  * Noesis Lab twin for 4.1 -- the quadrature transition table, driven by polling.
  *
  * THE LIMIT, STATED UP FRONT: this simulator models no interrupts. There is no
- * attachInterrupt to call, no pin-change interrupt, no ATOMIC_BLOCK, and the
- * parser has no 'volatile'. A call to attachInterrupt would parse, run, and do
- * nothing at all -- an unknown function in the builtin dispatch returns 0
- * rather than failing -- so this twin would print zero counts for ever while
- * looking like the interrupt build. That is why it polls instead.
+ * pin-change interrupt and no ATOMIC_BLOCK, and a call to attachInterrupt is
+ * stopped with that sentence rather than doing nothing -- so a sketch written
+ * the interrupt way could not run here at all. That is why this twin polls
+ * instead.
  *
  * What the bench build has that this does not: the edge is caught even when it
  * falls between two digitalRead calls, the handler can afford to be 20 us long
  * and still miss nothing, and the shared counter can be read without tearing.
  * Prove the table here first; the table is the part that is actually hard.
  *
- * Plain globals rather than "const byte": the parser rejects const at file
- * scope. Values and logic are otherwise unchanged from the bench sketch.
+ * Values and logic are unchanged from the bench sketch.
  */
 
 int PIN_CLK = 2, PIN_DT = 3, PIN_SW = 4;

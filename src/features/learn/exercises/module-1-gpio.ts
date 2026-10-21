@@ -154,8 +154,8 @@ const PUSH_BUTTON: Exercise = {
 /*
  * Module 1 twin for 1.1 -- one button, one LED, one debounce.
  *
- * The pin numbers are plain globals rather than "const byte": the interpreter's
- * parser rejects const at file scope. Inside a function const is fine.
+ * The pin numbers are plain globals, which is how an Arduino sketch usually
+ * names them: a #define or a global both work here.
  */
 
 byte PIN_BUTTON = 2;
