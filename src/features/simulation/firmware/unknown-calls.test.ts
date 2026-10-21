@@ -97,6 +97,68 @@ describe('a call the bench cannot make', () => {
   });
 });
 
+describe('a name the sketch has never heard of', () => {
+  it('says so in the Python front end', () => {
+    expect(failure('print(pins)')).toBe("NameError: name 'pins' is not defined");
+  });
+
+  it('says so in the C++ front end', () => {
+    expect(failure('void setup() { Serial.print(pins); }', 'arduino-cpp')).toBe(
+      "Error: 'pins' was not declared in this scope",
+    );
+  });
+
+  it('says what a device is, rather than claiming the name is unknown', () => {
+    expect(failure('from gpiozero import LED\nlamp = LED(17)\nprint(lamp)')).toBe(
+      "TypeError: 'lamp' is a device, not a value",
+    );
+  });
+
+  it('says what a function is', () => {
+    expect(failure('def go():\n    return 1\nprint(go)')).toBe(
+      "TypeError: 'go' is a function, not a value",
+    );
+  });
+
+  it('says what a class is', () => {
+    expect(failure('class Counter:\n    def bump(self):\n        return 1\nprint(Counter)')).toBe(
+      "TypeError: 'Counter' is a class, not a value",
+    );
+  });
+});
+
+describe('a member the bench cannot find', () => {
+  it('says a value has no such member', () => {
+    expect(failure("print('abc'.length)")).toBe(
+      "AttributeError: 'str' object has no attribute 'length'",
+    );
+  });
+
+  it('says a dictionary has no such key', () => {
+    expect(failure("d = {'a': 1}\nprint(d['b'])")).toBe(
+      "KeyError: key 'b' is not in the dictionary",
+    );
+  });
+
+  it('says a device has no such member', () => {
+    expect(failure('from gpiozero import LED\nlamp = LED(17)\nprint(lamp.nonsense)')).toBe(
+      "AttributeError: 'led' object has no attribute 'nonsense'",
+    );
+  });
+
+  it('reads a list by its index', () => {
+    expect(output('print([1, 2, 3][1])')).toBe('2\n');
+  });
+});
+
+describe('an index the bench cannot reach', () => {
+  it('says a list has no such element', () => {
+    expect(failure('print([1, 2, 3][5])')).toBe(
+      'IndexError: index 5 is out of range for a list of 3',
+    );
+  });
+});
+
 describe('len', () => {
   it('counts the characters of a string', () => {
     expect(output("print(len('abc'))")).toBe('3\n');
