@@ -52,6 +52,24 @@ export interface ScriptedI2cSlave {
 }
 
 /**
+ * A device that answers on the SPI bus.
+ *
+ * Unlike I2C there is no address to acknowledge: a device is selected by its
+ * chip-select pin alone, which is why a panel on the wrong CS simply never
+ * answers rather than reporting a fault.
+ */
+export interface SpiDevice {
+  /**
+   * One byte out to the device.
+   *
+   * `dataSelect` is the data/command line's level, and `chipSelected` is false
+   * once the chip-select has risen -- which is how a device knows a command
+   * was abandoned half way.
+   */
+  receive(byte: number, dataSelect: boolean, chipSelected: boolean): void;
+}
+
+/**
  * A read that runs off the end of what a device has.
  *
  * I2C has no way to say "there is nothing more": a device that answers fewer

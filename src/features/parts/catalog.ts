@@ -132,6 +132,18 @@ export type ComponentSpec =
   | { readonly kind: 'ir-receiver' }
   | { readonly kind: 'keypad' }
   | { readonly kind: 'i2c-sensor'; readonly device: I2cSensorVariant }
+  /*
+   * A shift register on the SPI bus: the clock and the data in are the bus's
+   * own pins, and the latch is a plain output the sketch drives, because on
+   * the chip the two are separate wires.
+   */
+  | {
+      readonly kind: 'shift-register';
+      readonly spi: { readonly clock: string; readonly dataIn: string };
+      readonly latch: string;
+      /** The enable line, active low: pulling it down floats the outputs. */
+      readonly enable: string;
+    }
   | { readonly kind: 'lcd'; readonly variant: LcdVariant }
   | { readonly kind: 'servo' }
   /*

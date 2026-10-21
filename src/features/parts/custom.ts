@@ -372,6 +372,11 @@ function checkComponent(value: unknown): ComponentVerdict {
   if (OHM_KINDS.has(kind)) allowed.add('ohms');
   if (kind === 'capacitor') allowed.add('farads');
   if (kind === 'display') allowed.add('address');
+  if (kind === 'shift-register') {
+    allowed.add('spi');
+    allowed.add('latch');
+    allowed.add('enable');
+  }
   const integer = INTEGER_PARAMS[kind];
   if (integer !== undefined) allowed.add(integer.param);
   for (const key of Object.keys(component)) {
@@ -382,6 +387,38 @@ function checkComponent(value: unknown): ComponentVerdict {
     const bus = component.bus;
     if (typeof bus !== 'string' || SCRIPTED_BUSES[bus] === undefined) {
       return bad(`component.bus must be one of ${Object.keys(SCRIPTED_BUSES).join(', ')}`);
+    }
+  }
+  if (kind === 'shift-register') {
+    /*
+     * The chip names three of its own pins: the clock and the data in are the
+     * bus's wires, and the latch and the enable are the ones the sketch
+     * drives. A file has to name the same pins the shipped part does, because
+     * the behaviour reads the part's pins by those names.
+     */
+    const spi = component.spi;
+    if (!isPlainObject(spi)) return bad('component.spi must be an object');
+    const wiring = spi as Record<string, unknown>;
+    for (const key of Object.keys(wiring)) {
+      if (key !== 'clock' && key !== 'dataIn') {
+        return bad(`component.spi.${key} is not a field of the SPI wiring`);
+      }
+    }
+    const clock = wiring.clock;
+    const dataIn = wiring.dataIn;
+    const latch = component.latch;
+    const enable = component.enable;
+    if (typeof clock !== 'string' || typeof dataIn !== 'string') {
+      return bad('component.spi must name the clock and the data in');
+    }
+    if (typeof latch !== 'string') return bad('component.latch must name a pin');
+    if (typeof enable !== 'string') return bad('component.enable must name a pin');
+    const ids = pinIdsForComponent(component as unknown as ComponentSpec);
+    if (ids === null) return bad('this part has no pins to name');
+    for (const name of [clock, dataIn, latch, enable]) {
+      if (!ids.includes(name)) {
+        return bad(`the pin "${name}" is not one this part has`);
+      }
     }
   }
   for (const param of ENUM_PARAMS) {

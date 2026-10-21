@@ -845,6 +845,14 @@ function elementsForPart(
       ];
     }
 
+    case 'shift-register':
+      /*
+       * The outputs are not in the netlist: the chip drives them, and what it
+       * drives them with is the byte it has latched, which only the firmware
+       * knows. The engine stamps them around the netlist instead.
+       */
+      return [];
+
     case 'neopixel':
     case 'neopixel-matrix':
     case 'led-ring':

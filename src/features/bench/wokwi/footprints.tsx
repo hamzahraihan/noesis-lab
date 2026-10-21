@@ -178,9 +178,11 @@ function shapeFor(
       return <DisplayBody definition={definition} state={state} part={part} />;
     case 'i2c-sensor':
     case 'ds18b20':
+    case 'shift-register':
       // The modules the bench draws itself: Wokwi's library has no element
-      // for a barometer, a current monitor, a converter or a one-wire
-      // sensor, so these are drawn here from the definition's own pins.
+      // for a barometer, a current monitor, a converter, a one-wire sensor
+      // or a shift register, so these are drawn here from the definition's
+      // own pins.
       return <ModuleBody definition={definition} />;
   }
 }

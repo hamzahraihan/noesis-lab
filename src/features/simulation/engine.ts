@@ -32,6 +32,7 @@ import { ADS1115_CHANNEL_KNOBS } from '@/features/parts';
 import { Bmp180 } from '@/features/parts';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
+import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -311,6 +312,15 @@ export class Engine {
   /** Everything on the bench that answers to an I2C address. */
   private readonly devices = new Map<string, I2cDevice>();
 
+  /**
+   * The shift registers on the bench, keyed by part id.
+   *
+   * They answer on the SPI bus, but they are not displays: a shift register
+   * holds a byte and drives eight pins with it, and what it holds is the
+   * sketch's business rather than the renderer's.
+   */
+  private readonly shiftRegisters = new Map<string, Shift595>();
+
   /** Servo parts, keyed by part id, for the renderer and the firmware port. */
   private readonly servos = new Map<string, Servo>();
 
@@ -436,6 +446,7 @@ export class Engine {
     const previousLcds = new Map(this.lcds);
     this.displays.clear();
     this.devices.clear();
+    this.shiftRegisters.clear();
     this.servos.clear();
     this.lcds.clear();
     this.lcdStrobe.clear();
@@ -522,6 +533,9 @@ export class Engine {
         device.setLoadSource(() => this.dynamicState.knob(part.id, HX711_LOAD_KNOB));
       }
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
+      if (part.definition.component.kind === 'shift-register') {
+        this.shiftRegisters.set(part.id, new Shift595());
+      }
       const lcd = previousLcds.get(part.id) ?? createLcd(part.definition);
       if (lcd) this.lcds.set(part.id, lcd);
       if (
@@ -963,6 +977,47 @@ export class Engine {
       if (controller instanceof Ili9341) controller.receive(byte, dataSelect, chipSelected);
       else if (controller instanceof Ssd1306) controller.receiveSpi(byte, dataSelect, chipSelected);
     }
+    for (const [partId, register] of this.shiftRegisters) {
+      if (!this.isShiftRegisterOnSpiBus(partId)) continue;
+      register.receive(byte, dataSelect, chipSelected);
+    }
+  }
+
+  /**
+   * The level on a part's pin, when a board pin drives it.
+   *
+   * A part's pin is a net, and the board pin that shares it is the one
+   * driving it: the sketch sets the pin, and the part sees the level.
+   */
+  private partPinLevel(partId: string, pinId: string, timeMs: number): boolean {
+    if (!this.mcuPart) return false;
+    const net = this.currentNetlist.pinNode.get(`${partId}:${pinId}`);
+    if (net === undefined || net === GROUND) return false;
+    for (const pin of this.mcu.pins()) {
+      if (pin.gpio === undefined) continue;
+      if (this.netOfBoardGpio(this.currentNetlist, this.mcuPart.id, pin.gpio) !== net) continue;
+      return this.mcu.levelOf(pin.id, timeMs) !== 0;
+    }
+    return false;
+  }
+
+  /**
+   * Whether a shift register's clock and data in land on the SPI nets.
+   *
+   * The gate every byte goes through: a register whose clock is wired
+   * somewhere else hears nothing, which is the same silence a panel on the
+   * wrong chip-select gives.
+   */
+  private isShiftRegisterOnSpiBus(partId: string): boolean {
+    const component = this.bench.parts.find((part) => part.id === partId)?.definition.component;
+    if (component?.kind !== 'shift-register') return false;
+    const netlist = this.currentNetlist;
+    for (const pinId of [component.spi.clock, component.spi.dataIn]) {
+      const net = netlist.pinNode.get(`${partId}:${pinId}`);
+      if (net === undefined || net === GROUND) return false;
+      if (!this.spiNets.has(net)) return false;
+    }
+    return true;
   }
 
   /**
@@ -1624,6 +1679,28 @@ export class Engine {
         ohms: servo.loadOhms,
         label: 'servo',
       });
+    }
+    // A shift register drives its eight outputs itself, from the byte it has
+    // latched, so what it drives them with is stamped here rather than frozen
+    // into the netlist like a passive part.
+    for (const [partId, register] of this.shiftRegisters) {
+      const component = this.bench.parts.find((part) => part.id === partId)?.definition.component;
+      if (component?.kind !== 'shift-register') continue;
+      register.setLatchLevel(this.partPinLevel(partId, component.latch, timeMs));
+      register.setEnableLevel(!this.partPinLevel(partId, component.enable, timeMs));
+      const supply = netlist.pinNode.get(`${partId}:VCC`);
+      if (supply === undefined) continue;
+      for (let index = 0; index < SHIFT595_OUTPUTS; index++) {
+        const output = netlist.pinNode.get(`${partId}:Q${index}`);
+        if (output === undefined) continue;
+        elements.push({
+          kind: 'resistor',
+          a: output,
+          b: register.output(index) ? supply : GROUND,
+          ohms: SHIFT595_OUTPUT_OHMS,
+          label: `Q${index}`,
+        });
+      }
     }
     let internalNet = netlist.nodeCount;
     let sourceOrdinal = 0;

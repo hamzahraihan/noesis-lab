@@ -68,6 +68,7 @@ import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
 import { ds18b20Definition } from './ds18b20';
+import { shift595Definition } from './devices/shift595';
 import { remoteDefinition } from './remote';
 import { dialerDefinition } from './dialer';
 import { microsdDefinition } from './sdcard';
@@ -442,6 +443,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Four channels read against the chip\u2019s own reference, in sixteen-bit counts. The gain setting says how much of the range a channel gets.',
     make: ads1115Definition,
+  },
+  {
+    id: 'shift595',
+    name: '74HC595 Shift Register',
+    group: 'output',
+    note: 'Eight outputs from two wires: shift a byte in over SPI, then raise the latch to put it on the outputs.',
+    make: shift595Definition,
   },
   {
     id: 'lcd-16x2',

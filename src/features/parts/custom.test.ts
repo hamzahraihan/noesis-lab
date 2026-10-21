@@ -12,6 +12,7 @@ import {
 import type { ComponentSpec } from './catalog';
 import { PART_CATALOGUE } from './catalogue';
 import { DIODE_PROFILES } from './passives';
+import { shift595Definition } from './devices/shift595';
 
 /**
  * A part the catalogue does not ship, in the shape a file would carry it.
@@ -55,10 +56,10 @@ describe('the derivation', () => {
     expect(kinds).toContain('ir-remote');
     expect(kinds).not.toContain('mcu');
     expect(kinds).not.toContain('breadboard');
-    // 36 shipped kinds plus `scripted`, which ships no part on purpose: the
+    // 37 shipped kinds plus `scripted`, which ships no part on purpose: the
     // whole point of that kind is that the host has no model for it.
     expect(kinds).toContain('scripted');
-    expect(kinds.length).toBe(37);
+    expect(kinds.length).toBe(38);
   });
 
   it("reads a kind's pins from the shipped part of that kind", () => {
@@ -267,6 +268,29 @@ describe('a part a file may carry', () => {
       ],
     };
     expect(reasonFor(tft)).toContain('reads these pins');
+  });
+
+  it('checks a shift register the same way, and only lets it name its own pins', () => {
+    const shipped = shift595Definition();
+    const register = {
+      ...goodResistor(),
+      widthMm: shipped.widthMm,
+      heightMm: shipped.heightMm,
+      component: { ...shipped.component },
+      pins: shipped.pins.map((pin) => ({ ...pin })),
+    };
+    expect(validatePartDefinition(register).ok).toBe(true);
+    // A clock the part does not have: the behaviour reads the pins by name.
+    expect(
+      reasonFor({
+        ...register,
+        component: { ...shipped.component, spi: { clock: 'NOPE', dataIn: 'SER' } },
+      }),
+    ).toContain('is not one this part has');
+    // The chip-select is the bus's business, not the part's to declare.
+    expect(
+      reasonFor({ ...register, component: { ...shipped.component, chipSelect: 'CS' } }),
+    ).toContain('component.chipSelect is not part of "shift-register"');
   });
 
   it('refuses a colour that is not a hex triple', () => {
