@@ -100,7 +100,7 @@ An interactive simulation platform designed to bridge the gap between software c
 - **Simulation Engine:** SPICE-like fast transient circuit simulation combined with cycle-accurate micro-controller emulation (e.g., AVR/ARM instruction execution).
 - **Asset Rendering:** Low-poly 3D / high-DPI Vector 2D models using WebGL/Canvas to ensure smooth web/desktop rendering while preserving component labels and pin pitch detail.
 - **Extensibility:** Moddable component framework allowing users to define custom sensor behavior using JS/Lua scripting or JSON specs.
-  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 35
+  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 38
   component kinds the simulator implements — geometry, parameters, pins, knobs and
   colours, validated at import and resolvable by the compiler like any shipped
   part. **Scripting half shipped** (2026-10-19, spec
@@ -112,7 +112,9 @@ An interactive simulation platform designed to bridge the gap between software c
   level, or an I2C slave answering register reads and writes at the address its
   file declares. The runtime loads lazily — 492 KB of WASM behind a dynamic
   import, fetched the first time a bench holds a part that has a script — and a
-  fault reaches the operator as one line in the console per part per fault.
+  fault reaches the operator as a row of its own in the Problems panel, one per
+  part per fault, whichever realm latched it: the page's own runtime, or the
+  worker's, which reports its rows over its message channel.
   It was deferred because it needed an ABI over the solver's `Element[]`, a sandbox
   that cannot touch the DOM, worker-safe evaluation, and a story for a user module
   that throws mid-solve; the spec answers those four. A circuit now **carries the
@@ -120,9 +122,7 @@ An interactive simulation platform designed to bridge the gap between software c
   opens on a machine that never imported anything — which is what a gallery
   example needs. **Worked example shipped** (2026-10-20): the gallery's *Soil
   Moisture Probe* carries its definition inside the circuit document, and its
-  knob is the sensor — the sketch reads whatever the script answers on A0. Still
-  open from that spec: the Problems panel row a fault should own (today's line is
-  the console).
+  knob is the sensor — the sketch reads whatever the script answers on A0.
 
 ---
 
@@ -511,8 +511,52 @@ something the sketch cannot read as a number -- a device, an object, a
 function, a class -- says what it holds rather than claiming the name was
 unknown.
 
-**Still open.** In the C++ front end a field that was never set still reads as
-zero: the interpreter cannot tell a field nobody assigned from a field
-nobody wrote, and zero is what C++ gives a field it knows about.
+**A field the class declares is not a zero until somebody sets it.** The
+bench can now tell three cases apart, where it answered zero for all three:
+a field the constructor set reads its value, a field nobody set says it was
+never set, and a member the class never had says the class has no such
+member. A typo'd field used to read as data, and a field the sketch forgot
+used to read as a zero, and both of those are the worst answers there are.
+The one zero left in this corner is a member of a class the bench has never
+seen -- a library's own class, whose members it does not know.
+
+**An unqualified name in a member function is the member.** `n = 41` in a
+constructor writes the field and not a local, which is what C++ means by it,
+and it is what makes the rule above possible: a field that was never set is
+in no scope at all, so without this the write would land in the method's own
+frame and the field would stay unset. A local of the same name is the
+programmer's own and stays theirs.
+
+**Still open.** A free function sees the caller's scope, fields included: a
+name it writes is the nearest one the chain holds, and the chain runs
+through the object whose method called it. C++ would refuse to compile that
+at all; the bench compiles it and lets the member take the write.
+
+### 6.6 The debugger, and what it can stop at
+
+**A stop is a line, and the program stops there.** The margin of the editor
+carries one: a click sets it, a click takes it off, and the sketch stops the
+next time it runs a statement on that line. The panel under the bench says
+where the program is and what it can see there -- the names in scope and what
+each of them holds -- and offers the three things a person can ask of a
+stopped program: carry on, step over the call it is in, or step into it.
+
+**The interpreter is where the stops are.** A stop needs a place to stop, and
+the interpreter is a program the bench can read: it asks itself, at every
+statement, whether it should stop there. A compiled core is a machine the
+bench cannot read that way, so a run on one has no stops in it -- and the
+panel says so rather than pretending otherwise.
+
+**The stops travel with the sketch, not with the run.** The bench's sketch
+may be running in a worker, and the worker is the realm that holds the
+program: so the stops ride with the sketch when it is loaded, and the frame
+the program stopped on comes back as a message. A stop that arrived after
+the sketch had started would be a stop the sketch had already passed.
+
+**A line can hold more than one statement.** `int a = 1; int b = 2;` is two
+statements on one line, and a stop is on the line rather than on the
+statement: it fires when the program reaches the line, and not again while
+it is still on it. A block is not a statement of its own -- it carries the
+line of the first statement inside it -- so it is never where a stop lands.
 
 

@@ -4,9 +4,10 @@
  * The spec's rule is that failure is loud and latched: the part goes quiet from
  * the first fault on, which the solver and the bus both honour, and the fault
  * itself has to reach the operator rather than only the model. The Problems
- * panel is where these rows belong; until it grows one, the console is the one
- * place every backend has, and this is deliberately once per part per fault --
- * a script that throws on every call must not turn the solver into a log spout.
+ * panel owns a row for each of these -- one per part per fault, and never the
+ * same one twice, so a script that throws on every call does not turn the
+ * solver into a log spout. The console keeps a line of it too, because it is
+ * the one place every backend has.
  */
 
 export interface ScriptFault {

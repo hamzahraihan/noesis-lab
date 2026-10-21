@@ -32,20 +32,21 @@ A neighboring product could not truthfully copy these together:
 - Runs entirely in the browser as static files; hosted anywhere that can serve static assets. HashRouter (no server rewrites). Dev and preview servers are Vite.
 - Optional worker path offloads the simulation engine to a Web Worker over a SharedArrayBuffer snapshot; requires cross-origin isolation (COOP/COEP headers) on the host. Falls back silently to in-page simulation without it.
 - Firmware is compiled in-browser via an AVR toolchain fetched from a CDN (requires `cross-origin-resource-policy`); works offline for everything except that compile step once cached.
-- Seven boards: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano RP2040 Connect, Franzininho, Raspberry Pi 4. Seven boards, each with its own pin numbering and buses.
+- Eight boards: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano RP2040 Connect, Raspberry Pi Pico, Franzininho, Raspberry Pi 4. Eight boards, each with its own pin numbering and buses.
 - Editor is Monaco (bundled, no CDN) with an `arduino-cpp` language whose completions are exactly the interpreter's supported subset.
 - Component artwork is `@wokwi/elements` (MIT, 50+ SVG parts) integrated at true millimetre scale, plus hand-authored breadboard, capacitor, and I2C OLED.
-- Instruments on the bench: multimeter, oscilloscope, logic analyser, bus monitor, serial terminal.
+- Instruments on the bench: multimeter, oscilloscope, logic analyser, bus monitor, serial terminal, and a debugger for the interpreted sketch.
 
 ## Capabilities and Constraints
 
 Confirmed capabilities:
 - Resistive-network circuit solver per frame; pin-level voltage/current readout.
-- Firmware interpreter for a deliberately small C++ subset (void/int/float/double/bool/char/byte/long/short/unsigned/signed, arrays, #define; no struct/enum/pointers/classes/String/uint8_t).
-- Real-firmware backends alongside the interpreter: the Uno runs compiled AVR machine code (in-browser toolchain, Wasm core), and the Nano RP2040 Connect boots the pinned MicroPython UF2 on `rp2040js`, mounting the project's files as a littlefs image. Run re-mounts the current code and starts a fresh machine; Reset is the same clean boot. Selected per run from the backend selector.
+- Firmware interpreter for a deliberately small C++ subset (void/int/float/double/bool/char/byte/long/short/unsigned/signed, the fixed-width integer types, String, arrays, classes with methods and fields, file-scope enums, #define; no pointers, structs, heap allocation or templates).
+- Real-firmware backends alongside the interpreter: the Uno runs compiled AVR machine code (in-browser toolchain, Wasm core); the Nano RP2040 Connect and the Raspberry Pi Pico boot the pinned MicroPython UF2 on `rp2040js`, mounting the project's files as a littlefs image; the ESP32 boots an emulated Xtensa chip running its own MicroPython. Run re-mounts the current code and starts a fresh machine; Reset is the same clean boot. Selected per run from the backend selector, which refuses a mode the board or the sketch cannot use and says why.
 - Arduino APIs the interpreter implements: pinMode, digitalWrite, analogWrite, Serial, Wire (including requestFrom/read), SPI, delay, millis, and board-specific interrupts; character LCD (HD44780), servos, and a `tft` convenience layer.
 - A bench-local network: `WiFi.begin`/`status`/`localIP` with Arduino's `WL_*` codes, and a poll-based `net` port — `get`/`read` for HTTP and `subscribe`/`available`/`message` for a sensor that publishes. It is simulated, so it is deterministic and needs no internet; the answer arrives on simulated time, which is why a sketch polls for it.
-- Guided exercise ladder: 11 exercises (0.1 first circuit; 1.1–1.2 GPIO; 2.1–2.2 analog; 3.1–3.2 bus protocols; 4.1–4.2 interrupts; 5.1 maps; 5.2 single-board computers).
+- A debugger on the interpreted sketch: a stop set in the editor's margin, the program held there with the names in scope and what each holds, and three ways on — continue, step over the call, step into it. The stops travel with the sketch into the worker, which is the realm that holds the program. Nothing on a compiled core: no GDB, no memory view, no watchpoints.
+- Guided exercise ladder: 12 exercises (0.1 first circuit; 1.1–1.2 GPIO; 2.1–2.2 analog; 3.1–3.2 bus protocols; 4.1–4.2 interrupts; 5.1 maps; 5.2 single-board computers; 5.3 networks).
 - Project gallery per board; glossary; references page; diagnostics harness.
 - Real 1:1 scale parts on 2.54 mm pitch; pin coordinates in millimetres.
 
@@ -62,7 +63,7 @@ Explicitly undecided:
 ## Brand Commitments
 
 - Name: Noesis (also shown as "Noesis Lab" in the UI heading).
-- Assets: Wokwi component library (MIT), board definitions for seven boards, the exercise ladder (0.1–5.2), long-form worksheets in docs/exercises/, project gallery data.
+- Assets: Wokwi component library (MIT), board definitions for eight boards, the exercise ladder (0.1–5.3), long-form worksheets in docs/exercises/, project gallery data.
 - No voice, personality, or visual identity is formally committed here. Visual world, palette, typography, and components belong in DESIGN.md and are owned by new-work/document, not init.
 - References the user explicitly made binding: none beyond the above.
 
@@ -71,7 +72,8 @@ Explicitly undecided:
 Real content, data, and assets (with paths):
 - docs/PLAN.md — project brief and implementation decisions (Monaco, Wokwi parts, jumper routing, boards).
 - docs/exercises/ — long-form worksheets for every module (module-0 through module-5).
-- src/features/learn/exercises/ — the app-facing exercise data (0.1–5.2).
+- docs/parity-scorecard.md — the benchmark against Wokwi and Velxio: every pillar, the file behind every score, and the gaps still open.
+- src/features/learn/exercises/ — the app-facing exercise data (0.1–5.3).
 - src/features/learn/boardRegistry.ts — board list and editorial lines.
 - src/features/parts/ — board and part definitions with pin tables.
 - src/features/simulation/mcu.ts — per-board bus/pin tables.

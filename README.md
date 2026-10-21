@@ -1,35 +1,155 @@
-# React + TypeScript + Vite
+# Noesis
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+**Wire it. Run it. Watch it move.**
 
-Currently, two official plugins are available:
+Noesis is an embedded-systems workbench in the browser. You wire a board onto a
+breadboard at true millimetre scale, write the firmware that drives it, and
+watch the voltage move while it runs — no hardware, no damage, no bill.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The point is not that the code compiles. It is that a shorted LED, a missing
+pull-up, a floating input and a wrong I²C address are all *physical* mistakes
+here, and the bench shows each one instead of hiding it.
 
-## React Compiler
+Everything runs in the page. The bench is static files; there is no server
+runtime, and once the toolchain has been fetched once it works offline.
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+## What is on the bench
 
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
+**Eight boards**, each with its own pin numbering, its own buses and its own
+traps: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano
+RP2040 Connect, Raspberry Pi Pico, Franzininho, Raspberry Pi 4.
 
-## Expanding the Oxlint configuration
+**Firmware that really runs.** Four paths, chosen per run from the backend
+selector, which refuses a mode the board or the sketch cannot use and says
+why:
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+| Backend | Boards | What actually executes |
+| --- | --- | --- |
+| AVR | Uno | Real compiled machine code — an in-browser AVR toolchain and a home-built Wasm CPU core, cross-checked against the `avr8js` reference path |
+| RP2040 | Nano RP2040 Connect, Pico | The pinned MicroPython build, booted on `rp2040js`, with the project's files mounted as a littlefs image |
+| ESP32 chip | ESP32 | An emulated Xtensa chip running its own MicroPython, with GPIO, I²C and SPI seams into the bench |
+| Interpreter | all of them | A C++/Python front end over a generator-based VM — the fallback for boards with no machine-code core |
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+**Fifty-seven parts** over thirty-eight component kinds, drawn at 1:1 on
+2.54 mm pitch: LEDs and matrices, 7-segment and LCD and OLED and TFT panels,
+servos, steppers, relays, a keypad, a rotary encoder, potentiometers, buttons,
+sensors over I²C and one-wire, and a breadboard whose holes are the ones the
+wires actually land in.
+
+**Instruments** — an oscilloscope, an 8-channel logic analyser, a multimeter, a
+bus monitor and a serial monitor. The analyser draws the square wave the
+solver produced, not the samples between edges.
+
+**A debugger.** Set a stop in the editor's margin and the sketch stops there:
+the panel says where it is, what it can see from there, and carries on, steps
+over the call, or steps into it.
+
+**Twelve exercises**, from a first LED to interrupts, each runnable on the
+bench it describes, with long-form worksheets, hints and worked solutions.
+
+**A circuit that travels.** The document is the source of truth: it autosaves
+per board, rides in a share link, and reads and writes as a `.json` file. A
+custom part's definition travels inside it, so a link opens on a machine that
+imported nothing.
+
+## Getting started
+
+Requires **Node 24** and npm.
+
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Then open the printed URL. The bench opens on the Uno with a starter circuit
+wired and a sketch loaded.
+
+## The checks
+
+```bash
+npm run check          # typecheck + lint + boundary gate + the whole suite
+```
+
+or individually:
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | The dev server, with the worker path's isolation headers already set |
+| `npm run build` | Typecheck and a production bundle into `dist/` |
+| `npm run preview` | Serve the built bundle the way a static host would |
+| `npm test` | The full Vitest suite — 197 files, 1,638 tests |
+| `npm run test:watch` | The same, in watch mode |
+| `npm run typecheck` | `tsc -b` |
+| `npm run lint` | oxlint |
+| `npm run format` | oxfmt over `src` and `scripts` |
+| `npm run check:boundaries` | The architectural gate — features may not reach across each other |
+| `npm run build:wasm` | Rebuild the AVR Wasm core from `simulation/avr/wasm/` |
+
+The boundary gate is worth knowing about: it fails the build if one feature
+reaches into another's internals, so the seams stay seams.
+
+## Hosting it
+
+The app is static files with a `HashRouter`, so any host that can serve files
+will do. One exception: the **simulation worker** offload needs the page to be
+cross-origin isolated, which means two response headers on every response:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Without them the bench still runs — the engine falls back to simulating in the
+page — but the worker path stays dark. `docs/static-hosting.md` has the details
+per host.
+
+## Where things live
+
+```
+src/
+  features/
+    bench/         the workbench: canvas, wiring, editor, panels, stores
+    simulation/    the engine — solver, netlist, firmware, backends, worker
+    parts/         board and part definitions, and the custom-part registry
+    instruments/   scope, logic analyser, multimeter, bus monitor, editor
+    learn/         exercises, gallery, projects, glossary, references
+  routes/          one file per route
+docs/
+  PLAN.md          the brief and the decisions taken along the way
+  exercises/       long-form worksheets, module 0 to module 5
+  parity-scorecard.md   how the bench compares to Wokwi and Velxio
+```
+
+Two conventions worth knowing before you read the code:
+
+- **The circuit is data.** `simulation/circuit-doc.ts` defines the document;
+  the canvas edits it, the bench is a projection of it, and undo is a stack of
+  documents rather than a stack of inverse operations.
+- **Nothing claims a capability the simulator does not have.** The editor's
+  autocomplete offers exactly the subset the interpreter implements. A call
+  the bench cannot make raises, with a name, rather than answering zero.
+
+## Status
+
+In development, and honest about where it stands: `docs/parity-scorecard.md`
+scores the bench against Wokwi and Velxio pillar by pillar, names the file
+behind every score, and lists the gaps that are still open.
+
+Two things are deliberately *not* settled yet, and both are recorded rather
+than assumed:
+
+- **No licence has been chosen.** The package is private and the repository
+  carries no `LICENSE` file, so no terms are committed. Anyone who wants to
+  reuse or extend this should raise it first.
+- **No accessibility standard is named.** Keyboard operability, reduced-motion
+  handling and screen-reader-friendly readouts are implemented, but no WCAG
+  level has been audited or claimed.
+
+## Credits
+
+Component artwork is **[@wokwi/elements](https://github.com/wokwi/wokwi-elements)**,
+MIT — Wokwi's own published library, integrated at true millimetre scale so a
+part's pins and its picture agree. The breadboard, the capacitor and the
+four-pin I²C OLED are hand-authored, because Wokwi ships no breadboard and its
+OLED is a different part — eight pins and SPI, where this bench drives the
+breakout a sketch actually talks to.
