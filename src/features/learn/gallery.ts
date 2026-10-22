@@ -2185,6 +2185,68 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Memory — an address and the bytes at it
+ * ------------------------------------------------------------------ */
+
+const MEMORY: GalleryProject = {
+  id: 'eeprom24lc256',
+  title: 'EEPROM',
+  blurb:
+    'A 24LC256 and a counter that lives in it. The chip is not a register file: the sketch writes an address and then the bytes at it, which is the shape almost every memory has.',
+  parts: [{ name: 'EEPROM (24LC256)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * The memory takes an address and then the bytes at it. Reading is the
+ * same shape: name the address, and then read.
+ */
+const byte MEMORY = 0x50;
+const int COUNTER = 0x0010;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  Serial.println("memory ready");
+}
+
+void loop() {
+  // Read the counter back.
+  Wire.beginTransmission(MEMORY);
+  Wire.write(COUNTER >> 8);
+  Wire.write(COUNTER & 0xFF);
+  Wire.endTransmission();
+  Wire.requestFrom(MEMORY, 1);
+  byte count = Wire.read();
+
+  // Count it up and write it back.
+  count = count + 1;
+  Wire.beginTransmission(MEMORY);
+  Wire.write(COUNTER >> 8);
+  Wire.write(COUNTER & 0xFF);
+  Wire.write(count);
+  Wire.endTransmission();
+
+  Serial.print("count ");
+  Serial.println(count);
+  delay(500);
+}
+`,
+      circuit: CIRCUITS.eeprom24lc256,
+    },
+  ],
+  working: [
+    'The count climbs, and it climbs by one every time.',
+    'The counter lives in the memory, not in the sketch: a chip that forgot would start the count again.',
+    'The address is sixteen bits, so it takes two bytes on the bus.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -3025,6 +3087,7 @@ export const GALLERY: readonly GalleryProject[] = [
   EXPANDER,
   THERMOCOUPLE,
   CONVERTER,
+  MEMORY,
   MATRIX,
   NOKIA_5110,
   REACTION,

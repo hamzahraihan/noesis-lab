@@ -943,6 +943,26 @@ void loop() {
     expect(Math.abs(peak - volts), 'the windings see the supply').toBeLessThan(0.5);
   }, 60_000);
 
+  it('keeps the count in the memory', () => {
+    const build = galleryById('eeprom24lc256')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+
+    // The count climbs by one every time, which is the proof that the
+    // memory kept it: a chip that forgot would start the count again.
+    const log = simulation.serialLines().join('');
+    const counts = [...log.matchAll(/count (\d+)/g)].map((match) => Number(match[1]));
+    expect(counts.length, 'the sketch reported a count').toBeGreaterThan(1);
+    for (let index = 1; index < counts.length; index++) {
+      expect(counts[index], 'the count climbs by one').toBe(counts[index - 1]! + 1);
+    }
+  }, 60_000);
+
   it('shows the count in binary on eight lights', () => {
     const build = galleryById('pcf8574')!.builds[0]!;
     const simulation = benchFor(build);
