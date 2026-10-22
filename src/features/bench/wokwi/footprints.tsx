@@ -199,6 +199,9 @@ function shapeFor(
     case 'tm1637':
       // A display that drives its own glass: the digits are its registers.
       return <Tm1637Body definition={definition} state={state} part={part} />;
+    case 'a4988':
+      // A driver board: nothing on it moves by itself.
+      return <A4988Body definition={definition} />;
   }
 }
 
@@ -1498,6 +1501,82 @@ function SevenSegmentDigit({
         height={t}
         fill={pattern & 0x80 ? on : off}
       />
+    </g>
+  );
+}
+
+/**
+ * The A4988 carrier: a black board with the driver in the middle, the bulk
+ * capacitor beside it and the trim potentiometer for the current limit.
+ *
+ * The board is drawn rather than borrowed, because the library has no
+ * element for a stepper driver -- and the header is drawn the way the
+ * carrier carries it, in four groups of four: the motor's leads, the
+ * supply, and the eight lines the driver takes.
+ */
+function A4988Body({ definition }: { definition: PartDefinition }) {
+  const width = definition.widthMm;
+  const height = definition.heightMm;
+  return (
+    <g filter="url(#nz-lift)">
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        rx={1.4}
+        fill={definition.bodyColour}
+        stroke="#0c1018"
+        strokeWidth={0.2}
+      />
+      <rect x={0} y={0} width={width} height={height} rx={1.4} fill="url(#nz-body)" />
+      {/* The driver, and the exposed pad under it. */}
+      <rect x={15.5} y={13.0} width={8.0} height={8.0} rx={0.4} fill="#16181d" />
+      <circle cx={17.0} cy={14.5} r={0.4} fill="#8b9099" opacity={0.7} />
+      {/* The bulk capacitor across the motor's supply. */}
+      <circle cx={27.5} cy={17.0} r={3.2} fill="#1f2937" stroke="#4b5563" strokeWidth={0.3} />
+      <text
+        x={27.5}
+        y={17.6}
+        fontSize={1.5}
+        textAnchor="middle"
+        fill="#9ca3af"
+        fontFamily={SILKSCREEN_FONT}
+      >
+        100
+      </text>
+      {/* The trim potentiometer: the current limit. */}
+      <rect x={13.0} y={26.0} width={6.0} height={6.0} rx={0.5} fill="#1e3a8a" />
+      <circle cx={16.0} cy={29.0} r={1.6} fill="#93c5fd" />
+      <rect x={15.4} y={26.4} width={1.2} height={5.2} rx={0.2} fill="#dbeafe" />
+      <text
+        x={width / 2}
+        y={9.0}
+        fontSize={1.7}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+        opacity={0.95}
+      >
+        A4988
+      </text>
+      {/* The header along the bottom edge, and the names a tutorial calls it. */}
+      {definition.pins.map((pin) => (
+        <g key={pin.id}>
+          <SolderPad x={pin.x} y={pin.y} />
+          <text
+            x={pin.x}
+            y={pin.y - 1.2}
+            fontSize={1.0}
+            textAnchor="middle"
+            fill={definition.legendColour}
+            fontFamily={SILKSCREEN_FONT}
+            opacity={0.9}
+          >
+            {pin.label}
+          </text>
+        </g>
+      ))}
     </g>
   );
 }

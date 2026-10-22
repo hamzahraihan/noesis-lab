@@ -70,6 +70,7 @@ import { dhtDefinition } from './dht';
 import { ds18b20Definition } from './ds18b20';
 import { mfrc522Definition } from './mfrc522';
 import { tm1637Definition } from './tm1637';
+import { a4988Definition } from './a4988';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -288,6 +289,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'a4988',
+    name: 'Stepper driver (A4988)',
+    group: 'output',
+    note: 'A stepper motor driver with a translator behind it: a pulse on STEP moves the motor one step and DIR says which way, so the sketch never writes a phase table. The bench models the full-step excitation; the microstep modes drive one winding at a reduced current, which the bench\u2019s motor does not follow.',
+    make: a4988Definition,
   },
   {
     id: 'tm1637',

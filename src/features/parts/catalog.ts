@@ -118,6 +118,7 @@ export type ComponentSpec =
   | { readonly kind: 'ds18b20' }
   | { readonly kind: 'rc522' }
   | { readonly kind: 'tm1637' }
+  | { readonly kind: 'a4988' }
   | { readonly kind: 'neopixel' }
   | { readonly kind: 'neopixel-matrix' }
   | { readonly kind: 'led-ring' }

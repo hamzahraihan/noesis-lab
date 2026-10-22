@@ -35,6 +35,7 @@ import { Ds1307 } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
+import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -326,6 +327,15 @@ export class Engine {
   private readonly shiftRegisters = new Map<string, Shift595>();
 
   /**
+   * The stepper drivers on the bench, keyed by part id.
+   *
+   * A driver is not a display and not a sensor: it takes a step pulse and
+   * drives the windings of a motor from it, so what it drives them with is
+   * decided at the solve rather than frozen into the netlist.
+   */
+  private readonly stepperDrivers = new Map<string, A4988>();
+
+  /**
    * The register devices on the SPI bus, keyed by part id.
    *
    * Like the shift registers they are not displays, but unlike them they
@@ -458,10 +468,12 @@ export class Engine {
      */
     const previousLcds = new Map(this.lcds);
     const previousReaders = new Map(this.cardReaders);
+    const previousDrivers = new Map(this.stepperDrivers);
     this.displays.clear();
     this.devices.clear();
     this.shiftRegisters.clear();
     this.cardReaders.clear();
+    this.stepperDrivers.clear();
     this.servos.clear();
     this.lcds.clear();
     this.lcdStrobe.clear();
@@ -554,6 +566,10 @@ export class Engine {
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       if (part.definition.component.kind === 'shift-register') {
         this.shiftRegisters.set(part.id, new Shift595());
+      }
+      if (part.definition.component.kind === 'a4988') {
+        const driver = previousDrivers.get(part.id) ?? new A4988();
+        this.stepperDrivers.set(part.id, driver);
       }
       if (part.definition.component.kind === 'rc522') {
         const reader = previousReaders.get(part.id) ?? new Mfrc522();
@@ -1805,6 +1821,36 @@ export class Engine {
           b: register.output(index) ? supply : GROUND,
           ohms: SHIFT595_OUTPUT_OHMS,
           label: `Q${index}`,
+        });
+      }
+    }
+    /*
+     * A stepper driver drives the motor's windings itself, from the step
+     * pulse it was given, so what it drives them with is stamped here
+     * rather than frozen into the netlist like a passive part. The outputs
+     * are the chip's own states: one end of a winding at the supply and the
+     * other at ground, or both at ground when the chip has that winding
+     * turned off.
+     */
+    for (const [partId, driver] of this.stepperDrivers) {
+      driver.setInputs({
+        step: this.partPinLevel(partId, 'STEP', timeMs),
+        dir: this.partPinLevel(partId, 'DIR', timeMs),
+        enable: this.partPinLevel(partId, 'ENABLE', timeMs),
+        reset: this.partPinLevel(partId, 'RESET', timeMs),
+        sleep: this.partPinLevel(partId, 'SLEEP', timeMs),
+      });
+      const supply = netlist.pinNode.get(`${partId}:VMOT`);
+      if (supply === undefined) continue;
+      for (const pin of ['1A', '1B', '2A', '2B'] as const) {
+        const output = netlist.pinNode.get(`${partId}:${pin}`);
+        if (output === undefined) continue;
+        elements.push({
+          kind: 'resistor',
+          a: output,
+          b: driver.output(pin) ? supply : GROUND,
+          ohms: A4988_OUTPUT_OHMS,
+          label: pin,
         });
       }
     }
