@@ -365,6 +365,18 @@ part on the bench that drives a pin at a level of its own choosing: everything
 else that drives a pin drives it high or low. The converter's output is a
 source, and the solver carries it like any other.
 
+**A second voltage.** The Uno's own supply is five volts, and that is
+enough for a sketch and not enough for a motor: a stepper driver wants the
+motor's own supply, and a bench where the only voltage is the board's cannot
+show a motor turning at the voltage it really has. So the supply is a part
+with two terminals and a knob -- the knob says what the terminals are at,
+and the solver carries that voltage like any other source.
+
+**It is the one part the operator sets.** Everything else on the bench either
+follows the sketch or follows a probe; the supply is the only one whose
+voltage a person chooses, and that is what makes it a bench rather than a
+board.
+
 **A display behind two wires.** The TM1637 module is a display driver with a
 register file behind it: a sketch writes the segment patterns into the
 registers and the chip scans the digits itself, so the glass shows what was
