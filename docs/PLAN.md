@@ -356,6 +356,15 @@ chip, a weak pull-up that the chip can pull down; the bench gives them the
 same output impedance it gives the shift register's, and the *input*
 register, which reads the wiring rather than the chip, is not modelled.
 
+**A voltage the bench makes.** The bench could measure an analog level --
+the ADS1115 counts one, the barometer reports one -- and it had nothing that
+could *make* one. The MCP4725 is that: the sketch writes twelve bits over the
+I2C bus and the chip holds a voltage on its output, somewhere between the
+ground and the supply, in four thousand and ninety-five steps. It is the one
+part on the bench that drives a pin at a level of its own choosing: everything
+else that drives a pin drives it high or low. The converter's output is a
+source, and the solver carries it like any other.
+
 **A display behind two wires.** The TM1637 module is a display driver with a
 register file behind it: a sketch writes the segment patterns into the
 registers and the chip scans the digits itself, so the glass shows what was
