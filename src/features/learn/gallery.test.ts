@@ -8,6 +8,7 @@ import {
   PART_CATALOGUE,
   SEGMENT_MAP,
   SevenSegment,
+  SUPPLY_VOLTAGE_KNOB,
   Tm1637,
 } from '@/features/parts';
 import { boardOption } from './boardRegistry';
@@ -912,6 +913,34 @@ void loop() {
       Math.abs(simulation.engine.stepperAngle(motor.id) - expected),
       'the shaft agrees with the count',
     ).toBeLessThan(15);
+  }, 60_000);
+
+  it('runs the motor on the supply, not on the board', () => {
+    const build = galleryById('a4988')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const motor = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'stepper',
+    )!;
+    const supply = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'power-supply',
+    )!;
+    const voltsOn = (pin: string): number => {
+      const net = simulation.engine.currentNetlist.pinNode.get(`${motor.id}:${pin}`);
+      return net === undefined ? 0 : simulation.engine.voltageOfNet(net);
+    };
+    // The windings are driven one way at a time, so this is a peak.
+    let peak = 0;
+    for (let i = 0; i < 30; i++) {
+      simulation.tick(0.05);
+      peak = Math.max(peak, Math.abs(voltsOn('A+') - voltsOn('A-')));
+    }
+    const volts = simulation.controls.knob(supply.id, SUPPLY_VOLTAGE_KNOB);
+    expect(Math.abs(peak - volts), 'the windings see the supply').toBeLessThan(0.5);
   }, 60_000);
 
   it('shows the count in binary on eight lights', () => {

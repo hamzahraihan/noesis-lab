@@ -1218,6 +1218,7 @@ function tm1637Checks(build: GalleryBuild): CheckDef[] {
 
 function a4988Checks(build: GalleryBuild): CheckDef[] {
   const motor = build.circuit.parts?.find((part) => part.type === 'stepper-motor')?.id;
+  const supply = build.circuit.parts?.find((part) => part.type === 'power-supply')?.id;
   return [
     {
       name: 'the driver turns the motor one step per pulse',
@@ -1249,6 +1250,35 @@ function a4988Checks(build: GalleryBuild): CheckDef[] {
             started,
             'fail',
             `the shaft stands at ${angle(motor)} degrees, not the ${expected} of ${reported[1]} steps`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+    {
+      name: 'the motor runs on the supply, not on the board',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the motor runs on the supply, not on the board';
+        const read = sim.partVolts;
+        const knob = sim.knob;
+        if (read === undefined || knob === undefined || motor === undefined || supply === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read the windings');
+        }
+        // The windings are driven in one direction at a time, so the reading
+        // is a peak rather than a value.
+        let peak = 0;
+        for (let frame = 0; frame < 30; frame++) {
+          sim.tick(0.05);
+          peak = Math.max(peak, Math.abs(read(motor, 'A+') - read(motor, 'A-')));
+        }
+        const volts = knob(supply, 'volts');
+        if (Math.abs(peak - volts) > 0.5) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the windings saw ${peak} volts and the supply is at ${volts}`,
           );
         }
         return verdict(name, started, 'pass');

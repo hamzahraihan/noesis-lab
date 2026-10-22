@@ -21,6 +21,13 @@
       "x": 210,
       "y": 40,
       "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "power-supply",
+      "x": 300,
+      "y": 130,
+      "rotation": 0
     }
   ],
   "wires": [
@@ -113,14 +120,6 @@
       "bends": []
     },
     {
-      "id": "w12",
-      "from": "p1:5V",
-      "to": "p2:VMOT",
-      "colour": "#ef4444",
-      "gaugeAwg": 26,
-      "bends": []
-    },
-    {
       "id": "w13",
       "from": "p2:1A",
       "to": "p3:A+",
@@ -149,6 +148,22 @@
       "from": "p2:2B",
       "to": "p3:B-",
       "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w17",
+      "from": "p4:V+",
+      "to": "p2:VMOT",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w18",
+      "from": "p1:J1_GND",
+      "to": "p4:GND",
+      "colour": "#111827",
       "gaugeAwg": 26,
       "bends": []
     }
