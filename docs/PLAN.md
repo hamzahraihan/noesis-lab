@@ -333,6 +333,19 @@ boundary is what tells the chip the next byte is an address again. The
 compiled AVR core has no SPI port, so an SPI part is an interpreted-sketch
 part; the compiled boards drive I2C.
 
+**A sensor that answers.** The MAX6675 is a thermocouple amplifier with a
+shift register on the front: the sketch shifts out a dummy byte and the chip
+hands back sixteen bits, four of them status and twelve the temperature in
+quarter-degree steps. It is the second thing on the bench that answers over
+SPI -- the MFRC522 reader was the first, and the bus grew a return path for
+it -- and the first that answers with a measurement rather than a register.
+
+The bench models the chip and not the probe. A thermocouple is a junction of
+two metals whose voltage depends on the temperature at the hot end, which is
+a fact about a wire rather than something a chip can be asked about, so the
+probe's temperature is a knob and the chip reads it the way it would read a
+probe: in quarter-degree steps, rounded to what the wire can tell it.
+
 **Eight pins out of two.** The PCF8574 is the answer to a board that has run
 out of pins: a sketch writes one byte over the I2C bus and eight ports follow
 it, the way the shift register's eight outputs follow a byte on the SPI bus.
