@@ -878,6 +878,35 @@ void loop() {
     expect(glass.digits[3], 'the last digit').toBe(SEGMENT_MAP[String(seconds % 10)]);
   }, 60_000);
 
+  it('turns the motor one step per pulse', () => {
+    const build = galleryById('a4988')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const motor = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'stepper',
+    )!;
+    let peak = 0;
+    for (let i = 0; i < 60; i++) {
+      simulation.tick(0.05);
+      peak = Math.max(peak, simulation.engine.stepperAngle(motor.id));
+    }
+    expect(peak, 'the motor moved').toBeGreaterThan(0);
+
+    // The shaft stands where the steps the sketch counted have taken it.
+    const log = simulation.serialLines().join('');
+    const reported = /step (-?\d+)/.exec(log);
+    expect(reported, 'the sketch reported a step').not.toBeNull();
+    const expected = Number(reported![1]) * 7.5;
+    expect(
+      Math.abs(simulation.engine.stepperAngle(motor.id) - expected),
+      'the shaft agrees with the count',
+    ).toBeLessThan(15);
+  }, 60_000);
+
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
       const build = galleryById('alarm-clock')!.builds[0];

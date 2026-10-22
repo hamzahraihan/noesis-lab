@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "a4988",
+      "x": 120,
+      "y": 10,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "stepper-motor",
+      "x": 210,
+      "y": 40,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:D2",
+      "to": "p2:STEP",
+      "colour": "#eab308",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:D3",
+      "to": "p2:DIR",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:D4",
+      "to": "p2:ENABLE",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:D5",
+      "to": "p2:RESET",
+      "colour": "#38bdf8",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p1:D6",
+      "to": "p2:SLEEP",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p1:D7",
+      "to": "p2:MS1",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p1:D8",
+      "to": "p2:MS2",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p1:D9",
+      "to": "p2:MS3",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "p1:5V",
+      "to": "p2:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "p1:J1_GND",
+      "to": "p2:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p1:J1_GND",
+      "to": "p2:GND2",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "p1:5V",
+      "to": "p2:VMOT",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w13",
+      "from": "p2:1A",
+      "to": "p3:A+",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w14",
+      "from": "p2:1B",
+      "to": "p3:A-",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w15",
+      "from": "p2:2A",
+      "to": "p3:B+",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w16",
+      "from": "p2:2B",
+      "to": "p3:B-",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

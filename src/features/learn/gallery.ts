@@ -1920,6 +1920,97 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Stepper — a pulse and a direction
+ * ------------------------------------------------------------------ */
+
+const STEPPER: GalleryProject = {
+  id: 'a4988',
+  title: 'Stepper Motor',
+  blurb:
+    'An A4988 driver and a stepper motor. The chip has a translator behind it: a pulse on STEP moves the motor one step and DIR says which way, so the sketch never writes a phase table.',
+  parts: [
+    { name: 'Stepper driver (A4988)', qty: 1 },
+    { name: 'Stepper Motor', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+/*
+ * The driver does the phase sequence: the sketch sends a pulse and a
+ * direction, and the chip works out which windings to energise.
+ */
+const byte STEP_PIN = 2;
+const byte DIR_PIN = 3;
+const byte ENABLE_PIN = 4;
+const byte RESET_PIN = 5;
+const byte SLEEP_PIN = 6;
+
+unsigned long count = 0;
+long steps = 0;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
+  pinMode(RESET_PIN, OUTPUT);
+  pinMode(SLEEP_PIN, OUTPUT);
+
+  /*
+   * The enable, reset and sleep lines are all active low, so a running
+   * chip holds the enable line down and the other two up.
+   */
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(RESET_PIN, HIGH);
+  digitalWrite(SLEEP_PIN, HIGH);
+
+  // The microstep pins low are the chip's full-step setting.
+  pinMode(7, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(9, OUTPUT);
+  digitalWrite(7, LOW);
+  digitalWrite(8, LOW);
+  digitalWrite(9, LOW);
+
+  Serial.println("motor ready");
+}
+
+void loop() {
+  // Twenty steps one way, then twenty the other. The count is what the
+  // sketch has sent; the steps are what the shaft has net of them.
+  if ((count % 40) < 20) {
+    digitalWrite(DIR_PIN, HIGH);
+    steps += 1;
+  } else {
+    digitalWrite(DIR_PIN, LOW);
+    steps -= 1;
+  }
+  count += 1;
+
+  // The pulse the driver counts.
+  digitalWrite(STEP_PIN, HIGH);
+  delay(2);
+  digitalWrite(STEP_PIN, LOW);
+  delay(60);
+
+  Serial.print("step ");
+  Serial.println(steps);
+}
+`,
+      circuit: CIRCUITS.a4988,
+    },
+  ],
+  working: [
+    'The shaft turns one step for every pulse the sketch sends.',
+    'Twenty steps one way and twenty the other, so the shaft turns back and forth.',
+    'The serial log counts the steps the sketch sent.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -2756,6 +2847,7 @@ export const GALLERY: readonly GalleryProject[] = [
   SHIFT_REGISTER,
   RFID,
   FOUR_DIGITS,
+  STEPPER,
   MATRIX,
   NOKIA_5110,
   REACTION,

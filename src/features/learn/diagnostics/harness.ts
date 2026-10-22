@@ -26,6 +26,13 @@ export interface HarnessSim {
    */
   partVolts?(partId: string, pinId: string): number;
   /**
+   * A stepper's shaft angle, in degrees.
+   *
+   * The shaft is the motor's own state rather than a pin's voltage, so a
+   * check that wants to know where the motor is asks for it.
+   */
+  stepperAngle?(partId: string): number;
+  /**
    * A four-digit display's glass, when the bench has one.
    *
    * The digits are the module's own registers, not volts on a pin, so a

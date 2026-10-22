@@ -128,6 +128,7 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
         const net = sim.engine.currentNetlist.pinNode.get(`${partId}:${pinId}`);
         return net === undefined ? 0 : sim.engine.voltageOfNet(net);
       },
+      stepperAngle: (partId: string) => sim.engine.stepperAngle(partId),
       tm1637: (partId: string) => {
         const controller = sim.engine.displayController(partId);
         return controller instanceof Tm1637 ? controller : undefined;
@@ -1201,6 +1202,56 @@ function tm1637Checks(build: GalleryBuild): CheckDef[] {
   ];
 }
 
+/* ------------------------------------------------------------------ *
+ * a4988 on uno: a pulse moves the motor, and the shaft agrees with the
+ * count the sketch reported.
+ *
+ * The driver does the phase sequence, so the check does not look at the
+ * windings: it looks at where the shaft ended up, which is the thing the
+ * sketch asked for.
+ * ------------------------------------------------------------------ */
+
+function a4988Checks(build: GalleryBuild): CheckDef[] {
+  const motor = build.circuit.parts?.find((part) => part.type === 'stepper-motor')?.id;
+  return [
+    {
+      name: 'the driver turns the motor one step per pulse',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the driver turns the motor one step per pulse';
+        const angle = sim.stepperAngle;
+        if (angle === undefined || motor === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read a motor');
+        }
+        let peak = 0;
+        for (let frame = 0; frame < 60; frame++) {
+          sim.tick(0.05);
+          peak = Math.max(peak, angle(motor));
+        }
+        if (peak === 0) {
+          return verdict(name, started, 'fail', 'the motor never moved');
+        }
+        // The log says how many steps the shaft is net of; it has turned
+        // that many times seven and a half degrees.
+        const reported = /step (-?\d+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report a step');
+        }
+        const expected = Number(reported[1]) * 7.5;
+        if (Math.abs(angle(motor) - expected) > 15) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the shaft stands at ${angle(motor)} degrees, not the ${expected} of ${reported[1]} steps`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -1218,6 +1269,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'shift-register') return shiftRegisterChecks(build);
   if (projectId === 'rfid') return rfidChecks;
   if (projectId === 'tm1637') return tm1637Checks(build);
+  if (projectId === 'a4988') return a4988Checks(build);
   if (projectId === 'max7219') return max7219Checks(build);
   if (projectId === 'nokia-5110') return nokia5110Checks(build);
   return [];
