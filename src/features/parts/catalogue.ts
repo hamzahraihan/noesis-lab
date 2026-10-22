@@ -71,6 +71,7 @@ import { ds18b20Definition } from './ds18b20';
 import { mfrc522Definition } from './mfrc522';
 import { tm1637Definition } from './tm1637';
 import { a4988Definition } from './a4988';
+import { pcf8574Definition } from './devices/pcf8574';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -289,6 +290,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'pcf8574',
+    name: 'I/O expander (PCF8574)',
+    group: 'output',
+    note: 'Eight pins in two wires. A sketch writes one byte over the I2C bus and the ports follow it, which is the answer to a board that has run out of pins.',
+    make: pcf8574Definition,
   },
   {
     id: 'a4988',

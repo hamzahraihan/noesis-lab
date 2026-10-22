@@ -59,7 +59,7 @@ describe('the derivation', () => {
     // 37 shipped kinds plus `scripted`, which ships no part on purpose: the
     // whole point of that kind is that the host has no model for it.
     expect(kinds).toContain('scripted');
-    expect(kinds.length).toBe(41);
+    expect(kinds.length).toBe(42);
   });
 
   it("reads a kind's pins from the shipped part of that kind", () => {

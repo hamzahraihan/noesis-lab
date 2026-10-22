@@ -36,6 +36,7 @@ import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/par
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
 import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
+import { Pcf8574, PCF8574_OUTPUT_OHMS, PCF8574_PORTS } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -1851,6 +1852,27 @@ export class Engine {
           b: driver.output(pin) ? supply : GROUND,
           ohms: A4988_OUTPUT_OHMS,
           label: pin,
+        });
+      }
+    }
+    /*
+     * An I/O expander drives its eight ports itself, from the byte the sketch
+     * wrote, so what it drives them with is stamped here rather than frozen
+     * into the netlist like a passive part.
+     */
+    for (const [partId, device] of this.devices) {
+      if (!(device instanceof Pcf8574)) continue;
+      const supply = netlist.pinNode.get(`${partId}:VCC`);
+      if (supply === undefined) continue;
+      for (let index = 0; index < PCF8574_PORTS; index++) {
+        const output = netlist.pinNode.get(`${partId}:P${index}`);
+        if (output === undefined) continue;
+        elements.push({
+          kind: 'resistor',
+          a: output,
+          b: device.output(index) ? supply : GROUND,
+          ohms: PCF8574_OUTPUT_OHMS,
+          label: `P${index}`,
         });
       }
     }

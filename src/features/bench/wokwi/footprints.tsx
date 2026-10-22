@@ -186,6 +186,7 @@ function shapeFor(
         <DisplayBody definition={definition} state={state} part={part} />
       );
     case 'i2c-sensor':
+    case 'i2c-expander':
     case 'ds18b20':
     case 'shift-register':
       // The modules the bench draws itself: Wokwi's library has no element

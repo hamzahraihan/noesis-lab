@@ -10,6 +10,7 @@ export * from './devices/ads1115';
 export * from './devices/bmp180';
 export * from './devices/ds1307';
 export * from './devices/hx711';
+export * from './devices/pcf8574';
 export * from './devices/ina219';
 export * from './devices/shift595';
 export * from './devices/lcd';

@@ -136,6 +136,11 @@ export type ComponentSpec =
   | { readonly kind: 'keypad' }
   | { readonly kind: 'i2c-sensor'; readonly device: I2cSensorVariant }
   /*
+   * An I/O expander: the sketch writes one byte and eight pins follow it, so
+   * a project that has run out of board pins has somewhere to go.
+   */
+  | { readonly kind: 'i2c-expander' }
+  /*
    * A shift register on the SPI bus: the clock and the data in are the bus's
    * own pins, and the latch is a plain output the sketch drives, because on
    * the chip the two are separate wires.
