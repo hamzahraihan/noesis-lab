@@ -19,9 +19,16 @@ import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from './ssd1306';
 import { Max7219 } from './max7219';
 import { Pcd8544 } from './pcd8544';
 import type { SevenSegment } from './sevensegment';
+import type { Tm1637 } from '../tm1637';
 
 /** Either controller model a display part can be driving. */
-export type DisplayController = Ssd1306 | Ili9341 | SevenSegment | Max7219 | Pcd8544;
+export type DisplayController =
+  | Ssd1306
+  | Ili9341
+  | SevenSegment
+  | Max7219
+  | Pcd8544
+  | Tm1637;
 
 /**
  * 0.96" 128x64 OLED, I2C, 4-pin breakout.

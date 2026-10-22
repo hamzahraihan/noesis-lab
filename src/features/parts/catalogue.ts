@@ -69,6 +69,7 @@ import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
 import { ds18b20Definition } from './ds18b20';
 import { mfrc522Definition } from './mfrc522';
+import { tm1637Definition } from './tm1637';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -287,6 +288,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'tm1637',
+    name: '4-digit LED display (TM1637)',
+    group: 'output',
+    note: 'Four digits behind two wires. The chip scans the display itself, so a sketch writes the segment patterns into its registers and the glass shows them.',
+    make: tm1637Definition,
   },
   {
     id: 'mfrc522',

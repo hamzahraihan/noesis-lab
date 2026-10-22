@@ -37,6 +37,7 @@ export * from './sdcard';
 export * from './pixels';
 export * from './stepper';
 export * from './mfrc522';
+export * from './tm1637';
 // Last: the catalogue aggregates every definition above, so it evaluates
 // after them (import-cycle order).
 export * from './catalogue';

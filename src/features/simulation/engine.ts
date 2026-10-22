@@ -34,6 +34,7 @@ import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts'
 import { Ds1307 } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
+import { Tm1637 } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -475,7 +476,11 @@ export class Engine {
       if (!controller) {
         // The multiplexed 7-segment display keeps its own per-digit latch so
         // the renderer never depends on sampling a transient digit strobe.
-        if (part.definition.component.kind === '7segment') {
+        if (part.definition.component.kind === 'tm1637') {
+          // The module carries its own driver, so the display registers are
+          // the controller and the glass is whatever those registers say.
+          controller = new Tm1637();
+        } else if (part.definition.component.kind === '7segment') {
           controller = new SevenSegment(part.definition.component.digits ?? 1);
         } else {
           controller = createController(part.definition) ?? undefined;

@@ -19,6 +19,7 @@ import { DynamicState } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import { WIPER_KNOB } from '@/features/parts';
 import { MFRC522_CARD_KNOB } from '@/features/parts';
+import { Tm1637 } from '@/features/parts';
 import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '@/features/parts';
 import { Max7219 } from '@/features/parts';
@@ -195,6 +196,9 @@ function shapeFor(
     case 'rc522':
       // A register device with something to show: the card in its field.
       return <RfidBody definition={definition} state={state} part={part} />;
+    case 'tm1637':
+      // A display that drives its own glass: the digits are its registers.
+      return <Tm1637Body definition={definition} state={state} part={part} />;
   }
 }
 
@@ -1357,6 +1361,143 @@ function RfidBody({
           </text>
         </g>
       )}
+    </g>
+  );
+}
+
+/**
+ * The TM1637 module: a black board with four red digits, the driver chip
+ * beside them and the four-pin header along the bottom.
+ *
+ * The digits are drawn from the module's own display registers, so the glass
+ * shows what the sketch wrote into them -- the module scans the digits
+ * itself, which is the whole reason it takes two pins instead of twelve.
+ */
+function Tm1637Body({
+  definition,
+  state,
+  part,
+}: {
+  definition: PartDefinition;
+  state: FootprintState;
+  part: PartInstance;
+}) {
+  const width = definition.widthMm;
+  const height = definition.heightMm;
+  const controller = state.displays?.get(part.id);
+  const module = controller instanceof Tm1637 ? controller : null;
+  const patterns = module?.digits ?? [0, 0, 0, 0];
+  const lit = module?.lit ?? false;
+  const digitWidth = 10.0;
+  const digitHeight = 13.0;
+  const gap = 1.5;
+  const startX = (width - (4 * digitWidth + 3 * gap)) / 2;
+  const startY = 1.6;
+
+  return (
+    <g filter="url(#nz-lift)">
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        rx={1.4}
+        fill={definition.bodyColour}
+        stroke="#0c1018"
+        strokeWidth={0.2}
+      />
+      <rect x={0} y={0} width={width} height={height} rx={1.4} fill="url(#nz-body)" />
+      {Array.from({ length: 4 }, (_, index) => (
+        <SevenSegmentDigit
+          key={index}
+          x={startX + index * (digitWidth + gap)}
+          y={startY}
+          width={digitWidth}
+          height={digitHeight}
+          pattern={patterns[index] ?? 0}
+          lit={lit}
+        />
+      ))}
+      {/* The driver and the oscillator beside it. */}
+      <Chip x={width - 9.5} y={height - 6.2} width={4.6} height={4.6} legs={4} />
+      <rect x={width - 14.5} y={height - 5.4} width={2.6} height={1.6} rx={0.3} fill="#c8ced8" />
+      {/* The header along the bottom edge, and the names a tutorial calls it. */}
+      {definition.pins.map((pin) => (
+        <g key={pin.id}>
+          <SolderPad x={pin.x} y={pin.y} />
+          <text
+            x={pin.x}
+            y={pin.y - 1.1}
+            fontSize={1.3}
+            textAnchor="middle"
+            fill={definition.legendColour}
+            fontFamily={SILKSCREEN_FONT}
+            opacity={0.9}
+          >
+            {pin.label}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/**
+ * One 7-segment digit, drawn as the seven bars a real display is made of.
+ *
+ * The bars are hexagons with the ends cut at forty-five degrees, which is
+ * what gives a 7-segment its look; the decimal point is a square beside the
+ * lower right. A segment that is not lit is drawn dark rather than omitted,
+ * because an unlit segment is still there.
+ */
+function SevenSegmentDigit({
+  x,
+  y,
+  width,
+  height,
+  pattern,
+  lit,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pattern: number;
+  lit: boolean;
+}) {
+  const t = width * 0.16;
+  const half = (height - t) / 2;
+  const on = lit ? '#ff2f2f' : '#431010';
+  const off = '#2a0a0a';
+  const colour = (bit: number): string => (pattern & (1 << bit) ? on : off);
+
+  const horizontal = (barY: number): string =>
+    `M ${x + t / 2} ${barY} L ${x + width - t / 2} ${barY} L ${x + width} ${barY + t / 2} ` +
+    `L ${x + width - t / 2} ${barY + t} L ${x + t / 2} ${barY + t} L ${x} ${barY + t / 2} Z`;
+  const vertical = (barX: number, barY: number, barHeight: number): string =>
+    `M ${barX} ${barY + t / 2} L ${barX + t / 2} ${barY} L ${barX + t} ${barY + t / 2} ` +
+    `L ${barX + t} ${barY + barHeight - t / 2} L ${barX + t / 2} ${barY + barHeight} ` +
+    `L ${barX} ${barY + barHeight - t / 2} Z`;
+
+  return (
+    <g>
+      {/* A, G, D: the three horizontal bars. */}
+      <path d={horizontal(y)} fill={colour(0)} />
+      <path d={horizontal(y + half)} fill={colour(6)} />
+      <path d={horizontal(y + height - t)} fill={colour(3)} />
+      {/* F, B: the upper verticals. E, C: the lower ones. */}
+      <path d={vertical(x, y, half)} fill={colour(5)} />
+      <path d={vertical(x + width - t, y, half)} fill={colour(1)} />
+      <path d={vertical(x, y + half, half)} fill={colour(4)} />
+      <path d={vertical(x + width - t, y + half, half)} fill={colour(2)} />
+      {/* The decimal point, which is the colon on the second digit. */}
+      <rect
+        x={x + width + 0.3}
+        y={y + height - t}
+        width={t}
+        height={t}
+        fill={pattern & 0x80 ? on : off}
+      />
     </g>
   );
 }

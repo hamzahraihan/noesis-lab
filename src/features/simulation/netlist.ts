@@ -864,6 +864,7 @@ function elementsForPart(
     case 'display':
     case 'i2c-sensor':
     case 'rc522':
+    case 'tm1637':
     case 'lcd':
     case 'servo':
       /*
