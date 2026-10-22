@@ -1773,6 +1773,78 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Matrix — a heart on sixty-four LEDs
+ * ------------------------------------------------------------------ */
+
+const MATRIX: GalleryProject = {
+  id: 'max7219',
+  title: 'LED Matrix',
+  blurb:
+    'An 8x8 matrix with a MAX7219 behind it. Each of the eight columns is a register, each bit of it is a row, and the whole picture is eight register writes.',
+  parts: [{ name: '8x8 LED matrix (MAX7219)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+// Chip select is an ordinary pin; the module's clock and data in are the
+// SPI bus's own wires, so the sketch never touches them.
+const byte CS = 10;
+
+void writeRegister(byte reg, byte value) {
+  SPI.begin();
+  SPI.transfer(reg);
+  SPI.transfer(value);
+  SPI.end();
+}
+
+void drawHeart(int small) {
+  // DIGIT1..DIGIT8 are the columns, left to right, and bit 0 of each is the
+  // top row: 0b00111111 is a column lit from the top down to row 5.
+  writeRegister(1, small ? 0x00 : 0x0E);
+  writeRegister(2, 0x3F);
+  writeRegister(3, 0x7F);
+  writeRegister(4, 0xFE);
+  writeRegister(5, 0xFE);
+  writeRegister(6, 0x7E);
+  writeRegister(7, 0x3F);
+  writeRegister(8, small ? 0x00 : 0x0E);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(CS, OUTPUT);
+  digitalWrite(CS, HIGH);
+  // The chip powers up shut down at its dimmest: wake it, then turn it up.
+  writeRegister(0x0C, 0x01);
+  writeRegister(0x0A, 0x0F);
+  writeRegister(0x0B, 0x07);
+  Serial.println("heartbeat");
+}
+
+void loop() {
+  drawHeart(0);
+  delay(180);
+  drawHeart(1);
+  delay(120);
+  drawHeart(0);
+  delay(180);
+  drawHeart(1);
+  delay(500);
+}
+`,
+      circuit: CIRCUITS['max7219'],
+    },
+  ],
+  working: [
+    'A heart beats on the matrix: two frames, a wide one and a narrow one.',
+    'Each frame is eight writes of an address and a byte, latched by chip-select when the SPI transaction ends.',
+    'The serial monitor says when the beat starts.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Reaction Timer — one button, one LED, one latency number
  * ------------------------------------------------------------------ */
 
@@ -2411,6 +2483,7 @@ export const GALLERY: readonly GalleryProject[] = [
   PARKING,
   WEATHER,
   SHIFT_REGISTER,
+  MATRIX,
   REACTION,
   NET_CLOCK,
   SENSOR_FEED,

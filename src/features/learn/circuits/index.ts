@@ -30,6 +30,7 @@ import alarmClock from './alarm-clock.json';
 import dashboard from './dashboard.json';
 import esp32Tft from './esp32-tft.json';
 import instrumentBench from './instrument-bench.json';
+import max7219 from './max7219.json';
 import parking from './parking.json';
 import reaction from './reaction.json';
 import safe from './safe.json';
@@ -54,6 +55,7 @@ export type CircuitId =
   | 'dashboard'
   | 'esp32-tft'
   | 'instrument-bench'
+  | 'max7219'
   | 'parking'
   | 'reaction'
   | 'safe'
@@ -77,6 +79,7 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   dashboard: parseCircuit(dashboard, 'dashboard'),
   'esp32-tft': parseCircuit(esp32Tft, 'esp32-tft'),
   'instrument-bench': parseCircuit(instrumentBench, 'instrument-bench'),
+  max7219: parseCircuit(max7219, 'max7219'),
   parking: parseCircuit(parking, 'parking'),
   reaction: parseCircuit(reaction, 'reaction'),
   safe: parseCircuit(safe, 'safe'),
