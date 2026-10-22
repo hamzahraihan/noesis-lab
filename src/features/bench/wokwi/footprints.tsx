@@ -22,6 +22,7 @@ import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '@/features/parts';
 import { Max7219 } from '@/features/parts';
 import { MAX7219_COLUMNS, MAX7219_ROWS } from '@/features/parts';
+import { Pcd8544 } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import type { Servo } from '@/features/parts';
@@ -1342,8 +1343,7 @@ function PotentiometerBody({
 // ---------------------------------------------------------------------------
 // Displays
 
-/** Scale from panel pixels to millimetres of glass. */
-const PIXEL_MM = 0.19;
+/** Default glass for a small monochrome panel, when the part declares none. */
 const PANEL_MM = 26;
 /** Glass size of the 2.4" TFT, which is a very different shape from the OLED. */
 const TFT_PANEL_MM = 53;
@@ -1354,6 +1354,9 @@ interface PixelRun {
   readonly width: number;
 }
 
+/** Anything that can say whether a pixel is lit: both monochrome controllers. */
+type LitPanel = { isLit(x: number, y: number): boolean };
+
 /**
  * Merges each row of lit pixels into horizontal runs.
  *
@@ -1361,7 +1364,7 @@ interface PixelRun {
  * bench's DOM and make dragging any other part on it stutter; merging runs
  * gives the same picture from a few hundred shapes.
  */
-function pixelRuns(controller: Ssd1306, width: number, height: number): PixelRun[] {
+function pixelRuns(controller: LitPanel, width: number, height: number): PixelRun[] {
   const runs: PixelRun[] = [];
   for (let y = 0; y < height; y++) {
     let start = -1;
@@ -1423,7 +1426,7 @@ function DisplayBody({
       {isColour ? (
         <ColourPanel controller={controller} panel={panel} glass={glass} />
       ) : (
-        <MonoPanel controller={controller} panel={panel} />
+        <MonoPanel controller={controller} panel={panel} glass={glass} />
       )}
 
       <SolderPads definition={definition} />
@@ -1548,44 +1551,68 @@ function SolderPads({ definition }: { definition: PartDefinition }) {
   );
 }
 
-/** The 128x64 OLED: merged runs of lit pixels, a few hundred shapes at most. */
+/**
+ * A monochrome panel: merged runs of lit pixels over the glass it declares.
+ *
+ * Two controllers share the drawing and agree on almost nothing else. The OLED
+ * lights a pixel; the Nokia's STN glass darkens one, and its contrast voltage
+ * is the only brightness it has. What they do share is the geometry problem --
+ * 128x64 and 84x48 on carriers of different sizes -- so the cell size comes
+ * from the glass rather than from a constant. Square cells on purpose: the
+ * glass of a small panel is cut for its own pixel grid, and reading one axis
+ * for both is what keeps a 2:1 panel from being stretched down the screen.
+ */
 function MonoPanel({
   controller,
   panel,
+  glass,
 }: {
   controller: DisplayController | undefined;
   panel: PartDefinition['displayPixels'];
+  glass: { readonly width: number; readonly height: number };
 }) {
+  const screen =
+    controller instanceof Ssd1306 || controller instanceof Pcd8544 ? controller : undefined;
+  const runs = screen && panel ? pixelRuns(screen, panel.width, panel.height) : [];
+  const cell = panel ? (glass.width - 1.4) / panel.width : 0;
+  const lcd = controller instanceof Pcd8544 ? controller : undefined;
   const oled = controller instanceof Ssd1306 ? controller : undefined;
-  const runs = oled && panel ? pixelRuns(oled, panel.width, panel.height) : [];
 
   return (
     <g>
-      {/* Glass: faintly lit green-on-black when on, flat black when off. */}
+      {/* Glass: a lit OLED reads green-on-black, an STN panel reads the other
+          way up -- pale green, with a dark pixel where the sketch drew one. */}
       <rect
         x={1.4}
         y={1.4}
-        width={PANEL_MM - 1.4}
-        height={PANEL_MM - 1.4}
-        fill={oled?.lit ? '#0b1418' : '#05080b'}
+        width={glass.width - 1.4}
+        height={glass.height - 1.4}
+        fill={lcd ? (lcd.lit ? '#b7c6a3' : '#8d9a80') : oled?.lit ? '#0b1418' : '#05080b'}
       />
       {runs.map((run) => (
         <rect
           key={`${run.x}-${run.y}`}
-          x={1.4 + run.x * PIXEL_MM}
-          y={1.4 + run.y * PIXEL_MM}
-          width={run.width * PIXEL_MM}
-          height={PIXEL_MM}
-          fill={oled?.mirrored ? '#38bdf8' : '#7df9c0'}
+          x={1.4 + run.x * cell}
+          y={1.4 + run.y * cell}
+          width={run.width * cell}
+          height={cell}
+          fill={lcd ? '#1d2a24' : oled?.mirrored ? '#38bdf8' : '#7df9c0'}
+          opacity={lcd ? 0.35 + 0.65 * lcd.brightness : 1}
         />
       ))}
       {/* Glass over the top, which is what makes it read as a screen. */}
-      <rect x={1.4} y={1.4} width={PANEL_MM - 1.4} height={PANEL_MM - 1.4} fill="url(#nz-glass)" />
+      <rect
+        x={1.4}
+        y={1.4}
+        width={glass.width - 1.4}
+        height={glass.height - 1.4}
+        fill="url(#nz-glass)"
+      />
       <rect
         x={0.7}
         y={0.7}
-        width={PANEL_MM}
-        height={PANEL_MM}
+        width={glass.width}
+        height={glass.height}
         rx={0.8}
         fill="none"
         stroke="#000"

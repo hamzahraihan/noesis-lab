@@ -83,6 +83,7 @@ describe('the derivation', () => {
 
     expect(layoutValuesFor('display')).toEqual([
       'max7219',
+      'pcd8544',
       'ssd1306',
       'ssd1306-spi',
       'ili9341',

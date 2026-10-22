@@ -69,6 +69,7 @@ import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
 import { ds18b20Definition } from './ds18b20';
 import { max7219Definition } from './display/max7219';
+import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
 import { remoteDefinition } from './remote';
 import { dialerDefinition } from './dialer';
@@ -458,6 +459,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'output',
     note: 'Sixty-four LEDs behind three wires. Every pixel is a register write: DIGIT0..7 are the columns and each bit is a row, so a frame is an address and a byte.',
     make: max7219Definition,
+  },
+  {
+    id: 'nokia-5110',
+    name: 'Nokia 5110 LCD (PCD8544)',
+    group: 'output',
+    note: '84x48 pixels of glass backed by six banks of eight rows. One pin tells commands from data, and the contrast voltage lives in the extended half of the instruction set.',
+    make: nokia5110Definition,
   },
   {
     id: 'lcd-16x2',

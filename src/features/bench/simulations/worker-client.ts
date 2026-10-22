@@ -90,6 +90,9 @@ import {
   LcdDriver,
   Max7219,
   MAX7219_FRAME_BYTES,
+  Pcd8544,
+  PCD8544_FRAME_BYTES,
+  PCD8544_FLAGS_BYTES,
   pixelCount,
   SSD1306_FLAG_LIT,
   SSD1306_FLAG_MIRRORED,
@@ -241,6 +244,9 @@ function displayBytesForPart(definition: PartDefinition): number {
   if (component.kind === 'display' && component.controller === 'max7219') {
     return MAX7219_FRAME_BYTES + 1;
   }
+  if (component.kind === 'display' && component.controller === 'pcd8544') {
+    return PCD8544_FRAME_BYTES + PCD8544_FLAGS_BYTES;
+  }
   if (
     component.kind === 'neopixel' ||
     component.kind === 'neopixel-matrix' ||
@@ -389,6 +395,24 @@ export function max7219FromSnapshot(
   const matrix = new Max7219();
   matrix.restore(frameBytes, flags);
   return matrix;
+}
+
+/**
+ * Rebuilds the Nokia panel from the frame the worker mirrored.
+ *
+ * A mirrored frame is the panel's own memory -- one byte per column per bank
+ * -- plus the flags that say whether the glass is lit and inverted, and the
+ * contrast voltage the chip was driving, so putting it back is one restore
+ * rather than replaying the commands that drew it.
+ */
+export function pcd8544FromSnapshot(
+  frameBytes: Uint8Array | readonly number[],
+  flags: number,
+  contrast: number,
+): Pcd8544 {
+  const panel = new Pcd8544();
+  panel.restore(frameBytes, flags, contrast);
+  return panel;
 }
 
 /** One colour-TFT frame as it crosses SHM: visible size + RGB565 bytes. */

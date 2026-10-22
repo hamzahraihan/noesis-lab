@@ -41,6 +41,7 @@ import { HX711_LOAD_KNOB } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import { SevenSegment } from '@/features/parts';
 import { Max7219 } from '@/features/parts';
+import { Pcd8544 } from '@/features/parts';
 
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
@@ -978,6 +979,7 @@ export class Engine {
       if (!this.isOnSpiBus(partId)) continue;
       if (controller instanceof Ili9341) controller.receive(byte, dataSelect, chipSelected);
       else if (controller instanceof Ssd1306) controller.receiveSpi(byte, dataSelect, chipSelected);
+      else if (controller instanceof Pcd8544) controller.receive(byte, dataSelect, chipSelected);
     }
     for (const [partId, register] of this.shiftRegisters) {
       if (!this.isShiftRegisterOnSpiBus(partId)) continue;

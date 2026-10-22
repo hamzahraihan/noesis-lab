@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { isLargePart, type CatalogueEntry } from '@/features/parts';
+import { isLargePart, PCD8544_FLAGS_BYTES, type CatalogueEntry } from '@/features/parts';
 import { Sidebar } from '../ide/Sidebar';
 import { CatalogueGrid } from '../ide/CatalogueGrid';
 import { columnX, stripRowY } from '@/features/parts';
@@ -30,6 +30,7 @@ import {
   createWorkerClient,
   lcdFromSnapshot,
   max7219FromSnapshot,
+  pcd8544FromSnapshot,
   sevenSegmentFromSnapshot,
   ssd1306FromSnapshot,
   tftFromSnapshot,
@@ -1145,6 +1146,21 @@ export default function Bench(props: BenchProps) {
           displays.set(
             part.id,
             max7219FromSnapshot(bytes.slice(0, bytes.length - 1), bytes[bytes.length - 1] ?? 0),
+          );
+        } else if (
+          component.kind === 'display' &&
+          component.controller === 'pcd8544' &&
+          bytes !== undefined
+        ) {
+          // The panel's own memory, the flags that say whether the glass is
+          // lit and inverted, and the contrast voltage it was driving.
+          displays.set(
+            part.id,
+            pcd8544FromSnapshot(
+              bytes.slice(0, bytes.length - PCD8544_FLAGS_BYTES),
+              bytes[bytes.length - PCD8544_FLAGS_BYTES] ?? 0,
+              bytes[bytes.length - 1] ?? 0,
+            ),
           );
         } else if (
           component.kind === 'display' &&

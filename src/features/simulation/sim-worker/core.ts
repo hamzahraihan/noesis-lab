@@ -105,6 +105,11 @@ import {
   MAX7219_FRAME_BYTES,
   MAX7219_INTENSITY_SHIFT,
   Max7219,
+  PCD8544_FLAG_INVERSE,
+  PCD8544_FLAG_LIT,
+  PCD8544_FLAGS_BYTES,
+  PCD8544_FRAME_BYTES,
+  Pcd8544,
   SSD1306_FLAG_LIT,
   SSD1306_FLAG_MIRRORED,
   SSD1306_FRAME_BYTES,
@@ -229,6 +234,10 @@ function displayBytesForBench(bench: Bench): number {
       // One register per column, plus the flags that say whether the chip is
       // awake and how hard it is driving the LEDs.
       bytes += MAX7219_FRAME_BYTES + 1;
+    } else if (component.kind === 'display' && component.controller === 'pcd8544') {
+      // The panel's own memory, plus the flags that say whether the glass is
+      // lit and inverted, plus the contrast voltage it was last driving.
+      bytes += PCD8544_FRAME_BYTES + PCD8544_FLAGS_BYTES;
     } else if (
       component.kind === 'neopixel' ||
       component.kind === 'neopixel-matrix' ||
@@ -768,6 +777,14 @@ class SimCore implements CoreHandle {
         for (let i = 0; i < MAX7219_FRAME_BYTES; i++) put(frame[i] ?? 0);
         const intensity = Math.round((matrix?.brightness ?? 0) * 0x0f);
         put((matrix?.lit ? MAX7219_FLAG_LIT : 0) | (intensity << MAX7219_INTENSITY_SHIFT));
+      } else if (component.kind === 'display' && component.controller === 'pcd8544') {
+        const controller = this.engine.displayController(part.id);
+        const panel = controller instanceof Pcd8544 ? controller : null;
+        const frame = panel ? panel.frame() : new Uint8Array(0);
+        for (let i = 0; i < PCD8544_FRAME_BYTES; i++) put(frame[i] ?? 0);
+        put((panel?.lit ? PCD8544_FLAG_LIT : 0) | (panel?.inverted ? PCD8544_FLAG_INVERSE : 0));
+        // The contrast voltage the chip was last driving, 0 at its dimmest.
+        put(Math.round((panel?.brightness ?? 0) * 0x7f));
       } else if (component.kind === 'servo') {
         const servo = this.engine.servo(part.id);
         put(servo ? Math.max(0, Math.min(180, Math.round(servo.angle))) : 0);
