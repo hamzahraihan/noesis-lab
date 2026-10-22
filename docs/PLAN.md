@@ -424,10 +424,11 @@ temperature outright -- and the object still takes its pin in the constructor,
 the way Arduino's library takes it, so `OneWire ow(2);` is the spelling a
 sketch writes.
 
-**Four of the instruments are the bench's own drawings.** The Wokwi library
-has no element for a barometer, a current monitor, a converter or a one-wire
-sensor, so their artwork is drawn here, on the same 2.54 mm grid as the modules
-the library does draw -- which is what makes the header a jumper can reach.
+**Six of the instruments are the bench's own drawings.** The Wokwi library
+has no element for a barometer, a current monitor, a converter, a one-wire
+sensor, a shift register or a matrix, so their artwork is drawn here, on the
+same 2.54 mm grid as the modules the library does draw -- which is what makes
+the header a jumper can reach.
 
 **The SPI bus is a bus now, and a shift register is on it.** It used to reach
 panels and nothing else: the engine delivered a byte to the displays, and a
@@ -445,6 +446,19 @@ toward Q7, so the first bit to arrive ends up there and the last on Q0. A
 sketch that sends a byte most significant bit first therefore lights Q7 with
 the byte's highest bit -- the gotcha every sketch that lights a chain in order
 has to know, and the reason the bench says so on the part.
+
+**An 8x8 matrix, and a latch that belongs to the bus.** The MAX7219 is the
+first part whose frame is sixteen bits rather than one byte, and it found a gap
+in the SPI model: `SpiBus.end()` raised chip-select and told nobody, so a device
+that latches on the rise had no way to hear it. The bus now says when a
+transaction has ended, and the matrix latches there -- which is also the honest
+reading of the chip, whose shift register is exactly sixteen bits wide, so a
+transaction that sends four frames without a rise between them leaves only the
+last. The registers are the glass: DIGIT1..DIGIT8 are the columns with bit 0
+the top row, and shutdown, intensity, scan limit and display test change what
+those columns show. A sketch that never writes the intensity register therefore
+draws at the chip's power-up current, which is its dimmest, and the bench draws
+it that way rather than at a brightness the hardware would not give.
 
 **The comparator sensor family is one part, not five.** A PIR, a sound, a
 heart-rate, a gas and a flame board are all the same LM393 with a trimmer
