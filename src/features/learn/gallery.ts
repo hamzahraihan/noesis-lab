@@ -1845,6 +1845,130 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Nokia 5110 — a sine wave on 84x48 pixels of glass
+ * ------------------------------------------------------------------ */
+
+const NOKIA_5110: GalleryProject = {
+  id: 'nokia-5110',
+  title: 'Nokia 5110',
+  blurb:
+    'The phone display, sold as a breakout: 84 by 48 pixels of glass behind a PCD8544, driven over four wires. The chip keeps the picture in its own memory, so the whole wave is a run of address-and-byte writes.',
+  parts: [{ name: 'Nokia 5110 LCD (PCD8544)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+// The module as it is sold: an 84x48 glass with a PCD8544 behind it, and
+// eight pins along the bottom. Four of them carry the picture -- clock, data
+// in, chip select and the line that says whether a byte is a command or
+// display memory -- and the rest are the reset line, the supply and the
+// backlight, which this sketch leaves alone.
+const byte PIN_SCK = 13;
+const byte PIN_MOSI = 11;
+const byte PIN_CS = 10;
+const byte PIN_DC = 9;
+const byte PIN_RST = 8;
+
+const int WIDTH = 84;
+const int BANKS = 6;
+
+double phase = 0.0;
+
+// A command byte. The data/command line is low, so the chip reads it as an
+// instruction rather than as a byte of display memory. The transaction is
+// already open: chip select stays low across a command and the memory bytes
+// that follow it.
+void sendCommand(byte value) {
+  SPI.transfer(value, 0);
+}
+
+// A byte of display memory. The data/command line is high.
+void sendData(byte value) {
+  SPI.transfer(value, 1);
+}
+
+// The column address: the X command, with the column in its low bits.
+void setColumn(int column) {
+  sendCommand(0x80 | column);
+}
+
+// The bank address: the Y command, with the bank in its low bits.
+void setBank(int bank) {
+  sendCommand(0x40 | bank);
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(PIN_CS, OUTPUT);
+  pinMode(PIN_DC, OUTPUT);
+  pinMode(PIN_MOSI, OUTPUT);
+  pinMode(PIN_SCK, OUTPUT);
+  pinMode(PIN_RST, OUTPUT);
+
+  // The reset line, low and then high again. The panel comes up in the state
+  // a reset leaves it in, so this is all the module sees at power-up.
+  digitalWrite(PIN_RST, LOW);
+  delay(10);
+  digitalWrite(PIN_RST, HIGH);
+  delay(50);
+
+  SPI.begin();
+
+  // The extended instruction set, where the contrast voltage lives.
+  SPI.beginTransaction();
+  sendCommand(0x21);
+  sendCommand(0xBF);
+  // Back to the basic set: the address commands are only there.
+  sendCommand(0x20);
+  // Display on, and not inverted.
+  sendCommand(0x0C);
+  SPI.end();
+
+  Serial.println("nokia 5110 wave");
+}
+
+void loop() {
+  // Clear the glass: six banks of eighty-four columns, one byte each.
+  for (int bank = 0; bank < BANKS; bank++) {
+    SPI.beginTransaction();
+    setBank(bank);
+    setColumn(0);
+    for (int x = 0; x < WIDTH; x++) {
+      sendData(0);
+    }
+    SPI.end();
+  }
+
+  // The wave: one lit pixel per column, on the row the sine is at.
+  for (int x = 0; x < WIDTH; x++) {
+    double offset = 20.0 * sin(x * 0.12 + phase);
+    // Truncation towards zero, which is what a cast to int does.
+    int y = 23 + (offset < 0.0 ? ceil(offset) : floor(offset));
+    SPI.beginTransaction();
+    setColumn(x);
+    setBank(y >> 3);
+    sendData(1 << (y & 7));
+    SPI.end();
+  }
+
+  phase = phase + 0.2;
+  delay(30);
+}
+`,
+      circuit: CIRCUITS['nokia-5110'],
+    },
+  ],
+  working: [
+    'The glass shows a sine wave: one lit pixel per column, on the row the wave is at, and the wave walks sideways.',
+    'The picture is 84 columns of chip memory in six banks of eight rows, and every frame clears all six banks before the wave is written again.',
+    'The backlight pin is left unconnected on purpose: it is an LED on the module, and the PCD8544 drives the glass itself, so the wave shows without it.',
+    'On this bench the data/command state travels with the byte, so a command goes out as SPI.transfer(value, 0) and a byte of display memory as SPI.transfer(value, 1).',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Reaction Timer — one button, one LED, one latency number
  * ------------------------------------------------------------------ */
 
@@ -2484,6 +2608,7 @@ export const GALLERY: readonly GalleryProject[] = [
   WEATHER,
   SHIFT_REGISTER,
   MATRIX,
+  NOKIA_5110,
   REACTION,
   NET_CLOCK,
   SENSOR_FEED,

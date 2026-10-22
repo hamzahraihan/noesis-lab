@@ -31,7 +31,18 @@ export interface HarnessSim {
    * The pixels are register bits inside the part, not volts on a pin, so a
    * check that wants to know what the matrix is showing asks the controller.
    */
-  matrix?(partId: string): { lit: boolean; isLit(column: number, row: number): boolean } | undefined;
+  matrix?(
+    partId: string,
+  ): { lit: boolean; isLit(column: number, row: number): boolean } | undefined;
+  /**
+   * A graphic display's glass, when the bench has one.
+   *
+   * The pixels are memory bits inside the part, not volts on a pin, so a
+   * check that wants to know what the glass is showing asks the controller.
+   */
+  panel?(
+    partId: string,
+  ): { lit: boolean; inverted: boolean; isLit(x: number, y: number): boolean } | undefined;
   resetAvrCore?(): boolean;
   stageArmedAlarm?(): void;
   tryCompile?(): Promise<{ status: 'ready' } | { status: 'skip' | 'fail'; detail: string }>;
