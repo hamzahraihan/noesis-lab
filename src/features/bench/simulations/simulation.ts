@@ -1710,10 +1710,13 @@ export class Simulation {
   /** Simulated milliseconds a firmware `delay` still owes before it resumes. */
   private pendingDelayMs = 0;
 
-  private readonly spi = new SpiBus((byte, dataSelect, chipSelected) => {
-    this.engine.deliverSpi(byte, dataSelect, chipSelected);
-    return true;
-  });
+  private readonly spi = new SpiBus(
+    (byte, dataSelect, chipSelected) => {
+      this.engine.deliverSpi(byte, dataSelect, chipSelected);
+      return true;
+    },
+    () => this.engine.endSpiTransfer(),
+  );
 
   /** Spends `ms` of simulated time on the circuit, without any firmware. */
   private advanceBy(ms: number): void {

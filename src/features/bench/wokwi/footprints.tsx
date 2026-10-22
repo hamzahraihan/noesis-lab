@@ -20,6 +20,8 @@ import { DIODE_PROFILES } from '@/features/parts';
 import { WIPER_KNOB } from '@/features/parts';
 import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '@/features/parts';
+import { Max7219 } from '@/features/parts';
+import { MAX7219_COLUMNS, MAX7219_ROWS } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import type { Servo } from '@/features/parts';
@@ -175,7 +177,11 @@ function shapeFor(
     case 'potentiometer':
       return <PotentiometerBody definition={definition} state={state} part={part} />;
     case 'display':
-      return <DisplayBody definition={definition} state={state} part={part} />;
+      return definition.component.controller === 'max7219' ? (
+        <MatrixBody definition={definition} state={state} part={part} />
+      ) : (
+        <DisplayBody definition={definition} state={state} part={part} />
+      );
     case 'i2c-sensor':
     case 'ds18b20':
     case 'shift-register':
@@ -1438,6 +1444,95 @@ function DisplayBody({
       >
         {definition.name.toUpperCase()}
       </text>
+    </g>
+  );
+}
+
+/**
+ * The MAX7219 8x8 matrix module: sixty-four LEDs on a board, with the chip
+ * that drives them on the back.
+ *
+ * A pixel is a register bit, so the whole glass is one dot per bit. The chip's
+ * intensity register is the only brightness the module has, and it is why a
+ * sketch that never writes 0x0A draws a dim picture here: the model starts the
+ * register at the chip's power-up value rather than at a pretty one.
+ */
+function MatrixBody({
+  definition,
+  state,
+  part,
+}: {
+  definition: PartDefinition;
+  state: FootprintState;
+  part: PartInstance;
+}) {
+  const controller = state.displays?.get(part.id);
+  const matrix = controller instanceof Max7219 ? controller : undefined;
+  const drive = matrix?.brightness ?? 0;
+  const pitch = 2.5;
+  const first = (definition.widthMm - (MAX7219_COLUMNS - 1) * pitch) / 2;
+  const dots: React.ReactNode[] = [];
+  for (let row = 0; row < MAX7219_ROWS; row++) {
+    for (let column = 0; column < MAX7219_COLUMNS; column++) {
+      const lit = matrix?.isLit(column, row) ?? false;
+      const x = first + column * pitch;
+      const y = first + row * pitch;
+      dots.push(
+        <g key={`${column}-${row}`}>
+          {/* The bezel around each die, which is what reads as a dot matrix. */}
+          <circle cx={x} cy={y} r={1.12} fill="#04070b" />
+          <circle
+            cx={x}
+            cy={y}
+            r={0.9}
+            fill={lit ? '#fbbf24' : '#3d1f1f'}
+            opacity={lit ? 0.3 + 0.7 * drive : 1}
+          />
+          {lit && <circle cx={x} cy={y} r={0.42} fill="#fff7e0" opacity={0.3 + 0.55 * drive} />}
+        </g>,
+      );
+    }
+  }
+
+  return (
+    <g filter="url(#nz-lift)">
+      <rect
+        width={definition.widthMm}
+        height={definition.heightMm}
+        rx={1.4}
+        fill={definition.bodyColour}
+        stroke="#05070a"
+        strokeWidth={0.3}
+      />
+      <rect width={definition.widthMm} height={definition.heightMm} rx={1.4} fill="url(#nz-body)" />
+      {dots}
+      <text
+        x={definition.widthMm / 2}
+        y={26.6}
+        fontSize={1.5}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+        opacity={0.9}
+      >
+        {definition.name.toUpperCase()}
+      </text>
+      {definition.pins.map((pin) => (
+        <g key={pin.id}>
+          <SolderPad x={pin.x} y={pin.y} />
+          <text
+            x={pin.x}
+            y={pin.y - 1.5}
+            fontSize={1.15}
+            textAnchor="middle"
+            fill={definition.legendColour}
+            fontFamily={SILKSCREEN_FONT}
+            opacity={0.85}
+          >
+            {pin.label}
+          </text>
+        </g>
+      ))}
     </g>
   );
 }

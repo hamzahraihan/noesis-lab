@@ -88,6 +88,8 @@ import {
   DynamicState,
   Ili9341,
   LcdDriver,
+  Max7219,
+  MAX7219_FRAME_BYTES,
   pixelCount,
   SSD1306_FLAG_LIT,
   SSD1306_FLAG_MIRRORED,
@@ -236,6 +238,9 @@ function displayBytesForPart(definition: PartDefinition): number {
     // lit and whether the image is mirrored.
     return SSD1306_FRAME_BYTES + 1;
   }
+  if (component.kind === 'display' && component.controller === 'max7219') {
+    return MAX7219_FRAME_BYTES + 1;
+  }
   if (
     component.kind === 'neopixel' ||
     component.kind === 'neopixel-matrix' ||
@@ -368,6 +373,22 @@ export function ssd1306FromSnapshot(
     mirrored: (flags & SSD1306_FLAG_MIRRORED) !== 0,
   });
   return panel;
+}
+
+/**
+ * Rebuilds the matrix from the frame the worker mirrored.
+ *
+ * A mirrored frame is the eight column registers plus the flags that say
+ * whether the chip is awake and how hard it is driving, so putting it back is
+ * one restore rather than replaying the transaction that wrote it.
+ */
+export function max7219FromSnapshot(
+  frameBytes: Uint8Array | readonly number[],
+  flags: number,
+): Max7219 {
+  const matrix = new Max7219();
+  matrix.restore(frameBytes, flags);
+  return matrix;
 }
 
 /** One colour-TFT frame as it crosses SHM: visible size + RGB565 bytes. */

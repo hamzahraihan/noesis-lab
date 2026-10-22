@@ -68,6 +68,7 @@ import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
 import { ds18b20Definition } from './ds18b20';
+import { max7219Definition } from './display/max7219';
 import { shift595Definition } from './devices/shift595';
 import { remoteDefinition } from './remote';
 import { dialerDefinition } from './dialer';
@@ -450,6 +451,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'output',
     note: 'Eight outputs from two wires: shift a byte in over SPI, then raise the latch to put it on the outputs.',
     make: shift595Definition,
+  },
+  {
+    id: 'max7219-matrix',
+    name: '8x8 LED matrix (MAX7219)',
+    group: 'output',
+    note: 'Sixty-four LEDs behind three wires. Every pixel is a register write: DIGIT0..7 are the columns and each bit is a row, so a frame is an address and a byte.',
+    make: max7219Definition,
   },
   {
     id: 'lcd-16x2',

@@ -12,6 +12,7 @@ import {
   createWorkerClient,
   ingestSnapshot,
   lcdFromSnapshot,
+  max7219FromSnapshot,
   remapWithBench,
   sevenSegmentFromSnapshot,
   ssd1306FromSnapshot,
@@ -22,6 +23,8 @@ import {
   type MirrorState,
 } from './worker-client';
 import {
+  MAX7219_FLAG_LIT,
+  MAX7219_INTENSITY_SHIFT,
   SSD1306_FLAG_LIT,
   SSD1306_FLAG_MIRRORED,
   SSD1306_FRAME_BYTES,
@@ -205,6 +208,20 @@ describe('display adapters', () => {
     expect(panel.isLit(1, 0)).toBe(false);
     expect(panel.lit).toBe(true);
     expect(panel.mirrored).toBe(true);
+  });
+
+  it('rebuilds a matrix frame, its shutdown state and its brightness', () => {
+    const frame = [0x0e, 0x3f, 0x7f, 0xfe, 0xfe, 0x7e, 0x3f, 0x0e];
+    const glass = max7219FromSnapshot(frame, MAX7219_FLAG_LIT | (0x0f << MAX7219_INTENSITY_SHIFT));
+    expect(glass.lit).toBe(true);
+    expect(glass.isLit(0, 1)).toBe(true);
+    expect(glass.isLit(0, 0)).toBe(false);
+    expect(glass.isLit(3, 7)).toBe(true);
+    expect(glass.brightness).toBe(1);
+    // The frame says shut down, so the registers are there and the glass is dark.
+    const dark = max7219FromSnapshot(frame, 0);
+    expect(dark.lit).toBe(false);
+    expect(dark.isLit(0, 1)).toBe(false);
   });
 });
 
@@ -493,9 +510,9 @@ describe('worker port protocol', () => {
     // The stops ride with the next sketch the worker builds: a stop that
     // arrived after the build would be a stop the sketch had passed.
     client.loadFirmware(plainProject());
-    const init = port.sent
-      .filter((msg) => (msg as { type?: string }).type === 'init')
-      .at(-1) as { stops?: unknown } | undefined;
+    const init = port.sent.filter((msg) => (msg as { type?: string }).type === 'init').at(-1) as
+      | { stops?: unknown }
+      | undefined;
     expect(init?.stops).toEqual([{ file: 'main.ino', line: 3 }]);
     // The worker pushes the frame when the program stops.
     port.reply({

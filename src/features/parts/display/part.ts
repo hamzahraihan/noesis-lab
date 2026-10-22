@@ -16,10 +16,11 @@ import {
   ILI9341_WIDTH,
 } from './ili9341';
 import { Ssd1306, SSD1306_HEIGHT, SSD1306_WIDTH } from './ssd1306';
+import { Max7219 } from './max7219';
 import type { SevenSegment } from './sevensegment';
 
 /** Either controller model a display part can be driving. */
-export type DisplayController = Ssd1306 | Ili9341 | SevenSegment;
+export type DisplayController = Ssd1306 | Ili9341 | SevenSegment | Max7219;
 
 /**
  * 0.96" 128x64 OLED, I2C, 4-pin breakout.
@@ -195,6 +196,7 @@ export function createController(definition: PartDefinition): DisplayController 
   if (component.kind !== 'display') return null;
   if (component.controller === 'ssd1306-spi') return new Ssd1306();
   if (component.controller === 'ssd1306') return new Ssd1306(component.address);
+  if (component.controller === 'max7219') return new Max7219();
 
   const ram = definition.ramPixels;
   const panel = new Ili9341(ram?.width ?? ILI9341_WIDTH, ram?.height ?? ILI9341_HEIGHT);

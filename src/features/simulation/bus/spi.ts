@@ -52,9 +52,14 @@ export class SpiBus {
   private payload: SpiByte[] = [];
 
   private readonly deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean;
+  private readonly onEnd: (() => void) | undefined;
 
-  constructor(deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean) {
+  constructor(
+    deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean,
+    onEnd?: () => void,
+  ) {
     this.deliver = deliver;
+    this.onEnd = onEnd;
   }
   /** Pulls chip-select low and begins a transfer. */
   begin(): void {
@@ -92,6 +97,7 @@ export class SpiBus {
     this.selected = false;
     this.sawByte = false;
     this.payload = [];
+    this.onEnd?.();
     return transfer;
   }
 

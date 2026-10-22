@@ -88,6 +88,9 @@ const DISPLAY_ADDRESSES: Readonly<Record<string, readonly number[]>> = {
   ssd1306: [0x3c, 0x3d],
   'ssd1306-spi': [0],
   ili9341: [0],
+  // The matrix has no I2C address at all; the field is required of a display
+  // and zero is how the SPI modules already say "not addressed".
+  max7219: [0],
 };
 
 /** Kinds whose behaviour reads a single resistance. */

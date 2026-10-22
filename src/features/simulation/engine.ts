@@ -40,6 +40,7 @@ import { Hx711 } from '@/features/parts';
 import { HX711_LOAD_KNOB } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import { SevenSegment } from '@/features/parts';
+import { Max7219 } from '@/features/parts';
 
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
@@ -911,12 +912,7 @@ export class Engine {
    * Returns whether a device claimed the address, so an unplugged sensor makes
    * the transaction come back unacknowledged, as it would on a real bench.
    */
-  writeI2C(
-    address: number,
-    byte: number,
-    isControlPosition: boolean,
-    pins?: I2cBusPins,
-  ): boolean {
+  writeI2C(address: number, byte: number, isControlPosition: boolean, pins?: I2cBusPins): boolean {
     let claimed = false;
     for (const [partId, device] of this.devices) {
       if (device.address !== (address & 0x7f) || !this.isOnI2cBus(partId, pins)) continue;
@@ -973,6 +969,12 @@ export class Engine {
    */
   deliverSpi(byte: number, dataSelect: boolean, chipSelected: boolean): void {
     for (const [partId, controller] of this.displays) {
+      if (controller instanceof Max7219) {
+        // The matrix has no D/C pin and no four-signal header: data in and
+        // clock are all it hears, and its chip-select is the bus's framing.
+        if (this.isMatrixOnSpiBus(partId)) controller.receive(byte, dataSelect, chipSelected);
+        continue;
+      }
       if (!this.isOnSpiBus(partId)) continue;
       if (controller instanceof Ili9341) controller.receive(byte, dataSelect, chipSelected);
       else if (controller instanceof Ssd1306) controller.receiveSpi(byte, dataSelect, chipSelected);
@@ -980,6 +982,19 @@ export class Engine {
     for (const [partId, register] of this.shiftRegisters) {
       if (!this.isShiftRegisterOnSpiBus(partId)) continue;
       register.receive(byte, dataSelect, chipSelected);
+    }
+  }
+
+  /**
+   * The chip-select rise, and with it the end of a transaction.
+   *
+   * A device that latches whole frames rather than bytes needs the boundary as
+   * an event of its own: the bus owns framing, so it says when a transaction
+   * has finished instead of leaving each device to infer it from byte timing.
+   */
+  endSpiTransfer(): void {
+    for (const controller of this.displays.values()) {
+      if (controller instanceof Max7219) controller.latch();
     }
   }
 
@@ -1013,6 +1028,23 @@ export class Engine {
     if (component?.kind !== 'shift-register') return false;
     const netlist = this.currentNetlist;
     for (const pinId of [component.spi.clock, component.spi.dataIn]) {
+      const net = netlist.pinNode.get(`${partId}:${pinId}`);
+      if (net === undefined || net === GROUND) return false;
+      if (!this.spiNets.has(net)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Whether a matrix's data in and clock land on the SPI nets.
+   *
+   * The module is three wires, not the four-signal display header: it has no
+   * D/C pin, because every byte it receives is a register write. So the gate
+   * asks for DIN and CLK, and a module wired to the wrong pair hears nothing.
+   */
+  private isMatrixOnSpiBus(partId: string): boolean {
+    const netlist = this.currentNetlist;
+    for (const pinId of ['DIN', 'CLK']) {
       const net = netlist.pinNode.get(`${partId}:${pinId}`);
       if (net === undefined || net === GROUND) return false;
       if (!this.spiNets.has(net)) return false;

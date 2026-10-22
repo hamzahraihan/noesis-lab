@@ -29,6 +29,7 @@ import { offsetOfFirstPin } from '../wiring/pin-offset';
 import {
   createWorkerClient,
   lcdFromSnapshot,
+  max7219FromSnapshot,
   sevenSegmentFromSnapshot,
   ssd1306FromSnapshot,
   tftFromSnapshot,
@@ -1135,6 +1136,15 @@ export default function Bench(props: BenchProps) {
           displays.set(
             part.id,
             ssd1306FromSnapshot(bytes.slice(0, bytes.length - 1), bytes[bytes.length - 1] ?? 0),
+          );
+        } else if (
+          component.kind === 'display' &&
+          component.controller === 'max7219' &&
+          bytes !== undefined
+        ) {
+          displays.set(
+            part.id,
+            max7219FromSnapshot(bytes.slice(0, bytes.length - 1), bytes[bytes.length - 1] ?? 0),
           );
         } else if (
           component.kind === 'display' &&

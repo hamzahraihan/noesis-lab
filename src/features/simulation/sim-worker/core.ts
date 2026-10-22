@@ -101,6 +101,10 @@ import {
   HUMIDITY_KNOB,
   DS18B20_TEMPERATURE_KNOB,
   LcdDriver,
+  MAX7219_FLAG_LIT,
+  MAX7219_FRAME_BYTES,
+  MAX7219_INTENSITY_SHIFT,
+  Max7219,
   SSD1306_FLAG_LIT,
   SSD1306_FLAG_MIRRORED,
   SSD1306_FRAME_BYTES,
@@ -221,6 +225,10 @@ function displayBytesForBench(bench: Bench): number {
       // The panel's own memory, plus the byte that says whether the glass is
       // lit and whether the image is mirrored.
       bytes += SSD1306_FRAME_BYTES + 1;
+    } else if (component.kind === 'display' && component.controller === 'max7219') {
+      // One register per column, plus the flags that say whether the chip is
+      // awake and how hard it is driving the LEDs.
+      bytes += MAX7219_FRAME_BYTES + 1;
     } else if (
       component.kind === 'neopixel' ||
       component.kind === 'neopixel-matrix' ||
@@ -336,10 +344,13 @@ class SimCore implements CoreHandle {
     this.net = new VirtualNetwork(() => this.engine.timeMs, {
       fetch: options.liveFetcher ?? (options.liveNetwork ? createLiveFetcher() : undefined),
     });
-    this.spi = new SpiBus((byte, dataSelect, chipSelected) => {
-      this.engine.deliverSpi(byte, dataSelect, chipSelected);
-      return true;
-    });
+    this.spi = new SpiBus(
+      (byte, dataSelect, chipSelected) => {
+        this.engine.deliverSpi(byte, dataSelect, chipSelected);
+        return true;
+      },
+      () => this.engine.endSpiTransfer(),
+    );
     this.i2c = new I2CBus(
       (address, byte, isControl) => this.engine.writeI2C(address, byte, isControl),
       (address, count) => this.engine.requestI2C(address, count),
@@ -750,6 +761,13 @@ class SimCore implements CoreHandle {
         const frame = panel ? panel.frame() : new Uint8Array(0);
         for (let i = 0; i < SSD1306_FRAME_BYTES; i++) put(frame[i] ?? 0);
         put((panel?.lit ? SSD1306_FLAG_LIT : 0) | (panel?.mirrored ? SSD1306_FLAG_MIRRORED : 0));
+      } else if (component.kind === 'display' && component.controller === 'max7219') {
+        const controller = this.engine.displayController(part.id);
+        const matrix = controller instanceof Max7219 ? controller : null;
+        const frame = matrix ? matrix.frame() : new Uint8Array(0);
+        for (let i = 0; i < MAX7219_FRAME_BYTES; i++) put(frame[i] ?? 0);
+        const intensity = Math.round((matrix?.brightness ?? 0) * 0x0f);
+        put((matrix?.lit ? MAX7219_FLAG_LIT : 0) | (intensity << MAX7219_INTENSITY_SHIFT));
       } else if (component.kind === 'servo') {
         const servo = this.engine.servo(part.id);
         put(servo ? Math.max(0, Math.min(180, Math.round(servo.angle))) : 0);

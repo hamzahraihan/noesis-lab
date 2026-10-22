@@ -81,7 +81,12 @@ describe('the derivation', () => {
     expect(one).toContain('COM.1');
     expect(four).toContain('DIG4');
 
-    expect(layoutValuesFor('display')).toEqual(['ssd1306', 'ssd1306-spi', 'ili9341']);
+    expect(layoutValuesFor('display')).toEqual([
+      'max7219',
+      'ssd1306',
+      'ssd1306-spi',
+      'ili9341',
+    ]);
     expect(layoutValuesFor('sensor-module')).toContain('pir');
     // A kind with no layout parameter has no values to choose from.
     expect(layoutValuesFor('resistor')).toEqual([]);
