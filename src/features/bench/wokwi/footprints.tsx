@@ -187,6 +187,7 @@ function shapeFor(
       );
     case 'i2c-sensor':
     case 'i2c-expander':
+    case 'eeprom':
     case 'thermocouple':
     case 'dac':
     case 'ds18b20':

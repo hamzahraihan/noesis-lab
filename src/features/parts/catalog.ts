@@ -157,6 +157,11 @@ export type ComponentSpec =
    */
   | { readonly kind: 'power-supply' }
   /*
+   * A memory chip: the sketch writes an address and then the bytes at it,
+   * which is a different shape of device from a register file.
+   */
+  | { readonly kind: 'eeprom' }
+  /*
    * A shift register on the SPI bus: the clock and the data in are the bus's
    * own pins, and the latch is a plain output the sketch drives, because on
    * the chip the two are separate wires.

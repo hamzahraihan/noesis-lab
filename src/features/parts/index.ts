@@ -14,6 +14,7 @@ export * from './devices/pcf8574';
 export * from './devices/max6675';
 export * from './devices/mcp4725';
 export * from './power-supply';
+export * from './devices/eeprom24lc256';
 export * from './devices/ina219';
 export * from './devices/shift595';
 export * from './devices/lcd';

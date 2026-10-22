@@ -867,6 +867,7 @@ function elementsForPart(
     case 'thermocouple':
     case 'dac':
     case 'power-supply':
+    case 'eeprom':
     case 'rc522':
     case 'tm1637':
     case 'a4988':

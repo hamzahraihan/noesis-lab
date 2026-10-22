@@ -75,6 +75,7 @@ import { pcf8574Definition } from './devices/pcf8574';
 import { max6675Definition } from './devices/max6675';
 import { mcp4725Definition } from './devices/mcp4725';
 import { powerSupplyDefinition } from './power-supply';
+import { eeprom24lc256Definition } from './devices/eeprom24lc256';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -293,6 +294,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'eeprom24lc256',
+    name: 'EEPROM (24LC256)',
+    group: 'output',
+    note: 'A memory rather than a register file: the sketch writes an address and then the bytes at it, and a write that runs off the end of a page comes back to the start of that page.',
+    make: eeprom24lc256Definition,
   },
   {
     id: 'power-supply',
