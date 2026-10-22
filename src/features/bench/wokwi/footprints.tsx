@@ -187,6 +187,7 @@ function shapeFor(
       );
     case 'i2c-sensor':
     case 'i2c-expander':
+    case 'thermocouple':
     case 'ds18b20':
     case 'shift-register':
       // The modules the bench draws itself: Wokwi's library has no element

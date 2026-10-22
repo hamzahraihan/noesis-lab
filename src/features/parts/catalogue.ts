@@ -72,6 +72,7 @@ import { mfrc522Definition } from './mfrc522';
 import { tm1637Definition } from './tm1637';
 import { a4988Definition } from './a4988';
 import { pcf8574Definition } from './devices/pcf8574';
+import { max6675Definition } from './devices/max6675';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -290,6 +291,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'max6675',
+    name: 'Thermocouple (MAX6675)',
+    group: 'input',
+    note: 'A thermocouple amplifier with a shift register on the front: the sketch shifts out a dummy byte and the chip hands back sixteen bits, four of them status and twelve the temperature in quarter-degree steps.',
+    make: max6675Definition,
   },
   {
     id: 'pcf8574',

@@ -37,6 +37,7 @@ import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
 import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
 import { Pcf8574, PCF8574_OUTPUT_OHMS, PCF8574_PORTS } from '@/features/parts';
+import { Max6675, MAX6675_TEMPERATURE_KNOB } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -337,6 +338,15 @@ export class Engine {
   private readonly stepperDrivers = new Map<string, A4988>();
 
   /**
+   * The thermocouples on the bench, keyed by part id.
+   *
+   * A thermocouple is a sensor that answers over the SPI bus: the sketch
+   * shifts out a dummy byte and the chip hands back the reading, so it
+   * needs the return path the card reader needed.
+   */
+  private readonly thermocouples = new Map<string, Max6675>();
+
+  /**
    * The register devices on the SPI bus, keyed by part id.
    *
    * Like the shift registers they are not displays, but unlike them they
@@ -470,11 +480,13 @@ export class Engine {
     const previousLcds = new Map(this.lcds);
     const previousReaders = new Map(this.cardReaders);
     const previousDrivers = new Map(this.stepperDrivers);
+    const previousThermocouples = new Map(this.thermocouples);
     this.displays.clear();
     this.devices.clear();
     this.shiftRegisters.clear();
     this.cardReaders.clear();
     this.stepperDrivers.clear();
+    this.thermocouples.clear();
     this.servos.clear();
     this.lcds.clear();
     this.lcdStrobe.clear();
@@ -567,6 +579,14 @@ export class Engine {
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       if (part.definition.component.kind === 'shift-register') {
         this.shiftRegisters.set(part.id, new Shift595());
+      }
+      if (part.definition.component.kind === 'thermocouple') {
+        const thermocouple = previousThermocouples.get(part.id) ?? new Max6675();
+        // The probe's temperature is what the operator has dialled in, and
+        // the chip reads it the way it would read a probe: in quarter-degree
+        // steps, rounded to what the wire can tell it.
+        thermocouple.setTemperature(this.dynamicState.knob(part.id, MAX6675_TEMPERATURE_KNOB));
+        this.thermocouples.set(part.id, thermocouple);
       }
       if (part.definition.component.kind === 'a4988') {
         const driver = previousDrivers.get(part.id) ?? new A4988();
@@ -1050,6 +1070,11 @@ export class Engine {
       answer = reader.receive(byte);
       heard = true;
     }
+    for (const [partId, thermocouple] of this.thermocouples) {
+      if (!this.isThermocoupleOnSpiBus(partId)) continue;
+      answer = thermocouple.receive();
+      heard = true;
+    }
     return heard ? answer : null;
   }
 
@@ -1067,6 +1092,7 @@ export class Engine {
       if (controller instanceof Max7219) controller.latch();
     }
     for (const reader of this.cardReaders.values()) reader.endTransaction();
+    for (const thermocouple of this.thermocouples.values()) thermocouple.endTransaction();
   }
 
   /**
@@ -1134,6 +1160,24 @@ export class Engine {
   isOnSpiBus(partId: string): boolean {
     const netlist = this.currentNetlist;
     for (const pin of ['CS', 'DC', 'MOSI', 'SCK']) {
+      const net = netlist.pinNode.get(`${partId}:${pin}`);
+      if (net === undefined || net === GROUND) return false;
+      if (!this.spiNets.has(net)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Whether a thermocouple is wired to the bus.
+   *
+   * The module names its lines the way the chip does -- CS, SCLK, SDI and
+   * SDO -- so the display's four-signal check does not describe it. The
+   * three that carry a command have to land; the fourth is the line the
+   * answer comes back on.
+   */
+  isThermocoupleOnSpiBus(partId: string): boolean {
+    const netlist = this.currentNetlist;
+    for (const pin of ['CS', 'SCLK', 'SDI']) {
       const net = netlist.pinNode.get(`${partId}:${pin}`);
       if (net === undefined || net === GROUND) return false;
       if (!this.spiNets.has(net)) return false;

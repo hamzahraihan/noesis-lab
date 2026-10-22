@@ -141,6 +141,12 @@ export type ComponentSpec =
    */
   | { readonly kind: 'i2c-expander' }
   /*
+   * A thermocouple amplifier: the chip reads a probe and hands the reading
+   * out over the SPI bus, so this is a sensor that answers rather than one
+   * the sketch polls.
+   */
+  | { readonly kind: 'thermocouple' }
+  /*
    * A shift register on the SPI bus: the clock and the data in are the bus's
    * own pins, and the latch is a plain output the sketch drives, because on
    * the chip the two are separate wires.
