@@ -356,6 +356,27 @@ and one byte of display data, and `display.print("12:34")` is the convenience
 on top of it. The colon on this module is the decimal point of the second
 digit, which is the only colon it has.
 
+**A driver that works out the phase sequence for you.** The A4988 is a
+stepper driver with a translator behind it: a pulse on STEP moves the motor
+one step and DIR says which way, so the sketch never writes a phase table --
+and that is the whole reason for buying one. The bench models the chip's
+full-step excitation: four states, each with one winding driven forward and
+the other driven back, and the states walk the Gray cycle the bench's motor
+already follows. The driver drives its four outputs itself, the way the shift
+register drives its eight, so what it drives them with is stamped into the
+solve rather than frozen into the netlist. A sketch needs no new firmware
+API for it at all: the step line is an ordinary pin, and the driver is what
+turns a pulse into a phase.
+
+**The microstep modes are not modelled, and the motor is the reason.** A
+microstep drives one winding at a *reduced current* rather than reversing
+it, while the bench's motor follows the polarity across a winding -- so a
+fine mode would move the motor by whole steps or not at all. The current
+regulation that makes a microstep real is a chopper, and the bench's solver
+is linear. The microstep-select pins are on the part because the module has
+them, and the model reads them; full step, the mode the bench models, is the
+three of them low.
+
 **Four firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306
 command bytes over `Wire` by hand, and `WirePort` had no read half at all. So
