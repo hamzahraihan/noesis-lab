@@ -1,9 +1,10 @@
 # Parity scorecard — how close Noesis is to Wokwi and Velxio
 
-Captured 2026-10-22 · measured at commit `4f046d1` · rubric v1 · the
+Captured 2026-10-22 · measured at commit `18e3672` · rubric v1 · the
 debugging pillar re-measured after the debugger shipped · the parts pillar
 re-measured after the bus instruments, the shift register, the matrix and the
-phone panel landed
+phone panel landed · the ecosystem pillar re-measured after the simulation
+CI landed
 
 **What this measures.** Two apps are the yardstick for this project: Wokwi,
 because it is the closest thing to the product being built, and Velxio,
@@ -65,17 +66,17 @@ than about arithmetic.
 | 8. Debugging | 8% | 42 | **60** | **A debugger, on the interpreted sketch.** A stop in the editor's margin, a program that stops on it with the line marked in the editor, the names in scope and what they hold, and three ways to move on: carry on, step over, step into (`simulation/firmware/debugger.ts`, `simulation/firmware/interpreter.ts`, `instruments/DebugPanel.tsx`). The stops ride with the sketch into the worker, which is the realm that holds the program (`sim-worker/worker.ts`). **Nothing on a compiled core** — no GDB, no memory view, no watchpoints, no expression evaluation. Wokwi debugs compiled firmware over GDB; Velxio documents no debugger at all, its docs carrying an AI assistant in that space instead. |
 | 9. Network & IoT | 5% | 45 | 35 | A bench-owned virtual network — `WiFi.begin`/`status`/`localIP`, a poll-based `net.get`/`read`/`subscribe` (`simulation/net/network.ts`) — plus an opt-in bridge to two real hosts (`net/live-hosts.ts`, `net/bridge.ts`). The Arduino libraries over it answer too: `HTTPClient http;` (blocking, the way a real request blocks), `PubSubClient mqtt;` and `WiFiUdp udp;` for the clock the network keeps. Wokwi does MQTT, HTTP and NTP; Velxio goes further still, with a local network gateway, four built-in networks that reach the real internet, and flashing firmware to real hardware. |
 | 10. Extension API | 5% | 55 | 60 | A part may arrive as a `.part.json` (`parts/custom.ts`) or carry **behaviour** as a script — QuickJS compiled to Wasm, one context per part, inside the simulation worker (`simulation/scripted/`). Definitions **travel with the circuit** (`CircuitDocument.definitions`), so a file opens on a machine that imported nothing. Wokwi and Velxio use a C→Wasm chip ABI instead. |
-| 11. Ecosystem & workflow | 5% | 33 | 33 | Monaco, multi-file tabs, an Arduino library manager with tier-2 libraries (`instruments/library-manager.ts`, `simulation/avr/libraries/`), GitHub CI running typecheck, lint, boundary checks and tests (`.github/workflows/ci.yml`), and a real `README.md`. **No VS Code extension, no simulation CI, no i18n, no community, and no licence.** Velxio has simulation CI with a GitHub Action, an MCP server, an AI assistant, GitHub Sync, BOM export and docs in 9 languages — and accounts, a paid tier and a Discord. Both targets gate their best workflow features behind a subscription, so the free tiers are closer to Noesis than the price pages suggest. |
+| 11. Ecosystem & workflow | 5% | 37 | 37 | Monaco, multi-file tabs, an Arduino library manager with tier-2 libraries (`instruments/library-manager.ts`, `simulation/avr/libraries/`), GitHub CI running typecheck, lint, boundary checks and tests (`.github/workflows/ci.yml`), and a real `README.md`. **A simulation CI, so a project can be checked on every push** (`.github/workflows/simulation-ci.yml`, `learn/ci/`): a folder with a circuit, a sketch and the lines the serial output has to carry, run headlessly by the same simulation the app drives. **No VS Code extension, no i18n, no community, and no licence.** Velxio has simulation CI with a GitHub Action, an MCP server, an AI assistant, GitHub Sync, BOM export and docs in 9 languages — and accounts, a paid tier and a Discord. Both targets gate their best workflow features behind a subscription, so the free tiers are closer to Noesis than the price pages suggest. |
 
-**Weighted total: 58.0% of Wokwi · 49.6% of Velxio.**
+**Weighted total: 58.2% of Wokwi · 49.8% of Velxio.**
 
 The arithmetic, so it can be checked:
 
 ```
 Wokwi   18×.65 + 14×.54 + 10×.85 +  9×.42 +  9×.78 + 10×.45
-       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.33  =  58.0
+       +  7×.70 +  8×.42 +  5×.45 +  5×.55 +  5×.37  =  58.2
 Velxio  18×.48 + 14×.51 + 10×.60 +  9×.21 +  9×.82 + 10×.35
-       +  7×.55 +  8×.60 +  5×.35 +  5×.60 +  5×.33  =  49.6
+       +  7×.55 +  8×.60 +  5×.35 +  5×.60 +  5×.37  =  49.8
 ```
 
 **What the targets' numbers rest on.** Wokwi's are from
@@ -107,8 +108,8 @@ feature it has but has not written down would not show.
 - **A debugger against Velxio.** Velxio's docs list no debugger at all; its
   docs carry an AI assistant in that space instead. Noesis stops a sketch on
   a line, shows what the program can see there, and steps through it.
-- **Engineering rigour.** 215 test files and 1,795 tests across 32,785 lines
-  of test against 73,347 lines of source in 252 files; CI with typecheck, lint
+- **Engineering rigour.** 216 test files and 1,799 tests across 32,837 lines
+  of test against 73,572 lines of source in 254 files; CI with typecheck, lint
   and boundary checks. The risky parts — the AVR Wasm core, the RP2040
   firmware path, the circuit document, the interpreter's Python front end —
   each have dedicated parity tests rather than smoke checks.
