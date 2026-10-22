@@ -1,0 +1,4 @@
+{
+  "frames": 150,
+  "serial": ["blink ready", "tick", "tick"]
+}

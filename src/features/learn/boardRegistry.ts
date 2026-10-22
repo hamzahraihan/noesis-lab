@@ -12,7 +12,7 @@
  */
 
 import type { PartDefinition } from '@/features/parts';
-import type { FirmwareLanguage } from '@/features/simulation';
+import type { CircuitDocument, FirmwareLanguage } from '@/features/simulation';
 import {
   arduinoMega2560,
   arduinoNano,
@@ -190,6 +190,21 @@ export const DEFAULT_BOARD_ID: BoardId = 'uno';
  */
 export function isBoardId(value: string | undefined): value is BoardId {
   return BOARDS.some((board) => board.id === value);
+}
+
+/**
+ * The board a circuit is for.
+ *
+ * A circuit names its board by putting the board on it, so the board is found
+ * by that part's own type rather than by a name the project has to repeat and
+ * keep in step. A circuit with no board on it is one no bench can build.
+ */
+export function boardForCircuit(circuit: CircuitDocument): BoardOption {
+  for (const board of BOARDS) {
+    const id = board.make().id;
+    if (circuit.parts.some((part) => part.type === id)) return board;
+  }
+  throw new Error('the circuit names no board this bench builds');
 }
 
 /**

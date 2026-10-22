@@ -1,0 +1,53 @@
+# Runs a project's simulation on every push.
+#
+# A reusable workflow: a repository that has a Noesis project calls this and
+# gets a pass or a fail, with the simulation's own serial output in the log.
+# The project's folder holds a circuit, a sketch and what the run should see
+# -- see `docs/simulation-ci.md`.
+name: Noesis simulation
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: The project folder to run, relative to the repository root
+        required: true
+        type: string
+      ref:
+        description: The Noesis ref to run against
+        required: false
+        default: main
+        type: string
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The repository that called this workflow, which holds the project.
+      - uses: actions/checkout@v4
+
+      # The bench itself, at the ref the caller asked for.
+      - uses: actions/checkout@v4
+        with:
+          repository: hamzahraihan/noesis-lab
+          ref: ${{ inputs.ref }}
+          path: noesis
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: noesis/package-lock.json
+
+      - run: npm ci
+        working-directory: noesis
+
+      # The runner is a test, because a test is what a Node process can run
+      # here: the bench's modules are TypeScript with a path alias, and vitest
+      # is what resolves them.
+      - name: Run the simulation
+        run: npx vitest run src/features/learn/ci/runner.test.ts
+        working-directory: noesis
+        env:
+          NOESIS_PROJECT: ${{ github.workspace }}/${{ inputs.project }}

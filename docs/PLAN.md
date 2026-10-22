@@ -763,3 +763,27 @@ it is still on it. A block is not a statement of its own -- it carries the
 line of the first statement inside it -- so it is never where a stop lands.
 
 
+
+### 6.7 Simulation CI: the same simulation, without a page
+
+**A project is three files, and a CI run is a Node process.** The bench is a
+page, but the simulation underneath it is plain TypeScript -- a circuit, a
+sketch and a clock -- so a project can be run without a browser and checked
+on every push. The project is the circuit document the bench already saves,
+the sketch, and what the run should see: the lines the serial output has to
+carry, in order.
+
+**The runner is a test, because that is what Node can run here.** The bench's
+modules are TypeScript with a path alias, and vitest is what resolves them,
+so the entry point the workflow runs is a test that skips itself when no
+project is named. The repository ships a reusable workflow, and a project
+calls it with the path of its folder: a user's repository gets a pass or a
+fail, with the simulation's own serial output in the log.
+
+**It checks the serial output, and it says so.** The serial output is the
+one observable every project has -- a sketch that prints nothing has nothing
+to say -- and the glass, the LEDs and the shaft are not read. The sketch runs
+on the interpreter, because that is the path a machine without a browser can
+run: the compiled path needs a HEX built by a toolchain the workflow would
+have to fetch, and a project that wants its firmware compiled should build
+it in its own workflow and check the HEX there.

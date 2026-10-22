@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "led-red",
+      "x": 140,
+      "y": 40,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "resistor-220",
+      "x": 200,
+      "y": 40,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:5V",
+      "to": "p2:A",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p2:K",
+      "to": "p3:a",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p3:b",
+      "to": "p1:D13",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}
