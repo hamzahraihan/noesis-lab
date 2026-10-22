@@ -354,10 +354,7 @@ class SimCore implements CoreHandle {
       fetch: options.liveFetcher ?? (options.liveNetwork ? createLiveFetcher() : undefined),
     });
     this.spi = new SpiBus(
-      (byte, dataSelect, chipSelected) => {
-        this.engine.deliverSpi(byte, dataSelect, chipSelected);
-        return true;
-      },
+      (byte, dataSelect, chipSelected) => this.engine.deliverSpi(byte, dataSelect, chipSelected),
       () => this.engine.endSpiTransfer(),
     );
     this.i2c = new I2CBus(

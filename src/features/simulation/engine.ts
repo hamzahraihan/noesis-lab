@@ -33,6 +33,7 @@ import { Bmp180 } from '@/features/parts';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
+import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -323,6 +324,15 @@ export class Engine {
    */
   private readonly shiftRegisters = new Map<string, Shift595>();
 
+  /**
+   * The register devices on the SPI bus, keyed by part id.
+   *
+   * Like the shift registers they are not displays, but unlike them they
+   * answer: every byte sent to one is an address or a value, and a read
+   * transaction comes back on MISO. The card reader is the first of them.
+   */
+  private readonly cardReaders = new Map<string, Mfrc522>();
+
   /** Servo parts, keyed by part id, for the renderer and the firmware port. */
   private readonly servos = new Map<string, Servo>();
 
@@ -446,9 +456,11 @@ export class Engine {
      * they need their own carried map.
      */
     const previousLcds = new Map(this.lcds);
+    const previousReaders = new Map(this.cardReaders);
     this.displays.clear();
     this.devices.clear();
     this.shiftRegisters.clear();
+    this.cardReaders.clear();
     this.servos.clear();
     this.lcds.clear();
     this.lcdStrobe.clear();
@@ -537,6 +549,18 @@ export class Engine {
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       if (part.definition.component.kind === 'shift-register') {
         this.shiftRegisters.set(part.id, new Shift595());
+      }
+      if (part.definition.component.kind === 'rc522') {
+        const reader = previousReaders.get(part.id) ?? new Mfrc522();
+        /*
+         * The card is read at the moment the chip asks for it, not copied in
+         * on a tick: a card slid into the field between two requests is seen
+         * by the second request, the way the real one is.
+         */
+        reader.setCardPresent(
+          () => this.dynamicState.knob(part.id, MFRC522_CARD_KNOB) > 0.5,
+        );
+        this.cardReaders.set(part.id, reader);
       }
       const lcd = previousLcds.get(part.id) ?? createLcd(part.definition);
       if (lcd) this.lcds.set(part.id, lcd);
@@ -858,6 +882,11 @@ export class Engine {
     return this.displays.get(partId);
   }
 
+  /** Register device for a part, or undefined when it has none. */
+  cardReader(partId: string): Mfrc522 | undefined {
+    return this.cardReaders.get(partId);
+  }
+
   /**
    * True while a probe is watching.
    *
@@ -962,21 +991,29 @@ export class Engine {
   }
 
   /**
-   * Delivers one SPI byte to any display wired onto the SPI bus.
+   * Delivers one SPI byte to the devices wired onto the SPI bus.
    *
-   * Unlike I2C there is no address to acknowledge: the display is selected by
-   * its chip-select pin alone, which is why a TFT on the wrong CS simply never
-   * answers rather than reporting a fault.
+   * Unlike I2C there is no address to acknowledge: a device is selected by its
+   * chip-select pin alone, which is why a TFT on the wrong CS simply never
+   * answers rather than reporting a fault. The return is the byte the selected
+   * device shifted back out on MISO, or null when nothing heard the byte at
+   * all -- which is what lets a register device answer and a display stay
+   * silent without either of them having to pretend.
    */
-  deliverSpi(byte: number, dataSelect: boolean, chipSelected: boolean): void {
+  deliverSpi(byte: number, dataSelect: boolean, chipSelected: boolean): number | null {
+    let heard = false;
+    let answer = 0;
     for (const [partId, controller] of this.displays) {
       if (controller instanceof Max7219) {
         // The matrix has no D/C pin and no four-signal header: data in and
         // clock are all it hears, and its chip-select is the bus's framing.
-        if (this.isMatrixOnSpiBus(partId)) controller.receive(byte, dataSelect, chipSelected);
+        if (!this.isMatrixOnSpiBus(partId)) continue;
+        controller.receive(byte, dataSelect, chipSelected);
+        heard = true;
         continue;
       }
       if (!this.isOnSpiBus(partId)) continue;
+      heard = true;
       if (controller instanceof Ili9341) controller.receive(byte, dataSelect, chipSelected);
       else if (controller instanceof Ssd1306) controller.receiveSpi(byte, dataSelect, chipSelected);
       else if (controller instanceof Pcd8544) controller.receive(byte, dataSelect, chipSelected);
@@ -984,7 +1021,14 @@ export class Engine {
     for (const [partId, register] of this.shiftRegisters) {
       if (!this.isShiftRegisterOnSpiBus(partId)) continue;
       register.receive(byte, dataSelect, chipSelected);
+      heard = true;
     }
+    for (const [partId, reader] of this.cardReaders) {
+      if (!this.isOnSpiBusAsReader(partId)) continue;
+      answer = reader.receive(byte);
+      heard = true;
+    }
+    return heard ? answer : null;
   }
 
   /**
@@ -993,11 +1037,14 @@ export class Engine {
    * A device that latches whole frames rather than bytes needs the boundary as
    * an event of its own: the bus owns framing, so it says when a transaction
    * has finished instead of leaving each device to infer it from byte timing.
+   * A register device needs it for the same reason in reverse -- the first
+   * byte of the next transaction is an address again.
    */
   endSpiTransfer(): void {
     for (const controller of this.displays.values()) {
       if (controller instanceof Max7219) controller.latch();
     }
+    for (const reader of this.cardReaders.values()) reader.endTransaction();
   }
 
   /**
@@ -1070,6 +1117,26 @@ export class Engine {
       if (!this.spiNets.has(net)) return false;
     }
     return true;
+  }
+
+  /**
+   * Whether a register device is wired to the bus.
+   *
+   * Its header names the lines the way the module does -- SDA is chip select
+   * on this board, not I2C data -- and it has no data/command pin, so the
+   * display's four-signal check does not describe it. Clock and data out have
+   * to land on the board's SPI pins; the select line may be any GPIO, because
+   * on real silicon it is, and only its being wired at all is checked here.
+   */
+  isOnSpiBusAsReader(partId: string): boolean {
+    const netlist = this.currentNetlist;
+    for (const pin of ['MOSI', 'SCK']) {
+      const net = netlist.pinNode.get(`${partId}:${pin}`);
+      if (net === undefined || net === GROUND) return false;
+      if (!this.spiNets.has(net)) return false;
+    }
+    const select = netlist.pinNode.get(`${partId}:SDA`);
+    return select !== undefined && select !== GROUND;
   }
 
   get currentNetlist(): Netlist {

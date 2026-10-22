@@ -18,6 +18,7 @@ import type { PartDefinition, PinSpec } from '@/features/parts';
 import { DynamicState } from '@/features/parts';
 import { DIODE_PROFILES } from '@/features/parts';
 import { WIPER_KNOB } from '@/features/parts';
+import { MFRC522_CARD_KNOB } from '@/features/parts';
 import { memo, useEffect, useRef } from 'react';
 import { Ili9341 } from '@/features/parts';
 import { Max7219 } from '@/features/parts';
@@ -191,6 +192,9 @@ function shapeFor(
       // or a shift register, so these are drawn here from the definition's
       // own pins.
       return <ModuleBody definition={definition} />;
+    case 'rc522':
+      // A register device with something to show: the card in its field.
+      return <RfidBody definition={definition} state={state} part={part} />;
   }
 }
 
@@ -1222,6 +1226,140 @@ const ModuleBody = staticBody(function ModuleBody({ definition }: { definition: 
 
 // ---------------------------------------------------------------------------
 // Inputs
+
+/**
+ * The MFRC522 module: a red board with its coil printed round the edge, the
+ * RF chip in the middle, and a card lying on it when one is in the field.
+ *
+ * The card is the whole point of the drawing: a sketch that reads a card and
+ * one that times out look identical on the glass, so the bench shows which
+ * one the operator set.
+ */
+function RfidBody({
+  definition,
+  state,
+  part,
+}: {
+  definition: PartDefinition;
+  state: FootprintState;
+  part: PartInstance;
+}) {
+  const width = definition.widthMm;
+  const height = definition.heightMm;
+  const card = state.controls.knob(part.id, MFRC522_CARD_KNOB) > 0.5;
+  const coil = [
+    { inset: 2.4, radius: 1.2 },
+    { inset: 4.6, radius: 0.9 },
+  ];
+
+  return (
+    <g filter="url(#nz-lift)">
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        rx={1.4}
+        fill={definition.bodyColour}
+        stroke="#0c1018"
+        strokeWidth={0.2}
+      />
+      <rect x={0} y={0} width={width} height={height} rx={1.4} fill="url(#nz-body)" />
+      {/* The antenna: two turns of copper round the board's edge. */}
+      {coil.map(({ inset, radius }) => (
+        <rect
+          key={inset}
+          x={inset}
+          y={inset}
+          width={width - inset * 2}
+          height={height - inset * 2}
+          rx={radius}
+          fill="none"
+          stroke="#f87171"
+          strokeOpacity={card ? 0.85 : 0.45}
+          strokeWidth={0.55}
+        />
+      ))}
+      {/* The RF front end and the crystal beside it. */}
+      <Chip x={13} y={20} width={8} height={8} legs={5} textColour={definition.legendColour} />
+      <rect x={24} y={22} width={3.4} height={2.6} rx={0.4} fill="#c8ced8" />
+      <rect x={24} y={26.4} width={3.4} height={2.6} rx={0.4} fill="#c8ced8" />
+      {/* The header along the bottom edge, and the names a tutorial calls it. */}
+      {definition.pins.map((pin) => (
+        <g key={pin.id}>
+          <SolderPad x={pin.x} y={pin.y} />
+          {/*
+           * The names run along the edge rather than under the pads: at
+           * 2.54 mm apart, a name across the board would land on its
+           * neighbour.
+           */}
+          <text
+            x={pin.x - 0.6}
+            y={pin.y + 5.4}
+            fontSize={1.25}
+            fill={definition.legendColour}
+            fontFamily={SILKSCREEN_FONT}
+            opacity={0.9}
+            transform={`rotate(-90 ${pin.x - 0.6} ${pin.y + 5.4})`}
+          >
+            {pin.label}
+          </text>
+        </g>
+      ))}
+      <text
+        x={width / 2}
+        y={height - 10}
+        fontSize={1.7}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+        opacity={0.95}
+      >
+        MFRC-522
+      </text>
+      {card && (
+        /*
+         * A card laid on the reader: white, a gold chip, and the name a
+         * catalogue gives it. Tilted a little, because a card on a board is
+         * never square.
+         */
+        <g transform={`translate(${width / 2} 30) rotate(-9)`}>
+          <rect
+            x={-13}
+            y={-8.5}
+            width={26}
+            height={17}
+            rx={1.8}
+            fill="#f8fafc"
+            stroke="#94a3b8"
+            strokeWidth={0.3}
+          />
+          <rect x={-9.5} y={-5.5} width={5.4} height={4.2} rx={0.4} fill="#d4a017" />
+          <text
+            x={4}
+            y={0}
+            fontSize={1.7}
+            textAnchor="middle"
+            fill="#334155"
+            fontFamily={SILKSCREEN_FONT}
+          >
+            MIFARE
+          </text>
+          <text
+            x={4}
+            y={3.2}
+            fontSize={1.2}
+            textAnchor="middle"
+            fill="#64748b"
+            fontFamily={SILKSCREEN_FONT}
+          >
+            1K
+          </text>
+        </g>
+      )}
+    </g>
+  );
+}
 
 function ButtonBody({
   definition,

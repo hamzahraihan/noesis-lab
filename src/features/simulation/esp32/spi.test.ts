@@ -121,10 +121,9 @@ describe('the emulated ESP32 on the bench SPI bus', () => {
     const panel = simulation.engine.displayController(panelPart.id);
     if (!(panel instanceof Ili9341)) throw new Error('esp32: the panel is not the colour TFT');
 
-    const bus = new SpiBus((byte, dataSelect, chipSelected) => {
-      simulation.engine.deliverSpi(byte, dataSelect, chipSelected);
-      return true;
-    });
+    const bus = new SpiBus((byte, dataSelect, chipSelected) =>
+      simulation.engine.deliverSpi(byte, dataSelect, chipSelected),
+    );
 
     const filesystem = await buildEsp32Filesystem(
       [

@@ -68,6 +68,7 @@ import { encoderDefinition } from './encoder';
 import { sonarDefinition } from './sonar';
 import { dhtDefinition } from './dht';
 import { ds18b20Definition } from './ds18b20';
+import { mfrc522Definition } from './mfrc522';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -286,6 +287,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'mfrc522',
+    name: 'RFID reader (MFRC522)',
+    group: 'input',
+    note: 'An SPI register file with a card in its field. A sketch reads the version register, asks for a card, and gets the ATQA back in the FIFO \u2014 or the timer interrupt when no card is there.',
+    make: mfrc522Definition,
   },
   {
     id: 'neopixel',

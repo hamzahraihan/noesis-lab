@@ -44,18 +44,25 @@ export interface SpiByte {
  * A single SPI bus.
  *
  * `deliver` receives each byte with the state of the D/C pin, which is what
- * tells a display whether the byte is a command or data.
+ * tells a display whether the byte is a command or data, and answers with the
+ * byte the device shifted back out on MISO -- or null when nothing on the bus
+ * heard the byte at all. A display has no MISO line to speak on and answers
+ * zero; a register device answers what it holds.
  */
 export class SpiBus {
   private selected = false;
   private sawByte = false;
   private payload: SpiByte[] = [];
 
-  private readonly deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean;
+  private readonly deliver: (
+    byte: number,
+    dataSelect: boolean,
+    chipSelected: boolean,
+  ) => number | null;
   private readonly onEnd: (() => void) | undefined;
 
   constructor(
-    deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => boolean,
+    deliver: (byte: number, dataSelect: boolean, chipSelected: boolean) => number | null,
     onEnd?: () => void,
   ) {
     this.deliver = deliver;
@@ -78,8 +85,9 @@ export class SpiBus {
   transfer(byte: number, dataSelect: boolean, chipSelected = true): number {
     if (!this.selected) return 0;
     this.payload.push({ value: byte & 0xff, data: dataSelect });
-    if (this.deliver(byte & 0xff, dataSelect, chipSelected)) this.sawByte = true;
-    return 0;
+    const answer = this.deliver(byte & 0xff, dataSelect, chipSelected);
+    if (answer !== null) this.sawByte = true;
+    return answer ?? 0;
   }
 
   /**

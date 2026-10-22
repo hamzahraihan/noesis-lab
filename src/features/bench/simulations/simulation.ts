@@ -1711,10 +1711,10 @@ export class Simulation {
   private pendingDelayMs = 0;
 
   private readonly spi = new SpiBus(
-    (byte, dataSelect, chipSelected) => {
-      this.engine.deliverSpi(byte, dataSelect, chipSelected);
-      return true;
-    },
+    // The byte the selected device shifted back out, or null when nobody on
+    // the pins heard the byte: the sketch reads the answer, so it has to
+    // travel back up the same path the write came down.
+    (byte, dataSelect, chipSelected) => this.engine.deliverSpi(byte, dataSelect, chipSelected),
     () => this.engine.endSpiTransfer(),
   );
 
