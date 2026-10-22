@@ -2576,6 +2576,13 @@ export default function Bench(props: BenchProps) {
                 if (workerClient !== null && workerLive)
                   workerClient.setPressed(selected.id, pressed);
                 else simulation.setPressed(selected.id, pressed);
+                /*
+                 * Asked for explicitly, like every other change to the bench:
+                 * the animation loop only redraws while the simulation is
+                 * running, so a control moved on a stopped bench stayed where
+                 * it was on screen while the model had already moved it.
+                 */
+                forceRender((n) => n + 1);
               }}
               onSetKnob={(spec, value) => {
                 if (!selected) return;
@@ -2589,6 +2596,10 @@ export default function Bench(props: BenchProps) {
                 if (workerClient !== null && workerLive)
                   workerClient.setKnob(selected.id, spec, value);
                 else simulation.setKnob(selected.id, spec, value);
+                // A knob's position is what the part draws -- a wiper's angle,
+                // a card in a reader's field -- so the bench is redrawn here
+                // rather than waiting for the running loop to ask for a frame.
+                forceRender((n) => n + 1);
               }}
               onRotate={() => {
                 // Physical, not electronic: this turns the part on the bench.
