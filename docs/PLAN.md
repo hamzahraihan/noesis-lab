@@ -333,6 +333,29 @@ boundary is what tells the chip the next byte is an address again. The
 compiled AVR core has no SPI port, so an SPI part is an interpreted-sketch
 part; the compiled boards drive I2C.
 
+**A display behind two wires.** The TM1637 module is a display driver with a
+register file behind it: a sketch writes the segment patterns into the
+registers and the chip scans the digits itself, so the glass shows what was
+written without the sketch multiplexing anything. The wire is CLK and DIO, and
+DIO is bidirectional -- the chip pulls it low to acknowledge every byte it
+takes, and answers a key scan on the same line -- so the interface is neither
+I2C nor SPI, and the bench had no bus to hang it on. What it has instead is a
+port: the module is found by the pair of pins the sketch named, and both of
+them have to land, because a module with no clock is a module that cannot
+answer.
+
+**The framing is the chip's own, and it is the part worth knowing.** The first
+byte of a transaction is a command -- an address, or the display control that
+says whether the glass is lit and how bright -- and the bytes after it are
+data. Only the position tells them apart, because a segment pattern can look
+like a command: the decimal point on its own is `0x80`, which is the display
+control's shape. A sketch that wrote the bytes one at a time would have the
+bench guessing, so the bench hands the module whole transactions and the
+call's shape is the framing: `display.write(0xC0, 0x3f)` is an address command
+and one byte of display data, and `display.print("12:34")` is the convenience
+on top of it. The colon on this module is the decimal point of the second
+digit, which is the only colon it has.
+
 **Four firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306
 command bytes over `Wire` by hand, and `WirePort` had no read half at all. So

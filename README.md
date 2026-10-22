@@ -30,11 +30,12 @@ why:
 | ESP32 chip | ESP32 | An emulated Xtensa chip running its own MicroPython, with GPIO, I²C and SPI seams into the bench |
 | Interpreter | all of them | A C++/Python front end over a generator-based VM — the fallback for boards with no machine-code core |
 
-**Sixty-five parts** over forty-one component kinds, drawn at 1:1 on
+**Sixty-six parts** over forty-two component kinds, drawn at 1:1 on
 2.54 mm pitch: LEDs and matrices, 7-segment and LCD and OLED and TFT panels,
 servos, steppers, relays, a keypad, a rotary encoder, potentiometers, buttons,
-sensors over I²C and one-wire, a card reader over SPI, and a breadboard whose
-holes are the ones the wires actually land in.
+sensors over I²C and one-wire, a card reader over SPI, a four-digit display
+behind two wires, and a breadboard whose holes are the ones the wires actually
+land in.
 
 **Instruments** — an oscilloscope, an 8-channel logic analyser, a multimeter, a
 bus monitor, a serial monitor and a serial plotter. The analyser draws the
@@ -78,7 +79,7 @@ or individually:
 | `npm run dev` | The dev server, with the worker path's isolation headers already set |
 | `npm run build` | Typecheck and a production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle the way a static host would |
-| `npm test` | The full Vitest suite — 213 files, 1,771 tests |
+| `npm test` | The full Vitest suite — 214 files, 1,784 tests |
 | `npm run test:watch` | The same, in watch mode |
 | `npm run typecheck` | `tsc -b` |
 | `npm run lint` | oxlint |
