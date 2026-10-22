@@ -365,6 +365,18 @@ part on the bench that drives a pin at a level of its own choosing: everything
 else that drives a pin drives it high or low. The converter's output is a
 source, and the solver carries it like any other.
 
+**A memory is not a register file.** Every other part on the bench is one:
+the sketch writes a register and reads it back. The 24LC256 is a pointer --
+the sketch writes an *address* and then the bytes at it -- which is the
+shape almost every memory on the planet has, and the shape the bench's SD
+card has at a higher level. The address is sixteen bits, so it takes two
+bytes on the bus, and a write is bounded by the page: the chip wraps inside
+its sixty-four byte page rather than running on into the next one.
+
+**The memory is part of the model, so what a sketch wrote is still there
+after the bench is rebuilt.** That is not the same as surviving a power
+cycle, and the bench does not model one.
+
 **A second voltage.** The Uno's own supply is five volts, and that is
 enough for a sketch and not enough for a motor: a stepper driver wants the
 motor's own supply, and a bench where the only voltage is the board's cannot
