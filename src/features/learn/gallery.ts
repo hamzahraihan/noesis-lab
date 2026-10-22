@@ -1865,6 +1865,61 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Four digits — a display behind two wires
+ * ------------------------------------------------------------------ */
+
+const FOUR_DIGITS: GalleryProject = {
+  id: 'tm1637',
+  title: 'Four-Digit Display',
+  blurb:
+    'A TM1637 module and four digits. The chip scans the display itself, so a sketch writes the segment patterns into its registers and the glass shows them: two wires instead of twelve.',
+  parts: [{ name: '4-digit LED display (TM1637)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+/*
+ * The module takes two wires: a clock and a data line. The four digits are
+ * the chip's own -- it scans them itself -- so the sketch writes the display
+ * registers and the glass shows them, with no multiplexing and no resistors.
+ */
+TM1637 display(2, 3);
+
+unsigned long lastSecond = 0;
+unsigned long elapsed = 0;
+
+void setup() {
+  Serial.begin(9600);
+  display.setBrightness(7);
+  Serial.println("stopwatch running");
+}
+
+void loop() {
+  if (millis() - lastSecond < 1000) {
+    return;
+  }
+  lastSecond = millis();
+  elapsed += 1;
+  // Four digits, zero-padded: a counter on a four-digit display keeps the
+  // last four.
+  display.printNumber(elapsed, 4);
+  Serial.print("t+");
+  Serial.println(elapsed);
+}
+`,
+      circuit: CIRCUITS.tm1637,
+    },
+  ],
+  working: [
+    'The glass counts the seconds, one a second, on four digits.',
+    'The colon is the decimal point of the second digit, which is the only colon this module has.',
+    'The serial log says the same number the glass shows.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -2700,6 +2755,7 @@ export const GALLERY: readonly GalleryProject[] = [
   WEATHER,
   SHIFT_REGISTER,
   RFID,
+  FOUR_DIGITS,
   MATRIX,
   NOKIA_5110,
   REACTION,

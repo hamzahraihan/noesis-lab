@@ -38,6 +38,7 @@ import reaction from './reaction.json';
 import safe from './safe.json';
 import shiftRegister from './shift-register.json';
 import soilProbe from './soil-probe.json';
+import tm1637 from './tm1637.json';
 import weather from './weather.json';
 
 /** The exercise or project id a document belongs to. */
@@ -65,6 +66,7 @@ export type CircuitId =
   | 'safe'
   | 'shift-register'
   | 'soil-probe'
+  | 'tm1637'
   | 'weather';
 
 export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
@@ -91,5 +93,6 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   safe: parseCircuit(safe, 'safe'),
   'shift-register': parseCircuit(shiftRegister, 'shift-register'),
   'soil-probe': parseCircuit(soilProbe, 'soil-probe'),
+  tm1637: parseCircuit(tm1637, 'tm1637'),
   weather: parseCircuit(weather, 'weather'),
 };

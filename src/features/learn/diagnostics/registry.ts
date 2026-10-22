@@ -13,7 +13,7 @@
  */
 
 import { Simulation } from '@/features/bench';
-import { Max7219, MFRC522_CARD_KNOB, Pcd8544 } from '@/features/parts';
+import { Max7219, MFRC522_CARD_KNOB, Pcd8544, SEGMENT_MAP, Tm1637 } from '@/features/parts';
 // Boundary-explicit: learn → simulation value edges are outside the gate's forbidden set (bench|instruments → learn, parts → simulation, shared → features); verified by `node scripts/check-boundaries.mjs`.
 import {
   hexForSourcesHash,
@@ -127,6 +127,10 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
       partVolts: (partId: string, pinId: string) => {
         const net = sim.engine.currentNetlist.pinNode.get(`${partId}:${pinId}`);
         return net === undefined ? 0 : sim.engine.voltageOfNet(net);
+      },
+      tm1637: (partId: string) => {
+        const controller = sim.engine.displayController(partId);
+        return controller instanceof Tm1637 ? controller : undefined;
       },
       matrix: (partId: string) => {
         const controller = sim.engine.displayController(partId);
@@ -1149,6 +1153,54 @@ const rfidChecks: CheckDef[] = [
   },
 ];
 
+/* ------------------------------------------------------------------ *
+ * tm1637 on uno: a number the sketch counts lands on the glass.
+ *
+ * The display's digits are the module's own registers, so the check reads
+ * them where they live and compares them with the number the sketch
+ * reported: the glass and the log have to agree.
+ * ------------------------------------------------------------------ */
+
+function tm1637Checks(build: GalleryBuild): CheckDef[] {
+  const module = build.circuit.parts?.find((part) => part.type === 'tm1637')?.id;
+  return [
+    {
+      name: 'the display counts the seconds on its glass',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the display counts the seconds on its glass';
+        const read = sim.tm1637;
+        if (read === undefined || module === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read a display module');
+        }
+        const display = read(module);
+        if (display === undefined) {
+          return verdict(name, started, 'skip', 'the bench has no display module');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        if (!display.lit) {
+          return verdict(name, started, 'fail', 'the glass is not lit');
+        }
+        const reported = /t\+(\d+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report a time');
+        }
+        const seconds = Number(reported[1]);
+        const expected = SEGMENT_MAP[String(seconds % 10)] ?? 0;
+        if ((display.digits[3] ?? 0) !== expected) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the glass shows ${display.digits[3]}, not the ${expected} of ${seconds}`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -1165,6 +1217,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'instrument-bench') return instrumentBenchChecks;
   if (projectId === 'shift-register') return shiftRegisterChecks(build);
   if (projectId === 'rfid') return rfidChecks;
+  if (projectId === 'tm1637') return tm1637Checks(build);
   if (projectId === 'max7219') return max7219Checks(build);
   if (projectId === 'nokia-5110') return nokia5110Checks(build);
   return [];

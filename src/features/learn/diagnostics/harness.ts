@@ -26,6 +26,13 @@ export interface HarnessSim {
    */
   partVolts?(partId: string, pinId: string): number;
   /**
+   * A four-digit display's glass, when the bench has one.
+   *
+   * The digits are the module's own registers, not volts on a pin, so a
+   * check that wants to know what the glass shows asks the controller.
+   */
+  tm1637?(partId: string): { digits: readonly number[]; lit: boolean } | undefined;
+  /**
    * A matrix display's glass, when the bench has one.
    *
    * The pixels are register bits inside the part, not volts on a pin, so a

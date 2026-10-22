@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { MFRC522_CARD_KNOB, PART_CATALOGUE, SevenSegment } from '@/features/parts';
+import { MFRC522_CARD_KNOB, PART_CATALOGUE, SEGMENT_MAP, SevenSegment, Tm1637 } from '@/features/parts';
 import { boardOption } from './boardRegistry';
 import {
   GALLERY,
@@ -849,6 +849,33 @@ void loop() {
     const before = log().length;
     for (let i = 0; i < 30; i++) simulation.tick(0.05);
     expect(log().slice(before), 'the field is empty again').toContain('no card');
+  }, 60_000);
+
+  it('counts the seconds on the four-digit display', () => {
+    const build = galleryById('tm1637')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const module = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'tm1637',
+    )!;
+    for (let i = 0; i < 40; i++) simulation.tick(0.05);
+
+    const display = simulation.displayControllers().get(module.id);
+    expect(display).toBeInstanceOf(Tm1637);
+    const glass = display as Tm1637;
+    expect(glass.lit, 'the glass is lit').toBe(true);
+
+    // The glass and the log have to agree: the last digit is the second the
+    // sketch reported.
+    const log = simulation.serialLines().join('');
+    const reported = /t\+(\d+)/.exec(log);
+    expect(reported, 'the sketch reported a time').not.toBeNull();
+    const seconds = Number(reported![1]);
+    expect(glass.digits[3], 'the last digit').toBe(SEGMENT_MAP[String(seconds % 10)]);
   }, 60_000);
 
   it('moves the alarm-clock digits over time and on button taps', () => {
