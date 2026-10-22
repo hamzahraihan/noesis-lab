@@ -40,6 +40,7 @@ import shiftRegister from './shift-register.json';
 import soilProbe from './soil-probe.json';
 import tm1637 from './tm1637.json';
 import a4988 from './a4988.json';
+import pcf8574 from './pcf8574.json';
 import weather from './weather.json';
 
 /** The exercise or project id a document belongs to. */
@@ -69,6 +70,7 @@ export type CircuitId =
   | 'soil-probe'
   | 'tm1637'
   | 'a4988'
+  | 'pcf8574'
   | 'weather';
 
 export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
@@ -97,5 +99,6 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   'soil-probe': parseCircuit(soilProbe, 'soil-probe'),
   tm1637: parseCircuit(tm1637, 'tm1637'),
   a4988: parseCircuit(a4988, 'a4988'),
+  pcf8574: parseCircuit(pcf8574, 'pcf8574'),
   weather: parseCircuit(weather, 'weather'),
 };

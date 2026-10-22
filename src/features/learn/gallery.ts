@@ -2011,6 +2011,66 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Expander — eight pins in two wires
+ * ------------------------------------------------------------------ */
+
+const EXPANDER: GalleryProject = {
+  id: 'pcf8574',
+  title: 'I/O Expander',
+  blurb:
+    'A PCF8574 and eight LEDs. The board has run out of pins, so the expander makes eight more out of the two on the I\u00b2C bus: the sketch writes one byte and the ports follow it.',
+  parts: [
+    { name: 'I/O expander (PCF8574)', qty: 1 },
+    { name: 'Red LED', qty: 8 },
+    { name: '220 Resistor', qty: 8 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * The board has run out of pins, so the expander makes eight more out of
+ * the two on the I2C bus. The byte names the output register, and the byte
+ * after it says what the ports should be.
+ */
+const byte EXPANDER = 0x20;
+const byte OUTPUT_REGISTER = 0x00;
+
+byte counter = 0;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  Serial.println("expander ready");
+}
+
+void loop() {
+  // The counter in binary: bit 0 is the first light.
+  Wire.beginTransmission(EXPANDER);
+  Wire.write(OUTPUT_REGISTER);
+  Wire.write(counter);
+  Wire.endTransmission();
+
+  Serial.print("count ");
+  Serial.println(counter);
+  counter += 1;
+  delay(500);
+}
+`,
+      circuit: CIRCUITS.pcf8574,
+    },
+  ],
+  working: [
+    'The eight lights show the counter in binary, one bit each.',
+    'One byte goes out over the bus for every change.',
+    'The serial log says the number the lights are showing.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -2848,6 +2908,7 @@ export const GALLERY: readonly GalleryProject[] = [
   RFID,
   FOUR_DIGITS,
   STEPPER,
+  EXPANDER,
   MATRIX,
   NOKIA_5110,
   REACTION,

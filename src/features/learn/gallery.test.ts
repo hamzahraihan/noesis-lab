@@ -907,6 +907,32 @@ void loop() {
     ).toBeLessThan(15);
   }, 60_000);
 
+  it('shows the count in binary on eight lights', () => {
+    const build = galleryById('pcf8574')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const leds = simulation.bench.parts.filter((part) => part.definition.id === 'led-red');
+    expect(leds.length).toBe(8);
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+
+    // The lights are the byte the sketch wrote, one bit each.
+    const log = simulation.serialLines().join('');
+    const reported = /count (\d+)/.exec(log);
+    expect(reported, 'the sketch reported a count').not.toBeNull();
+    const value = Number(reported![1]);
+    for (const [bit, led] of leds.entries()) {
+      const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:A`);
+      const volts = net === undefined ? 0 : simulation.engine.voltageOfNet(net);
+      expect(volts > 1, `light ${bit} matches bit ${bit} of ${value}`).toBe(
+        (value >> bit & 1) === 1,
+      );
+    }
+  }, 60_000);
+
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
       const build = galleryById('alarm-clock')!.builds[0];

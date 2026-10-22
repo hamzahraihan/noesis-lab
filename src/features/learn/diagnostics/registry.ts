@@ -1252,6 +1252,53 @@ function a4988Checks(build: GalleryBuild): CheckDef[] {
   ];
 }
 
+/* ------------------------------------------------------------------ *
+ * pcf8574 on uno: one byte, and eight lights that agree with it.
+ *
+ * The expander is the answer to a board that has run out of pins, so what
+ * matters is that the byte the sketch wrote is the byte the lights show.
+ * ------------------------------------------------------------------ */
+
+function pcf8574Checks(build: GalleryBuild): CheckDef[] {
+  const leds = build.circuit.parts?.filter((part) => part.type === 'led-red').map((part) => part.id) ?? [];
+  return [
+    {
+      name: 'the eight lights show the count the log reports',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the eight lights show the count the log reports';
+        const read = sim.partVolts;
+        if (read === undefined || leds.length === 0) {
+          return verdict(name, started, 'skip', 'the bench cannot read the lights');
+        }
+        for (let frame = 0; frame < 60; frame++) {
+          sim.tick(0.05);
+        }
+        const reported = /count (\d+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report a count');
+        }
+        const value = Number(reported[1]);
+        let wrong = 0;
+        for (let bit = 0; bit < leds.length; bit++) {
+          const isLit = read(leds[bit]!, 'A') > 1;
+          const shouldBeLit = (value >> bit & 1) === 1;
+          if (isLit !== shouldBeLit) wrong += 1;
+        }
+        if (wrong > 0) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `${wrong} of the ${leds.length} lights did not match the count`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -1270,6 +1317,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'rfid') return rfidChecks;
   if (projectId === 'tm1637') return tm1637Checks(build);
   if (projectId === 'a4988') return a4988Checks(build);
+  if (projectId === 'pcf8574') return pcf8574Checks(build);
   if (projectId === 'max7219') return max7219Checks(build);
   if (projectId === 'nokia-5110') return nokia5110Checks(build);
   return [];
