@@ -100,7 +100,7 @@ An interactive simulation platform designed to bridge the gap between software c
 - **Simulation Engine:** SPICE-like fast transient circuit simulation combined with cycle-accurate micro-controller emulation (e.g., AVR/ARM instruction execution).
 - **Asset Rendering:** Low-poly 3D / high-DPI Vector 2D models using WebGL/Canvas to ensure smooth web/desktop rendering while preserving component labels and pin pitch detail.
 - **Extensibility:** Moddable component framework allowing users to define custom sensor behavior using JS/Lua scripting or JSON specs.
-  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 38
+  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 39
   component kinds the simulator implements — geometry, parameters, pins, knobs and
   colours, validated at import and resolvable by the compiler like any shipped
   part. **Scripting half shipped** (2026-10-19, spec
@@ -313,6 +313,25 @@ the sketch. **A capture leaves as a VCD**, the format PulseView reads, so a
 bench that caught a clock edge can be opened in the tool a hardware engineer
 already has, and the scope's own capture leaves as a CSV table of the time
 and the voltage at every sample.
+
+**The first bus device that answers.** Every part on the bench so far only
+listened: a TFT takes bytes, a shift register takes bytes, and the MISO line
+was a wire to nowhere -- `SPI.transfer` answered zero to every sketch that
+asked, and nothing said so. The MFRC522 card reader is the part that made the
+read half of the bus necessary. It is a register file: the first byte of a
+transaction is an address with bit 7 saying which way the byte goes, the
+second is the data, and a read leaves the chip's address counter walking, the
+way the datasheet draws it. It answers with its version (0x92), with a card's
+ATQA when one is in its field, and with the timer interrupt when the field is
+empty. The card is a knob in the inspector and the drawing shows it lying on
+the coil, so a sketch that timed out and one that read a card never look the
+same -- and moving the knob repaints the bench there and then, because a part's
+drawing is the knob's position and the running loop is not the only thing
+allowed to ask for a frame. A transaction is bounded by `SPI.begin()` and
+`SPI.end()`, the way every SPI sketch on the bench brackets one, and that
+boundary is what tells the chip the next byte is an address again. The
+compiled AVR core has no SPI port, so an SPI part is an interpreted-sketch
+part; the compiled boards drive I2C.
 
 **Four firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306
