@@ -424,11 +424,11 @@ temperature outright -- and the object still takes its pin in the constructor,
 the way Arduino's library takes it, so `OneWire ow(2);` is the spelling a
 sketch writes.
 
-**Six of the instruments are the bench's own drawings.** The Wokwi library
+**Seven of the instruments are the bench's own drawings.** The Wokwi library
 has no element for a barometer, a current monitor, a converter, a one-wire
-sensor, a shift register or a matrix, so their artwork is drawn here, on the
-same 2.54 mm grid as the modules the library does draw -- which is what makes
-the header a jumper can reach.
+sensor, a shift register, a matrix or a Nokia panel, so their artwork is drawn
+here, on the same 2.54 mm grid as the modules the library does draw -- which is
+what makes the header a jumper can reach.
 
 **The SPI bus is a bus now, and a shift register is on it.** It used to reach
 panels and nothing else: the engine delivered a byte to the displays, and a
@@ -459,6 +459,22 @@ the top row, and shutdown, intensity, scan limit and display test change what
 those columns show. A sketch that never writes the intensity register therefore
 draws at the chip's power-up current, which is its dimmest, and the bench draws
 it that way rather than at a brightness the hardware would not give.
+
+**A panel whose command byte means two things.** The Nokia 5110 is the first
+controller with two instruction sets. The basic one addresses memory and
+switches the display; the extended one takes the contrast voltage and the bias,
+and while it is selected the address commands are not decoded at all -- so a
+driver has to leave it before it draws, and a sketch that writes contrast and
+then keeps drawing writes into whatever column the counter was left on. The
+bench models the halves as the chip does rather than merging them. The panel's
+memory is also banks rather than pages, six of them, and a data write walks
+across the columns and wraps down a bank or walks down the banks and wraps
+across a column depending on one bit of the function set.
+
+One convention belongs to the bench and not to Arduino: the data/command state
+travels with the byte, so a command goes out as `SPI.transfer(value, 0)` and a
+byte of memory as `SPI.transfer(value)`. The interpreter's SPI port is where
+the firmware's control line is read, and the port has no pin of its own to ask.
 
 **The comparator sensor family is one part, not five.** A PIR, a sound, a
 heart-rate, a gas and a flame board are all the same LM393 with a trimmer
