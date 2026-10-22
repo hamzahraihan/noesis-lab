@@ -2129,6 +2129,62 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Converter — a voltage the bench makes
+ * ------------------------------------------------------------------ */
+
+const CONVERTER: GalleryProject = {
+  id: 'mcp4725',
+  title: 'DAC Converter',
+  blurb:
+    'An MCP4725 and the board\u2019s own analog input. The bench can measure a voltage; this is the part that makes one — the sketch writes twelve bits over the bus and the chip holds the level, and the board reads it back on an analog pin.',
+  parts: [{ name: 'DAC converter (MCP4725)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * The converter takes twelve bits and holds a voltage between the ground
+ * and the supply. The board reads that voltage back on an analog pin, so
+ * the loop closes on the bench rather than in the log.
+ */
+const byte CONVERTER = 0x60;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  Serial.println("converter ready");
+}
+
+void loop() {
+  // A ramp: the output walks from the ground to the supply.
+  for (int code = 0; code < 4096; code += 256) {
+    Wire.beginTransmission(CONVERTER);
+    Wire.write(code >> 8);
+    Wire.write(code & 0xFF);
+    Wire.endTransmission();
+    delay(100);
+
+    Serial.print("code ");
+    Serial.print(code);
+    Serial.print(" reads ");
+    Serial.println(analogRead(A0));
+  }
+}
+`,
+      circuit: CIRCUITS.mcp4725,
+    },
+  ],
+  working: [
+    'The output walks from the ground to the supply in sixteen steps.',
+    'The board reads the voltage back on an analog pin, and the log says what it read.',
+    'The reading is the code, in the board’s own ten bits.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -2968,6 +3024,7 @@ export const GALLERY: readonly GalleryProject[] = [
   STEPPER,
   EXPANDER,
   THERMOCOUPLE,
+  CONVERTER,
   MATRIX,
   NOKIA_5110,
   REACTION,

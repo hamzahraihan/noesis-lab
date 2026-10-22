@@ -42,6 +42,7 @@ import tm1637 from './tm1637.json';
 import a4988 from './a4988.json';
 import pcf8574 from './pcf8574.json';
 import max6675 from './max6675.json';
+import mcp4725 from './mcp4725.json';
 import weather from './weather.json';
 
 /** The exercise or project id a document belongs to. */
@@ -73,6 +74,7 @@ export type CircuitId =
   | 'a4988'
   | 'pcf8574'
   | 'max6675'
+  | 'mcp4725'
   | 'weather';
 
 export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
@@ -103,5 +105,6 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   a4988: parseCircuit(a4988, 'a4988'),
   pcf8574: parseCircuit(pcf8574, 'pcf8574'),
   max6675: parseCircuit(max6675, 'max6675'),
+  mcp4725: parseCircuit(mcp4725, 'mcp4725'),
   weather: parseCircuit(weather, 'weather'),
 };

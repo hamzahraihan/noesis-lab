@@ -963,6 +963,35 @@ void loop() {
     );
   }, 60_000);
 
+  it('makes a voltage the board can read back', () => {
+    const build = galleryById('mcp4725')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const converter = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'dac',
+    )!;
+    const net = simulation.engine.currentNetlist.pinNode.get(`${converter.id}:AOUT`);
+    const output = (): number => (net === undefined ? 0 : simulation.engine.voltageOfNet(net));
+    const first = output();
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+
+    // The sketch walks the output up a ramp, so it has to have moved.
+    expect(Math.abs(output() - first), 'the output moved').toBeGreaterThan(0.2);
+
+    // And the board has to have read the voltage the code asks for.
+    const log = simulation.serialLines().join('');
+    const matches = [...log.matchAll(/code (\d+) reads (\d+)/g)];
+    expect(matches.length, 'the sketch reported a reading').toBeGreaterThan(0);
+    const last = matches[matches.length - 1]!;
+    const code = Number(last[1]);
+    const counts = Number(last[2]);
+    expect(Math.abs(counts - (code / 4095) * 1023), 'the board read the voltage').toBeLessThan(24);
+  }, 60_000);
+
   it('moves the alarm-clock digits over time and on button taps', () => {
     for (const execution of ['interpreter', 'avr'] as const) {
       const build = galleryById('alarm-clock')!.builds[0];
