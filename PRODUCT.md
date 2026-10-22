@@ -34,7 +34,7 @@ A neighboring product could not truthfully copy these together:
 - Firmware is compiled in-browser via an AVR toolchain fetched from a CDN (requires `cross-origin-resource-policy`); works offline for everything except that compile step once cached.
 - Nine boards: Arduino Uno R3, ESP32 DevKit V1, Arduino Nano, Arduino Mega 2560, Nano RP2040 Connect, Raspberry Pi Pico, Franzininho, Raspberry Pi 4, and the bare ATtiny85 in its 8-lead package. Nine boards, each with its own pin numbering and buses.
 - Editor is Monaco (bundled, no CDN) with an `arduino-cpp` language whose completions are exactly the interpreter's supported subset.
-- Component artwork is `@wokwi/elements` (MIT, 50+ SVG parts) integrated at true millimetre scale, plus the bench's own drawings for the parts the library has no element for: the breadboard, the capacitor, the I²C OLED, the barometer, the current monitor, the 16-bit converter, the one-wire temperature sensor, the shift register, the LED matrix, the Nokia panel, the card reader, the four-digit display and the stepper driver.
+- Component artwork is `@wokwi/elements` (MIT, 50+ SVG parts) integrated at true millimetre scale, plus the bench's own drawings for the parts the library has no element for: the breadboard, the capacitor, the I²C OLED, the barometer, the current monitor, the 16-bit converter, the one-wire temperature sensor, the shift register, the LED matrix, the Nokia panel, the card reader, the four-digit display, the stepper driver and the I/O expander.
 - Instruments on the bench: multimeter, oscilloscope, logic analyser, bus monitor, serial terminal, serial plotter, and a debugger for the interpreted sketch.
 
 ## Capabilities and Constraints

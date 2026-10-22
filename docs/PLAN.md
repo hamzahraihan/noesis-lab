@@ -333,6 +333,16 @@ boundary is what tells the chip the next byte is an address again. The
 compiled AVR core has no SPI port, so an SPI part is an interpreted-sketch
 part; the compiled boards drive I2C.
 
+**Eight pins out of two.** The PCF8574 is the answer to a board that has run
+out of pins: a sketch writes one byte over the I2C bus and eight ports follow
+it, the way the shift register's eight outputs follow a byte on the SPI bus.
+The expander drives its ports itself, so what it drives them with is stamped
+into the solve rather than frozen into the netlist -- the same seam the shift
+register and the stepper driver use. The ports are quasi-bidirectional on the
+chip, a weak pull-up that the chip can pull down; the bench gives them the
+same output impedance it gives the shift register's, and the *input*
+register, which reads the wiring rather than the chip, is not modelled.
+
 **A display behind two wires.** The TM1637 module is a display driver with a
 register file behind it: a sketch writes the segment patterns into the
 registers and the chip scans the digits itself, so the glass shows what was
