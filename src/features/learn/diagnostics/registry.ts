@@ -13,7 +13,7 @@
  */
 
 import { Simulation } from '@/features/bench';
-import { Max7219, Pcd8544 } from '@/features/parts';
+import { Max7219, MFRC522_CARD_KNOB, Pcd8544 } from '@/features/parts';
 // Boundary-explicit: learn → simulation value edges are outside the gate's forbidden set (bench|instruments → learn, parts → simulation, shared → features); verified by `node scripts/check-boundaries.mjs`.
 import {
   hexForSourcesHash,
@@ -145,6 +145,12 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
       stageArmedAlarm: () => {
         sim.engine.writeI2C(0x68, 0x08, true);
         sim.engine.writeI2C(0x68, 0x01, false);
+      },
+      setCard: (present: boolean) => {
+        const reader = sim.bench.parts.find((part) => part.definition.component.kind === 'rc522');
+        if (reader !== undefined) {
+          sim.setKnob(reader.id, MFRC522_CARD_KNOB, present ? 1 : 0);
+        }
       },
       tryCompile: async () => {
         if (hexForSourcesHash(sourcesHashForProject(project)) === null) {
@@ -1096,6 +1102,53 @@ function nokia5110Checks(build: GalleryBuild): CheckDef[] {
   ];
 }
 
+/* ------------------------------------------------------------------ *
+ * rfid on uno: the chip answers on the bus, and the card changes what it
+ * answers.
+ *
+ * The reader has no glass and drives no pin the bench can read: everything
+ * it says goes out on MISO and comes back through the sketch's serial
+ * output. So the check watches the log, in the order a reader meets the
+ * chip's states -- version, an empty field, a card, an empty field again.
+ * ------------------------------------------------------------------ */
+
+const rfidChecks: CheckDef[] = [
+  {
+    name: 'the reader reports its version, times out, and sees a card',
+    run: (sim) => {
+      const started = performance.now();
+      const name = 'the reader reports its version, times out, and sees a card';
+      if (sim.setCard === undefined) {
+        return verdict(name, started, 'skip', 'the bench cannot put a card in the field');
+      }
+      const waitFor = (text: string, frames: number): boolean => {
+        for (let frame = 0; frame < frames; frame++) {
+          sim.tick(0.05);
+          if (sim.serialText().includes(text)) return true;
+        }
+        return false;
+      };
+      if (!waitFor('version 92', 40)) {
+        return verdict(name, started, 'fail', 'the version register did not come back');
+      }
+      if (!waitFor('no card', 40)) {
+        return verdict(name, started, 'fail', 'an empty field did not time out');
+      }
+      sim.setCard(true);
+      if (!waitFor('card 4 0', 60)) {
+        return verdict(name, started, 'fail', 'a card in the field was not read');
+      }
+      sim.setCard(false);
+      const before = sim.serialText().length;
+      for (let frame = 0; frame < 60; frame++) sim.tick(0.05);
+      if (!sim.serialText().slice(before).includes('no card')) {
+        return verdict(name, started, 'fail', 'the reader answered with no card there');
+      }
+      return verdict(name, started, 'pass');
+    },
+  },
+];
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -1111,6 +1164,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'soil-probe') return soilProbeChecks;
   if (projectId === 'instrument-bench') return instrumentBenchChecks;
   if (projectId === 'shift-register') return shiftRegisterChecks(build);
+  if (projectId === 'rfid') return rfidChecks;
   if (projectId === 'max7219') return max7219Checks(build);
   if (projectId === 'nokia-5110') return nokia5110Checks(build);
   return [];

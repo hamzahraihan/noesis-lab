@@ -1773,6 +1773,98 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * RFID — a card reader that answers on the bus
+ * ------------------------------------------------------------------ */
+
+const RFID: GalleryProject = {
+  id: 'rfid',
+  title: 'RFID Reader',
+  blurb:
+    'An MFRC522 card reader on the SPI bus. The sketch turns the antenna on, asks for a card, and reads the answer out of the chip\u2019s FIFO \u2014 or the timeout when its field is empty.',
+  parts: [{ name: 'RFID reader (MFRC522)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+// The reader's select line, and the reset a module needs after power-up.
+const byte SS_PIN = 10;
+const byte RST_PIN = 9;
+
+/*
+ * The chip is a register file: one address byte, one data byte. Bit 7 of the
+ * address says which way the byte goes, and the rest of it is the register.
+ */
+void writeReg(byte reg, byte value) {
+  digitalWrite(SS_PIN, LOW);
+  SPI.begin();
+  SPI.transfer((reg << 1) & 0x7E);
+  SPI.transfer(value);
+  SPI.end();
+  digitalWrite(SS_PIN, HIGH);
+}
+
+byte readReg(byte reg) {
+  digitalWrite(SS_PIN, LOW);
+  SPI.begin();
+  SPI.transfer(((reg << 1) & 0x7E) | 0x80);
+  byte value = SPI.transfer(0x00);
+  SPI.end();
+  digitalWrite(SS_PIN, HIGH);
+  return value;
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(SS_PIN, OUTPUT);
+  pinMode(RST_PIN, OUTPUT);
+  digitalWrite(SS_PIN, HIGH);
+  digitalWrite(RST_PIN, HIGH);
+  SPI.begin();
+
+  // Both antenna drivers on, or there is no field for a card to sit in.
+  writeReg(0x14, 0x03);
+  Serial.print("version ");
+  Serial.println(readReg(0x37), HEX);
+}
+
+void loop() {
+  // Clear the flags, flush the FIFO, queue a request, start it.
+  writeReg(0x01, 0x00);
+  writeReg(0x04, 0x7F);
+  writeReg(0x0A, 0x80);
+  writeReg(0x09, 0x26);
+  writeReg(0x01, 0x0C);
+  writeReg(0x0D, 0x87);
+
+  // The receive interrupt says a frame came back; a timeout says nobody
+  // was in the field to send one.
+  if ((readReg(0x04) & 0x20) != 0) {
+    Serial.print("card ");
+    while (readReg(0x0A) > 0) {
+      Serial.print(readReg(0x09));
+      Serial.print(" ");
+    }
+    Serial.println();
+    delay(1200);
+  } else {
+    Serial.println("no card");
+    delay(600);
+  }
+}
+`,
+      circuit: CIRCUITS.mfrc522,
+    },
+  ],
+  working: [
+    'The serial log opens with the chip\u2019s version, 92, read back over the bus.',
+    'With an empty field every request times out and the log says so, once a second.',
+    'Put a card in the field and the answer arrives in the FIFO: 4 and 0, the ATQA of a MIFARE Classic.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -2607,6 +2699,7 @@ export const GALLERY: readonly GalleryProject[] = [
   PARKING,
   WEATHER,
   SHIFT_REGISTER,
+  RFID,
   MATRIX,
   NOKIA_5110,
   REACTION,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { PART_CATALOGUE, SevenSegment } from '@/features/parts';
+import { MFRC522_CARD_KNOB, PART_CATALOGUE, SevenSegment } from '@/features/parts';
 import { boardOption } from './boardRegistry';
 import {
   GALLERY,
@@ -821,6 +821,34 @@ void loop() {
     expect(log).toContain('power 500 mW');
     // The converter is pointed at channel zero, which is at zero volts.
     expect(log).toContain('converter 0 counts');
+  }, 60_000);
+
+  it('answers a card on the SPI bus, and times out without one', () => {
+    const build = galleryById('rfid')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    for (let i = 0; i < 30; i++) simulation.tick(0.05);
+    const log = (): string => simulation.serialLines().join('');
+
+    // The version register is a read transaction: address out, byte back.
+    expect(log()).toContain('version 92');
+    expect(log()).toContain('no card');
+
+    const reader = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'rc522',
+    )!;
+    simulation.setKnob(reader.id, MFRC522_CARD_KNOB, 1);
+    for (let i = 0; i < 30; i++) simulation.tick(0.05);
+    expect(log(), 'the card\u2019s ATQA').toContain('card 4 0');
+
+    simulation.setKnob(reader.id, MFRC522_CARD_KNOB, 0);
+    const before = log().length;
+    for (let i = 0; i < 30; i++) simulation.tick(0.05);
+    expect(log().slice(before), 'the field is empty again').toContain('no card');
   }, 60_000);
 
   it('moves the alarm-clock digits over time and on button taps', () => {

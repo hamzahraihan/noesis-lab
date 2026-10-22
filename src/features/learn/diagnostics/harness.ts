@@ -45,6 +45,14 @@ export interface HarnessSim {
   ): { lit: boolean; inverted: boolean; isLit(x: number, y: number): boolean } | undefined;
   resetAvrCore?(): boolean;
   stageArmedAlarm?(): void;
+  /**
+   * Puts a card in the reader's field, or takes it out.
+   *
+   * The card is a knob like a sensor's load, but a check that wants to see a
+   * sketch notice a card has to turn it while the sketch is running: the
+   * bench finds the reader by itself, so the check does not need its id.
+   */
+  setCard?(present: boolean): void;
   tryCompile?(): Promise<{ status: 'ready' } | { status: 'skip' | 'fail'; detail: string }>;
 }
 
