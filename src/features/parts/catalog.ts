@@ -147,6 +147,11 @@ export type ComponentSpec =
    */
   | { readonly kind: 'thermocouple' }
   /*
+   * A converter: the sketch writes a code and the chip holds a voltage, so
+   * the bench can make an analog level as well as measure one.
+   */
+  | { readonly kind: 'dac' }
+  /*
    * A shift register on the SPI bus: the clock and the data in are the bus's
    * own pins, and the latch is a plain output the sketch drives, because on
    * the chip the two are separate wires.

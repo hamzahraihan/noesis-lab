@@ -73,6 +73,7 @@ import { tm1637Definition } from './tm1637';
 import { a4988Definition } from './a4988';
 import { pcf8574Definition } from './devices/pcf8574';
 import { max6675Definition } from './devices/max6675';
+import { mcp4725Definition } from './devices/mcp4725';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -291,6 +292,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'mcp4725',
+    name: 'DAC converter (MCP4725)',
+    group: 'output',
+    note: 'A converter rather than a sensor: the sketch writes twelve bits over the I2C bus and the chip holds a voltage on its output, somewhere between the ground and the supply, in four thousand and ninety-five steps.',
+    make: mcp4725Definition,
   },
   {
     id: 'max6675',

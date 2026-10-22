@@ -16,6 +16,7 @@ import { Hx711 } from './hx711';
 import { Ina219 } from './ina219';
 import { Mpu6050 } from './mpu6050';
 import { Pcf8574 } from './pcf8574';
+import { Mcp4725 } from './mcp4725';
 import { ScriptedI2cDevice } from './scripted';
 
 export type { I2cDevice } from './device';
@@ -50,6 +51,10 @@ export function createI2cDevice(
       // Only the OLED speaks I2C; a TFT on the same wires stays silent, and a
       // character LCD is driven over its own parallel header instead.
       return component.controller === 'ssd1306' ? new Ssd1306(component.address) : null;
+    case 'dac':
+      // The converter is a device like any other: a code over the bus, and
+      // a voltage on the output.
+      return new Mcp4725();
     case 'i2c-expander':
       // The expander is a device like any other: one byte over the bus, and
       // eight pins that follow it.

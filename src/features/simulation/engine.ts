@@ -38,6 +38,7 @@ import { Tm1637 } from '@/features/parts';
 import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
 import { Pcf8574, PCF8574_OUTPUT_OHMS, PCF8574_PORTS } from '@/features/parts';
 import { Max6675, MAX6675_TEMPERATURE_KNOB } from '@/features/parts';
+import { Mcp4725, MCP4725_OUTPUT_OHMS } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -1921,6 +1922,31 @@ export class Engine {
       }
     }
     let internalNet = netlist.nodeCount;
+    /*
+     * A converter makes a voltage rather than taking one, so its output is
+     * a source: the chip's amplifier holds the level its code asks for,
+     * behind the output impedance the datasheet gives. This is the one part
+     * on the bench that drives a pin at a level of its own choosing.
+     */
+    for (const [partId, device] of this.devices) {
+      if (!(device instanceof Mcp4725)) continue;
+      const output = netlist.pinNode.get(`${partId}:AOUT`);
+      if (output === undefined) continue;
+      elements.push({
+        kind: 'voltageSource',
+        a: internalNet,
+        b: GROUND,
+        volts: device.output(this.mcu.board.logicVolts),
+        label: 'dac',
+      });
+      elements.push({
+        kind: 'resistor',
+        a: output,
+        b: internalNet,
+        ohms: MCP4725_OUTPUT_OHMS,
+      });
+      internalNet++;
+    }
     let sourceOrdinal = 0;
     this.pinSourceIndex.clear();
 
