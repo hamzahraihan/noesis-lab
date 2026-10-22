@@ -300,6 +300,24 @@ const ARDUINO_OBJECTS: ReadonlyArray<
     ],
   ],
   [
+    'tm1637',
+    [
+      [
+        'print(clk, dio, text)',
+        'Put a line of text on the display. The two pins are the module\u2019s clock and data lines.',
+      ],
+      [
+        'printNumber(clk, dio, value, places)',
+        'Put a number on the display, zero-padded to the places asked for.',
+      ],
+      ['setBrightness(clk, dio, level)', 'How bright the glass is, 0 to 7.'],
+      [
+        'write(clk, dio, command, data...)',
+        'Write the protocol by hand: a command byte, then the data bytes that follow it.',
+      ],
+    ],
+  ],
+  [
     'sd',
     [
       ['begin(cs)', 'Say which pin is chip select.'],
@@ -359,6 +377,11 @@ const ARDUINO_CLASSES: ReadonlyArray<[name: string, declaration: string, doc: st
     'OneWire',
     'OneWire ${1:mySensor}(${2:2});',
     'A one-wire temperature sensor. The pin is in the declaration.',
+  ],
+  [
+    'TM1637',
+    'TM1637 ${1:myDisplay}(${2:2}, ${3:3});',
+    'A four-digit LED module. The two pins are its clock and data lines.',
   ],
   ['SD', 'SD ${1:myCard};', 'A microSD card. begin() says which pin is chip select.'],
   [
@@ -440,6 +463,7 @@ function registerArduinoLanguage(): void {
       'OneWire',
       'SD',
       'LiquidCrystal',
+      'TM1637',
       'HTTPClient',
       'PubSubClient',
       'WiFiUdp',

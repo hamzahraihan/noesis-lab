@@ -84,6 +84,7 @@ import { pixelCount, type PixelColor } from '@/features/parts';
 import { TEMPERATURE_KNOB } from '@/features/parts';
 import type { DisplayController } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
+import { Tm1637 } from '@/features/parts';
 import { TileFetcher } from '../utils/map-fetcher';
 import { TILE_SIZE, TileStore } from '../utils/map-tiles';
 import { VirtualNetwork, createNetPort } from '@/features/simulation';
@@ -2029,6 +2030,32 @@ export class Simulation {
     return null;
   }
 
+  /**
+   * The display module whose clock and data lines are wired to two board
+   * pins, if there is one.
+   *
+   * Both lines have to land: the module has no address and no way to say
+   * which of two on the bus it is, so it is found by the pair the sketch
+   * named, the way a part with two wires is found in the bench.
+   */
+  private tm1637OnPins(clk: number, dio: number): Tm1637 | null {
+    const clkId = this.mcu.pinIdForGpio(clk);
+    const dioId = this.mcu.pinIdForGpio(dio);
+    if (clkId === undefined || dioId === undefined) return null;
+    const clkNet = this.engine.netOfMcuPin(clkId);
+    const dioNet = this.engine.netOfMcuPin(dioId);
+    if (clkNet === GROUND || dioNet === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'tm1637') continue;
+      const nodes = this.engine.currentNetlist.pinNode;
+      if (nodes.get(`${part.id}:CLK`) !== clkNet) continue;
+      if (nodes.get(`${part.id}:DIO`) !== dioNet) continue;
+      const model = this.engine.displayController(part.id);
+      return model instanceof Tm1637 ? model : null;
+    }
+    return null;
+  }
+
   /** The one-wire sensor whose data pin is wired to a board pin, if there is one. */
   private oneWireOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -2276,6 +2303,20 @@ export class Simulation {
         temperature: (pin) => {
           const part = this.oneWireOnPin(pin);
           return part ? this.controls.knob(part.id, DS18B20_TEMPERATURE_KNOB) : 0;
+        },
+      },
+      tm1637: {
+        print: (clk, dio, text) => {
+          this.tm1637OnPins(clk, dio)?.print(text);
+        },
+        printNumber: (clk, dio, value, places) => {
+          this.tm1637OnPins(clk, dio)?.printNumber(value, places);
+        },
+        setBrightness: (clk, dio, level) => {
+          this.tm1637OnPins(clk, dio)?.setBrightness(level);
+        },
+        write: (clk, dio, command, data) => {
+          this.tm1637OnPins(clk, dio)?.transaction(command, data);
         },
       },
       ir: {

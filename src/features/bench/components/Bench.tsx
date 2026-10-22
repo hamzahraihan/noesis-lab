@@ -18,7 +18,7 @@ import { Sidebar } from '../ide/Sidebar';
 import { CatalogueGrid } from '../ide/CatalogueGrid';
 import { columnX, stripRowY } from '@/features/parts';
 import type { PartDefinition } from '@/features/parts';
-import { Servo, type DisplayController, type Lcd1602 } from '@/features/parts';
+import { Servo, TM1637_DIGITS, type DisplayController, type Lcd1602 } from '@/features/parts';
 import { liveHostIn, type BendPoint, type Terminal } from '@/features/simulation';
 import { Workbench } from './Workbench';
 import { TopBar } from '../ide/TopBar';
@@ -34,6 +34,7 @@ import {
   sevenSegmentFromSnapshot,
   ssd1306FromSnapshot,
   tftFromSnapshot,
+  tm1637FromSnapshot,
   type WorkerClient,
 } from '../simulations/worker-client';
 import { CenterTabs } from '../ide/CenterTabs';
@@ -1119,6 +1120,13 @@ export default function Bench(props: BenchProps) {
               colon.get(part.id) ?? false,
               logicVolts,
             ),
+          );
+        } else if (kind === 'tm1637' && bytes !== undefined) {
+          // The module's own display registers, and the flags that say
+          // whether the glass is lit and how bright it is.
+          displays.set(
+            part.id,
+            tm1637FromSnapshot(bytes.slice(0, TM1637_DIGITS), bytes[bytes.length - 1] ?? 0),
           );
         } else if (kind === 'lcd' && bytes !== undefined) {
           const panel = lcdFromSnapshot(

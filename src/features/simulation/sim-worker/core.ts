@@ -115,6 +115,10 @@ import {
   SSD1306_FRAME_BYTES,
   SevenSegment,
   Ssd1306,
+  Tm1637,
+  TM1637_DIGITS,
+  TM1637_FLAG_DUTY_SHIFT,
+  TM1637_FLAG_LIT,
   TEMPERATURE_KNOB,
   echoMicroseconds,
   pixelCount,
@@ -221,6 +225,7 @@ function displayBytesForBench(bench: Bench): number {
   for (const part of bench.parts) {
     const component = part.definition.component;
     if (component.kind === '7segment') bytes += (component.digits ?? 1) + 1;
+    else if (component.kind === 'tm1637') bytes += TM1637_DIGITS + 1;
     else if (component.kind === 'lcd') bytes += LCD_TEXT_BYTES + 1;
     else if (component.kind === 'servo') bytes += 1;
     else if (
@@ -751,6 +756,15 @@ class SimCore implements CoreHandle {
         const patterns = seven?.patterns() ?? new Uint8Array(0);
         for (let d = 0; d < digits; d++) put(patterns[d] ?? 0);
         put(seven?.colonLit ? 1 : 0);
+      } else if (component.kind === 'tm1637') {
+        const controller = this.engine.displayController(part.id);
+        const display = controller instanceof Tm1637 ? controller : null;
+        const patterns = display?.digits ?? [];
+        for (let d = 0; d < TM1637_DIGITS; d++) put(patterns[d] ?? 0);
+        put(
+          (display?.lit ? TM1637_FLAG_LIT : 0) |
+            ((display?.brightness ?? 0) << TM1637_FLAG_DUTY_SHIFT),
+        );
       } else if (component.kind === 'lcd') {
         const panel = this.engine.lcd(part.id);
         const bytes = this.textEncoder.encode(panel ? panel.text() : '');
@@ -1166,6 +1180,32 @@ class SimCore implements CoreHandle {
     return null;
   }
 
+  /**
+   * The display module whose clock and data lines are wired to two board
+   * pins, if there is one.
+   *
+   * Both lines have to land: the module has no address and no way to say
+   * which of two on the bus it is, so it is found by the pair the sketch
+   * named.
+   */
+  private tm1637OnPins(clk: number, dio: number): Tm1637 | null {
+    const clkId = this.mcu.pinIdForGpio(clk);
+    const dioId = this.mcu.pinIdForGpio(dio);
+    if (clkId === undefined || dioId === undefined) return null;
+    const clkNet = this.engine.netOfMcuPin(clkId);
+    const dioNet = this.engine.netOfMcuPin(dioId);
+    if (clkNet === GROUND || dioNet === GROUND) return null;
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'tm1637') continue;
+      const nodes = this.engine.currentNetlist.pinNode;
+      if (nodes.get(`${part.id}:CLK`) !== clkNet) continue;
+      if (nodes.get(`${part.id}:DIO`) !== dioNet) continue;
+      const model = this.engine.displayController(part.id);
+      return model instanceof Tm1637 ? model : null;
+    }
+    return null;
+  }
+
   /** The DHT sensor whose data pin is wired to a board pin, if there is one. */
   private dhtOnPin(pin: number): PartInstance | null {
     const pinId = this.mcu.pinIdForGpio(pin);
@@ -1515,6 +1555,20 @@ class SimCore implements CoreHandle {
         temperature: (pin) => {
           const part = this.oneWireOnPin(pin);
           return part ? this.controls.knob(part.id, DS18B20_TEMPERATURE_KNOB) : 0;
+        },
+      },
+      tm1637: {
+        print: (clk, dio, text) => {
+          this.tm1637OnPins(clk, dio)?.print(text);
+        },
+        printNumber: (clk, dio, value, places) => {
+          this.tm1637OnPins(clk, dio)?.printNumber(value, places);
+        },
+        setBrightness: (clk, dio, level) => {
+          this.tm1637OnPins(clk, dio)?.setBrightness(level);
+        },
+        write: (clk, dio, command, data) => {
+          this.tm1637OnPins(clk, dio)?.transaction(command, data);
         },
       },
       ir: {

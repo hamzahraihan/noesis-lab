@@ -99,6 +99,9 @@ import {
   SSD1306_FRAME_BYTES,
   SevenSegment,
   Ssd1306,
+  Tm1637,
+  TM1637_DIGITS,
+  TM1637_FLAG_DUTY_SHIFT,
   type KnobSpec,
   type Lcd1602,
   type LcdCommand,
@@ -231,6 +234,7 @@ function copyFrame(state: MirrorState, buf: SharedArrayBuffer): void {
 function displayBytesForPart(definition: PartDefinition): number {
   const component = definition.component;
   if (component.kind === '7segment') return (component.digits ?? 1) + 1;
+  if (component.kind === 'tm1637') return TM1637_DIGITS + 1;
   if (component.kind === 'lcd') return LCD_TEXT_BYTES + 1;
   if (component.kind === 'servo') return 1;
   if (
@@ -325,6 +329,26 @@ export function sevenSegmentFromSnapshot(
     seven.update(digitVolts, segVolts, high, colonLit ? 0 : high);
   }
   return seven;
+}
+
+/**
+ * Rebuilds a four-digit display module from mirrored register bytes.
+ *
+ * The module's own registers are what the glass shows, so the four pattern
+ * bytes and the flags byte -- the lit flag and the duty -- are all the page
+ * needs to draw it.
+ */
+export function tm1637FromSnapshot(
+  patterns: readonly number[],
+  flags: number,
+): Tm1637 {
+  const display = new Tm1637();
+  display.restore(
+    patterns,
+    (flags & 0x01) !== 0,
+    (flags >> TM1637_FLAG_DUTY_SHIFT) & 0x07,
+  );
+  return display;
 }
 
 /**

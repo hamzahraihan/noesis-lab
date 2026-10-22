@@ -508,6 +508,14 @@ export interface FirmwareServices {
    */
   onewire?: OneWirePort;
   /**
+   * A four-digit LED module, by the two pins its clock and data lines are
+   * wired to.
+   *
+   * Optional for the same reason `dht` and `servo` are: a host with no
+   * display module on the bench has nothing to write to.
+   */
+  tm1637?: Tm1637Port;
+  /**
    * IR receiver, by the pin its data line is wired to.
    *
    * Optional because a host with no receiver on the bench has nothing to
@@ -785,6 +793,32 @@ export interface DhtPort {
 export interface OneWirePort {
   /** Degrees Celsius from the part's temperature knob. */
   temperature(pin: number): number;
+}
+
+/**
+ * A four-digit LED module, by the two pins its clock and data lines are
+ * wired to.
+ *
+ * The TM1637's interface is two wires and no address, so the bench has no
+ * bus to hang it on: the module is found by the pins the sketch named, and
+ * the bytes are handed to it. The protocol lives in the part, and the port
+ * only says which part and what to write.
+ */
+export interface Tm1637Port {
+  /** Puts a line of text on the glass, encoded the way the chip encodes. */
+  print(clk: number, dio: number, text: string): void;
+  /** Puts a number on the glass, zero-padded to the places asked for. */
+  printNumber(clk: number, dio: number, value: number, places: number): void;
+  /** Sets the brightness, 0 (darkest) to 7 (brightest). */
+  setBrightness(clk: number, dio: number, level: number): void;
+  /**
+   * One transaction: the command byte, then the data bytes that follow it.
+   *
+   * The framing is the chip's own -- the first byte of a transaction is a
+   * command and the rest are data -- and the bench hands the module whole
+   * transactions rather than a bit-banged wire.
+   */
+  write(clk: number, dio: number, command: number, data: readonly number[]): void;
 }
 
 /**
@@ -1254,6 +1288,7 @@ const LIBRARY_OWNED_INSTANCES = new Set([
   'OneWire',
   'SD',
   'LiquidCrystal',
+  'TM1637',
   'HTTPClient',
   'PubSubClient',
   'WiFiUdp',
@@ -1267,6 +1302,14 @@ const LIBRARY_OWNED_INSTANCES = new Set([
  * carries it on, and a `begin()` with no pin of its own keeps it.
  */
 const LIBRARIES_PINNED_IN_CONSTRUCTOR = new Set(['DHT', 'OneWire']);
+/**
+ * The libraries whose constructor names two pins.
+ *
+ * The TM1637 module takes a clock and a data line, and a sketch that gave
+ * it one pin would be talking to a module that cannot answer, so both are
+ * remembered the way the single-pin libraries remember theirs.
+ */
+const LIBRARIES_PINNED_IN_PAIR = new Set(['TM1637']);
 /**
  * The library a bare name in a sketch stands for.
  *
@@ -1282,6 +1325,7 @@ const LIBRARY_NAMES: Readonly<Record<string, string>> = {
   dht: 'DHT',
   onewire: 'OneWire',
   DHT: 'DHT',
+  TM1637: 'TM1637',
   sd: 'SD',
   SD: 'SD',
   HTTPClient: 'HTTPClient',
@@ -1446,6 +1490,14 @@ export class FirmwareRuntime {
    */
   private libraryPins!: Map<string | Instance, number>;
   /**
+   * The two pins a library object was given in its constructor.
+   *
+   * The TM1637 module takes a clock and a data line, and the bench finds the
+   * module by both of them, so both are remembered the way the single-pin
+   * libraries remember theirs.
+   */
+  private libraryPinPairs!: Map<string | Instance, readonly [number, number]>;
+  /**
    * What a library object remembers between calls: the url it was given and
    * the status of the last answer.
    */
@@ -1550,6 +1602,7 @@ export class FirmwareRuntime {
     this.debugFrame = null;
     this.callDepth = 0;
     this.libraryPins = new Map();
+    this.libraryPinPairs = new Map();
     this.libraryStates = new Map();
     this.globals = new Scope();
     this.functions = new Map();
@@ -2297,6 +2350,12 @@ export class FirmwareRuntime {
      */
     if (LIBRARIES_PINNED_IN_CONSTRUCTOR.has(className) && args.length > 0) {
       this.libraryPins.set(instance, this.pinOf(services, asNumber(args[0] ?? -1)));
+    }
+    if (LIBRARIES_PINNED_IN_PAIR.has(className) && args.length > 1) {
+      this.libraryPinPairs.set(instance, [
+        this.pinOf(services, asNumber(args[0] ?? -1)),
+        this.pinOf(services, asNumber(args[1] ?? -1)),
+      ]);
     }
     const methods = this.classMethods.get(className);
     /*
@@ -5074,6 +5133,52 @@ export class FirmwareRuntime {
             return onewire.temperature(pin);
           case 'temperature':
             return onewire.temperature(this.pinOf(services, asNumber(args[0] ?? -1)));
+          default:
+            return 0;
+        }
+      }
+      case 'TM1637': {
+        const tm = services.tm1637;
+        if (!tm) return 0;
+        /*
+         * Two ways to name the module, the way every other library here
+         * works both ways: a sketch that declared the object gave it the two
+         * pins in its constructor, and a sketch that only named the library
+         * says which pins it means on the call.
+         */
+        const bound = this.libraryPinPairs.get(owner);
+        const clk = bound ? bound[0] : this.pinOf(services, asNumber(args[0] ?? -1));
+        const dio = bound ? bound[1] : this.pinOf(services, asNumber(args[1] ?? -1));
+        const rest = bound ? args : args.slice(2);
+        switch (member) {
+          case 'print': {
+            const text = rest[0];
+            tm.print(
+              clk,
+              dio,
+              typeof text === 'string' ? text : String(asNumber(text ?? 0)),
+            );
+            return 0;
+          }
+          case 'printNumber':
+            tm.printNumber(
+              clk,
+              dio,
+              asNumber(rest[0] ?? 0),
+              asNumber(rest[1] ?? 4),
+            );
+            return 0;
+          case 'setBrightness':
+            tm.setBrightness(clk, dio, asNumber(rest[0] ?? 0));
+            return 0;
+          case 'write':
+            tm.write(
+              clk,
+              dio,
+              asNumber(rest[0] ?? 0),
+              rest.slice(1).map((value) => asNumber(value)),
+            );
+            return 0;
           default:
             return 0;
         }
