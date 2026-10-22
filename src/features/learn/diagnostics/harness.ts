@@ -26,6 +26,13 @@ export interface HarnessSim {
    */
   partVolts?(partId: string, pinId: string): number;
   /**
+   * A knob's current value, for a part that reads one.
+   *
+   * A sensor's reading is what the operator has dialled in, so a check that
+   * wants to know what the sketch should have seen asks for the knob.
+   */
+  knob?(partId: string, knobId: string): number;
+  /**
    * A stepper's shaft angle, in degrees.
    *
    * The shaft is the motor's own state rather than a pin's voltage, so a

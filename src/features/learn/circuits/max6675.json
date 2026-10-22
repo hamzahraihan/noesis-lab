@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "max6675",
+      "x": 130,
+      "y": 20,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:5V",
+      "to": "p2:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:J1_GND",
+      "to": "p2:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:D13",
+      "to": "p2:SCLK",
+      "colour": "#eab308",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:D11",
+      "to": "p2:SDI",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p1:D12",
+      "to": "p2:SDO",
+      "colour": "#38bdf8",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p1:D10",
+      "to": "p2:CS",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

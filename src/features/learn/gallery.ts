@@ -2071,6 +2071,64 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Thermocouple — a reading that comes back
+ * ------------------------------------------------------------------ */
+
+const THERMOCOUPLE: GalleryProject = {
+  id: 'max6675',
+  title: 'Thermocouple',
+  blurb:
+    'A MAX6675 amplifier and a thermocouple. The chip reads the probe and hands the reading out over the bus: the sketch shifts out a dummy byte and takes sixteen bits back, four of them status and twelve the temperature in quarter-degree steps.',
+  parts: [{ name: 'Thermocouple (MAX6675)', qty: 1 }],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <SPI.h>
+
+/*
+ * The chip reads the probe and hands the reading out as sixteen bits: four
+ * status bits and a temperature in quarter-degree steps. The sketch shifts
+ * out a dummy byte and takes the answer as it comes back.
+ */
+const byte CHIP_SELECT = 10;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(CHIP_SELECT, OUTPUT);
+  digitalWrite(CHIP_SELECT, LOW);
+  SPI.begin();
+  Serial.println("thermocouple ready");
+}
+
+void loop() {
+  digitalWrite(CHIP_SELECT, LOW);
+  SPI.begin();
+  unsigned int high = SPI.transfer(0x00);
+  unsigned int low = SPI.transfer(0x00);
+  SPI.end();
+  digitalWrite(CHIP_SELECT, HIGH);
+
+  // The status bits come off the top, and what is left is the temperature
+  // in quarter-degree steps.
+  float celsius = (((high << 8) | low) >> 3) * 0.25;
+  Serial.print("celsius ");
+  Serial.println(celsius);
+  delay(500);
+}
+`,
+      circuit: CIRCUITS.max6675,
+    },
+  ],
+  working: [
+    'The log carries the probe\\u2019s temperature, a quarter of a degree at a time.',
+    'Turn the probe knob and the reading follows it.',
+    'The sketch reads sixteen bits and throws four of them away.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Matrix — a heart on sixty-four LEDs
  * ------------------------------------------------------------------ */
 
@@ -2909,6 +2967,7 @@ export const GALLERY: readonly GalleryProject[] = [
   FOUR_DIGITS,
   STEPPER,
   EXPANDER,
+  THERMOCOUPLE,
   MATRIX,
   NOKIA_5110,
   REACTION,

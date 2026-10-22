@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { MFRC522_CARD_KNOB, PART_CATALOGUE, SEGMENT_MAP, SevenSegment, Tm1637 } from '@/features/parts';
+import {
+  MAX6675_TEMPERATURE_KNOB,
+  MFRC522_CARD_KNOB,
+  PART_CATALOGUE,
+  SEGMENT_MAP,
+  SevenSegment,
+  Tm1637,
+} from '@/features/parts';
 import { boardOption } from './boardRegistry';
 import {
   GALLERY,
@@ -931,6 +938,29 @@ void loop() {
         (value >> bit & 1) === 1,
       );
     }
+  }, 60_000);
+
+  it('reads the probe temperature over the bus', () => {
+    const build = galleryById('max6675')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const module = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'thermocouple',
+    )!;
+    for (let i = 0; i < 30; i++) simulation.tick(0.05);
+
+    // The reading comes back over the bus, in quarter-degree steps.
+    const log = simulation.serialLines().join('');
+    const reported = /celsius ([\d.]+)/.exec(log);
+    expect(reported, 'the sketch reported a reading').not.toBeNull();
+    const probe = simulation.controls.knob(module.id, MAX6675_TEMPERATURE_KNOB);
+    expect(Math.abs(Number(reported![1]) - probe), 'the reading is the probe\u2019s').toBeLessThan(
+      0.25,
+    );
   }, 60_000);
 
   it('moves the alarm-clock digits over time and on button taps', () => {

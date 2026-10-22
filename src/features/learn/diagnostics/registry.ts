@@ -128,6 +128,11 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
         const net = sim.engine.currentNetlist.pinNode.get(`${partId}:${pinId}`);
         return net === undefined ? 0 : sim.engine.voltageOfNet(net);
       },
+      knob: (partId: string, knobId: string) => {
+        const part = sim.bench.parts.find((candidate) => candidate.id === partId);
+        const spec = part?.definition.knobs?.find((knob) => knob.id === knobId);
+        return part && spec ? sim.controls.knob(part.id, spec) : 0;
+      },
       stepperAngle: (partId: string) => sim.engine.stepperAngle(partId),
       tm1637: (partId: string) => {
         const controller = sim.engine.displayController(partId);
@@ -1299,6 +1304,47 @@ function pcf8574Checks(build: GalleryBuild): CheckDef[] {
   ];
 }
 
+/* ------------------------------------------------------------------ *
+ * max6675 on uno: the reading comes back over the bus.
+ *
+ * The chip answers with sixteen bits, so the check compares what the sketch
+ * read with the temperature the probe is at -- the quarter-degree step and
+ * all.
+ * ------------------------------------------------------------------ */
+
+function max6675Checks(build: GalleryBuild): CheckDef[] {
+  const module = build.circuit.parts?.find((part) => part.type === 'max6675')?.id;
+  return [
+    {
+      name: 'the reading comes back the way the probe is set',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the reading comes back the way the probe is set';
+        const knob = sim.knob;
+        if (knob === undefined || module === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read a knob');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        const reported = /celsius ([\d.]+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report a reading');
+        }
+        const read = Number(reported[1]);
+        const expected = knob(module, 'probe');
+        if (Math.abs(read - expected) > 0.25) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the sketch read ${read} and the probe is at ${expected}`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'alarm-clock') {
     return build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks;
@@ -1318,6 +1364,7 @@ function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
   if (projectId === 'tm1637') return tm1637Checks(build);
   if (projectId === 'a4988') return a4988Checks(build);
   if (projectId === 'pcf8574') return pcf8574Checks(build);
+  if (projectId === 'max6675') return max6675Checks(build);
   if (projectId === 'max7219') return max7219Checks(build);
   if (projectId === 'nokia-5110') return nokia5110Checks(build);
   return [];
