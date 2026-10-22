@@ -39,6 +39,7 @@ import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
 import { Pcf8574, PCF8574_OUTPUT_OHMS, PCF8574_PORTS } from '@/features/parts';
 import { Max6675, MAX6675_TEMPERATURE_KNOB } from '@/features/parts';
 import { Mcp4725, MCP4725_OUTPUT_OHMS } from '@/features/parts';
+import { SUPPLY_VOLTAGE_KNOB } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
 import { Ina219 } from '@/features/parts';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
@@ -1946,6 +1947,23 @@ export class Engine {
         ohms: MCP4725_OUTPUT_OHMS,
       });
       internalNet++;
+    }
+    /*
+     * A bench supply is a rail the operator sets, and the solver carries it
+     * like any other source. Nothing else on the bench drives a net at a
+     * level the operator chooses, and that is the whole of it.
+     */
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'power-supply') continue;
+      const net = netlist.pinNode.get(`${part.id}:V+`);
+      if (net === undefined) continue;
+      elements.push({
+        kind: 'voltageSource',
+        a: net,
+        b: GROUND,
+        volts: this.dynamicState.knob(part.id, SUPPLY_VOLTAGE_KNOB),
+        label: 'supply',
+      });
     }
     let sourceOrdinal = 0;
     this.pinSourceIndex.clear();

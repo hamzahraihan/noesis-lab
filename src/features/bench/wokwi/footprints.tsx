@@ -202,6 +202,9 @@ function shapeFor(
     case 'tm1637':
       // A display that drives its own glass: the digits are its registers.
       return <Tm1637Body definition={definition} state={state} part={part} />;
+    case 'power-supply':
+      // A box with a dial: the rail the operator set.
+      return <PowerSupplyBody definition={definition} />;
     case 'a4988':
       // A driver board: nothing on it moves by itself.
       return <A4988Body definition={definition} />;
@@ -1571,6 +1574,74 @@ function A4988Body({ definition }: { definition: PartDefinition }) {
             x={pin.x}
             y={pin.y - 1.2}
             fontSize={1.0}
+            textAnchor="middle"
+            fill={definition.legendColour}
+            fontFamily={SILKSCREEN_FONT}
+            opacity={0.9}
+          >
+            {pin.label}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+}
+
+/**
+ * A bench supply: a box with a dial and two terminals.
+ *
+ * The dial is the knob the operator turns, and the terminals are what the
+ * rest of the bench is wired to. It is drawn rather than borrowed because
+ * the library has no element for one.
+ */
+function PowerSupplyBody({ definition }: { definition: PartDefinition }) {
+  const width = definition.widthMm;
+  const height = definition.heightMm;
+  return (
+    <g filter="url(#nz-lift)">
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        rx={1.4}
+        fill={definition.bodyColour}
+        stroke="#0c1018"
+        strokeWidth={0.2}
+      />
+      <rect x={0} y={0} width={width} height={height} rx={1.4} fill="url(#nz-body)" />
+      {/* The dial, and the mark it points at. */}
+      <circle cx={9.0} cy={8.0} r={4.2} fill="#0f172a" stroke="#64748b" strokeWidth={0.3} />
+      <rect x={8.7} y={4.4} width={0.6} height={3.0} rx={0.2} fill="#f8fafc" />
+      <text
+        x={9.0}
+        y={15.0}
+        fontSize={1.4}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+      >
+        0-12 V
+      </text>
+      <text
+        x={width - 8.0}
+        y={9.0}
+        fontSize={1.6}
+        textAnchor="middle"
+        fill={definition.legendColour}
+        fontFamily={SILKSCREEN_FONT}
+        opacity={0.9}
+      >
+        SUPPLY
+      </text>
+      {/* The two terminals. */}
+      {definition.pins.map((pin) => (
+        <g key={pin.id}>
+          <SolderPad x={pin.x} y={pin.y} />
+          <text
+            x={pin.x}
+            y={pin.y - 1.2}
+            fontSize={1.2}
             textAnchor="middle"
             fill={definition.legendColour}
             fontFamily={SILKSCREEN_FONT}

@@ -152,6 +152,11 @@ export type ComponentSpec =
    */
   | { readonly kind: 'dac' }
   /*
+   * A bench supply: a rail the operator sets. The board's own five volts
+   * are enough for a sketch and not enough for a motor.
+   */
+  | { readonly kind: 'power-supply' }
+  /*
    * A shift register on the SPI bus: the clock and the data in are the bus's
    * own pins, and the latch is a plain output the sketch drives, because on
    * the chip the two are separate wires.

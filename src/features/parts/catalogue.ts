@@ -74,6 +74,7 @@ import { a4988Definition } from './a4988';
 import { pcf8574Definition } from './devices/pcf8574';
 import { max6675Definition } from './devices/max6675';
 import { mcp4725Definition } from './devices/mcp4725';
+import { powerSupplyDefinition } from './power-supply';
 import { max7219Definition } from './display/max7219';
 import { nokia5110Definition } from './display/pcd8544';
 import { shift595Definition } from './devices/shift595';
@@ -292,6 +293,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'One wire and a temperature: read with ow.getTemp(). Twelve-bit resolution, and a range the DHT cannot reach.',
     make: ds18b20Definition,
+  },
+  {
+    id: 'power-supply',
+    name: 'Bench supply (0-12 V)',
+    group: 'output',
+    note: 'A rail the operator sets. The board’s own five volts are enough for a sketch and not enough for a motor, and this is the part that carries a second voltage.',
+    make: powerSupplyDefinition,
   },
   {
     id: 'mcp4725',
