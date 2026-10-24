@@ -2,6 +2,10 @@
  * Stepper motors: windings the sketch energizes in sequence, and a shaft
  * that follows the order of the edges.
  *
+ * A motor behind a driver is different: its windings carry a phase-current
+ * vector, so the shaft follows the angle between the two winding voltages
+ * instead of counting polarity edges.
+ *
  * The 4-wire part carries two windings (A and B ends); the biaxial part
  * carries two independent pairs. Positions below are artwork-true from
  * each element's `pinInfo`, snapped to the 2.54 mm grid the breadboard
@@ -18,6 +22,9 @@ export const WINDING_OHMS = 50;
 
 /** Dead band around zero differential: inside it a winding reads un-driven. */
 export const WINDING_DEADBAND_VOLTS = 0.2;
+
+/** One full step is 90 electrical degrees on a two-phase motor. */
+export const ELECTRICAL_DEGREES_PER_STEP = 90;
 
 /** Winding polarity: +1 means the + end sits above the - end. */
 export type WindingPolarity = -1 | 0 | 1;
@@ -54,6 +61,29 @@ export function windingPolarity(plusVolts: number, minusVolts: number): WindingP
   if (across > WINDING_DEADBAND_VOLTS) return 1;
   if (across < -WINDING_DEADBAND_VOLTS) return -1;
   return 0;
+}
+
+/**
+ * Electrical angle of the phase-current vector, in degrees.
+ *
+ * `acrossA` and `acrossB` are the signed voltages across the two windings.
+ * A vector inside the dead band is undriven, not an angle, so it returns
+ * null and the caller holds the shaft.
+ */
+export function windingAngle(acrossA: number, acrossB: number): number | null {
+  if (Math.hypot(acrossA, acrossB) <= WINDING_DEADBAND_VOLTS) return null;
+  return (Math.atan2(acrossB, acrossA) * 180) / Math.PI;
+}
+
+/**
+ * The shortest signed turn from one angle to another, in `(-180, 180]`.
+ *
+ * A move from 315 to 45 is +90, not -270, which is what lets the shaft cross
+ * the wrap without spinning backwards.
+ */
+export function shortestAngleDelta(from: number, to: number): number {
+  const delta = ((((to - from + 180) % 360) + 360) % 360) - 180;
+  return delta === -180 ? 180 : delta;
 }
 
 export function stepperDefinition(): PartDefinition {

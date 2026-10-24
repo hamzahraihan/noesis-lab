@@ -8,8 +8,10 @@ import { Engine } from '@/features/simulation';
 import {
   STEP_DEGREES,
   biaxialStepperDefinition,
+  shortestAngleDelta,
   stepperDefinition,
   stepTransition,
+  windingAngle,
 } from './stepper';
 import { renderedSizeMm, wokwiPartFor } from '@/features/bench/wokwi/wokwi';
 
@@ -28,6 +30,37 @@ describe('step transition', () => {
   it('holds on jitter', () => {
     expect(stepTransition([1, 1], [1, 1])).toBe(0);
     expect(stepTransition([1, 1], [-1, -1])).toBe(0);
+  });
+});
+
+describe('winding vector', () => {
+  it('reads the four full-step angles', () => {
+    expect(windingAngle(1, -1)).toBeCloseTo(-45, 6);
+    expect(windingAngle(1, 1)).toBeCloseTo(45, 6);
+    expect(windingAngle(-1, 1)).toBeCloseTo(135, 6);
+    expect(windingAngle(-1, -1)).toBeCloseTo(-135, 6);
+  });
+
+  it('holds when both windings are inside the dead band', () => {
+    expect(windingAngle(0, 0)).toBeNull();
+    expect(windingAngle(0.1, 0.1)).toBeNull();
+  });
+
+  it('reads an arbitrary vector', () => {
+    expect(windingAngle(0.3, 0.4)).toBeCloseTo(53.1301, 3);
+  });
+});
+
+describe('shortest angle delta', () => {
+  it('crosses the wrap the short way', () => {
+    expect(shortestAngleDelta(315, 45)).toBeCloseTo(90, 6);
+    expect(shortestAngleDelta(45, 315)).toBeCloseTo(-90, 6);
+  });
+
+  it('keeps an ordinary move ordinary', () => {
+    expect(shortestAngleDelta(10, 10)).toBe(0);
+    expect(shortestAngleDelta(0, 90)).toBeCloseTo(90, 6);
+    expect(shortestAngleDelta(90, 0)).toBeCloseTo(-90, 6);
   });
 });
 
