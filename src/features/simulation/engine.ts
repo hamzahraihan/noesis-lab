@@ -32,11 +32,19 @@ import { ADS1115_CHANNEL_KNOBS } from '@/features/parts';
 import { Bmp180 } from '@/features/parts';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
+import { Ds3231, DS3231_TEMPERATURE_KNOB } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
 import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
-import { Pcf8574, PCF8574_OUTPUT_OHMS, PCF8574_PORTS } from '@/features/parts';
+import {
+  Mcp23017,
+  MCP23017_OUTPUT_OHMS,
+  MCP23017_PORT_PINS,
+  Pcf8574,
+  PCF8574_OUTPUT_OHMS,
+  PCF8574_PORTS,
+} from '@/features/parts';
 import { Max6675, MAX6675_TEMPERATURE_KNOB } from '@/features/parts';
 import { Mcp4725, MCP4725_OUTPUT_OHMS } from '@/features/parts';
 import { SUPPLY_VOLTAGE_KNOB } from '@/features/parts';
@@ -551,6 +559,11 @@ export class Engine {
         device.applyPreset(seed.hours, seed.minutes, seed.seconds, seed.nvram ?? []);
         this.seededRtcParts.add(part.id);
       }
+      if (device instanceof Ds3231 && part.initialRtc && !this.seededRtcParts.has(part.id)) {
+        const seed = part.initialRtc;
+        device.applyPreset(seed.hours, seed.minutes, seed.seconds);
+        this.seededRtcParts.add(part.id);
+      }
       if (device) this.devices.set(part.id, device);
       /*
        * The instruments read the world themselves, at the moment they report,
@@ -577,6 +590,13 @@ export class Engine {
         // The load on the cell was a knob the amplifier never heard about:
         // it read the tare for as long as the bench existed.
         device.setLoadSource(() => this.dynamicState.knob(part.id, HX711_LOAD_KNOB));
+      } else if (device instanceof Ds3231) {
+        // The thermometer is on the die, and the die is the one place on the
+        // bench a knob can reach. The chip reads it when a sketch asks, so a
+        // turn between two reads is seen by the next one.
+        device.setTemperatureSource(() =>
+          this.dynamicState.knob(part.id, DS3231_TEMPERATURE_KNOB),
+        );
       }
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       if (part.definition.component.kind === 'shift-register') {
@@ -1301,7 +1321,7 @@ export class Engine {
    */
   private advanceClocks(): void {
     for (const device of this.devices.values()) {
-      if (device instanceof Ds1307) {
+      if (device instanceof Ds1307 || device instanceof Ds3231) {
         device.setTime(new Date(RTC_EPOCH_MS + this.timeMs));
       }
     }
@@ -1919,6 +1939,30 @@ export class Engine {
           b: device.output(index) ? supply : GROUND,
           ohms: PCF8574_OUTPUT_OHMS,
           label: `P${index}`,
+        });
+      }
+    }
+    /*
+     * The sixteen-port expander has a direction register in front of each
+     * port: only a pin the sketch made an output gets stamped. An input pin
+     * is left alone, because the bench has nothing wired to report and a
+     * driven input would be a lie about the chip.
+     */
+    for (const [partId, device] of this.devices) {
+      if (!(device instanceof Mcp23017)) continue;
+      const supply = netlist.pinNode.get(`${partId}:VCC`);
+      if (supply === undefined) continue;
+      for (let index = 0; index < MCP23017_PORT_PINS.length; index++) {
+        if (!device.isOutput(index)) continue;
+        const pin = MCP23017_PORT_PINS[index]!;
+        const output = netlist.pinNode.get(`${partId}:${pin}`);
+        if (output === undefined) continue;
+        elements.push({
+          kind: 'resistor',
+          a: output,
+          b: device.output(index) ? supply : GROUND,
+          ohms: MCP23017_OUTPUT_OHMS,
+          label: pin,
         });
       }
     }

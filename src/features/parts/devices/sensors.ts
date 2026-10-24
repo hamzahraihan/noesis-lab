@@ -11,6 +11,7 @@
 import type { I2cSensorVariant, KnobSpec, PartDefinition, PinSpec } from '../catalog';
 import { ADS1115_CHANNEL_KNOBS } from './ads1115';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
+import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
 
 /** The hole pitch, and the grid every module's header is snapped to. */
@@ -64,6 +65,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     // supply, which the element silkscreens as 5V and every tutorial calls
     // VCC, and then the bus.
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+  },
+  ds3231: {
+    id: 'ds3231-rtc',
+    name: 'DS3231 RTC Module',
+    widthMm: 25.8,
+    heightMm: 22.212,
+    bodyColour: '#015abe',
+    legendColour: '#e6e6e6',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [DS3231_TEMPERATURE_KNOB],
   },
   mpu6050: {
     id: 'mpu6050-accel',
@@ -172,6 +183,11 @@ function i2cSensorDefinition(variant: I2cSensorVariant): PartDefinition {
 /** DS1307 real-time clock: the blue coin-cell module on a four-pin header. */
 export function ds1307Definition(): PartDefinition {
   return i2cSensorDefinition('ds1307');
+}
+
+/** DS3231 real-time clock: the same header, with a thermometer on the die. */
+export function ds3231Definition(): PartDefinition {
+  return i2cSensorDefinition('ds3231');
 }
 
 /** MPU-6050 accelerometer and gyroscope, on the carrier board it is sold on. */

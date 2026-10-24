@@ -398,6 +398,35 @@ describe('Clock class end to end', () => {
   });
 });
 
+describe('RTC_DS3231', () => {
+  it('reads the clock and the die temperature through the same handle', () => {
+    const bench = makeRtcBench();
+    bench.setTime(2026, 10, 24, 9, 30, 0);
+    bench.regs[0x0f] = 0x80;
+    bench.regs[0x11] = 0x17;
+    bench.regs[0x12] = 0x40;
+    const runtime = FirmwareRuntime.fromProject(
+      toSingleFileProject(
+        `RTC_DS3231 rtc;
+         void setup() {
+           rtc.begin();
+           Serial.println(rtc.lostPower());
+           rtc.adjust(DateTime(2026, 10, 24, 9, 30, 0));
+           Serial.println(rtc.lostPower());
+           DateTime now = rtc.now();
+           Serial.println(now.year() * 10000 + now.month() * 100 + now.day());
+           Serial.println(rtc.temperature());
+         }
+         void loop() {}`,
+        'arduino-cpp',
+      ),
+    );
+    const main = runtime.main(bench.services);
+    for (let step = 0; step < 50 && !main.next().done; step++);
+    expect(bench.serial.join('')).toBe('1\n0\n20261024\n23.25\n');
+  });
+});
+
 describe('RTC read caching', () => {
   function countingBench(nowMs: () => number = () => 0): {
     bench: RtcBench;

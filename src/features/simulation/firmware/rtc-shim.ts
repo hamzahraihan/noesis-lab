@@ -156,11 +156,21 @@ export class TimeSpanValue {
 }
 
 /**
- * A live handle on the DS1307 itself, as opposed to the values above.
+ * A live handle on the clock itself, as opposed to the values above.
  *
  * It carries no state of its own: every method goes out over the bench I2C
  * the way the raw build's `clkRead`/`nvReadByte` helpers do, so two handles
  * never disagree about the time. The interpreter installs one wherever a
- * class declares an `RTC_DS1307` member.
+ * class declares an `RTC_DS1307` or `RTC_DS3231` member.
+ *
+ * `ds3231` is the only difference between the two chips at this seam: the
+ * precision part has a thermometer and a status flag that `adjust` clears,
+ * and the older one has NVRAM in the registers where that flag lives.
  */
-export class RtcHandle {}
+export class RtcHandle {
+  readonly ds3231: boolean;
+
+  constructor(ds3231 = false) {
+    this.ds3231 = ds3231;
+  }
+}

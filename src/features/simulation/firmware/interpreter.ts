@@ -196,6 +196,12 @@ export type Value =
   | number
   | string
   | number[]
+  /*
+   * A `*args` parameter is an array of values, not only of numbers: a
+   * sketch can pass strings through one, and the interpreter stores the
+   * whole argument list as a value.
+   */
+  | Value[]
   | DictValue
   | DateTimeValue
   | TimeSpanValue
@@ -1283,6 +1289,7 @@ const SYSTEM_QUOTED_HEADERS = new Set(['arduino.h', 'wire.h', 'spi.h']);
 const LIBRARY_OWNED_INSTANCES = new Set([
   'SevSeg',
   'RTC_DS1307',
+  'RTC_DS3231',
   'Servo',
   'DHT',
   'OneWire',
@@ -2338,8 +2345,8 @@ export class FirmwareRuntime {
      * General for any class that holds one, exercised here by Clock.
      */
     for (const field of declaration?.fields ?? []) {
-      if (field.type === 'RTC_DS1307' && !field.init) {
-        instance.scope.values.set(field.name, new RtcHandle());
+      if ((field.type === 'RTC_DS1307' || field.type === 'RTC_DS3231') && !field.init) {
+        instance.scope.values.set(field.name, new RtcHandle(field.type === 'RTC_DS3231'));
       }
     }
     this.instances.set(name, instance);
@@ -2488,8 +2495,13 @@ export class FirmwareRuntime {
      * in a tab -- the library owns it -- so the handle answers directly
      * rather than through method bodies that do not exist.
      */
-    if (instance.className === 'RTC_DS1307') {
-      return yield* this.evaluateRtcCall(method, args, services);
+    if (instance.className === 'RTC_DS1307' || instance.className === 'RTC_DS3231') {
+      return yield* this.evaluateRtcCall(
+        method,
+        args,
+        services,
+        instance.className === 'RTC_DS3231',
+      );
     }
     /*
      * A SevSeg display (`SevSeg sevseg; sevseg.setNumber(...)`): the class is
@@ -3974,7 +3986,12 @@ export class FirmwareRuntime {
             return (yield* this.generatorMember(bound, callee.member, args)) as Value;
           }
           if (bound instanceof RtcHandle) {
-            return (yield* this.evaluateRtcCall(callee.member, args, services)) as Value;
+            return (yield* this.evaluateRtcCall(
+              callee.member,
+              args,
+              services,
+              bound.ds3231,
+            )) as Value;
           }
           /*
            * The libraries a sketch names outright: the bench's own name and
@@ -4150,7 +4167,7 @@ export class FirmwareRuntime {
     }
   }
 
-  private resolveArray(expression: Expr, scope: Scope): number[] | undefined {
+  private resolveArray(expression: Expr, scope: Scope): Value[] | undefined {
     if (expression.kind !== 'identifier') return undefined;
     const declared = scope.arrayFor(expression.name);
     if (declared !== undefined) return declared;
@@ -4541,10 +4558,11 @@ export class FirmwareRuntime {
     member: string,
     args: Value[],
     services: FirmwareServices,
+    ds3231 = false,
   ): Generator<Produced, Value, Value | undefined> {
     const wire = services.wire;
-
-    switch (member) {
+    // Arduino spells one of these `lostPower`; the rest are lowercase.
+    switch (member.toLowerCase()) {
       case 'begin': {
         // Probes for the part: with nothing answering at the address the bus
         // stays silent, which is the bench's report of a missing clock.
@@ -4592,6 +4610,39 @@ export class FirmwareRuntime {
         this.rtcNowCache = { value, served: 1 };
         return value;
       }
+      case 'temperature': {
+        /*
+         * The DS3231 keeps its thermometer at 0x11 and 0x12: ten signed
+         * quarter-degree counts in the top of a sixteen-bit frame. A DS1307
+         * has no thermometer, so the same read lands in its NVRAM and a
+         * DS1307 sketch that asks gets whatever is there -- which is the
+         * honest answer to calling a method the part does not have.
+         */
+        wire.beginTransmission(DS1307_ADDRESS);
+        wire.write(0x11);
+        const addressed = wire.endTransmission();
+        if (addressed > 0) yield addressed / 1000;
+        wire.requestFrom(DS1307_ADDRESS, 2);
+        const msb = wire.available() > 0 ? wire.read() : 0;
+        const lsb = wire.available() > 0 ? wire.read() : 0;
+        const counts = ((msb << 8) | lsb) >> 6;
+        return (counts & 0x200 ? counts - 0x400 : counts) / 4;
+      }
+      case 'lostpower': {
+        /*
+         * The DS3231 sets the oscillator-stop flag (0x0F bit 7) when its
+         * backup power has lapsed. Reading it is the part's report of an
+         * unreliable clock, so a DS1307 call lands in NVRAM like the
+         * thermometer read above.
+         */
+        wire.beginTransmission(DS1307_ADDRESS);
+        wire.write(0x0f);
+        const addressed = wire.endTransmission();
+        if (addressed > 0) yield addressed / 1000;
+        wire.requestFrom(DS1307_ADDRESS, 1);
+        const status = wire.available() > 0 ? wire.read() : 0;
+        return status & 0x80 ? 1 : 0;
+      }
       case 'adjust': {
         // Time moved under the cache: drop it before writing.
         this.rtcNowCache = null;
@@ -4615,6 +4666,19 @@ export class FirmwareRuntime {
         }
         const written = wire.endTransmission();
         if (written > 0) yield written / 1000;
+        /*
+         * A DS3231 that has just been set is trusted again: `adjust` ends
+         * with the clock running, so the oscillator-stop flag goes back to
+         * zero. The DS1307 has no such status register, so its NVRAM is
+         * left alone.
+         */
+        if (ds3231) {
+          wire.beginTransmission(DS1307_ADDRESS);
+          wire.write(0x0f);
+          wire.write(0x00);
+          const cleared = wire.endTransmission();
+          if (cleared > 0) yield cleared / 1000;
+        }
         return 0;
       }
       case 'readnvram': {

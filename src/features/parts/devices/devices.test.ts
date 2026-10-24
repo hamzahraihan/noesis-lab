@@ -10,6 +10,7 @@ import {
   ads1115Definition,
   bmp180Definition,
   ds1307Definition,
+  ds3231Definition,
   hx711Definition,
   ina219Definition,
   mpu6050Definition,
@@ -25,6 +26,7 @@ import { INA219_BUS_KNOB, INA219_CURRENT_KNOB, INA219_SHUNT_OHMS } from '../devi
 import { COUNTS_PER_GRAM } from '../devices/hx711';
 import { HX711_LOAD_KNOB } from '../devices/sensors';
 import { ADS1115_CHANNEL_KNOBS } from '../devices/ads1115';
+import { Mcp23017, mcp23017Definition } from '../devices/mcp23017';
 import { Servo, servoDefinition } from '../devices/servo';
 import { Lcd1602 } from '../devices/lcd1602';
 import { LcdDriver } from '../devices/lcd-driver';
@@ -522,6 +524,51 @@ describe('ds1307 on a live bench', () => {
     bus.endTransmission();
     expect(bus.requestFrom(0x68, 2)).toBe(2);
     expect([bus.read(), bus.read()]).toEqual([0x01, 0x01]);
+  });
+});
+
+describe('ds3231 on a live bench', () => {
+  it('advances its clock as simulated time moves', () => {
+    const { bus, engine } = i2cBench(ds3231Definition());
+    engine.skip(23);
+    expect(readRegister(bus, 0x68, 0x00, 3)).toEqual([0x23, 0x00, 0x00]);
+    engine.skip(1);
+    expect(readRegister(bus, 0x68, 0x00, 3)).toEqual([0x24, 0x00, 0x00]);
+  });
+});
+
+describe('mcp23017 on a live bench', () => {
+  it('drives only the ports the sketch made outputs', () => {
+    const { bus, engine, device } = i2cBench(mcp23017Definition());
+    const volts = (pin: string): number => {
+      const net = engine.currentNetlist.pinNode.get(`${device.id}:${pin}`);
+      return net === undefined ? 0 : engine.voltageOfNet(net);
+    };
+    const write = (register: number, value: number): void => {
+      bus.beginTransmission(0x20);
+      bus.write(register);
+      bus.write(value);
+      bus.endTransmission();
+    };
+
+    // A latch can be written while the port is still an input; it moves
+    // nothing on the pin, because the direction register is in the way.
+    write(0x14, 0xff);
+    engine.step(0.001);
+    expect(volts('PA0')).toBeLessThan(0.5);
+
+    // Clearing the direction bits puts the latch on the pins.
+    write(0x00, 0x00);
+    const model = engine.i2cDevice(device.id) as Mcp23017;
+    expect(model, 'the bench built the expander').toBeInstanceOf(Mcp23017);
+    expect(model.isOutput(0)).toBe(true);
+    expect(model.output(0)).toBe(true);
+    engine.step(0.001);
+    expect(volts('PA0')).toBeGreaterThan(3);
+    expect(volts('PA7')).toBeGreaterThan(3);
+
+    // Port B is a different direction register and is still an input.
+    expect(volts('PB0')).toBeLessThan(0.5);
   });
 });
 

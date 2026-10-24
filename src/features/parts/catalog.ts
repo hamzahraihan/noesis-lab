@@ -141,6 +141,11 @@ export type ComponentSpec =
    */
   | { readonly kind: 'i2c-expander' }
   /*
+   * A sixteen-pin expander: two ports, each with its own direction register,
+   * so the sketch decides which pins drive and which listen.
+   */
+  | { readonly kind: 'mcp23017' }
+  /*
    * A thermocouple amplifier: the chip reads a probe and hands the reading
    * out over the SPI bus, so this is a sensor that answers rather than one
    * the sketch polls.
@@ -204,7 +209,14 @@ export type SensorVariant = 'pir' | 'sound' | 'soundSmall' | 'heartbeat' | 'gas'
  * contribute no circuit of their own, they answer at an address, and what a
  * device does with a read is the device's business.
  */
-export type I2cSensorVariant = 'ds1307' | 'mpu6050' | 'hx711' | 'bmp180' | 'ina219' | 'ads1115';
+export type I2cSensorVariant =
+  | 'ds1307'
+  | 'ds3231'
+  | 'mpu6050'
+  | 'hx711'
+  | 'bmp180'
+  | 'ina219'
+  | 'ads1115';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

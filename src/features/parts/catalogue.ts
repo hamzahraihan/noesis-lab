@@ -41,6 +41,7 @@ import {
   ads1115Definition,
   bmp180Definition,
   ds1307Definition,
+  ds3231Definition,
   hx711Definition,
   ina219Definition,
   mpu6050Definition,
@@ -72,6 +73,7 @@ import { mfrc522Definition } from './mfrc522';
 import { tm1637Definition } from './tm1637';
 import { a4988Definition } from './a4988';
 import { pcf8574Definition } from './devices/pcf8574';
+import { mcp23017Definition } from './devices/mcp23017';
 import { max6675Definition } from './devices/max6675';
 import { mcp4725Definition } from './devices/mcp4725';
 import { powerSupplyDefinition } from './power-supply';
@@ -331,6 +333,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: pcf8574Definition,
   },
   {
+    id: 'mcp23017',
+    name: 'I/O expander (MCP23017)',
+    group: 'output',
+    note: 'Sixteen pins in two wires, with a direction register for each port. A port powers up as an input, so a sketch clears its direction bits before the latch can drive anything.',
+    make: mcp23017Definition,
+  },
+  {
     id: 'a4988',
     name: 'Stepper driver (A4988)',
     group: 'output',
@@ -474,6 +483,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Keeps time with a battery, and reads it a register at a time over I2C. Seconds are BCD, so the low nibble is the seconds.',
     make: ds1307Definition,
+  },
+  {
+    id: 'ds3231-rtc',
+    name: 'DS3231 Real-Time Clock',
+    group: 'input',
+    note: 'The same BCD time registers as the DS1307, with two alarms, a control and status register, and a thermometer on the die. It reports whether it lost power until a sketch sets the time.',
+    make: ds3231Definition,
   },
   {
     id: 'mpu6050-accel',
