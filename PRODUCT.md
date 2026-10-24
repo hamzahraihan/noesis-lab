@@ -40,6 +40,7 @@ A neighboring product could not truthfully copy these together:
 ## Capabilities and Constraints
 
 Confirmed capabilities:
+
 - Resistive-network circuit solver per frame; pin-level voltage/current readout.
 - Firmware interpreter for a deliberately small C++ subset (void/int/float/double/bool/char/byte/long/short/unsigned/signed, the fixed-width integer types, String, arrays, classes with methods and fields, file-scope enums, #define; no pointers, structs, heap allocation or templates).
 - Real-firmware backends alongside the interpreter: the Uno runs compiled AVR machine code (in-browser toolchain, Wasm core); the Nano RP2040 Connect and the Raspberry Pi Pico boot the pinned MicroPython UF2 on `rp2040js`, mounting the project's files as a littlefs image; the ESP32 boots an emulated Xtensa chip running its own MicroPython. Run re-mounts the current code and starts a fresh machine; Reset is the same clean boot. Selected per run from the backend selector, which refuses a mode the board or the sketch cannot use and says why.
@@ -52,6 +53,7 @@ Confirmed capabilities:
 - Real 1:1 scale parts on 2.54 mm pitch; pin coordinates in millimetres.
 
 Durable constraints future work must preserve:
+
 - Offline-capable: the bench works with no network; assets bundled locally.
 - Static hosting only: no server runtime; HashRouter + static files; COOP/COEP headers for the worker path.
 - Real millimetre-scale parts: 1:1 components on 2.54 mm pitch; artwork must agree with pin coordinates.
@@ -59,18 +61,20 @@ Durable constraints future work must preserve:
 - No fabrication of evidence: no invented testimonials, customers, benchmarks, pricing, licensing, or deployment claims.
 
 Explicitly undecided:
-- Accessibility standard: keyboard operability, reduced motion (prefers-reduced-motion), and screen-reader readouts are committed in code, but no formal WCAG level or audit target is named. Record a level only when confirmed.
+
+- None remaining: accessibility standard and licensing terms are committed below.
 
 ## Brand Commitments
 
 - Name: Noesis (also shown as "Noesis Lab" in the UI heading).
-- Assets: Wokwi component library (MIT), board definitions for nine boards, the exercise ladder (0.1–5.3), long-form worksheets in docs/exercises/, project gallery data.
+- Assets: Wokwi component library (MIT), board definitions for nine boards, the exercise ladder (0.1–5.3), long-form worksheets in docs/exercises/, project gallery data, and MIT license (`LICENSE`).
 - No voice, personality, or visual identity is formally committed here. Visual world, palette, typography, and components belong in DESIGN.md and are owned by new-work/document, not init.
 - References the user explicitly made binding: none beyond the above.
 
 ## Evidence on Hand
 
 Real content, data, and assets (with paths):
+
 - docs/PLAN.md — project brief and implementation decisions (Monaco, Wokwi parts, jumper routing, boards).
 - docs/exercises/ — long-form worksheets for every module (module-0 through module-5).
 - docs/parity-scorecard.md — the benchmark against Wokwi and Velxio: every pillar, the file behind every score, and the gaps still open.
@@ -79,12 +83,13 @@ Real content, data, and assets (with paths):
 - src/features/parts/ — board and part definitions with pin tables.
 - src/features/simulation/mcu.ts — per-board bus/pin tables.
 - src/index.css — incumbent visual system (instrument-console tokens).
-- public/ and src/assets/ — favicons, hero image, SVGs.
+- LICENSE — MIT license terms for the repository.
 
 Absences future work must not fabricate:
+
 - No real testimonials, named customers, case studies, or press.
 - No benchmarks, performance claims, or measured metrics beyond what tests assert.
-- No pricing, licensing terms, or commercial offering.
+- No pricing or commercial offering (source and assets released under the MIT license).
 - No production deployment URL or hosting claim (static-hosting doc describes requirements only).
 
 ## Product Principles
@@ -97,4 +102,4 @@ Absences future work must not fabricate:
 
 ## Accessibility & Inclusion
 
-Keyboard operability for the bench, respect for prefers-reduced-motion, and screen-reader-friendly numeric readouts are committed in code (focus-visible rings, reduced-motion animation disabling, tabular-nums readouts). No formal standard (e.g. WCAG level) or audit target is named yet; record one only when confirmed. No product-specific user needs beyond general web best practice are established.
+Target standard: WCAG 2.1 Level AA. Keyboard operability across the bench (focus-visible rings, logical tab order across toolbar, editor, canvas, and instrument panels), respect for `prefers-reduced-motion` (disabling non-essential animations and transitions), high-contrast token pairings, and screen-reader-friendly numeric readouts (`tabular-nums`) are committed in code.
