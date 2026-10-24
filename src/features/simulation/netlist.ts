@@ -865,6 +865,7 @@ function elementsForPart(
     case 'i2c-sensor':
     case 'i2c-expander':
     case 'mcp23017':
+    case 'pca9685':
     case 'thermocouple':
     case 'dac':
     case 'power-supply':

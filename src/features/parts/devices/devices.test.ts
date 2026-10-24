@@ -27,6 +27,7 @@ import { COUNTS_PER_GRAM } from '../devices/hx711';
 import { HX711_LOAD_KNOB } from '../devices/sensors';
 import { ADS1115_CHANNEL_KNOBS } from '../devices/ads1115';
 import { Mcp23017, mcp23017Definition } from '../devices/mcp23017';
+import { Pca9685, pca9685Definition, PCA9685_PRESCALE_50_HZ } from './pca9685';
 import { Servo, servoDefinition } from '../devices/servo';
 import { Lcd1602 } from '../devices/lcd1602';
 import { LcdDriver } from '../devices/lcd-driver';
@@ -569,6 +570,46 @@ describe('mcp23017 on a live bench', () => {
 
     // Port B is a different direction register and is still an input.
     expect(volts('PB0')).toBeLessThan(0.5);
+  });
+});
+
+describe('pca9685 on a live bench', () => {
+  it('switches a channel for the duty the sketch asked for', () => {
+    const { bus, engine, device } = i2cBench(pca9685Definition());
+    const write = (register: number, values: readonly number[]): void => {
+      bus.beginTransmission(0x40);
+      bus.write(register);
+      for (const value of values) bus.write(value);
+      bus.endTransmission();
+    };
+    const volts = (pin: string): number => {
+      const net = engine.currentNetlist.pinNode.get(`${device.id}:${pin}`);
+      return net === undefined ? 0 : engine.voltageOfNet(net);
+    };
+
+    // The oscillator has to be asleep to change the prescaler, and awake
+    // before the channels do anything.
+    write(0x00, [0x10 | 0x20]);
+    write(0xfe, [PCA9685_PRESCALE_50_HZ]);
+    write(0x00, [0x20]);
+    // Channel 0: high for the first quarter of the frame.
+    write(0x06, [0x00, 0x00, 0x00, 0x04]);
+    // Channel 1: held on, which is not a switching output. Full on is the
+    // control bit in ON_H, not a 4096 count in OFF_H.
+    write(0x0a, [0x00, 0x10, 0x00, 0x00]);
+
+    const model = engine.i2cDevice(device.id) as Pca9685;
+    expect(model, 'the bench built the driver').toBeInstanceOf(Pca9685);
+    expect(model.duty(0)).toBeCloseTo(0.25, 5);
+    expect(model.duty(1)).toBe(1);
+    expect(engine.needsFineSteps, 'the waveform needs the fine grid').toBe(true);
+    expect(engine.hasDynamics(), 'the waveform can change between solves').toBe(true);
+
+    engine.step(0.001);
+    expect(volts('PWM0'), 'the first quarter is high').toBeGreaterThan(1);
+    engine.step(0.006);
+    expect(volts('PWM0'), 'the rest of the frame is low').toBeLessThan(0.5);
+    expect(volts('PWM1'), 'a full-on channel stays high').toBeGreaterThan(1);
   });
 });
 

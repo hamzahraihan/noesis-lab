@@ -146,6 +146,12 @@ export type ComponentSpec =
    */
   | { readonly kind: 'mcp23017' }
   /*
+   * A PWM driver: sixteen channels on two wires, each with its own ON and
+   * OFF count, so a sketch can dim a light or place a servo pulse without
+   * spending a board pin on it.
+   */
+  | { readonly kind: 'pca9685' }
+  /*
    * A thermocouple amplifier: the chip reads a probe and hands the reading
    * out over the SPI bus, so this is a sensor that answers rather than one
    * the sketch polls.

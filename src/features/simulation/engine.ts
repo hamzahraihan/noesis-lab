@@ -41,6 +41,9 @@ import {
   Mcp23017,
   MCP23017_OUTPUT_OHMS,
   MCP23017_PORT_PINS,
+  Pca9685,
+  PCA9685_CHANNELS,
+  PCA9685_OUTPUT_OHMS,
   Pcf8574,
   PCF8574_OUTPUT_OHMS,
   PCF8574_PORTS,
@@ -1271,7 +1274,7 @@ export class Engine {
     for (const pin of this.mcu.pins()) {
       if (this.mcu.configurationOf(pin.id).pwm) return true;
     }
-    return false;
+    return this.partPwmActive();
   }
 
   /**
@@ -1290,7 +1293,16 @@ export class Engine {
     for (const pin of this.mcu.pins()) {
       if (this.mcu.configurationOf(pin.id).pwm) return true;
     }
+    if (this.partPwmActive()) return true;
     return this.currentNetlist.elements.some((element) => element.kind === 'capacitor');
+  }
+
+  /** True while a part, rather than a board pin, owns a switching output. */
+  private partPwmActive(): boolean {
+    for (const device of this.devices.values()) {
+      if (device instanceof Pca9685 && device.isPwmActive) return true;
+    }
+    return false;
   }
 
   /**
@@ -1967,6 +1979,33 @@ export class Engine {
       }
     }
     let internalNet = netlist.nodeCount;
+    /*
+     * A PWM driver switches its own outputs. Each channel is stamped as the
+     * resistor it is at this instant in the frame: to the supply while the
+     * counter is between its ON and OFF counts, and to ground otherwise. The
+     * waveform is what the solver sees, not an average, so a light on the
+     * channel brightens only while the channel is high.
+     */
+    for (const [partId, device] of this.devices) {
+      if (!(device instanceof Pca9685)) continue;
+      const supply = netlist.pinNode.get(`${partId}:VCC`);
+      if (supply === undefined) continue;
+      for (let channel = 0; channel < PCA9685_CHANNELS; channel++) {
+        const output = netlist.pinNode.get(`${partId}:PWM${channel}`);
+        // An unwired channel is not a source into the reference node. The
+        // netlist gives every loose pin the ground node, so stamping it would
+        // turn a sketch that writes all sixteen channels into a phantom short
+        // from the supply to ground.
+        if (output === undefined || output === GROUND) continue;
+        elements.push({
+          kind: 'resistor',
+          a: output,
+          b: device.level(channel, timeMs) ? supply : GROUND,
+          ohms: PCA9685_OUTPUT_OHMS,
+          label: `PWM${channel}`,
+        });
+      }
+    }
     /*
      * A converter makes a voltage rather than taking one, so its output is
      * a source: the chip's amplifier holds the level its code asks for,

@@ -74,6 +74,7 @@ import { tm1637Definition } from './tm1637';
 import { a4988Definition } from './a4988';
 import { pcf8574Definition } from './devices/pcf8574';
 import { mcp23017Definition } from './devices/mcp23017';
+import { pca9685Definition } from './devices/pca9685';
 import { max6675Definition } from './devices/max6675';
 import { mcp4725Definition } from './devices/mcp4725';
 import { powerSupplyDefinition } from './power-supply';
@@ -338,6 +339,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'output',
     note: 'Sixteen pins in two wires, with a direction register for each port. A port powers up as an input, so a sketch clears its direction bits before the latch can drive anything.',
     make: mcp23017Definition,
+  },
+  {
+    id: 'pca9685',
+    name: 'PWM driver (PCA9685)',
+    group: 'output',
+    note: 'Sixteen PWM channels on two wires. A sketch writes each channel’s ON and OFF counts, and the chip repeats the frame: a light can be dimmed or a servo pulse placed without spending a board pin.',
+    make: pca9685Definition,
   },
   {
     id: 'a4988',

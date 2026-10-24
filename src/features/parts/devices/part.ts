@@ -18,6 +18,7 @@ import { Ina219 } from './ina219';
 import { Mpu6050 } from './mpu6050';
 import { Pcf8574 } from './pcf8574';
 import { Mcp23017 } from './mcp23017';
+import { Pca9685 } from './pca9685';
 import { Mcp4725 } from './mcp4725';
 import { Eeprom24lc256 } from './eeprom24lc256';
 import { ScriptedI2cDevice } from './scripted';
@@ -70,6 +71,10 @@ export function createI2cDevice(
       // Two ports behind direction registers: the sketch says which pins
       // drive before the latch has any effect on them.
       return new Mcp23017();
+    case 'pca9685':
+      // Sixteen comparators on one free-running counter: the sketch writes
+      // where each channel turns on and off, and the chip repeats it.
+      return new Pca9685();
     case 'i2c-sensor':
       if (component.device === 'ds1307') return new Ds1307();
       if (component.device === 'ds3231') return new Ds3231();

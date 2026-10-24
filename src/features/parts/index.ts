@@ -13,6 +13,7 @@ export * from './devices/ds3231';
 export * from './devices/hx711';
 export * from './devices/pcf8574';
 export * from './devices/mcp23017';
+export * from './devices/pca9685';
 export * from './devices/max6675';
 export * from './devices/mcp4725';
 export * from './power-supply';
