@@ -2143,6 +2143,97 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Sixteen levels — a PWM frame, one light per step
+ * ------------------------------------------------------------------ */
+
+const PCA9685_DIMMER: GalleryProject = {
+  id: 'pca9685',
+  title: 'Sixteen-Level Dimmer',
+  blurb:
+    'A PCA9685 turns one I²C pair into sixteen PWM channels. Each channel compares the chip’s free-running counter against its own ON and OFF counts, so the sketch sets a duty rather than a pin level; the lights step from one sixteenth to full.',
+  parts: [
+    { name: 'PWM driver (PCA9685)', qty: 1 },
+    { name: 'Red LED', qty: 16 },
+    { name: '220 Resistor', qty: 16 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * One chip, sixteen lights, sixteen duties. The chip powers up asleep, and
+ * PRESCALE is writable only while it sleeps: the sketch writes the prescaler
+ * for a 50 Hz frame, wakes the oscillator, then gives channel n a duty of
+ * (n + 1) / 16. The last channel uses the full-on bit in ON_H rather than a
+ * width, because a 4096-count high time does not fit in twelve bits.
+ */
+const byte DRIVER = 0x40;
+const byte MODE1 = 0x00;
+const byte MODE2 = 0x01;
+const byte LED0_ON_L = 0x06;
+const byte PRESCALE = 0xFE;
+
+const byte SLEEP = 0x10;
+const byte AI = 0x20;
+const byte FULL = 0x10;
+
+void writeRegister(byte address, byte value) {
+  Wire.beginTransmission(DRIVER);
+  Wire.write(address);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+void setPwm(byte channel, unsigned int on, unsigned int off) {
+  Wire.beginTransmission(DRIVER);
+  Wire.write(LED0_ON_L + channel * 4);
+  Wire.write(on & 0xFF);            // ON_L
+  Wire.write(on >= 4096 ? FULL : (on >> 8) & 0x0F);
+  Wire.write(off & 0xFF);           // OFF_L
+  Wire.write(off >= 4096 ? FULL : (off >> 8) & 0x0F);
+  Wire.endTransmission();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  writeRegister(MODE2, 0x04);       // totem-pole outputs
+  writeRegister(MODE1, SLEEP | AI); // stop the oscillator, enable auto-increment
+  writeRegister(PRESCALE, 121);     // 25 MHz / (4096 * 122) is about 50 Hz
+  writeRegister(MODE1, AI);         // wake it up
+
+  for (byte channel = 0; channel < 15; channel++) {
+    setPwm(channel, 0, (channel + 1) * 256);
+  }
+  setPwm(15, 4096, 0);              // the last light is full on, not a width
+  Serial.println("sixteen levels");
+}
+
+void loop() {
+  Serial.print("levels");
+  for (byte channel = 0; channel < 16; channel++) {
+    Serial.print(" ");
+    Serial.print(channel + 1);
+  }
+  Serial.println();
+  delay(1000);
+}
+`,
+      circuit: CIRCUITS.pca9685,
+    },
+  ],
+  working: [
+    'The sixteen lights step from one sixteenth of the frame to full on.',
+    'The serial log lists the sixteen duties, one sixteenth through full.',
+    'The light that is fully on never switches; the rest run at 50 frames a second.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Precision clock — the time, and whether it can be trusted
  * ------------------------------------------------------------------ */
 
@@ -3292,6 +3383,7 @@ export const GALLERY: readonly GalleryProject[] = [
   STEPPER,
   EXPANDER,
   MCP23017_EXPANDER,
+  PCA9685_DIMMER,
   DS3231_CLOCK,
   THERMOCOUPLE,
   CONVERTER,

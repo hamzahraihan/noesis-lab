@@ -45,6 +45,7 @@ import pcf8574 from './pcf8574.json';
 import max6675 from './max6675.json';
 import mcp23017 from './mcp23017.json';
 import mcp4725 from './mcp4725.json';
+import pca9685 from './pca9685.json';
 import eeprom24lc256 from './eeprom24lc256.json';
 import weather from './weather.json';
 
@@ -80,6 +81,7 @@ export type CircuitId =
   | 'max6675'
   | 'mcp23017'
   | 'mcp4725'
+  | 'pca9685'
   | 'eeprom24lc256'
   | 'weather';
 
@@ -114,6 +116,7 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   max6675: parseCircuit(max6675, 'max6675'),
   mcp23017: parseCircuit(mcp23017, 'mcp23017'),
   mcp4725: parseCircuit(mcp4725, 'mcp4725'),
+  pca9685: parseCircuit(pca9685, 'pca9685'),
   eeprom24lc256: parseCircuit(eeprom24lc256, 'eeprom24lc256'),
   weather: parseCircuit(weather, 'weather'),
 };

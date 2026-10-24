@@ -1016,6 +1016,41 @@ void loop() {
     }
   }, 60_000);
 
+  it('dims sixteen lights in sixteenths of a PWM frame', () => {
+    const build = galleryById('pca9685')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const leds = simulation.bench.parts.filter((part) => part.definition.id === 'led-red');
+    expect(leds.length).toBe(16);
+    for (let frame = 0; frame < 20; frame++) simulation.tick(0.05);
+    expect(simulation.serialLines().join('')).toContain('sixteen levels');
+
+    // A whole 50 Hz frame is about 20 ms. Sampling it at 0.25 ms gives each
+    // sixteenth five high samples, and the full-on channel every sample.
+    const samples = 80;
+    const highs = new Array<number>(16).fill(0);
+    for (let sample = 0; sample < samples; sample++) {
+      simulation.tick(0.00025);
+      for (const [channel, led] of leds.entries()) {
+        const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:anode`);
+        const volts = net === undefined ? 0 : simulation.engine.voltageOfNet(net);
+        if (volts > 1) highs[channel] += 1;
+      }
+    }
+
+    for (let channel = 0; channel < 16; channel++) {
+      const expected = ((channel + 1) / 16) * samples;
+      expect(
+        Math.abs(highs[channel]! - expected),
+        `light ${channel} was high for ${highs[channel]} of ${samples} samples`,
+      ).toBeLessThanOrEqual(2);
+    }
+  }, 60_000);
+
   it('sets a clock that lost power, then keeps time', () => {
     const build = galleryById('ds3231')!.builds[0]!;
     const simulation = benchFor(build);
