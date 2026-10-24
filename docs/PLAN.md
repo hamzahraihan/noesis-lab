@@ -459,14 +459,30 @@ solve rather than frozen into the netlist. A sketch needs no new firmware
 API for it at all: the step line is an ordinary pin, and the driver is what
 turns a pulse into a phase.
 
-**The microstep modes are not modelled, and the motor is the reason.** A
-microstep drives one winding at a *reduced current* rather than reversing
-it, while the bench's motor follows the polarity across a winding -- so a
-fine mode would move the motor by whole steps or not at all. The current
-regulation that makes a microstep real is a chopper, and the bench's solver
-is linear. The microstep-select pins are on the part because the module has
-them, and the model reads them; full step, the mode the bench models, is the
-three of them low.
+**Microstepping is the same translator at a finer resolution.** The MS pins
+select full, 1/2, 1/4, 1/8 or 1/16 step. The datasheet defines five
+combinations; the undefined ones fall back to full step rather than guessing
+at a mode the chip does not promise. The mode is sampled on the STEP rising
+edge, and the translator keeps a fine position in sixteenths, so a 1/16 pulse
+is 5.625 electrical degrees. At home the two winding currents are the
+full-step anchor, and sixteen fine pulses walk the vector through the next
+full-step state.
+
+**The chopper is modelled by its average.** A fine mode does not switch an
+output to a rail for the whole solve; it drives a bridge at a duty. The bench
+stamps each output as the Thevenin divider the bridge presents over one
+period: a resistor of `R / duty` to VMOT and `R / (1 - duty)` to ground,
+where `R` is the 0.32 ohm output stage. At duty 0 or 1 that reduces exactly
+to the full-step stamp. The high-frequency ripple, the decay modes and the
+VREF current limit are outside the linear solver; the average is the model.
+
+**The motor follows the vector.** A direct-wired stepper still reads winding
+polarity edges. A motor matched to an A4988's outputs by net reads the signed
+voltage across each winding, takes `atan2` of the pair, and advances the
+shaft by the shortest angle over 90 electrical degrees. That is what lets the
+shaft stop between full steps instead of rounding to the next polarity. The
+gallery's `microstep` project wires MS1, MS2 and MS3 high and sends sixteen
+pulses forward and back, so the rotor turns one full step and returns.
 
 **Four firmware APIs, and what each one was missing.** The bench had no
 device drivers at all: the starter sketch drives the OLED by writing SSD1306

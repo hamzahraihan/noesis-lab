@@ -351,7 +351,7 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     id: 'a4988',
     name: 'Stepper driver (A4988)',
     group: 'output',
-    note: 'A stepper motor driver with a translator behind it: a pulse on STEP moves the motor one step and DIR says which way, so the sketch never writes a phase table. The bench models the full-step excitation; the microstep modes drive one winding at a reduced current, which the bench\u2019s motor does not follow.',
+    note: 'A stepper motor driver with a translator behind it: a pulse on STEP moves the motor one step and DIR says which way, so the sketch never writes a phase table. The five microstep modes (full, 1/2, 1/4, 1/8 and 1/16) are selected by MS1, MS2 and MS3 and sampled on the STEP edge. The bench stamps each bridge as its average output, so a fine step is a voltage between the rails, and the motor follows the phase vector between full-step positions.',
     make: a4988Definition,
   },
   {
