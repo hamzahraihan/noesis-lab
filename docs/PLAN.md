@@ -377,6 +377,20 @@ engine stamps only the pins the sketch made outputs; an input is left alone,
 because there is no wiring to report and a driven input would be a lie. Reads
 of a port answer the latch, and the interrupt registers are stored but inert.
 
+**Sixteen of one thing, and a frame to put them in.** The PCA9685 is the
+expander's opposite: sixteen outputs, each one switching rather than latching.
+A channel compares the chip's free-running counter against its own ON and OFF
+counts, so the sketch sets a duty and, separately, where in the frame that duty
+sits. The count is twelve bits and the clock behind it is 25 MHz through a
+prescaler, which is why 50 Hz is a register value rather than a delay: sleep
+the oscillator, write `PRESCALE`, wake it, and the chip repeats the frame on
+its own. The engine stamps every channel as a switched resistor to the supply
+or to ground at the instant the solver asks for, not as an averaged voltage, so
+a light on the channel brightens and dims with the waveform. That waveform is also why a
+`delay()` can no longer skip the part: the outputs move while the sketch waits.
+Servo pulse decoding is deliberately left to the library and the model: the
+bench shows the pulse the chip makes, and what reads it is a separate part.
+
 **A voltage the bench makes.** The bench could measure an analog level --
 the ADS1115 counts one, the barometer reports one -- and it had nothing that
 could *make* one. The MCP4725 is that: the sketch writes twelve bits over the

@@ -30,14 +30,14 @@ why:
 | ESP32 chip | ESP32 | An emulated Xtensa chip running its own MicroPython, with GPIO, I²C and SPI seams into the bench |
 | Interpreter | all of them | A C++/Python front end over a generator-based VM — the fallback for boards with no machine-code core |
 
-**Seventy-four parts** over forty-nine component kinds, drawn at 1:1 on
+**Seventy-five parts** over fifty component kinds, drawn at 1:1 on
 2.54 mm pitch: LEDs and matrices, 7-segment and LCD and OLED and TFT panels,
 servos, steppers, a stepper driver, relays, a keypad, a rotary encoder,
 potentiometers, buttons, sensors over I²C and one-wire, two I/O expanders,
-a precision clock with a thermometer, a card reader and a thermocouple over
-SPI, a four-digit display behind two wires, a converter that makes a voltage,
-a supply with a dial, a memory chip, and a breadboard whose holes are the
-ones the wires actually land in.
+a sixteen-channel PWM driver, a precision clock with a thermometer, a card
+reader and a thermocouple over SPI, a four-digit display behind two wires, a
+converter that makes a voltage, a supply with a dial, a memory chip, and a
+breadboard whose holes are the ones the wires actually land in.
 
 **Instruments** — an oscilloscope, an 8-channel logic analyser, a multimeter, a
 bus monitor, a serial monitor and a serial plotter. The analyser draws the
