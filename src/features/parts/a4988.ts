@@ -7,19 +7,16 @@
  * learner meets -- a motor driven from two pins instead of four, and a
  * sketch that never writes a phase table.
  *
- * The excitation modelled here is the chip's full-step pattern: four
- * states, each with one winding driven forward and the other driven back,
- * and the states walk the Gray cycle the bench's motor already follows.
+ * The full-step excitation is four states, each with one winding driven
+ * forward and the other driven back, and the states walk the Gray cycle the
+ * bench's motor already follows.
  *
- * The microstep modes are not modelled, and the reason is the motor rather
- * than the chip: a microstep drives one winding at a *reduced current*
- * instead of reversing it, while the bench's motor follows the polarity
- * across a winding. A fine mode would therefore move the motor by whole
- * steps or not at all, and the current regulation that makes a microstep
- * real is a chopper the bench's linear solver cannot carry. The
- * microstep-select pins are on the part because the module has them, and
- * the model reads them; a sketch that wants the full step the bench
- * models wires them low, which is the chip's full-step setting.
+ * The fine modes are modelled as average output levels rather than a
+ * switch-level chopper. Each full bridge's high-side duty follows the
+ * sine/cosine current the datasheet's table asks for, so the two winding
+ * voltages carry a phase vector the motor can follow between the full-step
+ * positions. The high-frequency chopper, its decay modes and the VREF current
+ * limit are outside the linear solver; the average is the model.
  *
  * The enable, reset and sleep lines are all active low, and each of them
  * turns the outputs off: the chip's FETs go high-impedance rather than
@@ -36,6 +33,37 @@ import type { PartDefinition, PinSpec } from './catalog';
  * two ends of a winding is the supply less what the driver drops.
  */
 export const A4988_OUTPUT_OHMS = 0.32;
+
+/** The resolutions the MS pins select, in microsteps per full step. */
+export type MicrostepMode = 1 | 2 | 4 | 8 | 16;
+
+/** Every resolution the chip offers, from the coarsest to the finest. */
+export const MICROSTEP_MODES: readonly MicrostepMode[] = [1, 2, 4, 8, 16];
+
+/**
+ * The resolution the MS pins ask for.
+ *
+ * The datasheet defines five combinations. The others are not defined, so
+ * they fall back to full step rather than guessing at a mode the chip does
+ * not promise.
+ */
+export function microstepsFor(ms1: boolean, ms2: boolean, ms3: boolean): MicrostepMode {
+  if (ms3) return ms1 && ms2 ? 16 : 1;
+  if (ms2) return ms1 ? 8 : 4;
+  return ms1 ? 2 : 1;
+}
+
+/** One electrical cycle is four full steps; one full step is 90 degrees. */
+const ELECTRICAL_DEGREES_PER_STEP = 90;
+
+/** The home state sits half a step before the first full-step state. */
+const HOME_ANGLE_DEGREES = -45;
+
+/** The four outputs, in the order the module's motor header carries them. */
+export type A4988OutputPin = '1A' | '1B' | '2A' | '2B';
+
+/** The four outputs in header order, for callers that stamp all of them. */
+export const A4988_OUTPUT_PINS: readonly A4988OutputPin[] = ['1A', '1B', '2A', '2B'];
 
 /** The four full-step states, as the levels of 1A, 1B, 2A and 2B. */
 const FULL_STEP: ReadonlyArray<readonly [boolean, boolean, boolean, boolean]> = [
@@ -61,6 +89,13 @@ export interface A4988Inputs {
   readonly reset: boolean;
   /** The sleep line, active low: low puts the chip to sleep. */
   readonly sleep: boolean;
+  /**
+   * The microstep-select lines. Absent means the module's pull-downs hold
+   * them low, which is the chip's full-step setting.
+   */
+  readonly ms1?: boolean;
+  readonly ms2?: boolean;
+  readonly ms3?: boolean;
 }
 
 /**
@@ -71,8 +106,15 @@ export interface A4988Inputs {
  * edge on STEP that the translator counts.
  */
 export class A4988 {
-  /** Where in the full-step cycle the translator stands. */
-  private phase = 0;
+  /**
+   * Where in the electrical cycle the translator stands, in 1/16-step
+   * units. One electrical cycle is 64 of them.
+   */
+  private finePosition = 0;
+  /** The resolution the last STEP edge selected. */
+  private activeMicrosteps: MicrostepMode = 1;
+  /** The resolution the MS pins are asking for now. */
+  private pendingMicrosteps: MicrostepMode = 1;
   /** The step line's level last seen, so a rising edge can be told. */
   private previousStep = false;
   private enabled = true;
@@ -84,45 +126,86 @@ export class A4988 {
    *
    * The translator moves on a rising edge of STEP and nowhere else, so the
    * level is kept and compared: a line that stays high is one step, not a
-   * stream of them.
+   * stream of them. The MS pins are sampled every solve but only take effect
+   * on the next edge, which is the datasheet's rule.
    */
   setInputs(inputs: A4988Inputs): void {
     const rising = inputs.step && !this.previousStep;
     this.previousStep = inputs.step;
+    this.pendingMicrosteps = microstepsFor(
+      inputs.ms1 ?? false,
+      inputs.ms2 ?? false,
+      inputs.ms3 ?? false,
+    );
     // The enable, reset and sleep lines are all active low.
     this.enabled = !inputs.enable;
     this.asleep = !inputs.sleep;
     this.inReset = !inputs.reset;
     if (this.asleep || this.inReset) {
-      // The chip parks at its home position with the outputs off.
-      this.phase = 0;
+      // The chip parks at its home position with the outputs off. The pins
+      // still say which resolution the parked translator should wake into.
+      this.finePosition = 0;
+      this.activeMicrosteps = this.pendingMicrosteps;
       return;
     }
     if (!this.enabled || !rising) return;
-    this.phase = (this.phase + (inputs.dir ? 1 : FULL_STEP.length - 1)) % FULL_STEP.length;
+    this.activeMicrosteps = this.pendingMicrosteps;
+    // Every mode divides 16, so a step is always a whole number of
+    // sixteenths and the fine position stays exact.
+    const stride = 16 / this.activeMicrosteps;
+    this.finePosition = (this.finePosition + (inputs.dir ? stride : -stride) + 64) % 64;
   }
 
-  /** The level an output is driving. */
-  output(pin: '1A' | '1B' | '2A' | '2B'): boolean {
-    if (!this.enabled || this.asleep || this.inReset) return false;
-    const state = FULL_STEP[this.phase] ?? FULL_STEP[0]!;
+  /**
+   * The high-side duty an output is driving, from 0 to 1.
+   *
+   * Full step is the existing binary waveform. A fine mode is the chip's
+   * sine table turned into a pair of bridge duties: the positive end of a
+   * winding carries `(1 + current) / 2`, the negative end `(1 - current) / 2`.
+   */
+  duty(pin: A4988OutputPin): number {
+    if (!this.enabled || this.asleep || this.inReset) return 0;
+    if (this.activeMicrosteps === 1) {
+      const state = FULL_STEP[this.position] ?? FULL_STEP[0]!;
+      const index = A4988_OUTPUT_PINS.indexOf(pin);
+      return state[index] ? 1 : 0;
+    }
+    const degrees = HOME_ANGLE_DEGREES + this.finePosition * (ELECTRICAL_DEGREES_PER_STEP / 16);
+    const radians = (degrees * Math.PI) / 180;
+    const a = Math.cos(radians);
+    const b = Math.sin(radians);
     switch (pin) {
       case '1A':
-        return state[0];
+        return (1 + a) / 2;
       case '1B':
-        return state[1];
+        return (1 - a) / 2;
       case '2A':
-        return state[2];
+        return (1 + b) / 2;
       case '2B':
-        return state[3];
+        return (1 - b) / 2;
       default:
-        return false;
+        return 0;
     }
+  }
+
+  /** The level an output is driving, as a binary view of its duty. */
+  output(pin: A4988OutputPin): boolean {
+    return this.duty(pin) > 0.5;
   }
 
   /** Where in the full-step cycle the translator stands, for a renderer. */
   get position(): number {
-    return this.phase;
+    return Math.floor(this.finePosition / 16) % 4;
+  }
+
+  /** The resolution the last STEP edge selected. */
+  get microsteps(): MicrostepMode {
+    return this.activeMicrosteps;
+  }
+
+  /** Where in the 1/16-step cycle the translator stands, for tests. */
+  get microstepPosition(): number {
+    return this.finePosition;
   }
 }
 
