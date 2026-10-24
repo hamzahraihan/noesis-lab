@@ -2011,6 +2011,98 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Microstepping — sixteen stops between two full steps
+ * ------------------------------------------------------------------ */
+
+const MICROSTEP: GalleryProject = {
+  id: 'microstep',
+  title: 'Microstepping',
+  blurb:
+    'The same A4988 and motor, with the microstep-select pins high. Sixteen pulses make one full step, and the coil currents follow the chip’s sine table instead of a binary phase.',
+  parts: [
+    { name: 'Stepper driver (A4988)', qty: 1 },
+    { name: 'Stepper Motor', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+
+/*
+ * The MS pins pick 1/16 step. The translator still does the phase sequence;
+ * the difference is that one pulse moves the shaft a sixteenth of a step,
+ * and the coil currents follow the chip's sine table between the full-step
+ * positions.
+ */
+const byte STEP_PIN = 2;
+const byte DIR_PIN = 3;
+const byte ENABLE_PIN = 4;
+const byte RESET_PIN = 5;
+const byte SLEEP_PIN = 6;
+const byte MS1_PIN = 7;
+const byte MS2_PIN = 8;
+const byte MS3_PIN = 9;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(ENABLE_PIN, OUTPUT);
+  pinMode(RESET_PIN, OUTPUT);
+  pinMode(SLEEP_PIN, OUTPUT);
+  pinMode(MS1_PIN, OUTPUT);
+  pinMode(MS2_PIN, OUTPUT);
+  pinMode(MS3_PIN, OUTPUT);
+
+  digitalWrite(ENABLE_PIN, LOW);
+  digitalWrite(RESET_PIN, HIGH);
+  digitalWrite(SLEEP_PIN, HIGH);
+  digitalWrite(MS1_PIN, HIGH);
+  digitalWrite(MS2_PIN, HIGH);
+  digitalWrite(MS3_PIN, HIGH);
+
+  Serial.println("microstep ready");
+  // Let the driver settle at home before the first pulse, so the bench sees
+  // the reference state the pulses move away from.
+  delay(100);
+}
+
+void loop() {
+  // Sixteen sixteenths are one full step, 7.5 degrees.
+  digitalWrite(DIR_PIN, HIGH);
+  for (byte i = 0; i < 16; i++) {
+    digitalWrite(STEP_PIN, HIGH);
+    delay(2);
+    digitalWrite(STEP_PIN, LOW);
+    delay(60);
+  }
+  Serial.println("microstep 16");
+
+  // And sixteen back return the shaft to where it started.
+  digitalWrite(DIR_PIN, LOW);
+  for (byte i = 0; i < 16; i++) {
+    digitalWrite(STEP_PIN, HIGH);
+    delay(2);
+    digitalWrite(STEP_PIN, LOW);
+    delay(60);
+  }
+  Serial.println("microstep 0");
+
+  delay(500);
+}
+`,
+      circuit: CIRCUITS.a4988,
+    },
+  ],
+  working: [
+    'Sixteen pulses turn the shaft one full step, 7.5 degrees.',
+    'Each pulse is 0.46875 degrees, a sixteenth of a step.',
+    'The coil drive follows a sine table, so a winding spends part of the cycle between the rails instead of only at the supply.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Expander — eight pins in two wires
  * ------------------------------------------------------------------ */
 
@@ -3381,6 +3473,7 @@ export const GALLERY: readonly GalleryProject[] = [
   RFID,
   FOUR_DIGITS,
   STEPPER,
+  MICROSTEP,
   EXPANDER,
   MCP23017_EXPANDER,
   PCA9685_DIMMER,

@@ -20,8 +20,11 @@ import { DIGIT_KNOB } from '@/features/parts';
 import { SD_CARD_BYTES } from '@/features/parts';
 import { clampChannel, pixelCount, type PixelColor } from '@/features/parts';
 import {
+  ELECTRICAL_DEGREES_PER_STEP,
   STEP_DEGREES,
+  shortestAngleDelta,
   stepTransition,
+  windingAngle,
   windingPolarity,
   type WindingPolarity,
 } from '@/features/parts';
@@ -36,7 +39,7 @@ import { Ds3231, DS3231_TEMPERATURE_KNOB } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
-import { A4988, A4988_OUTPUT_OHMS } from '@/features/parts';
+import { A4988, A4988_OUTPUT_OHMS, A4988_OUTPUT_PINS } from '@/features/parts';
 import {
   Mcp23017,
   MCP23017_OUTPUT_OHMS,
@@ -81,6 +84,21 @@ export interface EngineOptions {
   bench: Bench;
   mcu: McuRuntime;
   dynamicState?: DynamicState;
+}
+
+/**
+ * One stepper axis's tracking state.
+ *
+ * `mode` is how the shaft reads its windings: a direct-wired motor follows
+ * polarity edges, a motor behind a driver follows the phase vector. The
+ * previous vector is kept as raw volts so the next `atan2` is exact across
+ * the wrap.
+ */
+interface StepperAxisState {
+  mode: 'polarity' | 'vector';
+  prevA: number;
+  prevB: number;
+  angle: number;
 }
 
 /**
@@ -313,6 +331,7 @@ export class Engine {
     this.gpioEdges.clear();
     this.servoPendingRise.clear();
     this.supplyNet = GROUND;
+    this.driverDrivenAxes.clear();
 
     if (this.mcuPart) {
       const railLabel = SUPPLY_RAIL_LABELS[this.mcu.board.id];
@@ -324,6 +343,7 @@ export class Engine {
       }
     }
     this.rebuildBus();
+    this.mapStepperDrivers();
   }
 
   /** Display parts on the bench, keyed by part id, for the renderer to read. */
@@ -428,11 +448,17 @@ export class Engine {
    */
   private readonly sdFiles = new Map<string, Map<string, string>>();
 
-  /** Stepper shaft state: previous winding polarities plus angle, per axis. */
-  private readonly stepperState = new Map<
-    string,
-    Array<{ prevA: WindingPolarity; prevB: WindingPolarity; angle: number }>
-  >();
+  /** Stepper shaft state: previous winding readings plus angle, per axis. */
+  private readonly stepperState = new Map<string, StepperAxisState[]>();
+
+  /**
+   * Axes whose windings are driven by an A4988, keyed `partId:axisIndex`.
+   *
+   * A direct-wired motor is read by polarity edges; a driver-driven one is
+   * read as a phase vector, because the driver's fine modes stop between the
+   * binary states.
+   */
+  private readonly driverDrivenAxes = new Set<string>();
 
   /**
    * Addressable LED buffers, keyed by part id.
@@ -597,9 +623,7 @@ export class Engine {
         // The thermometer is on the die, and the die is the one place on the
         // bench a knob can reach. The chip reads it when a sketch asks, so a
         // turn between two reads is seen by the next one.
-        device.setTemperatureSource(() =>
-          this.dynamicState.knob(part.id, DS3231_TEMPERATURE_KNOB),
-        );
+        device.setTemperatureSource(() => this.dynamicState.knob(part.id, DS3231_TEMPERATURE_KNOB));
       }
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       if (part.definition.component.kind === 'shift-register') {
@@ -624,9 +648,7 @@ export class Engine {
          * on a tick: a card slid into the field between two requests is seen
          * by the second request, the way the real one is.
          */
-        reader.setCardPresent(
-          () => this.dynamicState.knob(part.id, MFRC522_CARD_KNOB) > 0.5,
-        );
+        reader.setCardPresent(() => this.dynamicState.knob(part.id, MFRC522_CARD_KNOB) > 0.5);
         this.cardReaders.set(part.id, reader);
       }
       const lcd = previousLcds.get(part.id) ?? createLcd(part.definition);
@@ -656,6 +678,76 @@ export class Engine {
 
     for (const partId of this.devices.keys()) {
       this.devices.get(partId)!.onBus = this.isOnI2cBus(partId);
+    }
+  }
+
+  /**
+   * Works out which motor axes an A4988 is driving.
+   *
+   * The driver and the motor meet only through nets, so the match is net
+   * equality: 1A/1B across A+/A- and 2A/2B across B+/B-, in either order.
+   * An axis with no driven pair is left to the direct-wired polarity path.
+   */
+  private mapStepperDrivers(): void {
+    this.driverDrivenAxes.clear();
+    const netlist = this.netlist;
+    if (!netlist) return;
+    const netOf = (partId: string, pinId: string): number | undefined =>
+      netlist.pinNode.get(`${partId}:${pinId}`);
+    const pairMatches = (
+      driverFirst: number | undefined,
+      driverSecond: number | undefined,
+      motorPlus: number | undefined,
+      motorMinus: number | undefined,
+    ): boolean => {
+      if (
+        driverFirst === undefined ||
+        driverSecond === undefined ||
+        motorPlus === undefined ||
+        motorMinus === undefined
+      ) {
+        return false;
+      }
+      // An all-ground pair is wiring that carries nothing; it cannot identify
+      // a driven winding.
+      if (driverFirst === GROUND && driverSecond === GROUND) return false;
+      if (motorPlus === GROUND && motorMinus === GROUND) return false;
+      return (
+        (driverFirst === motorPlus && driverSecond === motorMinus) ||
+        (driverFirst === motorMinus && driverSecond === motorPlus)
+      );
+    };
+    for (const driverId of this.stepperDrivers.keys()) {
+      const oneA = netOf(driverId, '1A');
+      const oneB = netOf(driverId, '1B');
+      const twoA = netOf(driverId, '2A');
+      const twoB = netOf(driverId, '2B');
+      for (const part of this.bench.parts) {
+        const kind = part.definition.component.kind;
+        const axes =
+          kind === 'stepper'
+            ? [['A', 'B']]
+            : kind === 'biaxial-stepper'
+              ? [
+                  ['A1', 'B1'],
+                  ['A2', 'B2'],
+                ]
+              : null;
+        if (!axes) continue;
+        axes.forEach(([a, b], index) => {
+          const aPlus = netOf(part.id, `${a}+`);
+          const aMinus = netOf(part.id, `${a}-`);
+          const bPlus = netOf(part.id, `${b}+`);
+          const bMinus = netOf(part.id, `${b}-`);
+          const straight =
+            pairMatches(oneA, oneB, aPlus, aMinus) && pairMatches(twoA, twoB, bPlus, bMinus);
+          const crossed =
+            pairMatches(oneA, oneB, bPlus, bMinus) && pairMatches(twoA, twoB, aPlus, aMinus);
+          if (straight || crossed) {
+            this.driverDrivenAxes.add(`${part.id}:${index}`);
+          }
+        });
+      }
     }
   }
 
@@ -1621,33 +1713,69 @@ export class Engine {
       if (!axes) continue;
       let state = this.stepperState.get(part.id);
       if (!state || state.length !== axes.length) {
-        state = axes.map(
-          (_, index): { prevA: WindingPolarity; prevB: WindingPolarity; angle: number } => ({
-            prevA: 0,
-            prevB: 0,
-            angle: state?.[index]?.angle ?? 0,
-          }),
-        );
+        state = axes.map((_, index): StepperAxisState => ({
+          mode: 'polarity',
+          prevA: 0,
+          prevB: 0,
+          angle: state?.[index]?.angle ?? 0,
+        }));
         this.stepperState.set(part.id, state);
       }
       axes.forEach(([a, b], index) => {
-        const nextA = windingPolarity(level(part.id, `${a}+`), level(part.id, `${a}-`));
-        const nextB = windingPolarity(level(part.id, `${b}+`), level(part.id, `${b}-`));
         const axis = state[index];
-        // Before the first driven sighting there is no edge to count yet:
-        // arm the tracker and move on.
-        if (axis.prevA === 0 && axis.prevB === 0 && nextA === 0 && nextB === 0) return;
-        if (axis.prevA === 0 && axis.prevB === 0) {
+        const mode = this.driverDrivenAxes.has(`${part.id}:${index}`) ? 'vector' : 'polarity';
+        // A driver appearing or disappearing changes what the winding levels
+        // mean. Keep the shaft where it is, but throw away the old reference
+        // so the first sighting in the new mode only arms the tracker.
+        if (axis.mode !== mode) {
+          axis.mode = mode;
+          axis.prevA = 0;
+          axis.prevB = 0;
+        }
+        if (mode === 'polarity') {
+          const nextA = windingPolarity(level(part.id, `${a}+`), level(part.id, `${a}-`));
+          const nextB = windingPolarity(level(part.id, `${b}+`), level(part.id, `${b}-`));
+          // Before the first driven sighting there is no edge to count yet:
+          // arm the tracker and move on.
+          if (axis.prevA === 0 && axis.prevB === 0 && nextA === 0 && nextB === 0) return;
+          if (axis.prevA === 0 && axis.prevB === 0) {
+            axis.prevA = nextA;
+            axis.prevB = nextB;
+            return;
+          }
+          // The previous levels always advance, even across an undriven
+          // intermediate: a hop through zero breaks the edge it crossed, so
+          // the far side never counts as a continuation.
+          axis.angle +=
+            stepTransition(
+              [axis.prevA as WindingPolarity, axis.prevB as WindingPolarity],
+              [nextA, nextB],
+            ) * STEP_DEGREES;
           axis.prevA = nextA;
           axis.prevB = nextB;
           return;
         }
-        // The previous levels always advance, even across an undriven
-        // intermediate: a hop through zero breaks the edge it crossed, so
-        // the far side never counts as a continuation.
-        axis.angle += stepTransition([axis.prevA, axis.prevB], [nextA, nextB]) * STEP_DEGREES;
-        axis.prevA = nextA;
-        axis.prevB = nextB;
+        const acrossA = level(part.id, `${a}+`) - level(part.id, `${a}-`);
+        const acrossB = level(part.id, `${b}+`) - level(part.id, `${b}-`);
+        const nextAngle = windingAngle(acrossA, acrossB);
+        // A winding pair with no current has no angle to follow; drop the
+        // reference so the shaft holds rather than jumping on the next sight.
+        if (nextAngle === null) {
+          axis.prevA = 0;
+          axis.prevB = 0;
+          return;
+        }
+        // The first driven sighting is a reference, not a move.
+        if (axis.prevA === 0 && axis.prevB === 0) {
+          axis.prevA = acrossA;
+          axis.prevB = acrossB;
+          return;
+        }
+        const prevAngle = (Math.atan2(axis.prevB, axis.prevA) * 180) / Math.PI;
+        axis.angle +=
+          (shortestAngleDelta(prevAngle, nextAngle) / ELECTRICAL_DEGREES_PER_STEP) * STEP_DEGREES;
+        axis.prevA = acrossA;
+        axis.prevB = acrossB;
       });
     }
   }
@@ -1906,10 +2034,10 @@ export class Engine {
     /*
      * A stepper driver drives the motor's windings itself, from the step
      * pulse it was given, so what it drives them with is stamped here
-     * rather than frozen into the netlist like a passive part. The outputs
-     * are the chip's own states: one end of a winding at the supply and the
-     * other at ground, or both at ground when the chip has that winding
-     * turned off.
+     * rather than frozen into the netlist like a passive part. Full step is
+     * the chip's binary state: one end of a winding at the supply, the other
+     * at ground. A fine mode is the average of the chopper, stamped as the
+     * Thevenin divider the bridge presents over one period.
      */
     for (const [partId, driver] of this.stepperDrivers) {
       driver.setInputs({
@@ -1918,19 +2046,47 @@ export class Engine {
         enable: this.partPinLevel(partId, 'ENABLE', timeMs),
         reset: this.partPinLevel(partId, 'RESET', timeMs),
         sleep: this.partPinLevel(partId, 'SLEEP', timeMs),
+        ms1: this.partPinLevel(partId, 'MS1', timeMs),
+        ms2: this.partPinLevel(partId, 'MS2', timeMs),
+        ms3: this.partPinLevel(partId, 'MS3', timeMs),
       });
       const supply = netlist.pinNode.get(`${partId}:VMOT`);
       if (supply === undefined) continue;
-      for (const pin of ['1A', '1B', '2A', '2B'] as const) {
-        const output = netlist.pinNode.get(`${partId}:${pin}`);
-        if (output === undefined) continue;
+      const stampAverage = (output: number | undefined, duty: number, label: string): void => {
+        if (output === undefined || output === GROUND || supply === GROUND) return;
+        const ohms = A4988_OUTPUT_OHMS;
+        if (duty <= 0) {
+          elements.push({ kind: 'resistor', a: output, b: GROUND, ohms, label });
+          return;
+        }
+        if (duty >= 1) {
+          // A node tied to the supply already cannot be pulled above it.
+          if (output !== supply) {
+            elements.push({ kind: 'resistor', a: output, b: supply, ohms, label });
+          }
+          return;
+        }
+        // Top duty `duty` to the supply, the rest to ground: the pair is a
+        // Thevenin source at `duty * VMOT` behind the bridge's own ohms.
+        if (output !== supply) {
+          elements.push({
+            kind: 'resistor',
+            a: supply,
+            b: output,
+            ohms: ohms / duty,
+            label: `${label}+`,
+          });
+        }
         elements.push({
           kind: 'resistor',
           a: output,
-          b: driver.output(pin) ? supply : GROUND,
-          ohms: A4988_OUTPUT_OHMS,
-          label: pin,
+          b: GROUND,
+          ohms: ohms / (1 - duty),
+          label: `${label}-`,
         });
+      };
+      for (const pin of A4988_OUTPUT_PINS) {
+        stampAverage(netlist.pinNode.get(`${partId}:${pin}`), driver.duty(pin), pin);
       }
     }
     /*

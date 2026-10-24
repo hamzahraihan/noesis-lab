@@ -944,6 +944,49 @@ void loop() {
     expect(Math.abs(peak - volts), 'the windings see the supply').toBeLessThan(0.5);
   }, 60_000);
 
+  it('turns one full step in sixteen microsteps', () => {
+    const build = galleryById('microstep')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const motor = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'stepper',
+    )!;
+    const supply = simulation.bench.parts.find(
+      (part) => part.definition.component.kind === 'power-supply',
+    )!;
+    const voltsOn = (pin: string): number => {
+      const net = simulation.engine.currentNetlist.pinNode.get(`${motor.id}:${pin}`);
+      return net === undefined ? 0 : simulation.engine.voltageOfNet(net);
+    };
+    const volts = simulation.controls.knob(supply.id, SUPPLY_VOLTAGE_KNOB);
+
+    let peak = 0;
+    let fractional = false;
+    // The sketch logs after the forward sixteen and again after the return.
+    // Stop on the second log so the shaft is still at home; the loop's
+    // half-second pause keeps the next cycle out of the sample.
+    for (let frame = 0; frame < 200; frame++) {
+      simulation.tick(0.05);
+      peak = Math.max(peak, simulation.engine.stepperAngle(motor.id));
+      const across = Math.abs(voltsOn('A+') - voltsOn('A-'));
+      if (across > volts * 0.1 && across < volts * 0.9) fractional = true;
+      const seen = simulation.serialLines().join('');
+      if (seen.includes('microstep 16') && seen.includes('microstep 0')) break;
+    }
+
+    const log = simulation.serialLines().join('');
+    expect(log).toContain('microstep 16');
+    expect(log).toContain('microstep 0');
+    expect(peak, 'sixteen pulses are one full step').toBeGreaterThan(7.5 - 0.6);
+    expect(peak, 'sixteen pulses are one full step').toBeLessThan(7.5 + 0.6);
+    expect(simulation.engine.stepperAngle(motor.id), 'the shaft returned').toBeCloseTo(0, 1);
+    expect(fractional, 'the winding sees an average, not a rail').toBe(true);
+  }, 60_000);
+
   it('keeps the count in the memory', () => {
     const build = galleryById('eeprom24lc256')!.builds[0]!;
     const simulation = benchFor(build);
@@ -985,7 +1028,7 @@ void loop() {
       const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:A`);
       const volts = net === undefined ? 0 : simulation.engine.voltageOfNet(net);
       expect(volts > 1, `light ${bit} matches bit ${bit} of ${value}`).toBe(
-        (value >> bit & 1) === 1,
+        ((value >> bit) & 1) === 1,
       );
     }
   }, 60_000);
@@ -1011,7 +1054,7 @@ void loop() {
       const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:anode`);
       const volts = net === undefined ? 0 : simulation.engine.voltageOfNet(net);
       expect(volts > 1, `light ${bit} matches bit ${bit} of ${value}`).toBe(
-        (value >> bit & 1) === 1,
+        ((value >> bit) & 1) === 1,
       );
     }
   }, 60_000);
