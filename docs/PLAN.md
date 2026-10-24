@@ -356,6 +356,27 @@ chip, a weak pull-up that the chip can pull down; the bench gives them the
 same output impedance it gives the shift register's, and the *input*
 register, which reads the wiring rather than the chip, is not modelled.
 
+**The same clock, with a thermometer.** The DS3231 keeps the DS1307's seven
+BCD time registers, so a sketch that reads a clock a register at a time reads
+this one the same way. What sits above them is the part's own story: two
+alarms, a control and status register, an aging register, and a temperature
+sensor on the die at `0x11` and `0x12`, in signed quarter-degree counts. The
+oscillator-stop flag in the status register says the clock lost power, and a
+sketch that sets the time clears it -- writing the time is the act that makes
+the clock trustworthy. The interpreter's `RTC_DS3231` handle answers
+`temperature()` and `lostPower()` beside `now()` and `adjust()`, and the die
+temperature is a knob because a bench has no room to heat.
+
+**Sixteen pins, and a direction register in front of them.** The PCF8574
+turns one byte into eight pins; the MCP23017 turns two bytes into sixteen and
+adds the thing the older chip does not have: every pin can be an input or an
+output. The direction registers power up as all ones, so a fresh chip is
+sixteen inputs and a latch written before the direction is cleared moves
+nothing. That is the lesson the part carries, and the bench keeps it. The
+engine stamps only the pins the sketch made outputs; an input is left alone,
+because there is no wiring to report and a driven input would be a lie. Reads
+of a port answer the latch, and the interrupt registers are stored but inert.
+
 **A voltage the bench makes.** The bench could measure an analog level --
 the ADS1115 counts one, the barometer reports one -- and it had nothing that
 could *make* one. The MCP4725 is that: the sketch writes twelve bits over the
