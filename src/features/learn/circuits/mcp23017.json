@@ -1,0 +1,661 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "mcp23017",
+      "x": 300,
+      "y": 20,
+      "rotation": 0
+    },
+    {
+      "id": "l0",
+      "type": "led-red",
+      "x": 20,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r0",
+      "type": "resistor-220",
+      "x": 20,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l1",
+      "type": "led-red",
+      "x": 50,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r1",
+      "type": "resistor-220",
+      "x": 50,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l2",
+      "type": "led-red",
+      "x": 80,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r2",
+      "type": "resistor-220",
+      "x": 80,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l3",
+      "type": "led-red",
+      "x": 110,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r3",
+      "type": "resistor-220",
+      "x": 110,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l4",
+      "type": "led-red",
+      "x": 140,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r4",
+      "type": "resistor-220",
+      "x": 140,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l5",
+      "type": "led-red",
+      "x": 170,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r5",
+      "type": "resistor-220",
+      "x": 170,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l6",
+      "type": "led-red",
+      "x": 200,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r6",
+      "type": "resistor-220",
+      "x": 200,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l7",
+      "type": "led-red",
+      "x": 230,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "r7",
+      "type": "resistor-220",
+      "x": 230,
+      "y": 150,
+      "rotation": 0
+    },
+    {
+      "id": "l8",
+      "type": "led-red",
+      "x": 20,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r8",
+      "type": "resistor-220",
+      "x": 20,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l9",
+      "type": "led-red",
+      "x": 50,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r9",
+      "type": "resistor-220",
+      "x": 50,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l10",
+      "type": "led-red",
+      "x": 80,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r10",
+      "type": "resistor-220",
+      "x": 80,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l11",
+      "type": "led-red",
+      "x": 110,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r11",
+      "type": "resistor-220",
+      "x": 110,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l12",
+      "type": "led-red",
+      "x": 140,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r12",
+      "type": "resistor-220",
+      "x": 140,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l13",
+      "type": "led-red",
+      "x": 170,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r13",
+      "type": "resistor-220",
+      "x": 170,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l14",
+      "type": "led-red",
+      "x": 200,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r14",
+      "type": "resistor-220",
+      "x": 200,
+      "y": 270,
+      "rotation": 0
+    },
+    {
+      "id": "l15",
+      "type": "led-red",
+      "x": 230,
+      "y": 240,
+      "rotation": 0
+    },
+    {
+      "id": "r15",
+      "type": "resistor-220",
+      "x": 230,
+      "y": 270,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:5V",
+      "to": "p2:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:J1_GND",
+      "to": "p2:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:A4",
+      "to": "p2:SDA",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:A5",
+      "to": "p2:SCL",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p2:PA0",
+      "to": "l0:A",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "l0:K",
+      "to": "r0:a",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "r0:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w8",
+      "from": "p2:PA1",
+      "to": "l1:A",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w9",
+      "from": "l1:K",
+      "to": "r1:a",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w10",
+      "from": "r1:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w11",
+      "from": "p2:PA2",
+      "to": "l2:A",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w12",
+      "from": "l2:K",
+      "to": "r2:a",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w13",
+      "from": "r2:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w14",
+      "from": "p2:PA3",
+      "to": "l3:A",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w15",
+      "from": "l3:K",
+      "to": "r3:a",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w16",
+      "from": "r3:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w17",
+      "from": "p2:PA4",
+      "to": "l4:A",
+      "colour": "#38bdf8",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w18",
+      "from": "l4:K",
+      "to": "r4:a",
+      "colour": "#38bdf8",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w19",
+      "from": "r4:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w20",
+      "from": "p2:PA5",
+      "to": "l5:A",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w21",
+      "from": "l5:K",
+      "to": "r5:a",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w22",
+      "from": "r5:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w23",
+      "from": "p2:PA6",
+      "to": "l6:A",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w24",
+      "from": "l6:K",
+      "to": "r6:a",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w25",
+      "from": "r6:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w26",
+      "from": "p2:PA7",
+      "to": "l7:A",
+      "colour": "#14b8a6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w27",
+      "from": "l7:K",
+      "to": "r7:a",
+      "colour": "#14b8a6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w28",
+      "from": "r7:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w29",
+      "from": "p2:PB0",
+      "to": "l8:A",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w30",
+      "from": "l8:K",
+      "to": "r8:a",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w31",
+      "from": "r8:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w32",
+      "from": "p2:PB1",
+      "to": "l9:A",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w33",
+      "from": "l9:K",
+      "to": "r9:a",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w34",
+      "from": "r9:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w35",
+      "from": "p2:PB2",
+      "to": "l10:A",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w36",
+      "from": "l10:K",
+      "to": "r10:a",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w37",
+      "from": "r10:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w38",
+      "from": "p2:PB3",
+      "to": "l11:A",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w39",
+      "from": "l11:K",
+      "to": "r11:a",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w40",
+      "from": "r11:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w41",
+      "from": "p2:PB4",
+      "to": "l12:A",
+      "colour": "#38bdf8",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w42",
+      "from": "l12:K",
+      "to": "r12:a",
+      "colour": "#38bdf8",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w43",
+      "from": "r12:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w44",
+      "from": "p2:PB5",
+      "to": "l13:A",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w45",
+      "from": "l13:K",
+      "to": "r13:a",
+      "colour": "#a855f7",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w46",
+      "from": "r13:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w47",
+      "from": "p2:PB6",
+      "to": "l14:A",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w48",
+      "from": "l14:K",
+      "to": "r14:a",
+      "colour": "#ec4899",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w49",
+      "from": "r14:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w50",
+      "from": "p2:PB7",
+      "to": "l15:A",
+      "colour": "#14b8a6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w51",
+      "from": "l15:K",
+      "to": "r15:a",
+      "colour": "#14b8a6",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w52",
+      "from": "r15:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

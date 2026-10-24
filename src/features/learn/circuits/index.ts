@@ -28,6 +28,7 @@ import circuit51 from './5.1.json';
 import circuit52 from './5.2.json';
 import alarmClock from './alarm-clock.json';
 import dashboard from './dashboard.json';
+import ds3231 from './ds3231.json';
 import esp32Tft from './esp32-tft.json';
 import instrumentBench from './instrument-bench.json';
 import max7219 from './max7219.json';
@@ -42,6 +43,7 @@ import tm1637 from './tm1637.json';
 import a4988 from './a4988.json';
 import pcf8574 from './pcf8574.json';
 import max6675 from './max6675.json';
+import mcp23017 from './mcp23017.json';
 import mcp4725 from './mcp4725.json';
 import eeprom24lc256 from './eeprom24lc256.json';
 import weather from './weather.json';
@@ -61,6 +63,7 @@ export type CircuitId =
   | '5.2'
   | 'alarm-clock'
   | 'dashboard'
+  | 'ds3231'
   | 'esp32-tft'
   | 'instrument-bench'
   | 'max7219'
@@ -75,6 +78,7 @@ export type CircuitId =
   | 'a4988'
   | 'pcf8574'
   | 'max6675'
+  | 'mcp23017'
   | 'mcp4725'
   | 'eeprom24lc256'
   | 'weather';
@@ -93,6 +97,7 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   '5.2': parseCircuit(circuit52, '5.2'),
   'alarm-clock': parseCircuit(alarmClock, 'alarm-clock'),
   dashboard: parseCircuit(dashboard, 'dashboard'),
+  ds3231: parseCircuit(ds3231, 'ds3231'),
   'esp32-tft': parseCircuit(esp32Tft, 'esp32-tft'),
   'instrument-bench': parseCircuit(instrumentBench, 'instrument-bench'),
   max7219: parseCircuit(max7219, 'max7219'),
@@ -107,6 +112,7 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   a4988: parseCircuit(a4988, 'a4988'),
   pcf8574: parseCircuit(pcf8574, 'pcf8574'),
   max6675: parseCircuit(max6675, 'max6675'),
+  mcp23017: parseCircuit(mcp23017, 'mcp23017'),
   mcp4725: parseCircuit(mcp4725, 'mcp4725'),
   eeprom24lc256: parseCircuit(eeprom24lc256, 'eeprom24lc256'),
   weather: parseCircuit(weather, 'weather'),

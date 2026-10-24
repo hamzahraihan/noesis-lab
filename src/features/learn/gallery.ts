@@ -2071,6 +2071,212 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * Sixteen ports — direction before level
+ * ------------------------------------------------------------------ */
+
+const MCP23017_EXPANDER: GalleryProject = {
+  id: 'mcp23017',
+  title: 'Sixteen-Light Counter',
+  blurb:
+    'An MCP23017 makes sixteen pins out of the two on the I\u00b2C bus. Each port has a direction register, so the sketch clears the direction bits first; only then does the latch drive the LEDs.',
+  parts: [
+    { name: 'I/O expander (MCP23017)', qty: 1 },
+    { name: 'Red LED', qty: 16 },
+    { name: '220 Resistor', qty: 16 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * Two ports, sixteen lights. The chip powers up with every pin an input,
+ * so the first job is to clear both direction registers. After that the
+ * pair of output latches is one sixteen-bit number.
+ */
+const byte EXPANDER = 0x20;
+const byte IODIR_A = 0x00;
+const byte IODIR_B = 0x01;
+const byte GPIO_A = 0x12;
+const byte GPIO_B = 0x13;
+
+unsigned int counter = 0;
+
+void writeRegister(byte address, byte value) {
+  Wire.beginTransmission(EXPANDER);
+  Wire.write(address);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // Direction bits at zero make the pins outputs.
+  writeRegister(IODIR_A, 0x00);
+  writeRegister(IODIR_B, 0x00);
+  Serial.println("expander ready");
+}
+
+void loop() {
+  // The counter in binary, low byte on port A and high byte on port B.
+  writeRegister(GPIO_A, counter & 0xFF);
+  writeRegister(GPIO_B, counter >> 8);
+
+  Serial.print("count ");
+  Serial.println(counter);
+  counter += 1;
+  delay(500);
+}
+`,
+      circuit: CIRCUITS.mcp23017,
+    },
+  ],
+  working: [
+    'The sixteen lights show the counter in binary, eight on each port.',
+    'The direction registers are cleared first; a latch written while a pin is an input moves nothing.',
+    'The serial log prints the number the two ports are showing.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
+ * Precision clock — the time, and whether it can be trusted
+ * ------------------------------------------------------------------ */
+
+const DS3231_CLOCK: GalleryProject = {
+  id: 'ds3231',
+  title: 'Precision Clock',
+  blurb:
+    'A DS3231 keeps the time and reports whether it lost power. The sketch reads the oscillator flag first, sets the clock if it has to, then reads the die temperature the chip measures for itself.',
+  parts: [
+    { name: 'DS3231 RTC Module', qty: 1 },
+    { name: 'Red LED', qty: 1 },
+    { name: '220 Resistor', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * The DS3231 keeps the DS1307's time registers, so the seven bytes below
+ * are the same BCD packing. What it adds is a status register: bit 7 says
+ * the oscillator stopped, which means the time cannot be trusted until a
+ * sketch sets it. The same chip has a thermometer at 0x11 and 0x12.
+ */
+const byte CLOCK = 0x68;
+const byte STATUS = 0x0F;
+const int LED_PIN = 9;
+
+byte toBcd(byte value) {
+  return ((value / 10) << 4) | (value % 10);
+}
+
+byte fromBcd(byte value) {
+  return (value >> 4) * 10 + (value & 0x0F);
+}
+
+byte readRegister(byte address) {
+  Wire.beginTransmission(CLOCK);
+  Wire.write(address);
+  Wire.endTransmission();
+  Wire.requestFrom(CLOCK, 1);
+  return Wire.available() ? Wire.read() : 0;
+}
+
+void writeRegister(byte address, byte value) {
+  Wire.beginTransmission(CLOCK);
+  Wire.write(address);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+void setClock() {
+  Wire.beginTransmission(CLOCK);
+  Wire.write(0x00);
+  Wire.write(toBcd(0));   // seconds
+  Wire.write(toBcd(30));  // minutes
+  Wire.write(toBcd(9));   // hours
+  Wire.write(toBcd(6));   // Saturday
+  Wire.write(toBcd(24));  // date
+  Wire.write(toBcd(10));  // October
+  Wire.write(toBcd(26));  // 2026
+  Wire.endTransmission();
+}
+
+void reportTime() {
+  Wire.beginTransmission(CLOCK);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  Wire.requestFrom(CLOCK, 7);
+  byte second = fromBcd(Wire.read() & 0x7F);
+  byte minute = fromBcd(Wire.read() & 0x7F);
+  byte hour = fromBcd(Wire.read() & 0x3F);
+  Wire.read();  // weekday, not printed
+  byte date = fromBcd(Wire.read() & 0x3F);
+  byte month = fromBcd(Wire.read() & 0x1F);
+  byte year = fromBcd(Wire.read());
+
+  Serial.print("time 20");
+  Serial.print(year);
+  Serial.print(month);
+  Serial.print(date);
+  Serial.print(" ");
+  Serial.print(hour);
+  Serial.print(":");
+  Serial.print(minute);
+  Serial.print(":");
+  Serial.println(second);
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(LED_PIN, OUTPUT);
+  Wire.begin();
+
+  // A clock that lost power says so until the time is written.
+  if (readRegister(STATUS) & 0x80) {
+    Serial.println("lost power");
+    setClock();
+    writeRegister(STATUS, 0x00);
+    Serial.println("clock set");
+  } else {
+    Serial.println("clock running");
+  }
+
+  reportTime();
+  int raw = (readRegister(0x11) * 256) + readRegister(0x12);
+  Serial.print("celsius ");
+  Serial.println((raw >> 6) * 0.25);
+}
+
+void loop() {
+  // The seconds bit toggles the light, once per second.
+  byte second = readRegister(0x00) & 0x7F;
+  if (second & 1) {
+    digitalWrite(LED_PIN, HIGH);
+  } else {
+    digitalWrite(LED_PIN, LOW);
+  }
+  delay(200);
+}
+`,
+      circuit: CIRCUITS.ds3231,
+    },
+  ],
+  working: [
+    'The serial log reports the lost-power flag, sets the clock, then prints the time it now keeps.',
+    'The light toggles with the seconds register, so the clock is driving the board.',
+    'Turn the Die temperature knob and the next reading changes: the chip measures itself in quarter-degree steps.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Thermocouple — a reading that comes back
  * ------------------------------------------------------------------ */
 
@@ -3085,6 +3291,8 @@ export const GALLERY: readonly GalleryProject[] = [
   FOUR_DIGITS,
   STEPPER,
   EXPANDER,
+  MCP23017_EXPANDER,
+  DS3231_CLOCK,
   THERMOCOUPLE,
   CONVERTER,
   MEMORY,

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
+  DS3231_TEMPERATURE_KNOB,
   MAX6675_TEMPERATURE_KNOB,
   MFRC522_CARD_KNOB,
   PART_CATALOGUE,
@@ -987,6 +988,71 @@ void loop() {
         (value >> bit & 1) === 1,
       );
     }
+  }, 60_000);
+
+  it('shows a sixteen-bit count on sixteen lights', () => {
+    const build = galleryById('mcp23017')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const leds = simulation.bench.parts.filter((part) => part.definition.id === 'led-red');
+    expect(leds.length).toBe(16);
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+
+    // The last number the sketch printed is the one the two latches hold.
+    const log = simulation.serialLines().join('');
+    const counts = [...log.matchAll(/count (\d+)/g)].map((match) => Number(match[1]));
+    expect(counts.length, 'the sketch reported a count').toBeGreaterThan(1);
+    const value = counts[counts.length - 1]!;
+    for (const [bit, led] of leds.entries()) {
+      const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:anode`);
+      const volts = net === undefined ? 0 : simulation.engine.voltageOfNet(net);
+      expect(volts > 1, `light ${bit} matches bit ${bit} of ${value}`).toBe(
+        (value >> bit & 1) === 1,
+      );
+    }
+  }, 60_000);
+
+  it('sets a clock that lost power, then keeps time', () => {
+    const build = galleryById('ds3231')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const clock = simulation.bench.parts.find(
+      (part) =>
+        part.definition.component.kind === 'i2c-sensor' &&
+        part.definition.component.device === 'ds3231',
+    )!;
+    const led = simulation.bench.parts.find((part) => part.definition.id === 'led-red')!;
+    const litStates = new Set<boolean>();
+    for (let i = 0; i < 60; i++) {
+      simulation.tick(0.05);
+      const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:anode`);
+      litStates.add((net === undefined ? 0 : simulation.engine.voltageOfNet(net)) > 1);
+    }
+
+    // The flag is cleared by setting the time, and the sketch reports both.
+    const log = simulation.serialLines().join('');
+    expect(log).toContain('lost power');
+    expect(log).toContain('clock set');
+    expect(log).toContain('time 20261024 9:30:0');
+
+    // The thermometer answers on the same bus, in quarter-degree steps.
+    const reported = /celsius ([\d.-]+)/.exec(log);
+    expect(reported, 'the sketch reported a reading').not.toBeNull();
+    const die = simulation.controls.knob(clock.id, DS3231_TEMPERATURE_KNOB);
+    expect(Math.abs(Number(reported![1]) - die), 'the reading is the die temperature').toBeLessThan(
+      0.25,
+    );
+
+    // The seconds register drives the light, so both halves of a second appear.
+    expect(litStates.size, 'the light toggles with the seconds').toBe(2);
   }, 60_000);
 
   it('reads the probe temperature over the bus', () => {
