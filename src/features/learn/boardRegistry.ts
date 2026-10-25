@@ -19,14 +19,20 @@ import {
   arduinoUnoR3,
   attiny85Chip,
   esp32DevKitV1,
+  esp32C3DevKit,
+  esp32S3DevKit,
   franzininhoBoard,
   nanoRp2040Connect,
   raspberryPi4,
   raspberryPiPico,
+  stm32f103BluePill,
 } from '@/features/parts';
 
 export type BoardId =
   | 'esp32'
+  | 'esp32-c3'
+  | 'esp32-s3'
+  | 'stm32f103'
   | 'uno'
   | 'mega'
   | 'nano'
@@ -96,6 +102,33 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     summary: '3.3 V, 12-bit ADC, and four pins that cannot drive anything.',
     bestFor:
       'Later, once 5 V is comfortable. GPIO34-39 are input-only, and GPIO12 and GPIO15 are sampled at reset -- both traps the bench reproduces so you can hit them.',
+  },
+  {
+    id: 'esp32-c3',
+    name: 'ESP32-C3 DevKit',
+    make: esp32C3DevKit,
+    language: 'arduino-cpp',
+    languages: ['arduino-cpp', 'python'],
+    summary: '3.3 V RISC-V board on the ESP32 DevKit outline.',
+    bestFor: 'A cheaper ESP32-family board running the same sketches.',
+  },
+  {
+    id: 'esp32-s3',
+    name: 'ESP32-S3 DevKit',
+    make: esp32S3DevKit,
+    language: 'arduino-cpp',
+    languages: ['arduino-cpp', 'python'],
+    summary: '3.3 V ESP32-S3 board on the ESP32 DevKit outline.',
+    bestFor: 'More GPIO and USB on the ESP32 family.',
+  },
+  {
+    id: 'stm32f103',
+    name: 'STM32F103 Blue Pill',
+    make: stm32f103BluePill,
+    language: 'arduino-cpp',
+    languages: ['arduino-cpp'],
+    summary: '3.3 V ARM Cortex-M3 board.',
+    bestFor: 'A first ARM Cortex-M3 board.',
   },
   {
     id: 'nano',
