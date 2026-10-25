@@ -57,6 +57,9 @@ export function floatingInputFraction(timeMs: number): number {
  */
 const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
   esp32: [21, 22],
+  'esp32-c3': [21, 22],
+  'esp32-s3': [21, 22],
+  stm32f103: [18, 19],
   uno: [18, 19],
   nano: [18, 19],
   mega: [20, 21],
@@ -87,6 +90,9 @@ const I2C_PINS: Readonly<Record<string, readonly number[]>> = {
  */
 const SPI_PINS: Readonly<Record<string, readonly number[]>> = {
   esp32: [5, 15, 18, 23],
+  'esp32-c3': [5, 15, 18, 23],
+  'esp32-s3': [5, 15, 18, 23],
+  stm32f103: [10, 9, 13, 11],
   uno: [10, 9, 13, 11],
   nano: [10, 9, 13, 11],
   mega: [53, 9, 52, 51],
