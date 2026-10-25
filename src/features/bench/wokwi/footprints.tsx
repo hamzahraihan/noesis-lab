@@ -13,6 +13,7 @@
  * `hardware.tsx`; each SVG document renders `HardwareDefs` once.
  */
 
+import raspberryPi4Svg from '@/assets/raspberry-pi-4.svg?url';
 import type { PartInstance } from '@/features/simulation';
 import type { PartDefinition, PinSpec } from '@/features/parts';
 import { DynamicState } from '@/features/parts';
@@ -593,40 +594,81 @@ const BoardBody = staticBody(function BoardBody({
 }) {
   const { widthMm: width, heightMm: height } = definition;
   const dressing = BOARD_DRESSING[definition.id];
+  const isRaspberryPi4 = definition.id === 'raspberry-pi-4';
   /*
    * Two runs down the edges is what nearly every board here is, and splitting
    * on the midpoint gets it for free. A board whose header is one block gets
    * its runs from the pins instead, grouped along the axis they run down.
    */
-  const headerRuns: readonly PinSpec[][] = dressing?.headerIsBlock
-    ? [...new Set(definition.pins.map((pin) => pin.x))]
-        .sort((a, b) => a - b)
-        .map((x) => definition.pins.filter((pin) => pin.x === x))
-    : [
-        definition.pins.filter((pin) => pin.x < width / 2),
-        definition.pins.filter((pin) => pin.x >= width / 2),
-      ];
+  const headerRuns: readonly PinSpec[][] = isRaspberryPi4
+    ? [definition.pins as unknown as PinSpec[]]
+    : dressing?.headerIsBlock
+      ? [...new Set(definition.pins.map((pin) => pin.x))]
+          .sort((a, b) => a - b)
+          .map((x) => definition.pins.filter((pin) => pin.x === x))
+      : [
+          definition.pins.filter((pin) => pin.x < width / 2),
+          definition.pins.filter((pin) => pin.x >= width / 2),
+        ];
   const silk = definition.legendColour;
 
   return (
     <g>
       {/* Solder mask over the FR4, with the board's own colour underneath. */}
-      <rect
-        width={width}
-        height={height}
-        rx={2.6}
-        fill={definition.bodyColour}
-        stroke="#05070a"
-        strokeWidth={0.3}
-      />
-      <rect width={width} height={height} rx={2.6} fill="url(#nz-mask)" />
+      {!isRaspberryPi4 && (
+        <>
+          <rect
+            width={width}
+            height={height}
+            rx={2.6}
+            fill={definition.bodyColour}
+            stroke="#05070a"
+            strokeWidth={0.3}
+          />
+          <rect width={width} height={height} rx={2.6} fill="url(#nz-mask)" />
+        </>
+      )}
+      {isRaspberryPi4 && (
+        /*
+         * The artwork's own view box is larger than the board, with the green
+         * PCB sitting in a sub-rectangle of it. Rendering the whole file into
+         * the 85 x 56 mm box would shrink the board and push the header away
+         * from the pin coordinates. The nested `viewBox` below crops straight
+         * to the board's rectangle (26,3 960x632 through the file's
+         * translate(0,6) scale(0.6641) group) so the drawn board fills the
+         * definition box and the pins land on the drawn header.
+         */
+        <svg
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          viewBox="17.2666 7.9923 637.536 419.7112"
+          preserveAspectRatio="none"
+          overflow="hidden"
+        >
+          <image
+            href={raspberryPi4Svg}
+            x={0}
+            y={0}
+            width={1034}
+            height={677}
+            preserveAspectRatio="none"
+          />
 
-      <BoardCopper definition={definition} />
+        </svg>
+      )}
 
-      <MountingHole x={2.6} y={2.6} />
-      <MountingHole x={width - 2.6} y={2.6} />
-      <MountingHole x={2.6} y={height - 2.6} />
-      <MountingHole x={width - 2.6} y={height - 2.6} />
+      {!isRaspberryPi4 && <BoardCopper definition={definition} />}
+
+      {!isRaspberryPi4 && (
+        <>
+          <MountingHole x={2.6} y={2.6} />
+          <MountingHole x={width - 2.6} y={2.6} />
+          <MountingHole x={2.6} y={height - 2.6} />
+          <MountingHole x={width - 2.6} y={height - 2.6} />
+        </>
+      )}
 
       {dressing?.usb === 'micro-b' && <MicroUsb x={(width - 7.5) / 2} y={0.6} label="USB" />}
       {dressing?.usb === 'usb-b' && <UsbB x={5} y={1.6} label="USB" />}
@@ -671,9 +713,10 @@ const BoardBody = staticBody(function BoardBody({
        * single-board computer has no barrel jack and no USB-B, so its processor
        * is placed by hand like everything else about it.
        */}
-      {(dressing?.chips ?? []).map((chip) => (
-        <Chip key={`${chip.x}:${chip.y}`} {...chip} />
-      ))}
+      {!isRaspberryPi4 &&
+        (dressing?.chips ?? []).map((chip) => (
+          <Chip key={`${chip.x}:${chip.y}`} {...chip} />
+        ))}
 
       {dressing?.buttons.map((button) => (
         <BoardButton
@@ -685,13 +728,14 @@ const BoardBody = staticBody(function BoardBody({
         />
       ))}
 
-      {headerRuns.map((pins) => (
-        <PinHeader
-          key={pins[0] ? `${pins[0].x}:${pins[0].y}` : 'empty'}
-          pins={pins}
-          labelColour={silk}
-        />
-      ))}
+      {!isRaspberryPi4 &&
+        headerRuns.map((pins) => (
+          <PinHeader
+            key={pins[0] ? `${pins[0].x}:${pins[0].y}` : 'empty'}
+            pins={pins}
+            labelColour={silk}
+          />
+        ))}
 
       {definition.component.kind === 'mcu' && (
         <PinLevelTags definition={definition} part={part} state={state} runs={headerRuns} />
@@ -720,17 +764,19 @@ const BoardBody = staticBody(function BoardBody({
         />
       ))}
 
-      <text
-        x={width / 2}
-        y={height - 1.6}
-        fontSize={2}
-        textAnchor="middle"
-        fill={silk}
-        opacity={0.5}
-        fontFamily={SILKSCREEN_FONT}
-      >
-        {definition.name.toUpperCase()}
-      </text>
+      {!isRaspberryPi4 && (
+        <text
+          x={width / 2}
+          y={height - 1.6}
+          fontSize={2}
+          textAnchor="middle"
+          fill={silk}
+          opacity={0.5}
+          fontFamily={SILKSCREEN_FONT}
+        >
+          {definition.name.toUpperCase()}
+        </text>
+      )}
     </g>
   );
 });

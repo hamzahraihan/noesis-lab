@@ -1296,10 +1296,19 @@ const PI_J8: ReadonlyArray<readonly [physical: number, label: string]> = [
   [40, 'GPIO21'],
 ];
 
-/** Where the header sits on an 85 x 56 mm board, and where each column runs. */
-const PI_HEADER_X = 24.0;
-const PI_HEADER_Y = 7.5;
-const PI_HEADER_PITCH = 2.54;
+/*
+ * Where the header sits on an 85 x 56 mm board, and where each column runs.
+ *
+ * The artwork's header is two dashed gold pin rows, not a plain 2.54 mm grid.
+ * These constants are measured off those rows so a wire ends on the drawn pin:
+ * twenty pads from x = 8.68 mm to 55.95 mm, and two rows 2.215 mm apart. The
+ * slight narrowing from the hardware's 2.54 mm is the artwork's own drawing,
+ * and matching it matters more here than matching the datasheet.
+ */
+const PI_HEADER_X = 8.677;
+const PI_HEADER_Y = 2.481;
+const PI_HEADER_PITCH = 2.488;
+const PI_HEADER_ROW_GAP = 2.215;
 
 function raspberryPiBoardPin(id: string, label: string, physical: number): BoardPin {
   const gpio = label.startsWith('GPIO') ? Number(label.slice(4)) : undefined;
@@ -1330,14 +1339,14 @@ function raspberryPiDefinition(): PartDefinition {
   const even: PinSpec[] = [];
 
   for (const [physical, label] of PI_J8) {
-    const row = Math.floor((physical - 1) / 2);
-    const column = physical % 2 === 0 ? 1 : 0;
+    const column = Math.floor((physical - 1) / 2);
+    const row = physical % 2 === 0 ? 1 : 0;
     const id = `J8_${physical}`;
     const pin: PinSpec = {
       id,
       label,
       x: PI_HEADER_X + column * PI_HEADER_PITCH,
-      y: PI_HEADER_Y + row * PI_HEADER_PITCH,
+      y: PI_HEADER_Y + row * PI_HEADER_ROW_GAP,
       net: label === 'GND' ? 'GND' : label === '5V' ? '5V' : label === '3V3' ? '3V3' : undefined,
     };
     pins.push(pin);
