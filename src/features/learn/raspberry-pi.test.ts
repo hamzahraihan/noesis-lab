@@ -74,22 +74,22 @@ describe('the 40-pin header', () => {
   it('lays the header out as a two-row block rather than two edge columns', () => {
     /*
      * The artwork groups the pins into rows by their y, so the geometry has to
-     * be a block: one line of odd physical pins and one of even, side by side.
-     * Two columns at opposite ends of the board would draw two strips nowhere
-     * near the holes, and the wires would land on nothing.
+     * be a block: one line of odd physical pins and one of even, stacked one
+     * above the other. Two columns at opposite ends of the board would draw two
+     * strips nowhere near the holes, and the wires would land on nothing.
      */
     const odd = pi().pins.filter((pin) => Number(pin.id.slice(3)) % 2 === 1);
     const even = pi().pins.filter((pin) => Number(pin.id.slice(3)) % 2 === 0);
 
-    // Each line is one column, so every pin in it shares the other coordinate.
-    expect(new Set(odd.map((pin) => pin.x)).size).toBe(1);
-    expect(new Set(even.map((pin) => pin.x)).size).toBe(1);
-    expect(new Set(odd.map((pin) => pin.y)).size).toBe(20);
+    // Each line is one row, so every pin in it shares the other coordinate.
+    expect(new Set(odd.map((pin) => pin.y)).size).toBe(1);
+    expect(new Set(even.map((pin) => pin.y)).size).toBe(1);
+    expect(new Set(odd.map((pin) => pin.x)).size).toBe(20);
 
-    // And the two lines are a header pitch apart.
-    const [oddX] = [...new Set(odd.map((pin) => pin.x))];
-    const [evenX] = [...new Set(even.map((pin) => pin.x))];
-    expect(Math.abs(oddX - evenX)).toBeCloseTo(2.54, 5);
+    // And the two rows sit a header pitch apart, as drawn in the artwork.
+    const [oddY] = [...new Set(odd.map((pin) => pin.y))];
+    const [evenY] = [...new Set(even.map((pin) => pin.y))];
+    expect(Math.abs(oddY - evenY)).toBeCloseTo(2.215, 3);
   });
 });
 
