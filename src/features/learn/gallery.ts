@@ -3463,6 +3463,174 @@ const INSTRUMENT_BENCH: GalleryProject = {
   ],
 };
 
+/* ------------------------------------------------------------------ *
+ * Environment Bench — light, temperature and humidity on one bus
+ * ------------------------------------------------------------------ */
+
+const ENVIRONMENT_BENCH_SKETCH = `#include <Arduino.h>
+#include <Wire.h>
+
+// An environment bench: a light sensor, a thermometer and a temp/humidity
+// sensor, all three answering on the same two wires.
+//
+// None of them hides behind a library. The BH1750 is commanded with a single
+// byte and reports a raw count; the TMP102 is a pointer register and two
+// bytes; the SHT31 wants a sixteen-bit command and returns six bytes, with a
+// CRC after each measured word. Reading the datasheet is the exercise.
+
+byte LIGHT = 0x23;
+byte THERMOMETER = 0x48;
+byte HUMIDITY = 0x44;
+
+// The datasheet's CRC-8: polynomial 0x31, initial value 0xFF.
+int crc8Byte(int crc, int value) {
+  crc = crc ^ value;
+  for (int bit = 0; bit < 8; bit++) {
+    if ((crc & 0x80) != 0) {
+      crc = ((crc << 1) ^ 0x31) & 0xFF;
+    } else {
+      crc = (crc << 1) & 0xFF;
+    }
+  }
+  return crc;
+}
+
+int crc8(int high, int low) {
+  return crc8Byte(crc8Byte(0xFF, high), low);
+}
+
+// A register that holds two bytes, most significant first.
+int readWord(int address, int pointer) {
+  Wire.beginTransmission(address);
+  Wire.write(pointer);
+  Wire.endTransmission();
+  Wire.requestFrom(address, 2);
+  int high = Wire.read();
+  int low = Wire.read();
+  return (high << 8) | low;
+}
+
+// The SHT31's single-shot command: high repeatability, no clock stretching.
+// The bench answers at once; a real part needs the datasheet's conversion
+// time before its frame is ready, so the delay is part of the sketch.
+void startHumidityMeasurement() {
+  Wire.beginTransmission(HUMIDITY);
+  Wire.write(0x24);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  delay(20);
+}
+
+// A temperature in hundredths of a degree, with the sign in front.
+void printHundredths(int hundredths) {
+  if (hundredths < 0) {
+    Serial.print("-");
+    hundredths = 0 - hundredths;
+  }
+  int whole = idiv(hundredths, 100);
+  int fraction = hundredths - whole * 100;
+  Serial.print(whole);
+  Serial.print(".");
+  if (fraction < 10) { Serial.print("0"); }
+  Serial.print(fraction);
+}
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();
+
+  // Power the light sensor on, then leave it measuring continuously at the
+  // fine resolution. From here a read is a fresh conversion.
+  Wire.beginTransmission(LIGHT);
+  Wire.write(0x01);
+  Wire.endTransmission();
+  Wire.beginTransmission(LIGHT);
+  Wire.write(0x10);
+  Wire.endTransmission();
+
+  Serial.println("environment bench up");
+}
+
+void loop() {
+  // The BH1750's data register is two bytes, most significant first. The
+  // datasheet's conversion is lux = count / 1.2.
+  Wire.requestFrom(LIGHT, 2);
+  int lightCounts = (Wire.read() << 8) | Wire.read();
+  int lux = idiv(lightCounts * 10 + 6, 12);
+
+  // The TMP102 reports a signed twelve-bit count left-justified across two
+  // bytes: 0.0625 C a count, so shifting four bits down gives the count.
+  int temperatureWord = readWord(THERMOMETER, 0x00);
+  if (temperatureWord > 32767) { temperatureWord = temperatureWord - 65536; }
+  int thermometerCounts = temperatureWord >> 4;
+  int thermometerHundredths = idiv(thermometerCounts * 100, 16);
+
+  // One SHT31 frame: temperature MSB, LSB, CRC, humidity MSB, LSB, CRC.
+  startHumidityMeasurement();
+  Wire.requestFrom(HUMIDITY, 6);
+  int tMsb = Wire.read();
+  int tLsb = Wire.read();
+  int tCrc = Wire.read();
+  int hMsb = Wire.read();
+  int hLsb = Wire.read();
+  int hCrc = Wire.read();
+
+  int rawTemperature = (tMsb << 8) | tLsb;
+  int rawHumidity = (hMsb << 8) | hLsb;
+  // T = -45 + 175 * raw / 65535, and RH = 100 * raw / 65535. The extra half
+  // divisor rounds the integer division to the nearest hundredth or tenth.
+  int humidityHundredths = idiv(17500 * rawTemperature + 32767, 65535) - 4500;
+  int humidityTenths = idiv(rawHumidity * 1000 + 32767, 65535);
+
+  bool crcOk = crc8(tMsb, tLsb) == tCrc && crc8(hMsb, hLsb) == hCrc;
+
+  Serial.print("light ");
+  Serial.print(lux);
+  Serial.print(" lx  tmp102 ");
+  printHundredths(thermometerHundredths);
+  Serial.print(" C  sht31 ");
+  printHundredths(humidityHundredths);
+  Serial.print(" C  humidity ");
+  Serial.print(idiv(humidityTenths, 10));
+  Serial.print(".");
+  Serial.print(humidityTenths - idiv(humidityTenths, 10) * 10);
+  Serial.print(" %  crc ");
+  if (crcOk) {
+    Serial.println("ok");
+  } else {
+    Serial.println("bad");
+  }
+
+  delay(1000);
+}
+`;
+
+const ENVIRONMENT_BENCH: GalleryProject = {
+  id: 'environment-bench',
+  title: 'Environment Bench',
+  blurb:
+    'Three weather sensors on one pair of wires: a light meter, a thermometer, and a temperature/humidity sensor whose readings carry their own CRC. Each one speaks its datasheet protocol directly, from a one-byte command to a six-byte frame.',
+  parts: [
+    { name: 'BH1750 Light Sensor', qty: 1 },
+    { name: 'TMP102 Temperature Sensor', qty: 1 },
+    { name: 'SHT31 Temp/Humidity', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: ENVIRONMENT_BENCH_SKETCH,
+      circuit: CIRCUITS['environment-bench'],
+    },
+  ],
+  working: [
+    'The serial log prints one line a reading: the light in lux, the thermometer in degrees, and the humidity sensor with its CRC verdict.',
+    'Turn the Light knob and the lux follows: the chip is in continuous mode, so every read is the current light.',
+    'Turn the Temperature and Humidity knobs on the SHT31 and the next measurement follows; the TMP102 has its own Temperature knob, read on every pass.',
+    'The CRC is recomputed in the sketch from the two data bytes, and the line ends in "crc ok" only when both words agree.',
+  ],
+};
+
 export const GALLERY: readonly GalleryProject[] = [
   ALARM_CLOCK,
   SAFE,
@@ -3489,6 +3657,7 @@ export const GALLERY: readonly GalleryProject[] = [
   LIVE_WEATHER,
   SOIL_PROBE,
   INSTRUMENT_BENCH,
+  ENVIRONMENT_BENCH,
 ];
 
 export function galleryById(id: string): GalleryProject | null {

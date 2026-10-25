@@ -43,7 +43,7 @@ describe('registry', () => {
   }, 30_000);
 
   it('passes its live checks for the new part projects', async () => {
-    for (const id of ['ds3231', 'mcp23017', 'pca9685', 'microstep'] as const) {
+    for (const id of ['ds3231', 'mcp23017', 'pca9685', 'microstep', 'environment-bench'] as const) {
       const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
       const report = await runHarness(entry.checks, entry.makeSim);
       const failed = report.results.filter((result) => result.status === 'fail');

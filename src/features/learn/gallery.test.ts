@@ -3,13 +3,17 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
+  BH1750_LIGHT_KNOB,
   DS3231_TEMPERATURE_KNOB,
   MAX6675_TEMPERATURE_KNOB,
   MFRC522_CARD_KNOB,
   PART_CATALOGUE,
   SEGMENT_MAP,
   SevenSegment,
+  SHT31_HUMIDITY_KNOB,
+  SHT31_TEMPERATURE_KNOB,
   SUPPLY_VOLTAGE_KNOB,
+  TMP102_TEMPERATURE_KNOB,
   Tm1637,
 } from '@/features/parts';
 import { boardOption } from './boardRegistry';
@@ -830,6 +834,43 @@ void loop() {
     expect(log).toContain('power 500 mW');
     // The converter is pointed at channel zero, which is at zero volts.
     expect(log).toContain('converter 0 counts');
+  }, 60_000);
+
+  it('runs the environment bench live: three sensors on one bus', () => {
+    const build = galleryById('environment-bench')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+    const log = (): string => simulation.serialLines().join('');
+    const first = log();
+    expect(first).toContain('light 250 lx');
+    expect(first).toContain('tmp102 21.00 C');
+    expect(first).toContain('sht31 21.00 C');
+    expect(first).toContain('humidity 45.0 %');
+    expect(first).toContain('crc ok');
+
+    // Each sensor's own knob is the air or the light on the bench: turning
+    // them changes what the next conversion reports, not what the sketch
+    // assumes. The line is assembled from three independent protocols.
+    const part = (id: string) =>
+      simulation.bench.parts.find((candidate) => candidate.definition.id === id)!;
+    simulation.setKnob(part('bh1750-light').id, BH1750_LIGHT_KNOB, 500);
+    simulation.setKnob(part('tmp102-temperature').id, TMP102_TEMPERATURE_KNOB, 30);
+    simulation.setKnob(part('sht31-temp-humidity').id, SHT31_TEMPERATURE_KNOB, 30);
+    simulation.setKnob(part('sht31-temp-humidity').id, SHT31_HUMIDITY_KNOB, 60);
+
+    const before = log().length;
+    for (let i = 0; i < 60; i++) simulation.tick(0.05);
+    const tail = log().slice(before);
+    expect(tail).toContain('light 500 lx');
+    expect(tail).toContain('tmp102 30.00 C');
+    expect(tail).toContain('sht31 30.00 C');
+    expect(tail).toContain('humidity 60.0 %');
+    expect(tail).toContain('crc ok');
   }, 60_000);
 
   it('answers a card on the SPI bus, and times out without one', () => {

@@ -10,6 +10,7 @@ import type { PartDefinition } from '../catalog';
 import type { I2cDevice, ScriptedI2cSlave } from './device';
 import { Ssd1306 } from '../display/ssd1306';
 import { Ads1115 } from './ads1115';
+import { Bh1750 } from './bh1750';
 import { Bmp180 } from './bmp180';
 import { Ds1307 } from './ds1307';
 import { Ds3231 } from './ds3231';
@@ -22,6 +23,8 @@ import { Pca9685 } from './pca9685';
 import { Mcp4725 } from './mcp4725';
 import { Eeprom24lc256 } from './eeprom24lc256';
 import { ScriptedI2cDevice } from './scripted';
+import { Sht31 } from './sht31';
+import { Tmp102 } from './tmp102';
 
 export type { I2cDevice } from './device';
 
@@ -82,6 +85,9 @@ export function createI2cDevice(
       if (component.device === 'bmp180') return new Bmp180();
       if (component.device === 'ina219') return new Ina219();
       if (component.device === 'ads1115') return new Ads1115();
+      if (component.device === 'bh1750') return new Bh1750();
+      if (component.device === 'tmp102') return new Tmp102();
+      if (component.device === 'sht31') return new Sht31();
       return new Hx711();
     default:
       return null;

@@ -222,7 +222,10 @@ export type I2cSensorVariant =
   | 'hx711'
   | 'bmp180'
   | 'ina219'
-  | 'ads1115';
+  | 'ads1115'
+  | 'bh1750'
+  | 'tmp102'
+  | 'sht31';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

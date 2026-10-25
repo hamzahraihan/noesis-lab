@@ -566,9 +566,10 @@ so a sketch scans it the way real code does, and no API was invented for it.
 **An instrument that answers on the bus needs no firmware of its own.** The
 bus is already there -- `Wire` moves the bytes and `requestFrom` reads them
 back -- so a new chip on the I2C bus is a model and a drawing, and the
-*protocol* is the exercise. The bench carries six of them now: a clock, an
-accelerometer, a load-cell amplifier, a barometer, a current monitor and a
-sixteen-bit converter. The first three answer with the register map their
+*protocol* is the exercise. The bench carries nine of them now: a clock, an
+accelerometer, a load-cell amplifier, a barometer, a current monitor, a
+sixteen-bit converter, a light meter, a thermometer and a temp/humidity
+sensor. The first three answer with the register map their
 datasheet prints. The barometer answers with raw counts and the eleven
 calibration coefficients in its E2PROM, and the compensation the datasheet
 prints is the arithmetic that turns them into pascals -- so it is in the
@@ -578,12 +579,25 @@ wrote, and its shunt saturates when the current passes the range its gain
 setting gives it. The converter is told which channel to look at and how much
 of the range to give it, and answers in counts.
 
+The three environment sensors are the same seam with three different command
+shapes. The BH1750 has one-byte commands and no register pointer, so the
+command *is* the whole write; it can measure once or continuously and at three
+resolutions. The TMP102 is a pointer register and two bytes, with a signed
+twelve-bit temperature left-justified across them, and a configuration word
+and two trip points beside it. The SHT31 takes a sixteen-bit command and
+answers with six bytes -- temperature, CRC, humidity, CRC -- so a sketch that
+does not check the CRCs cannot tell a reading from the all-ones frame that
+comes back before a measurement. None of the three needed a firmware API:
+`Wire` carries all three protocols unchanged.
+
 **What the world is doing is the operator's to set.** The pressure the
 barometer sits in, the current through the monitor's shunt, the voltage on the
-converter's channels: each is a knob, which is the convention the load cell's
-load and the soil probe's moisture already follow. The chip's registers are
-recomputed from the knob rather than from a number the operator typed in, so
-what a sketch reads back is what the operator dialled in.
+converter's channels, the light on the BH1750, the air around the TMP102 and
+the temperature and humidity at the SHT31: each is a knob, which is the
+convention the load cell's load and the soil probe's moisture already follow.
+The chip's registers are recomputed from the knob rather than from a number
+the operator typed in, so what a sketch reads back is what the operator
+dialled in.
 
 **A one-wire sensor is a knob and a library, and the waveform between them is
 not modelled.** The DS18B20 answers through the `OneWire` library, the way the
@@ -594,11 +608,12 @@ temperature outright -- and the object still takes its pin in the constructor,
 the way Arduino's library takes it, so `OneWire ow(2);` is the spelling a
 sketch writes.
 
-**Seven of the instruments are the bench's own drawings.** The Wokwi library
-has no element for a barometer, a current monitor, a converter, a one-wire
-sensor, a shift register, a matrix or a Nokia panel, so their artwork is drawn
-here, on the same 2.54 mm grid as the modules the library does draw -- which is
-what makes the header a jumper can reach.
+**Ten of the instruments are the bench's own drawings.** The Wokwi library
+has no element for a barometer, a current monitor, a converter, a light meter,
+a thermometer, a temp/humidity sensor, a one-wire sensor, a shift register, a
+matrix or a Nokia panel, so their artwork is drawn here, on the same 2.54 mm
+grid as the modules the library does draw -- which is what makes the header a
+jumper can reach.
 
 **The SPI bus is a bus now, and a shift register is on it.** It used to reach
 panels and nothing else: the engine delivered a byte to the displays, and a

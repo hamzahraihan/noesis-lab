@@ -10,9 +10,12 @@
 
 import type { I2cSensorVariant, KnobSpec, PartDefinition, PinSpec } from '../catalog';
 import { ADS1115_CHANNEL_KNOBS } from './ads1115';
+import { BH1750_LIGHT_KNOB } from './bh1750';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
+import { SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from './sht31';
+import { TMP102_TEMPERATURE_KNOB } from './tmp102';
 
 /** The hole pitch, and the grid every module's header is snapped to. */
 const PITCH = 2.54;
@@ -107,10 +110,10 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     knobs: [HX711_LOAD_KNOB],
   },
   /*
-   * The three below are the bench's own drawings rather than Wokwi's: the
-   * library has no element for a barometer, a current monitor or an
-   * analogue-to-digital converter, so the artwork is drawn here and the
-   * header is on the same grid the others sit on.
+   * The modules below are the bench's own drawings rather than Wokwi's: the
+   * library has no element for a barometer, a current monitor, a converter, a
+   * light meter, a thermometer or a temp/humidity sensor, so the artwork is
+   * drawn here and the header is on the same grid the others sit on.
    */
   bmp180: {
     id: 'bmp180-barometer',
@@ -142,6 +145,36 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     legendColour: '#e8e8e8',
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [...ADS1115_CHANNEL_KNOBS],
+  },
+  bh1750: {
+    id: 'bh1750-light',
+    name: 'BH1750 Light Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1b2a4a',
+    legendColour: '#e8e8e8',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [BH1750_LIGHT_KNOB],
+  },
+  tmp102: {
+    id: 'tmp102-temperature',
+    name: 'TMP102 Temperature Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#0f3b3a',
+    legendColour: '#e8f5f2',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [TMP102_TEMPERATURE_KNOB],
+  },
+  sht31: {
+    id: 'sht31-temp-humidity',
+    name: 'SHT31 Temp/Humidity',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#123b2e',
+    legendColour: '#eef7f2',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [SHT31_TEMPERATURE_KNOB, SHT31_HUMIDITY_KNOB],
   },
 };
 
@@ -213,4 +246,19 @@ export function ina219Definition(): PartDefinition {
 /** ADS1115 converter: four channels read as sixteen-bit counts. */
 export function ads1115Definition(): PartDefinition {
   return i2cSensorDefinition('ads1115');
+}
+
+/** BH1750 light sensor: ambient light as a sixteen-bit count. */
+export function bh1750Definition(): PartDefinition {
+  return i2cSensorDefinition('bh1750');
+}
+
+/** TMP102 thermometer: a signed twelve-bit temperature over the bus. */
+export function tmp102Definition(): PartDefinition {
+  return i2cSensorDefinition('tmp102');
+}
+
+/** SHT31 temp/humidity sensor: two CRC-protected words in one frame. */
+export function sht31Definition(): PartDefinition {
+  return i2cSensorDefinition('sht31');
 }

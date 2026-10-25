@@ -29,6 +29,7 @@ import circuit52 from './5.2.json';
 import alarmClock from './alarm-clock.json';
 import dashboard from './dashboard.json';
 import ds3231 from './ds3231.json';
+import environmentBench from './environment-bench.json';
 import esp32Tft from './esp32-tft.json';
 import instrumentBench from './instrument-bench.json';
 import max7219 from './max7219.json';
@@ -65,6 +66,7 @@ export type CircuitId =
   | 'alarm-clock'
   | 'dashboard'
   | 'ds3231'
+  | 'environment-bench'
   | 'esp32-tft'
   | 'instrument-bench'
   | 'max7219'
@@ -100,6 +102,7 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   'alarm-clock': parseCircuit(alarmClock, 'alarm-clock'),
   dashboard: parseCircuit(dashboard, 'dashboard'),
   ds3231: parseCircuit(ds3231, 'ds3231'),
+  'environment-bench': parseCircuit(environmentBench, 'environment-bench'),
   'esp32-tft': parseCircuit(esp32Tft, 'esp32-tft'),
   'instrument-bench': parseCircuit(instrumentBench, 'instrument-bench'),
   max7219: parseCircuit(max7219, 'max7219'),

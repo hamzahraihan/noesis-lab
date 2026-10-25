@@ -39,12 +39,15 @@ import {
 } from './display/part';
 import {
   ads1115Definition,
+  bh1750Definition,
   bmp180Definition,
   ds1307Definition,
   ds3231Definition,
   hx711Definition,
   ina219Definition,
   mpu6050Definition,
+  sht31Definition,
+  tmp102Definition,
 } from './devices/sensors';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
@@ -533,6 +536,27 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Four channels read against the chip\u2019s own reference, in sixteen-bit counts. The gain setting says how much of the range a channel gets.',
     make: ads1115Definition,
+  },
+  {
+    id: 'bh1750-light',
+    name: 'BH1750 Light Sensor',
+    group: 'input',
+    note: 'Ambient light as a sixteen-bit count. The command byte chooses one-shot or continuous and the resolution, and the sketch divides by 1.2 to get lux.',
+    make: bh1750Definition,
+  },
+  {
+    id: 'tmp102-temperature',
+    name: 'TMP102 Temperature Sensor',
+    group: 'input',
+    note: 'A signed twelve-bit thermometer at 0.0625 °C a count, left-justified across two bytes. It also carries a configuration register and two trip points.',
+    make: tmp102Definition,
+  },
+  {
+    id: 'sht31-temp-humidity',
+    name: 'SHT31 Temp/Humidity',
+    group: 'input',
+    note: 'Temperature and humidity in one six-byte frame, with a CRC after each word. A soft reset and a die heater share the same sixteen-bit command space.',
+    make: sht31Definition,
   },
   {
     id: 'shift595',

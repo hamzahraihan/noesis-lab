@@ -8,13 +8,23 @@ import { I2CBus } from '@/features/simulation';
 import { DynamicState, type PartDefinition } from '../catalog';
 import {
   ads1115Definition,
+  bh1750Definition,
   bmp180Definition,
   ds1307Definition,
   ds3231Definition,
   hx711Definition,
   ina219Definition,
   mpu6050Definition,
+  sht31Definition,
+  tmp102Definition,
 } from '../devices/sensors';
+import { BH1750_LIGHT_KNOB } from '../devices/bh1750';
+import { TMP102_TEMPERATURE_KNOB } from '../devices/tmp102';
+import {
+  SHT31_HUMIDITY_KNOB,
+  SHT31_TEMPERATURE_KNOB,
+  sht31Crc8,
+} from '../devices/sht31';
 import {
   BMP180_CALIBRATION,
   BMP180_PRESSURE_KNOB,
@@ -954,5 +964,104 @@ describe('a converter on the bench', () => {
 
     expect(narrow).toBeGreaterThan(wide * 15);
     expect(narrow).toBeLessThan(wide * 17);
+  });
+});
+
+describe('a light sensor on the bench', () => {
+  it('measures the light the operator dialled in, in the mode the sketch chose', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(bh1750Definition());
+    dynamicState.setKnob(device.id, BH1750_LIGHT_KNOB, 250);
+    engine.step(0.05);
+
+    // Power on, then continuous high-resolution measurement: both commands are
+    // one byte, and the chip has no register pointer to set first.
+    bus.beginTransmission(0x23);
+    bus.write(0x01);
+    bus.write(0x10);
+    bus.endTransmission();
+
+    // 250 lux at 1.2 counts per lux, most significant byte first.
+    expect(readBytes(bus, 0x23, 2)).toEqual([0x01, 0x2c]);
+
+    // A continuous conversion follows the knob between reads.
+    dynamicState.setKnob(device.id, BH1750_LIGHT_KNOB, 500);
+    engine.step(0.05);
+    expect(readBytes(bus, 0x23, 2)).toEqual([0x02, 0x58]);
+
+    // Mode two gives twice the counts for the same light.
+    bus.beginTransmission(0x23);
+    bus.write(0x11);
+    bus.endTransmission();
+    expect(readBytes(bus, 0x23, 2)).toEqual([0x04, 0xb0]);
+  });
+});
+
+describe('a TMP102 on the bench', () => {
+  it('reports the knob as a left-justified signed temperature word', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(tmp102Definition());
+    dynamicState.setKnob(device.id, TMP102_TEMPERATURE_KNOB, 30);
+    engine.step(0.05);
+
+    // 30 C is 480 counts at 0.0625 C, left-justified across the two bytes.
+    expect(readRegister(bus, 0x48, 0x00, 2)).toEqual([0x1e, 0x00]);
+
+    dynamicState.setKnob(device.id, TMP102_TEMPERATURE_KNOB, -10);
+    engine.step(0.05);
+    // -160 counts is two's complement in the top twelve bits.
+    expect(readRegister(bus, 0x48, 0x00, 2)).toEqual([0xf6, 0x00]);
+  });
+
+  it('keeps the configuration its datasheet resets to', () => {
+    const { bus } = i2cBench(tmp102Definition());
+    expect(readRegister(bus, 0x48, 0x01, 2)).toEqual([0x60, 0xa0]);
+    expect(readRegister(bus, 0x48, 0x02, 2)).toEqual([0x4b, 0x00]);
+    expect(readRegister(bus, 0x48, 0x03, 2)).toEqual([0x50, 0x00]);
+  });
+});
+
+describe('an SHT31 on the bench', () => {
+  it('sends both measurements with a CRC the sketch can check', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(sht31Definition());
+    dynamicState.setKnob(device.id, SHT31_TEMPERATURE_KNOB, 25);
+    dynamicState.setKnob(device.id, SHT31_HUMIDITY_KNOB, 50);
+    engine.step(0.05);
+
+    bus.beginTransmission(0x44);
+    bus.write(0x24);
+    bus.write(0x00);
+    bus.endTransmission();
+
+    const bytes = readBytes(bus, 0x44, 6);
+    expect(bytes).toHaveLength(6);
+    expect(bytes[2]).toBe(sht31Crc8(bytes.slice(0, 2)));
+    expect(bytes[5]).toBe(sht31Crc8(bytes.slice(3, 5)));
+
+    // The datasheet's two linear maps, read back from the raw words.
+    const temperature = -45 + (175 * ((bytes[0] << 8) | bytes[1])) / 0xffff;
+    const humidity = (100 * ((bytes[3] << 8) | bytes[4])) / 0xffff;
+    expect(temperature).toBeCloseTo(25, 2);
+    expect(humidity).toBeCloseTo(50, 2);
+  });
+
+  it('holds the conversion until the next measurement command', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(sht31Definition());
+    dynamicState.setKnob(device.id, SHT31_TEMPERATURE_KNOB, 20);
+    engine.step(0.05);
+
+    bus.beginTransmission(0x44);
+    bus.write(0x24);
+    bus.write(0x00);
+    bus.endTransmission();
+    const first = readBytes(bus, 0x44, 6);
+
+    dynamicState.setKnob(device.id, SHT31_TEMPERATURE_KNOB, 30);
+    engine.step(0.05);
+    expect(readBytes(bus, 0x44, 6), 'a read is not a new conversion').toEqual(first);
+
+    bus.beginTransmission(0x44);
+    bus.write(0x24);
+    bus.write(0x00);
+    bus.endTransmission();
+    expect(readBytes(bus, 0x44, 6)).not.toEqual(first);
   });
 });
