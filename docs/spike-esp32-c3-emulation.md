@@ -18,6 +18,14 @@ Branch: `spike/esp32-c3-emulation`
    `esp32c3` / `esp32s3` build the RISC-V / S3 machine instead of the classic one. `esp32sim_cpu_hz`
    reports 160 MHz (C3) vs 240 MHz (classic/S3), so pacing must be parameterised.
 
+3. **The GPIO/I2C/SPI seams are NOT in the upstream build.** The published
+   `mikroverk.github.io/esp32sim/wasm/esp32sim.wasm` (3.82 MB) exports only `esp32sim_cpu_hz`,
+   `esp32sim_new` and `esp32sim_set_jit` — none of `esp32sim_gpio_out`, `esp32sim_i2c_attach_host` or
+   `esp32sim_spi_attach_host`. Those exports come from this repo's *local patches*
+   (`src/features/simulation/esp32/patches/esp32sim-*-seam.patch`), and the GPIO patch's match arms are
+   hardcoded to `MachineKind::Esp32(m)` with `_ => 0` for every other variant. So extending the seams to
+   C3/S3 requires editing the Rust source, not just rebuilding.
+
 3. **The seam exports are shared.** The GPIO/I2C/SPI host seams the bench relies on
    (`esp32sim_gpio_out`, `esp32sim_gpio_oe`, `esp32sim_gpio_set_input`, `esp32sim_i2c_attach_host`,
    `esp32sim_spi_attach_host`) are part of the common module ABI, so the same host code transfers. The
@@ -51,13 +59,29 @@ touching (per the codebase map in `src/features/bench/simulations`):
 
 Estimated cost: ~4–6 weeks per family for seams + tests + wiring, after a 1–2 week spike.
 
-## Recommended next step
+## Recommended next step (revised after seam verification)
 
-Phase 2 (if funded): parameterise the `esp32/` module into an `esp32-family/` module keyed by a variant
-enum (`classic | s3 | c3`), with per-variant assets, and wire `esp32c3` into the execution union behind
-the same MicroPython-only policy as the classic ESP32. Start with C3 (simplest ISA, console-only
-peripherals match the bench's GPIO/UART needs for a first blink). Defer S3 until C3 boots, and defer
-STM32 indefinitely.
+The seam verification (see finding 3) changes the cost model: Phase 2 is no longer "parameterise the TS
+side" — it requires **Rust source changes to esp32sim** to extend the GPIO/I2C/SPI seam match arms to
+`MachineKind::Esp32C3` / `Esp32S3`, plus a Rust toolchain build and re-hosting of the resulting WASM.
+
+Additionally, upstream esp32sim lists C3 as "draft: console only" — i.e. even a working C3 emulation
+would deliver serial output only, not GPIO-driven LEDs, which is the bench's core value. The bench's
+starter LED blink would not be observable on C3 until upstream's C3 GPIO model matures.
+
+Given that, three options:
+
+- **Option A — Full seam work**: fork esp32sim, extend the three seam patches to C3/S3, build, host, and
+  integrate. ~6–10 weeks including Rust/toolchain setup. Delivers real C3/S3 emulation with GPIO/I2C/SPI.
+- **Option B — Console-only C3 emulation**: use the upstream (unpatched) WASM as-is for C3/S3. The bench
+  could run MicroPython and show serial output, but no LED blink / no bus devices. Low value, ~2 weeks.
+- **Option C — Keep on interpreter (recommended)**: leave ESP32-C3/S3/STM32F103 on the interpreter path
+  (PR #16). The interpreter already covers the curriculum; the parity scorecard's own ceiling statement
+  notes that instruction-level ESP32 fidelity is "its own spike only if it becomes a product goal."
+
+Recommendation: **Option C** unless there is a concrete curriculum requirement (e.g. "must run real
+ESP-IDF C on these boards"). The interpreter path is complete, tested, and merged. Revisit Option A only
+if a product goal demands instruction-level fidelity.
 
 ## Decision needed
 
