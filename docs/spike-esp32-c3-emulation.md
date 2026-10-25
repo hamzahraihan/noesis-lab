@@ -83,8 +83,21 @@ Recommendation: **Option C** unless there is a concrete curriculum requirement (
 ESP-IDF C on these boards"). The interpreter path is complete, tested, and merged. Revisit Option A only
 if a product goal demands instruction-level fidelity.
 
-## Decision needed
+## Toolchain status (verified on this machine)
 
-- Confirm C3 as the first target (vs S3).
-- Confirm willingness to host ~2.5 MB of new firmware artefacts (ROM + MicroPython image) per variant.
-- Confirm the seam exports are present in the pinned upstream build before committing to the integration.
+- Rust toolchain present: `rustc 1.86.0`, `cargo 1.86.0` (chocolatey, msvc host).
+- **`wasm32-unknown-unknown` std is NOT installed** — sysroot only contains
+  `x86_64-pc-windows-msvc`. `rustup` is not available, so the target cannot be added through the
+  normal path. esp32sim's `tools/wasm-build.sh` requires `rustup target add wasm32-unknown-unknown`
+  and aborts without it.
+- Consequence: the Rust seam-patch work (Option A) cannot be built or tested on this machine until
+  the wasm32 target is installed. Installing it requires either rustup (not present) or a manual
+  component download from the Rust release archives.
+
+## Practical recommendation
+
+Given the toolchain blocker and the "draft: console only" upstream status of C3, **Option C (keep on
+interpreter) remains the deliverable**. Option A is blocked on infrastructure, not on design. If Option A
+is still desired, the next concrete step is a one-time environment setup (install rustup + wasm32
+target) — a human/CI task, not something this agent can complete in-session. After that, the seam-patch
+extension is the actual engineering work.
