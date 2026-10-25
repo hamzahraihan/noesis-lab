@@ -541,6 +541,6 @@ export function starterSketchFor(
   }
   if (boardId === 'pico') return PICO_BLINK_SKETCH;
   if (boardId === 'rp2040') return RP2040_BLINK_SKETCH;
-  if (boardId === 'esp32') return ESP32_BLINK_SKETCH;
+  if (boardId === 'esp32' || boardId === 'esp32-c3' || boardId === 'esp32-s3') return ESP32_BLINK_SKETCH;
   return PI_BLINK_SKETCH;
 }

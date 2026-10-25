@@ -4,6 +4,9 @@ import {
   arduinoNano,
   arduinoUnoR3,
   esp32DevKitV1,
+  esp32C3DevKit,
+  esp32S3DevKit,
+  stm32f103BluePill,
   nanoRp2040Connect,
   raspberryPiPico,
 } from './boards';
@@ -12,6 +15,9 @@ import type { PartDefinition } from './catalog';
 
 const BOARDS: ReadonlyArray<readonly [string, () => PartDefinition]> = [
   ['esp32', esp32DevKitV1],
+  ['esp32-c3', esp32C3DevKit],
+  ['esp32-s3', esp32S3DevKit],
+  ['stm32f103', stm32f103BluePill],
   ['uno', arduinoUnoR3],
   ['mega', arduinoMega2560],
   ['nano', arduinoNano],

@@ -17,9 +17,12 @@ import {
   nanoRp2040Connect,
   arduinoUnoR3,
   esp32DevKitV1,
+  esp32C3DevKit,
+  esp32S3DevKit,
   franzininhoBoard,
   raspberryPi4,
   raspberryPiPico,
+  stm32f103BluePill,
 } from './boards';
 import { breadboardDefinition } from './breadboard';
 import {
@@ -676,6 +679,9 @@ export function isLargePart(id: string): boolean {
 
 const BOARD_FACTORIES: Readonly<Record<string, () => PartDefinition>> = {
   'esp32-devkit-v1': esp32DevKitV1,
+  'esp32-c3-devkit': esp32C3DevKit,
+  'esp32-s3-devkit': esp32S3DevKit,
+  'stm32f103-blue-pill': stm32f103BluePill,
   'arduino-uno-r3': arduinoUnoR3,
   'arduino-mega-2560': arduinoMega2560,
   'arduino-nano': arduinoNano,

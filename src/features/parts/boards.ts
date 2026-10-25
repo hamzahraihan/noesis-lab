@@ -1685,3 +1685,96 @@ let pico: PartDefinition | null = null;
 export function raspberryPiPico(): PartDefinition {
   return (pico ??= picoDefinition());
 }
+
+/**
+ * ESP32-C3 DevKit, on the same DevKit outline as the ESP32-WROOM-32.
+ *
+ * The C3 is a RISC-V part, but the bench models it through the interpreter
+ * like the ESP32, so the header geometry and pin table are reused unchanged.
+ * Only the board identity and serial prefix differ.
+ */
+function esp32C3Definition(): PartDefinition {
+  const base = esp32Definition();
+  return {
+    ...base,
+    id: 'esp32-c3-devkit',
+    name: 'ESP32-C3 DevKit',
+    component: {
+      kind: 'mcu',
+      board: {
+        ...(base.component as { kind: 'mcu'; board: any }).board,
+        id: 'esp32-c3',
+        name: 'ESP32-C3',
+        serialPrefix: 'ESP32-C3',
+      },
+    },
+  };
+}
+
+/**
+ * ESP32-S3 DevKit, on the same DevKit outline as the ESP32-WROOM-32.
+ */
+function esp32S3Definition(): PartDefinition {
+  const base = esp32Definition();
+  return {
+    ...base,
+    id: 'esp32-s3-devkit',
+    name: 'ESP32-S3 DevKit',
+    component: {
+      kind: 'mcu',
+      board: {
+        ...(base.component as { kind: 'mcu'; board: any }).board,
+        id: 'esp32-s3',
+        name: 'ESP32-S3',
+        serialPrefix: 'ESP32-S3',
+      },
+    },
+  };
+}
+
+/**
+ * STM32F103 "Blue Pill", on the Arduino Uno's header geometry for the bench.
+ *
+ * The STM32F103 is an ARM Cortex-M3 part; the bench runs it through the
+ * interpreter like the AVR boards, so the Uno's pin table is reused. Logic
+ * level is 3.3 V with a 12-bit converter.
+ */
+function stm32f103Definition(): PartDefinition {
+  const base = unoDefinition();
+  return {
+    ...base,
+    id: 'stm32f103-blue-pill',
+    name: 'STM32F103 Blue Pill',
+    bodyColour: '#1a6fb0',
+    component: {
+      kind: 'mcu',
+      board: {
+        ...(base.component as { kind: 'mcu'; board: any }).board,
+        id: 'stm32f103',
+        name: 'STM32F103',
+        logicVolts: 3.3,
+        serialPrefix: 'STM32F103',
+        adcBits: 12,
+        pwmHz: 1000,
+        sourceOhms: 40,
+        sinkOhms: 40,
+      },
+    },
+  };
+}
+
+let esp32c3: PartDefinition | null = null;
+let esp32s3: PartDefinition | null = null;
+let stm32f103: PartDefinition | null = null;
+
+export function esp32C3DevKit(): PartDefinition {
+  return (esp32c3 ??= esp32C3Definition());
+}
+
+export function esp32S3DevKit(): PartDefinition {
+  return (esp32s3 ??= esp32S3Definition());
+}
+
+export function stm32f103BluePill(): PartDefinition {
+  return (stm32f103 ??= stm32f103Definition());
+}
