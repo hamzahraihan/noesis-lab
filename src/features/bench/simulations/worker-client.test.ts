@@ -112,6 +112,34 @@ describe('worker client fallback', () => {
     expect(client?.poll()).toBe('ok');
     client?.dispose();
   });
+
+  it('takes the worker’s debug status over its own staged build', () => {
+    const port = fakePort();
+    const client = createWorkerClient({
+      board: { id: 'uno' } as never,
+      bench: benchWith([]),
+      firmware: plainProject(),
+      execution: 'avr',
+      onFallback: () => {},
+      createPort: () => port,
+    });
+    const init = port.sent[0] as { id: number };
+    const buf = allocSnapshot(layoutFor(1, 0, 16));
+    headerView(buf).generation = 1;
+    port.reply({
+      id: init.id,
+      ok: true,
+      buffer: buf,
+      fault: null,
+      debugWatchable: true,
+      debugCompiled: false,
+    });
+    // The AVR build failed onto the interpreter: stops still work, but the
+    // panel must not call this a compiled run.
+    expect(client?.debugWatchable()).toBe(true);
+    expect(client?.debugCompiled()).toBe(false);
+    client?.dispose();
+  });
 });
 
 describe('mirror remap', () => {
@@ -385,6 +413,57 @@ describe('compile routing', () => {
     expect(client.fault).toBeNull();
     client.dispose();
   });
+
+  it('passes the packaged line map to a single-TU build and stages its debug rows', async () => {
+    const seen: { lineMap?: readonly unknown[] } = {};
+    const debug = { lines: [{ pc: 2, file: 'main.ino', line: 1 }] };
+    const client = new WorkerClientImpl({ id: 'uno' } as never, {
+      avrCompile: (async (
+        _source: string,
+        _progress: unknown,
+        _signal: unknown,
+        lineMap: readonly unknown[],
+      ) => {
+        seen.lineMap = lineMap;
+        return { hex: new Uint16Array([1]), warnings: [], debug };
+      }) as never,
+    });
+    client.setExecution('avr');
+    // Nothing has been built yet, so there is nothing to promise.
+    expect(client.debugWatchable()).toBe(false);
+    expect(client.debugCompiled()).toBe(false);
+
+    await client.compileAndRun(plainProject());
+
+    expect(seen.lineMap?.length).toBeGreaterThan(0);
+    expect(client.debugWatchable()).toBe(true);
+    expect(client.debugCompiled()).toBe(true);
+    client.dispose();
+  });
+
+  it('drops staged debug rows when a build fails', async () => {
+    let failing = false;
+    const debug = { lines: [{ pc: 2, file: 'main.ino', line: 1 }] };
+    const client = new WorkerClientImpl({ id: 'uno' } as never, {
+      avrCompile: (async () => {
+        if (failing) throw new Error('boom');
+        return { hex: new Uint16Array([1]), warnings: [], debug };
+      }) as never,
+    });
+    client.setExecution('avr');
+    await client.compileAndRun(plainProject());
+    expect(client.debugWatchable()).toBe(true);
+
+    failing = true;
+    await client.compileAndRun(plainProject());
+
+    expect(client.fault).toMatch(/compile failed/);
+    // With no bundled HEX the worker lands on its interpreter runner, which
+    // the debugger can still watch; the AVR core is gone, not the debugger.
+    expect(client.debugWatchable()).toBe(true);
+    expect(client.debugCompiled()).toBe(false);
+    client.dispose();
+  });
 });
 
 /** Injected fake port: records posts, replays worker replies synchronously. */
@@ -537,6 +616,62 @@ describe('worker port protocol', () => {
     expect(types).toContain('debug-step');
     port.reply({ type: 'debug-resumed' });
     expect(client.debugPaused()).toBe(false);
+    client.dispose();
+  });
+
+  it('carries a compiled stop across the worker boundary with PC and registers', () => {
+    const port = fakePort();
+    const client = portClient(port, vi.fn());
+    replyInitOk(port);
+    port.reply({
+      type: 'debug-paused',
+      frame: {
+        file: 'main.ino',
+        line: 2,
+        column: 0,
+        depth: 0,
+        variables: [],
+        pc: 4,
+        compiled: true,
+        registers: [
+          { name: 'r0', value: '0x00' },
+          { name: 'PC', value: '0x4' },
+        ],
+      },
+    });
+
+    const frame = client.debugFrame();
+    expect(frame?.pc).toBe(4);
+    expect(frame?.compiled).toBe(true);
+    expect(frame?.registers).toEqual([
+      { name: 'r0', value: '0x00' },
+      { name: 'PC', value: '0x4' },
+    ]);
+    client.dispose();
+  });
+
+  it('flashes the compiled debug rows beside the words', async () => {
+    const port = fakePort();
+    const debug = { lines: [{ pc: 2, file: 'main.ino', line: 1 }] };
+    const client = portClient(port, vi.fn(), {
+      avrCompile: (async () => ({
+        hex: new Uint16Array([1]),
+        warnings: [],
+        debug,
+      })) as never,
+    });
+    client.setExecution('avr');
+    replyInitOk(port);
+    port.sent.length = 0;
+
+    await client.compileAndRun(plainProject());
+
+    const flash = port.sent.find((msg) => (msg as { type?: string }).type === 'flash') as
+      | { words: Uint16Array; debug?: unknown }
+      | undefined;
+    expect(flash).toBeDefined();
+    expect(Array.from(flash?.words ?? [])).toEqual([1]);
+    expect(flash?.debug).toEqual(debug);
     client.dispose();
   });
 
