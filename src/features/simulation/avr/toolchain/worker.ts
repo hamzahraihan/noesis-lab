@@ -7,7 +7,8 @@
 // pathname relative to CDN_BASE, and the package's own `assetsBase` support
 // points its tools/assets fetches at CDN_BASE.
 import { CDN_BASE, FetchCache, SRI, createProductionBackend } from './cache';
-import { buildProjectHex } from './tools';
+import { buildProject } from './tools';
+import type { CompiledDebugInfo, DebugUnitMap } from '../debug/lines';
 
 const realFetch = globalThis.fetch.bind(globalThis);
 const cache = new FetchCache(createProductionBackend(), realFetch, SRI);
@@ -39,11 +40,6 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
   });
 }) as typeof fetch;
 
-export interface CompileRequest {
-  readonly id: number;
-  readonly source: string;
-}
-
 export interface ProjectUnitPayload {
   readonly name: string;
   readonly source: string;
@@ -53,37 +49,32 @@ export interface ProjectUnitPayload {
 /**
  * Extended payload, same protocol: the client owns orchestration (Tier-2
  * fetch, custom-slot enumeration, header merging) and posts firmware plus
- * library translation units with their headers, prebuilt Tier-2 objects, and
- * optional manifest object paths. The worker compiles every unit
- * (cc1plus+as), links all objects, and returns HEX — or per-unit GCC errors
- * naming /build/<unit> frames for client-side mapping.
+ * library translation units with their headers, prebuilt Tier-2 objects,
+ * optional manifest object paths, and the per-unit line maps that turn DWARF
+ * rows back into sketch tabs. The worker compiles every unit (cc1plus+as),
+ * links all objects, and returns HEX plus the mapped debug rows — or per-unit
+ * GCC errors naming /build/<unit> frames for client-side mapping.
  */
 export interface ProjectCompileRequest {
   readonly id: number;
   readonly units: readonly ProjectUnitPayload[];
   readonly prebuiltObjects?: readonly Uint8Array[];
   readonly manifestObjects?: readonly string[];
+  readonly lineMaps?: readonly DebugUnitMap[];
 }
 
 export interface CompileResponse {
   readonly id: number;
   readonly ok: boolean;
   readonly hexText?: string;
+  readonly debug?: CompiledDebugInfo;
   readonly errors?: string;
 }
 
-async function handle(source: string): Promise<string> {
-  const toolchain = await import('@horang-corp/avr-gcc-wasm');
-  toolchain.setAssetsBase(CDN_BASE);
-  const result = await toolchain.buildFirmware({ source });
-  if (typeof result.hex !== 'string' || result.hex.length === 0) {
-    throw new Error('toolchain returned no HEX');
-  }
-  return result.hex;
-}
-
-async function handleProject(request: ProjectCompileRequest): Promise<string> {
-  const hexText = await buildProjectHex({
+async function handleProject(
+  request: ProjectCompileRequest,
+): Promise<{ hexText: string; debug: CompiledDebugInfo | null }> {
+  const built = await buildProject({
     units: request.units.map((unit) => ({
       name: unit.name,
       source: unit.source,
@@ -91,25 +82,22 @@ async function handleProject(request: ProjectCompileRequest): Promise<string> {
     })),
     prebuiltObjects: request.prebuiltObjects ?? [],
     manifestObjects: request.manifestObjects,
+    lineMaps: request.lineMaps,
   });
-  if (hexText.length === 0) throw new Error('toolchain returned no HEX');
-  return hexText;
-}
-
-function isProjectRequest(
-  data: CompileRequest | ProjectCompileRequest,
-): data is ProjectCompileRequest {
-  return Array.isArray((data as ProjectCompileRequest).units);
+  if (built.hexText.length === 0) throw new Error('toolchain returned no HEX');
+  return built;
 }
 
 self.addEventListener('message', (event: MessageEvent) => {
-  const data = event.data as CompileRequest | ProjectCompileRequest;
-  const work = isProjectRequest(data)
-    ? handleProject(data)
-    : handle((data as CompileRequest).source);
-  work.then(
-    (hexText: string) => {
-      self.postMessage({ id: data.id, ok: true, hexText } satisfies CompileResponse);
+  const data = event.data as ProjectCompileRequest;
+  handleProject(data).then(
+    (built) => {
+      self.postMessage({
+        id: data.id,
+        ok: true,
+        hexText: built.hexText,
+        ...(built.debug === null ? {} : { debug: built.debug }),
+      } satisfies CompileResponse);
     },
     (error: unknown) => {
       const errors = error instanceof Error ? error.message : String(error);
