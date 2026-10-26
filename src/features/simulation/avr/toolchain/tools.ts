@@ -18,6 +18,8 @@
 // rejects blob: URLs; data: URLs import the same 135 KB glue fine).
 import { CDN_BASE } from './cache';
 import { TIER2_AS_FLAGS, TIER2_CC1_FLAGS } from '../libraries/tier2';
+import { parseElfDebugLines } from '../debug/dwarf';
+import { buildDebugLines, type CompiledDebugInfo, type DebugUnitMap } from '../debug/lines';
 
 export interface ToolchainUnit {
   /** Basename-style object name, e.g. 'HorangFirmware.cpp' — built at /build/<name>. */
@@ -34,6 +36,14 @@ export interface ProjectBuildRequest {
   readonly prebuiltObjects: readonly Uint8Array[];
   /** Manifest object paths; defaults to core_abi.o plus the base group. */
   readonly manifestObjects?: readonly string[];
+  /** Per-unit TU-line -> sketch-line maps, for the DWARF line table. */
+  readonly lineMaps?: readonly DebugUnitMap[];
+}
+
+/** HEX plus the source rows the linked ELF's DWARF line table describes. */
+export interface ProjectBuildResult {
+  readonly hexText: string;
+  readonly debug: CompiledDebugInfo | null;
 }
 
 /** Thrown for toolchain failures (compile/assemble/link/objcopy). The message
@@ -297,14 +307,14 @@ export async function compileToolchainUnit(unit: ToolchainUnit): Promise<Uint8Ar
 
 /**
  * Compiles every unit, links unit objects plus prebuilt objects plus the
- * manifest core objects, and returns the Intel HEX text. Throws
- * BuildFailedError (with GCC frames) on toolchain failure, plain Error on
- * transport failure or abort.
+ * manifest core objects, and returns the Intel HEX text with the linked ELF's
+ * DWARF rows translated back to sketch tabs. Throws BuildFailedError (with GCC
+ * frames) on toolchain failure, plain Error on transport failure or abort.
  */
-export async function buildProjectHex(
+export async function buildProject(
   request: ProjectBuildRequest,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<ProjectBuildResult> {
   const check = (): void => {
     if (signal?.aborted) throw new Error('compile cancelled');
   };
@@ -353,6 +363,10 @@ export async function buildProjectHex(
     '/build/HorangFirmware.elf',
   );
   check();
+  // Debug info is an aid, never a build gate: a malformed line table returns
+  // an empty list, and the HEX below still flashes exactly as before.
+  const rows = buildDebugLines(parseElfDebugLines(elf), request.lineMaps ?? []);
+  const debug = rows.length > 0 ? { lines: rows } : null;
   const hexBytes = await runTool(
     'avr-objcopy',
     ['-O', 'ihex', '-R', '.eeprom', '/build/HorangFirmware.elf', '/build/HorangFirmware.hex'],
@@ -362,5 +376,5 @@ export async function buildProjectHex(
     '/build/HorangFirmware.hex',
   );
   check();
-  return new TextDecoder().decode(hexBytes);
+  return { hexText: new TextDecoder().decode(hexBytes), debug };
 }
