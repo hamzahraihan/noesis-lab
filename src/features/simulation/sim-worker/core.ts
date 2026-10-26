@@ -77,6 +77,7 @@ import {
   type WirePort,
 } from '../firmware/interpreter';
 import { FirmwareDebugger, type Breakpoint, type DebugFrame } from '../firmware/debugger';
+import type { CompiledDebugInfo } from '../avr/debug/lines';
 import { pythonModulesFor } from '../firmware/python-modules';
 import { FirmwareSyntaxError } from '../firmware/parser';
 import {
@@ -175,7 +176,7 @@ export interface CoreHandle {
     fetchRp2040?: () => Promise<Rp2040Assets>,
     fetchEsp32?: () => Promise<Esp32Assets>,
   ): void;
-  flash(words: Uint16Array): void;
+  flash(words: Uint16Array, debug?: CompiledDebugInfo): void;
   snapshot(): SharedArrayBuffer;
   readonly timeMs: number;
   readonly fault: string | null;
@@ -192,6 +193,10 @@ export interface CoreHandle {
   debugFrame(): DebugFrame | null;
   /** Whether the debugger has the program stopped. */
   debugPaused(): boolean;
+  /** Whether the run can be watched at its source lines. */
+  debugWatchable(): boolean;
+  /** Whether the running core is compiled firmware rather than the script. */
+  debugCompiled(): boolean;
   /** Lets the program carry on from where it stopped. */
   resumeDebug(): void;
   /** Runs the program to the next statement, over a call or into it. */
@@ -273,6 +278,7 @@ class SimCore implements CoreHandle {
    */
   private debugger: FirmwareDebugger | null = null;
   private avrBackend: AvrBackend | null = null;
+  private executionMode: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
   private avrSettledRevision = -1;
   private wantWasm = false;
   private wasmDemoted = false;
@@ -447,21 +453,41 @@ class SimCore implements CoreHandle {
     watcher.clear();
     for (const stop of stops) watcher.toggleBreakpoint(stop.file, stop.line);
     this.runner?.runtime.attachDebugger(watcher);
+    this.avrBackend?.setDebugStops(watcher);
   }
 
   debugFrame(): DebugFrame | null {
-    return this.runner?.stoppedAt ?? null;
+    return this.avrBackend?.debugFrame() ?? this.runner?.stoppedAt ?? null;
   }
 
   debugPaused(): boolean {
-    return this.runner?.paused === true;
+    return this.avrBackend?.debugPaused() ?? this.runner?.paused === true;
+  }
+
+  /** A compiled core is watchable only when its build carried source rows. */
+  debugWatchable(): boolean {
+    if (this.avrBackend !== null) return this.avrBackend.hasDebugInfo;
+    return this.executionMode === 'interpreter' || this.executionMode === 'avr';
+  }
+
+  /** An AVR core is present; RP2040/ESP32 and the fallback script are not. */
+  debugCompiled(): boolean {
+    return this.avrBackend !== null;
   }
 
   resumeDebug(): void {
+    if (this.avrBackend?.hasDebugInfo) {
+      this.avrBackend.resumeDebug();
+      return;
+    }
     this.runner?.resume();
   }
 
   stepDebug(mode: 'over' | 'into'): void {
+    if (this.avrBackend?.hasDebugInfo) {
+      this.avrBackend.stepDebug(mode);
+      return;
+    }
     const frame = this.debugFrame();
     if (mode === 'over') {
       if (frame === null) return;
@@ -508,6 +534,7 @@ class SimCore implements CoreHandle {
     this.wasmGeneration += 1;
     this.wasmAttachedTo = null;
     this.wasmFetch = fetchWasm;
+    this.executionMode = execution;
     this.bench = bench;
     this.engine.timeMs = 0;
     this.mcu.reset();
@@ -885,10 +912,10 @@ class SimCore implements CoreHandle {
    * runner, serial, or clock state. Construction failures clear the backend
    * and report through `fault`, as in `tryFlashAvr`.
    */
-  flash(words: Uint16Array): void {
+  flash(words: Uint16Array, debug?: CompiledDebugInfo): void {
     try {
       if (this.mcu.board.id !== 'uno') return;
-      this.flashAvrWords(words);
+      this.flashAvrWords(words, debug);
     } catch (error) {
       this.avrBackend = null;
       this.faultText = error instanceof Error ? error.message : String(error);
@@ -896,7 +923,7 @@ class SimCore implements CoreHandle {
   }
 
   /** Builds an AVR core from flash words over the same hooks `tryFlashAvr` uses. */
-  private flashAvrWords(program: Uint16Array): void {
+  private flashAvrWords(program: Uint16Array, debug?: CompiledDebugInfo): void {
     const flashed = new AvrBackend(program, {
       mcu: this.mcu,
       nowMs: () => this.engine.timeMs,
@@ -920,6 +947,8 @@ class SimCore implements CoreHandle {
       serial: { serialWrite: (text) => this.pushSerial(text) },
       i2c: this.i2cSink(),
     });
+    flashed.attachDebug(debug ?? null);
+    flashed.setDebugStops(this.debugger);
     this.avrBackend = flashed;
     if (this.wantWasm && !this.wasmDemoted)
       void this.attachWasmAsync(flashed, this.wasmGeneration, program);
