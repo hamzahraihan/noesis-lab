@@ -1,12 +1,36 @@
 import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
+import type { DebugFrame, DebugRegister } from '../firmware/debugger';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import type { AttachedWasm, WasmCore } from './wasm-core';
+import type { CompiledDebugInfo, DebugLine } from './debug/lines';
 import { SREG_DATA_ADDR, pullWasmState, readShadowState } from './wasm/sync';
 import { attachGpioBridge } from './gpio';
 import { attachTimer1, bindTimer1Outputs } from './timer1';
 import { attachTwiBridge } from './twi';
 import { attachUsartBridge } from './usart';
+
+/** The part of `FirmwareDebugger` the compiled core reads while it runs. */
+export interface DebugStopSource {
+  readonly armed: boolean;
+  hasBreakpoint(file: string, line: number): boolean;
+}
+
+interface DebugStep {
+  readonly mode: 'over' | 'into';
+  /** The paused PC; the step cannot stop again until it has moved past it. */
+  readonly originPc: number;
+}
+
+/** RCALL, CALL, ICALL or EICALL: an instruction that returns to the next PC. */
+function isCallOpcode(word: number): boolean {
+  return (
+    (word & 0xf000) === 0xd000 ||
+    (word & 0xfe0e) === 0x940e ||
+    word === 0x9509 ||
+    word === 0x9519
+  );
+}
 
 export interface AvrHooks {
   readonly mcu: McuRuntime;
@@ -45,6 +69,10 @@ export interface AvrHooks {
 /** Single step clamp, mirroring MAX_FRAME_MS in bench/simulation.ts. */
 export const MAX_STEP_MS = 40;
 
+function lineKey(line: DebugLine): string {
+  return `${line.file}:${line.line}`;
+}
+
 // SREG I/O address (0x5f) lives in the cycle-free sync leaf
 // (wasm/sync.ts, mirroring the layout in wasm/io.ts); imported here so the
 // address stays single-sourced. Any address change lands in the leaf.
@@ -63,6 +91,94 @@ export class AvrBackend implements ExecutionBackend {
   // JS default path (`wasm` null) is unchanged.
   private wasm: WasmCore | null = null;
   private wasmReset: (() => void) | null = null;
+  // Compiled source-line debugging. `debugRows` is the PC-indexed half of
+  // `debugInfo`, so the instruction loop pays one Map lookup only while a
+  // stop is armed or a step is in flight. A PC can name several source rows
+  // (a block's opening brace and its first statement share an address).
+  private debugInfo: CompiledDebugInfo | null = null;
+  private debugRows: ReadonlyMap<number, readonly DebugLine[]> = new Map();
+  private debugStops: DebugStopSource | null = null;
+  private debugStep: DebugStep | null = null;
+  /**
+   * SP immediately before the call a step-over is currently inside.
+   *
+   * Set when the call instruction executes, not when the line is scanned: a
+   * prologue can lower SP before a call and must not look like one.
+   */
+  private debugReturnSp: number | null = null;
+  private pausedLine: DebugLine | null = null;
+  private pausedFrame: DebugFrame | null = null;
+  /** The source row last entered, so a stop fires once per visit. */
+  private lastDebugLineKey: string | null = null;
+  /** PC of the stop just released; it must run one instruction before re-arming. */
+  private debugSkipPc: number | null = null;
+
+  /** Attaches (or clears) the source map a compiled sketch was built with. */
+  attachDebug(info: CompiledDebugInfo | null): void {
+    const lines = info?.lines ?? [];
+    this.debugInfo = lines.length > 0 ? info : null;
+    const rows = new Map<number, DebugLine[]>();
+    for (const line of lines) {
+      const at = rows.get(line.pc);
+      if (at === undefined) rows.set(line.pc, [line]);
+      else at.push(line);
+    }
+    this.debugRows = rows;
+    this.debugStep = null;
+    this.debugReturnSp = null;
+    this.pausedLine = null;
+    this.pausedFrame = null;
+    this.lastDebugLineKey = null;
+    this.debugSkipPc = null;
+    this.msCarry = 0;
+  }
+
+  /** Sets where the compiled core may stop, or clears the stop source. */
+  setDebugStops(source: DebugStopSource | null): void {
+    this.debugStops = source;
+  }
+
+  /** Whether this core carries a source map worth watching. */
+  get hasDebugInfo(): boolean {
+    return this.debugInfo !== null;
+  }
+
+  debugPaused(): boolean {
+    return this.pausedFrame !== null;
+  }
+
+  /** The held frame, by reference until the program moves. */
+  debugFrame(): DebugFrame | null {
+    return this.pausedFrame;
+  }
+
+  /** Carries on from the held line; it will not stop there again. */
+  resumeDebug(): void {
+    if (this.pausedFrame === null) return;
+    this.lastDebugLineKey = this.pausedLine === null ? null : lineKey(this.pausedLine);
+    this.debugSkipPc = this.pausedLine?.pc ?? null;
+    this.debugStep = null;
+    this.debugReturnSp = null;
+    this.pausedLine = null;
+    this.pausedFrame = null;
+    this.msCarry = 0;
+  }
+
+  /** Spends the held stop, running to the next distinct source line. */
+  stepDebug(mode: 'over' | 'into'): void {
+    if (this.pausedFrame === null || this.pausedLine === null) return;
+    const key = lineKey(this.pausedLine);
+    this.debugStep = {
+      mode,
+      originPc: this.pausedLine.pc,
+    };
+    this.debugReturnSp = null;
+    this.lastDebugLineKey = key;
+    this.debugSkipPc = this.pausedLine.pc;
+    this.pausedLine = null;
+    this.pausedFrame = null;
+    this.msCarry = 0;
+  }
 
   attachWasm(core: WasmCore | null): void {
     this.wasm = core;
@@ -249,13 +365,19 @@ export class AvrBackend implements ExecutionBackend {
 
   step(budgetMs: number): void {
     if (this.failed) return;
+    // A held program does not run, and owes no simulated time: the bench clock
+    // keeps moving beside it, but the core must not try to catch up on resume.
+    if (this.pausedFrame !== null) return;
     const clamped = Math.min(Math.max(budgetMs, 0), MAX_STEP_MS);
     if (budgetMs > MAX_STEP_MS) this.clampedMs += budgetMs - MAX_STEP_MS;
     const perMs = cyclesPerMs(UNO_CLOCK_HZ);
     const ms = this.msCarry + clamped;
     const settleEvery = (this.hooks.isProbed?.() ?? true) ? perMs : perMs * 4;
     const totalCycles = Math.floor(ms * perMs);
-    if (this.wasm !== null) {
+    const debugActive =
+      this.debugInfo !== null &&
+      (this.debugStep !== null || this.debugStops?.armed === true);
+    if (this.wasm !== null && !debugActive) {
       // Attached dispatch (tests only): Wasm runs each slice until it traps;
       // the shadow then catches up from the slice start (executing the prefix
       // with side effects exactly once — Wasm prefix execution is
@@ -271,6 +393,21 @@ export class AvrBackend implements ExecutionBackend {
       const consumedMs = totalCycles / perMs;
       this.msCarry = ms - consumedMs;
       return;
+    } else if (debugActive) {
+      /*
+       * The JS shadow is authoritative while a stop is armed, even if Wasm is
+       * attached: the accelerator's trap ABI knows nothing about breakpoints,
+       * and extending it for a debugger that exists to observe the shadow
+       * would buy nothing. One instruction at a time lets the stop land before
+       * the statement runs, exactly like the interpreter's statement hook.
+       */
+      let remaining = totalCycles;
+      while (remaining > 0) {
+        if (this.checkDebugStop(this.cpu.pc)) return;
+        this.noteStepCall(this.cpu.pc);
+        if (!this.stepShadowInstruction(settleEvery)) return;
+        remaining -= 1;
+      }
     } else {
       let remaining = totalCycles;
       while (remaining > 0) {
@@ -288,6 +425,102 @@ export class AvrBackend implements ExecutionBackend {
     this.msCarry = ms - consumedMs;
   }
 
+  /**
+   * Records the return level when a step-over reaches a call.
+   *
+   * The call itself is about to run, so SP is still at the caller's level.
+   * Waiting for that value comes back skips the callee; a prologue's push has
+   * no such call and therefore cannot trap the step in the current frame.
+   */
+  private noteStepCall(pc: number): void {
+    if (this.debugStep?.mode !== 'over' || this.debugReturnSp !== null) return;
+    if (isCallOpcode(this.programWords[pc] ?? 0)) this.debugReturnSp = this.cpu.SP;
+  }
+
+  /**
+   * Decides whether the instruction at `pc` stops the program before it runs.
+   *
+   * A step answers first: it lands on the next distinct source line, and a
+   * step over a call waits until the stack pointer is back at the level it
+   * left. A stop answers second and fires once per line visit, matching the
+   * interpreter's once-per-line rule.
+   */
+  private checkDebugStop(pc: number): boolean {
+    const rows = this.debugRows.get(pc);
+    if (rows === undefined || rows.length === 0) return false;
+
+    // A released stop sits on the instruction that was about to run. Let it
+    // execute once: a second source row on the same PC would otherwise re-stop
+    // the program before it makes any progress.
+    if (this.debugSkipPc !== null) {
+      const skip = this.debugSkipPc;
+      this.debugSkipPc = null;
+      if (pc === skip) return false;
+    }
+
+    const step = this.debugStep;
+    if (step !== null) {
+      if (pc === step.originPc) return false;
+      const next = rows.find((row) => lineKey(row) !== this.lastDebugLineKey);
+      if (next === undefined) return false;
+      if (
+        step.mode === 'over' &&
+        this.debugReturnSp !== null &&
+        this.cpu.SP < this.debugReturnSp
+      ) {
+        return false;
+      }
+      this.lastDebugLineKey = lineKey(next);
+      this.debugStep = null;
+      this.debugReturnSp = null;
+      this.pauseAt(next);
+      return true;
+    }
+
+    const canonical = rows[rows.length - 1]!;
+    if (this.debugStops?.armed === true) {
+      const hit = rows.find((row) => this.debugStops!.hasBreakpoint(row.file, row.line));
+      if (hit !== undefined && lineKey(hit) !== this.lastDebugLineKey) {
+        this.lastDebugLineKey = lineKey(hit);
+        this.pauseAt(hit);
+        return true;
+      }
+    }
+    this.lastDebugLineKey = lineKey(canonical);
+    return false;
+  }
+
+  private pauseAt(row: DebugLine): void {
+    this.pausedLine = row;
+    this.pausedFrame = this.frameFor(row);
+    this.msCarry = 0;
+  }
+
+  /** The held frame: a stable object, so the worker can deduplicate pushes. */
+  private frameFor(row: DebugLine): DebugFrame {
+    const cpu = this.cpu;
+    const registers: DebugRegister[] = [];
+    for (let index = 0; index < 32; index += 1) {
+      registers.push({
+        name: `r${index}`,
+        value: `0x${(cpu.data[index] ?? 0).toString(16).padStart(2, '0')}`,
+      });
+    }
+    registers.push({ name: 'SP', value: `0x${cpu.SP.toString(16)}` });
+    registers.push({ name: 'SREG', value: `0x${cpu.SREG.toString(16).padStart(2, '0')}` });
+    registers.push({ name: 'PC', value: `0x${(cpu.pc * 2).toString(16)}` });
+    return {
+      file: row.file,
+      line: row.line,
+      column: 0,
+      depth: 0,
+      variables: [],
+      pc: cpu.pc * 2,
+      registers,
+      compiled: true,
+    };
+  }
+
   reset(): void {
     this.cpu = this.buildCpu();
     this.msCarry = 0;
@@ -295,6 +528,12 @@ export class AvrBackend implements ExecutionBackend {
     this.msCounter = 0;
     this.clampedMs = 0;
     this.failed = null;
+    this.debugStep = null;
+    this.debugReturnSp = null;
+    this.pausedLine = null;
+    this.pausedFrame = null;
+    this.lastDebugLineKey = null;
+    this.debugSkipPc = null;
     // Attached Wasm reset hook fires alongside the JS rebuild (spec: reset
     // clears both).
     this.wasmReset?.();
