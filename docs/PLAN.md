@@ -866,23 +866,37 @@ stopped program: carry on, step over the call it is in, or step into it. The
 line itself is marked in the editor, because the editor is where the person is
 looking and the panel is where the detail is.
 
-**The interpreter is where the stops are.** A stop needs a place to stop, and
-the interpreter is a program the bench can read: it asks itself, at every
-statement, whether it should stop there. A compiled core is a machine the
-bench cannot read that way, so a run on one has no stops in it -- and the
-panel says so rather than pretending otherwise.
+**The interpreter asks itself where it is; a compiled core is told.** A stop
+needs a place to stop, and the interpreter is a program the bench can read:
+it asks itself, at every statement, whether it should stop there. A compiled
+AVR sketch is machine code, so its stops come from the line table the
+compiler wrote into the ELF: the toolchain builds with `-gdwarf-2` (the
+bundled GCC otherwise emits stabs, which the assembler turns into lines for
+the `.s` file rather than the sketch), reads `.debug_line`, and translates
+each row through the packager's `lineMap` back to a sketch tab and line. The
+core then stops before the instruction at that PC and reports the PC and the
+registers, where the interpreter can also report the names in scope and what
+they hold. While a stop is armed the JS shadow executes the firmware even
+when the Wasm accelerator is attached: the accelerator's trap path knows
+nothing about breakpoints, and a debugger that exists to observe the shadow
+does not need it to be fast.
 
 **The stops travel with the sketch, not with the run.** The bench's sketch
 may be running in a worker, and the worker is the realm that holds the
 program: so the stops ride with the sketch when it is loaded, and the frame
-the program stopped on comes back as a message. A stop that arrived after
-the sketch had started would be a stop the sketch had already passed.
+the program stopped on comes back as a message. A compiled sketch carries its
+source rows the same way, alongside its flash words; a stop that arrived
+after the sketch had started would be a stop the sketch had already passed.
 
 **A line can hold more than one statement.** `int a = 1; int b = 2;` is two
 statements on one line, and a stop is on the line rather than on the
 statement: it fires when the program reaches the line, and not again while
 it is still on it. A block is not a statement of its own -- it carries the
 line of the first statement inside it -- so it is never where a stop lands.
+DWARF can go further and give one instruction two source lines, as a block's
+opening brace and its first statement share an address. Both stay valid
+breakpoint targets, and carrying on lets that instruction run once before a
+stop can arm again, so the program never stops twice without moving.
 
 
 
