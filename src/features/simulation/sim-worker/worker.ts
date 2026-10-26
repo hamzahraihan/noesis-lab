@@ -11,6 +11,7 @@ import { createSimCore, type CoreHandle } from './core';
 import { clearReportedFaults } from '../scripted/diagnostics';
 import { ACK_STALE_MS, headerView, shouldThrottle } from './protocol';
 import type { Bench } from '../bench';
+import { parseDebugInfo, type CompiledDebugInfo } from '../avr/debug/lines';
 import type { Breakpoint, DebugFrame } from '../firmware/debugger';
 import type { FirmwareProject } from '../firmware/project';
 import type { KnobSpec } from '@/features/parts';
@@ -43,7 +44,7 @@ type Incoming =
   | { id: number; type: 'press'; partId: string; down: boolean }
   | { id: number; type: 'knob'; partId: string; spec: KnobSpec; value: number }
   | { id: number; type: 'edit'; bench: Bench }
-  | { id: number; type: 'flash'; words: Uint16Array }
+  | { id: number; type: 'flash'; words: Uint16Array; debug?: CompiledDebugInfo }
   | { id: number; type: 'speed'; scale: number }
   | { id: number; type: 'ack'; generation: number }
   | { id: number; type: 'faults' }
@@ -73,8 +74,12 @@ let lastAckMs = 0;
 let pausedFrame: DebugFrame | null = null;
 type Port = { postMessage(message: unknown): void };
 function handle(port: Port, msg: Incoming): void {
+  const debugStatus = (): Record<string, unknown> => ({
+    debugWatchable: core?.debugWatchable() ?? false,
+    debugCompiled: core?.debugCompiled() ?? false,
+  });
   const ok = (id: number, extra?: Record<string, unknown>): void =>
-    port.postMessage({ id, ok: true, ...extra });
+    port.postMessage({ id, ok: true, ...debugStatus(), ...extra });
   const fail = (id: number, error: string): void => port.postMessage({ id, ok: false, error });
   const detail = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
@@ -127,7 +132,11 @@ function handle(port: Port, msg: Incoming): void {
         break;
       }
       try {
-        core.flash(msg.words);
+        // The page already parsed the toolchain response, but this is a second
+        // realm boundary: never let a malformed row reach the core's lookup.
+        const debug = msg.debug === undefined ? undefined : parseDebugInfo(msg.debug);
+        if (msg.debug !== undefined && debug === null) throw new Error('malformed debug rows');
+        core.flash(msg.words, debug ?? undefined);
         ok(msg.id, { fault: core.fault });
       } catch (error) {
         fail(msg.id, detail(error));
@@ -230,7 +239,12 @@ if (typeof self !== 'undefined' && 'postMessage' in self) {
       const frame = core.debugFrame();
       if (frame !== pausedFrame) {
         pausedFrame = frame;
-        port.postMessage({ type: 'debug-paused', frame });
+        port.postMessage({
+          type: 'debug-paused',
+          frame,
+          debugWatchable: core.debugWatchable(),
+          debugCompiled: core.debugCompiled(),
+        });
       }
     } else if (pausedFrame !== null) {
       pausedFrame = null;
