@@ -1,0 +1,9 @@
+{
+  "frames": 60,
+  "serial": ["hardware ready"],
+  "hardware": [
+    { "kind": "volts", "part": "p1", "pin": "D13", "min": 4.0 },
+    { "kind": "amps", "pin": "D13", "min": 0.001 },
+    { "kind": "text", "part": "p4", "contains": "hardware ok" }
+  ]
+}

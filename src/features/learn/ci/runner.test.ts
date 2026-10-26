@@ -6,6 +6,9 @@ import { runCiProject } from './runner';
 /** The example project the documentation points at. */
 const EXAMPLE = fileURLToPath(new URL('../../../../examples/ci/blink', import.meta.url));
 
+/** The example that asserts what the bench itself is doing. */
+const HARDWARE = fileURLToPath(new URL('../../../../examples/ci/hardware', import.meta.url));
+
 /**
  * The project the environment names, when there is one.
  *
@@ -27,9 +30,53 @@ describe('the CI runner', () => {
     const project = loadCiProject(EXAMPLE);
     const run = runCiProject({
       ...project,
-      expectations: { frames: 60, serial: ['never said this'] },
+      expectations: { frames: 60, serial: ['never said this'], hardware: [] },
     });
     expect(run.failures.join('; ')).toContain('never said this');
+  });
+
+  it('reads the hardware a project asserts', () => {
+    const project = loadCiProject(HARDWARE);
+    const run = runCiProject(project);
+    expect(run.failures, run.failures.join('; ')).toEqual([]);
+    expect(run.hardware.map((reading) => reading.name)).toEqual([
+      'volts p1:D13',
+      'amps D13',
+      'text p4',
+    ]);
+    expect(run.hardware.every((reading) => reading.ok)).toBe(true);
+  });
+
+  it('says what the hardware did not do', () => {
+    const project = loadCiProject(EXAMPLE);
+    const run = runCiProject({
+      ...project,
+      expectations: {
+        frames: 60,
+        serial: [],
+        hardware: [
+          { kind: 'volts', part: 'p1', pin: 'D13', min: 5.5, at: 10 },
+          { kind: 'text', part: 'p1', contains: 'not an LCD' },
+        ],
+      },
+    });
+    const failures = run.failures.join('; ');
+    expect(failures).toContain('volts p1:D13: expected at least 5.5 V on p1:D13, saw');
+    expect(failures).toContain('text p1: p1 is not a character LCD');
+  });
+
+  it('samples a hardware assertion at the frame it names', () => {
+    const project = loadCiProject(EXAMPLE);
+    const run = runCiProject({
+      ...project,
+      expectations: {
+        frames: 60,
+        serial: [],
+        hardware: [{ kind: 'volts', part: 'p1', pin: 'D13', max: 1, at: 40 }],
+      },
+    });
+    expect(run.failures, run.failures.join('; ')).toEqual([]);
+    expect(run.hardware).toEqual([{ at: 40, ok: true, name: 'volts p1:D13', detail: '' }]);
   });
 
   it('fails a sketch that will not compile', () => {

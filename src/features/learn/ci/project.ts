@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { parseCircuit, type CircuitDocument } from '@/features/simulation';
 import type { FirmwareProject } from '@/features/simulation';
 import { boardForCircuit, type BoardOption } from '../boardRegistry';
+import { parseHardwareAssertions, type HardwareAssertion } from './assertions';
 
 /** What a run should see. */
 export interface CiExpectations {
@@ -40,6 +41,12 @@ export interface CiExpectations {
    * extra lines would be a nuisance rather than a truth.
    */
   readonly serial: readonly string[];
+  /**
+   * What the bench itself should be doing.
+   *
+   * Optional in the file, empty when the project only checks serial output.
+   */
+  readonly hardware: readonly HardwareAssertion[];
 }
 
 /** A project, read from its folder. */
@@ -93,7 +100,7 @@ function readExpectations(folder: string): CiExpectations {
   try {
     raw = readFileSync(join(folder, 'expect.json'), 'utf8');
   } catch {
-    return { frames: DEFAULT_CI_FRAMES, serial: [] };
+    return { frames: DEFAULT_CI_FRAMES, serial: [], hardware: [] };
   }
   let parsed: unknown;
   try {
@@ -106,7 +113,10 @@ function readExpectations(folder: string): CiExpectations {
   }
   const record = parsed as Record<string, unknown>;
   const frames = record.frames;
-  if (frames !== undefined && (typeof frames !== 'number' || !Number.isFinite(frames) || frames < 0)) {
+  if (
+    frames !== undefined &&
+    (typeof frames !== 'number' || !Number.isFinite(frames) || frames < 0)
+  ) {
     throw new Error('expect.json: frames must be a number of frames');
   }
   const serial = record.serial;
@@ -116,9 +126,11 @@ function readExpectations(folder: string): CiExpectations {
   ) {
     throw new Error('expect.json: serial must be a list of lines');
   }
+  const framesCount = typeof frames === 'number' ? Math.floor(frames) : DEFAULT_CI_FRAMES;
   return {
-    frames: typeof frames === 'number' ? Math.floor(frames) : DEFAULT_CI_FRAMES,
+    frames: framesCount,
     serial: Array.isArray(serial) ? (serial as string[]) : [],
+    hardware: parseHardwareAssertions(record.hardware, framesCount),
   };
 }
 
