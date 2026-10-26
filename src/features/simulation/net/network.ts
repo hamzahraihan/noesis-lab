@@ -68,9 +68,31 @@ export const NET_COMMAND_TOPIC = 'commands/interval';
 export const NET_READING_MIN_S = 1;
 export const NET_READING_MAX_S = 60;
 
-/** The payload the sensor publishes at a given reading, derived from its index. */
+/** The values a network sensor reports at a given second. */
+export interface NetSensorReading {
+  readonly temperature: number;
+  readonly humidity: number;
+  readonly pressure: number;
+}
+
+/**
+ * A sensor's reading, derived from the second it was asked at.
+ *
+ * The network plays the device, so the values are a pure function of
+ * simulated time: every run sees the same curve, and a lesson can name the
+ * next reading the way it names the clock.
+ */
+export function netSensorReading(index: number): NetSensorReading {
+  return {
+    temperature: 20 + (index % 8) * 0.5,
+    humidity: 40 + (index % 12) * 0.5,
+    pressure: 1000 + (index % 20),
+  };
+}
+
+/** The payload the MQTT sensor publishes at a given reading, from its index. */
 export function netReadingPayload(index: number): string {
-  return (20 + (index % 8) * 0.5).toFixed(1);
+  return netSensorReading(index).temperature.toFixed(1);
 }
 
 /* The status codes Arduino's WiFi library uses, kept at their real values so a
@@ -418,11 +440,49 @@ export class VirtualNetwork {
           '/time': () => this.clockBody(),
         },
       },
+      /*
+       * A sensor someone else owns: the readings are what the network knows,
+       * not what the board measured. `/reading` is the shape a real JSON API
+       * hands over; the single-value routes are the same data for a sketch
+       * that only needs one field.
+       */
+      'sensor.noesis': {
+        address: '192.168.4.3',
+        routes: {
+          '/temperature': () => this.sensorReadingValue().temperature.toFixed(1),
+          '/humidity': () => this.sensorReadingValue().humidity.toFixed(1),
+          '/pressure': () => String(this.sensorReadingValue().pressure),
+          '/reading': () => JSON.stringify(this.sensorReadingValue()),
+        },
+      },
+      /*
+       * NTP's job -- a clock someone else owns -- on the bench network. The
+       * transport is the bench's HTTP-shaped `net.get` rather than a UDP
+       * socket, but the answer is the same instant, and `WiFiUdp` already asks
+       * this route for its time.
+       */
+      'ntp.noesis': {
+        address: '192.168.4.4',
+        routes: {
+          '/time': () => this.clockBody(),
+          '/epoch': () => String(this.epochSeconds()),
+        },
+      },
     };
   }
 
   /** The bench clock as a request body: ISO-8601 UTC, on simulated time. */
   private clockBody(): string {
     return new Date(NET_EPOCH_MS + this.nowMs()).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  }
+
+  /** The network's sensor, indexed by the whole simulated second. */
+  private sensorReadingValue(): NetSensorReading {
+    return netSensorReading(Math.floor(this.nowMs() / 1000));
+  }
+
+  /** The same instant the clock route names, in whole Unix seconds. */
+  private epochSeconds(): number {
+    return Math.floor((NET_EPOCH_MS + this.nowMs()) / 1000);
   }
 }

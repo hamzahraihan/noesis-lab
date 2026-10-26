@@ -3109,6 +3109,120 @@ const SENSOR_FEED: GalleryProject = {
 };
 
 /* ------------------------------------------------------------------ *
+ * Network Weather — two hosts, one radio, one request at a time
+ * ------------------------------------------------------------------ */
+
+/*
+ * A network is not one server. This project asks two: the clock at
+ * `ntp.noesis` and the sensor at `sensor.noesis`. A board has one radio, so the
+ * loop carries a `stage` and rotates the request rather than trying to keep
+ * both in flight. That rotation is the lesson: the panel keeps the last value
+ * while the next answer is still on its way.
+ */
+const NET_WEATHER_SKETCH = `#include <WiFi.h>
+
+#define BLACK 0x0000
+#define WHITE 0xFFFF
+#define GREEN 0x07E0
+#define SKY   0x867D
+
+/* 0 asks for the clock, 1 for temperature, 2 for humidity. */
+int stage = 0;
+
+void setup() {
+  Serial.begin(115200);
+  tft.begin();
+  tft.setRotation(1);
+  tft.clear();
+  tft.print("NETWORK WEATHER", 20, 20, SKY);
+
+  WiFi.begin("noesis-bench", "benchwifi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(50);
+  }
+  Serial.print("joined ");
+  Serial.println(WiFi.localIP());
+
+  tft.print("time", 20, 80, SKY);
+  tft.print("temperature", 20, 140, SKY);
+  tft.print("humidity", 20, 200, SKY);
+}
+
+void loop() {
+  /*
+   * One radio, one request. The stage says which answer this pass is waiting
+   * for; reset() is what makes the next get() a new request rather than the
+   * answer the port already has.
+   */
+  if (stage == 0) {
+    if (net.get("http://ntp.noesis/time") == 1) {
+      tft.fillRect(140, 80, 300, 30, BLACK);
+      if (net.failed()) {
+        Serial.println("time failed");
+        tft.print("no time", 140, 80, 0xF800);
+      } else {
+        Serial.print("time ");
+        Serial.println(net.read());
+        tft.print(net.read(), 140, 80, GREEN);
+      }
+      net.reset();
+      stage = 1;
+    }
+  } else if (stage == 1) {
+    if (net.get("http://sensor.noesis/temperature") == 1) {
+      tft.fillRect(140, 140, 300, 30, BLACK);
+      if (net.failed()) {
+        Serial.println("temp failed");
+        tft.print("no temperature", 140, 140, 0xF800);
+      } else {
+        Serial.print("temp ");
+        Serial.println(net.read());
+        tft.print(net.read(), 140, 140, GREEN);
+      }
+      net.reset();
+      stage = 2;
+    }
+  } else {
+    if (net.get("http://sensor.noesis/humidity") == 1) {
+      tft.fillRect(140, 200, 300, 30, BLACK);
+      if (net.failed()) {
+        Serial.println("humidity failed");
+        tft.print("no humidity", 140, 200, 0xF800);
+      } else {
+        Serial.print("humidity ");
+        Serial.println(net.read());
+        tft.print(net.read(), 140, 200, GREEN);
+      }
+      net.reset();
+      stage = 0;
+    }
+  }
+
+  delay(20);
+}
+`;
+
+const NET_WEATHER: GalleryProject = {
+  id: 'net-weather',
+  title: 'Network Weather',
+  blurb:
+    'One board asks two services for their data: the network clock for the time, and a network sensor for temperature and humidity. A single radio means one request at a time, so the loop rotates between hosts and keeps drawing while the next answer is in flight.',
+  parts: [{ name: '3.2" TFT (ILI9341)', qty: 1 }],
+  builds: [
+    {
+      board: 'esp32',
+      circuit: CIRCUITS['esp32-tft'],
+      sketch: NET_WEATHER_SKETCH,
+    },
+  ],
+  working: [
+    'The serial monitor reports the join, then cycles through "time", "temp" and "humidity" as each answer arrives.',
+    'The panel shows one value from each host: the clock at ntp.noesis, and the sensor at sensor.noesis.',
+    'Only one request is in flight at a time, and the last value stays on the panel while the next one is pending.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Live Weather — the one build that reaches a real host
  * ------------------------------------------------------------------ */
 
@@ -3654,6 +3768,7 @@ export const GALLERY: readonly GalleryProject[] = [
   REACTION,
   NET_CLOCK,
   SENSOR_FEED,
+  NET_WEATHER,
   LIVE_WEATHER,
   SOIL_PROBE,
   INSTRUMENT_BENCH,

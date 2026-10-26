@@ -200,6 +200,30 @@ void loop() {
   });
 
   /*
+   * The two newer bench hosts, end to end: the shipped sketch cycles one
+   * request at a time between the network's clock and its sensor, and every
+   * answer has to arrive after the network's latency.
+   */
+  it('runs the shipped network-weather project', () => {
+    const build = buildFor(galleryById('net-weather')!, 'esp32')!;
+    const simulation = new Simulation(esp32DevKitV1());
+    expect(simulation.loadCircuit(build.circuit)).toEqual([]);
+    simulation.loadFirmware(build.sketch);
+    simulation.start();
+    for (let frame = 0; frame < 200; frame++) {
+      simulation.tick(0.05);
+      if (simulation.serialLines().join('').includes('humidity ')) break;
+    }
+
+    expect(simulation.firmwareError).toBeNull();
+    const serial = simulation.serialLines().join('');
+    expect(serial).toContain(`joined ${NET_LOCAL_IP}`);
+    expect(serial).toMatch(/time 2026-10-17T12:00:0\dZ/);
+    expect(serial).toContain('temp 20.0');
+    expect(serial).toContain('humidity 40.0');
+  });
+
+  /*
    * The shipped project, end to end: the circuit as a document, the sketch as
    * the gallery carries it, the answer on the panel. This is what makes the
    * capability a feature rather than an API -- a reader can open it, press Run

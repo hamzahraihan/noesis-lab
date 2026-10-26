@@ -196,6 +196,109 @@ describe('asking the network for something', () => {
   });
 });
 
+describe("the network's sensor host", () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('answers with simulated latency, like every other host', () => {
+    const { network, advance } = joined();
+    expect(network.get('http://sensor.noesis/temperature')).toBe(0);
+    advance(NET_LATENCY_MS - 1);
+    expect(network.get('http://sensor.noesis/temperature')).toBe(0);
+    advance(1);
+    expect(network.get('http://sensor.noesis/temperature')).toBe(1);
+    expect(network.read()).toBe('20.0');
+  });
+
+  it('publishes temperature, humidity and pressure that move with the clock', () => {
+    const { network, advance } = joined();
+
+    network.get('http://sensor.noesis/humidity');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://sensor.noesis/humidity')).toBe(1);
+    expect(network.read()).toBe('40.0');
+
+    network.reset();
+    network.get('http://sensor.noesis/pressure');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://sensor.noesis/pressure')).toBe(1);
+    expect(network.read()).toBe('1000');
+
+    // A second later the same sensor has moved on, as a real one would.
+    advance(1000);
+    network.reset();
+    network.get('http://sensor.noesis/temperature');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://sensor.noesis/temperature')).toBe(1);
+    expect(network.read()).toBe('20.5');
+  });
+
+  it('serves all readings together as JSON', () => {
+    const { network, advance } = joined();
+    network.get('http://sensor.noesis/reading');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://sensor.noesis/reading')).toBe(1);
+    expect(network.failed()).toBe(0);
+    expect(JSON.parse(network.read())).toEqual({
+      temperature: 20,
+      humidity: 40,
+      pressure: 1000,
+    });
+  });
+
+  it('reports a path it does not serve as a failure', () => {
+    const { network, advance } = joined();
+    network.get('http://sensor.noesis/temperature');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://sensor.noesis/temperature')).toBe(1);
+    expect(network.read()).toBe('20.0');
+
+    network.reset();
+    network.get('http://sensor.noesis/nothing-here');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://sensor.noesis/nothing-here')).toBe(1);
+    expect(network.failed()).toBe(1);
+    expect(network.read()).toBe('');
+  });
+});
+
+describe('the NTP host', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('serves the bench clock under its own name', () => {
+    const { network, advance } = joined();
+    network.get('http://ntp.noesis/time');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://ntp.noesis/time')).toBe(1);
+    expect(network.failed()).toBe(0);
+    expect(network.read()).toBe('2026-10-17T12:00:00Z');
+  });
+
+  it('serves the same instant as whole epoch seconds', () => {
+    const { network, advance } = joined();
+    network.get('http://ntp.noesis/epoch');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://ntp.noesis/epoch')).toBe(1);
+    expect(network.read()).toBe('1792238400');
+
+    advance(1000);
+    network.reset();
+    network.get('http://ntp.noesis/epoch');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://ntp.noesis/epoch')).toBe(1);
+    expect(network.read()).toBe('1792238401');
+  });
+});
+
 describe('the port a sketch talks to', () => {
   it('is the same object either backend wires', () => {
     const { network, advance } = bench();

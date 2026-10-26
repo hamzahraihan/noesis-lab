@@ -282,8 +282,9 @@ the other starves the request.
 arriving while the clock request is out — the poll-and-flag shape, the failure
 state, and the panel updating. The network itself is the bench's: `noesis-bench`
 with the password `benchwifi`, `api.noesis` serving `/time` and `/hello`,
-`time.noesis` answering the same clock under a second name, and the sensor
-publishing `readings/temp` once a second (retained, so the first
+`time.noesis` and `ntp.noesis` answering the same clock under other names,
+`sensor.noesis` serving `/temperature`, `/humidity`, `/pressure` and `/reading`,
+and the sensor publishing `readings/temp` once a second (retained, so the first
 reading is waiting on the subscribe). Every answer arrives on *simulated* time,
 so the same sketch behaves identically on every machine.
 

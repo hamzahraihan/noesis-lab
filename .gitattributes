@@ -3,3 +3,6 @@
 *.wasm binary
 *.elf binary
 *.bin binary
+
+# Bench presets are compared byte-for-byte with the parser's canonical text.
+src/features/learn/benches/*.json text eol=lf
