@@ -348,6 +348,7 @@ describe('the project gallery', () => {
       reaction: 5,
       'net-clock': 6,
       'sensor-feed': 6,
+      'net-weather': 6,
       'soil-probe': 3,
     };
     for (const entry of GALLERY) {
