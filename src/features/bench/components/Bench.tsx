@@ -785,10 +785,21 @@ export default function Bench(props: BenchProps) {
   const pausedLine =
     debugFrame !== null && debugFrame.file === project.activeName ? debugFrame.line : null;
   /*
-   * The debugger reads the sketch the interpreter runs, so a compiled core
-   * has nothing in it for the debugger to stop at.
+   * What the debugger can promise about the run: the interpreter can always
+   * be watched, a compiled AVR core only when its build carried source rows,
+   * and the RP2040/ESP32 machines have no source debugger at all. The worker
+   * owns the run once it is live, so it answers for its own build.
    */
-  const debugWatchable = (runSession.current?.backend ?? 'interpreter') === 'interpreter';
+  const runBackend = runSession.current?.backend ?? 'interpreter';
+  const debugWatchable = workerActive
+    ? workerClient.debugWatchable()
+    : runBackend === 'interpreter' || (runBackend === 'avr' && simulation.debugWatchable());
+  /*
+   * Compiled state follows the core that is actually running, not the backend
+   * the person selected: a failed AVR build can leave the interpreter running
+   * on the same bench, with source variables and no registers.
+   */
+  const debugCompiled = workerActive ? workerClient.debugCompiled() : simulation.debugCompiled();
   /*
    * The bench layout is frozen while the core steps: moving, turning, or
    * rewiring a part mid-run unclips its jumpers and the firmware is suddenly
@@ -2520,6 +2531,7 @@ export default function Bench(props: BenchProps) {
                 frame={debugFrame}
                 stops={stops}
                 watchable={debugWatchable}
+                compiled={debugCompiled}
                 onContinue={continueDebug}
                 onStepOver={stepDebugOver}
                 onStepInto={stepDebugInto}
