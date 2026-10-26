@@ -75,8 +75,10 @@ import {
   validateLibraries,
   type Bench,
   type Breakpoint,
+  type CompiledDebugInfo,
   type CompileResult,
   type DebugFrame,
+  type DebugRegister,
   type DebugVariable,
   type FirmwareProject,
   type ProjectLibraryContext,
@@ -607,6 +609,10 @@ export interface WorkerClient {
   debugFrame(): DebugFrame | null;
   /** Whether the debugger has the program stopped. */
   debugPaused(): boolean;
+  /** Whether the running core can be watched at its source lines. */
+  debugWatchable(): boolean;
+  /** Whether the running core is compiled AVR firmware, not the script. */
+  debugCompiled(): boolean;
   /** Lets the program carry on from where it stopped. */
   resumeDebug(): void;
   /** Runs the program to the next statement, over a call or into it. */
@@ -662,6 +668,9 @@ function asDebugFrame(value: unknown): DebugFrame | null {
     column: unknown;
     depth: unknown;
     variables: unknown;
+    pc?: unknown;
+    registers?: unknown;
+    compiled?: unknown;
   };
   if (typeof frame.file !== 'string' || typeof frame.line !== 'number') return null;
   if (typeof frame.column !== 'number' || typeof frame.depth !== 'number') return null;
@@ -677,12 +686,31 @@ function asDebugFrame(value: unknown): DebugFrame | null {
     }
     variables.push({ name: variable.name, value: variable.value, scope: variable.scope });
   }
+  if (frame.pc !== undefined && (typeof frame.pc !== 'number' || !Number.isFinite(frame.pc))) {
+    return null;
+  }
+  if (frame.compiled !== undefined && typeof frame.compiled !== 'boolean') return null;
+  let registers: DebugRegister[] | undefined;
+  if (frame.registers !== undefined) {
+    if (!Array.isArray(frame.registers)) return null;
+    registers = [];
+    for (const entry of frame.registers) {
+      if (entry === null || typeof entry !== 'object') return null;
+      if (!('name' in entry) || !('value' in entry)) return null;
+      const register = entry as { name: unknown; value: unknown };
+      if (typeof register.name !== 'string' || typeof register.value !== 'string') return null;
+      registers.push({ name: register.name, value: register.value });
+    }
+  }
   return {
     file: frame.file,
     line: frame.line,
     column: frame.column,
     depth: frame.depth,
     variables,
+    ...(frame.pc === undefined ? {} : { pc: frame.pc }),
+    ...(registers === undefined ? {} : { registers }),
+    ...(frame.compiled === undefined ? {} : { compiled: frame.compiled }),
   };
 }
 
@@ -719,6 +747,13 @@ class WorkerClientImpl implements WorkerClient {
   private stops: readonly Breakpoint[] = [];
   private compileAbort: AbortController | null = null;
   private stagedHex: Uint16Array | null = null;
+  /** Source rows flashed with the staged HEX, so the panel can promise stops. */
+  private stagedDebug: CompiledDebugInfo | null = null;
+  /** The worker's answer for the core it is actually running, when known. */
+  private workerDebugWatchable: boolean | null = null;
+  private workerDebugCompiled: boolean | null = null;
+  /** A failed AVR build with no bundled HEX lands on the interpreter. */
+  private avrFallback = false;
   private overflowSticky = false;
   private disposed = false;
   private samples: Array<{ wall: number; timeMs: number }> = [];
@@ -836,6 +871,13 @@ class WorkerClientImpl implements WorkerClient {
    * fresh one anyway.
    */
   setExecution(execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32'): void {
+    if (execution !== this.execution) {
+      this.workerDebugWatchable = null;
+      this.workerDebugCompiled = null;
+      this.avrFallback = false;
+      this.stagedHex = null;
+      this.stagedDebug = null;
+    }
     this.execution = execution;
   }
 
@@ -902,7 +944,7 @@ class WorkerClientImpl implements WorkerClient {
           signal,
         );
       } else {
-        compiled = await this.avrCompile(packed.source, () => {}, signal);
+        compiled = await this.avrCompile(packed.source, () => {}, signal, packed.lineMap);
       }
     } catch (error) {
       if (this.compileAbort !== controller) return;
@@ -925,6 +967,10 @@ class WorkerClientImpl implements WorkerClient {
     this.compileAbort = null;
     this.loadFirmware(project);
     this.stagedHex = compiled.hex;
+    this.stagedDebug = compiled.debug ?? null;
+    this.avrFallback = false;
+    this.workerDebugWatchable = compiled.debug !== undefined;
+    this.workerDebugCompiled = true;
     this.faultText = null;
     this.postFlash();
   }
@@ -990,6 +1036,27 @@ class WorkerClientImpl implements WorkerClient {
 
   debugPaused(): boolean {
     return this.debugRow !== null;
+  }
+
+  /**
+   * Whether the run can be watched at its source lines.
+   *
+   * The interpreter always can. A compiled AVR core can only when the build
+   * carried DWARF rows: a bundled HEX flashed as a fallback has no source
+   * map, and a promise of stops that can never fire is worse than saying so.
+   * The worker's own answer wins once it has spoken, because it knows which
+   * core actually survived a build or runtime fault.
+   */
+  debugWatchable(): boolean {
+    if (this.execution === 'avr') {
+      return this.workerDebugWatchable ?? (this.stagedDebug !== null || this.avrFallback);
+    }
+    return this.execution === 'interpreter';
+  }
+
+  debugCompiled(): boolean {
+    if (this.execution !== 'avr') return false;
+    return this.workerDebugCompiled ?? (this.stagedHex !== null && !this.avrFallback);
   }
 
   resumeDebug(): void {
@@ -1081,7 +1148,10 @@ class WorkerClientImpl implements WorkerClient {
   /** Flashes the staged HEX onto the worker's AVR core. */
   private postFlash(): void {
     if (this.stagedHex !== null && this.port !== null)
-      this.post('flash', { words: this.stagedHex });
+      this.post('flash', {
+        words: this.stagedHex,
+        ...(this.stagedDebug === null ? {} : { debug: this.stagedDebug }),
+      });
   }
 
   /**
@@ -1102,7 +1172,19 @@ class WorkerClientImpl implements WorkerClient {
       fault?: unknown;
       error?: unknown;
       rows?: unknown;
+      debugWatchable?: unknown;
+      debugCompiled?: unknown;
     };
+    /*
+     * The worker owns the run, so its answer is the truth about the backend it
+     * actually landed on -- including a build fallback or a core that faulted.
+     */
+    if (typeof reply.debugWatchable === 'boolean') {
+      this.workerDebugWatchable = reply.debugWatchable;
+    }
+    if (typeof reply.debugCompiled === 'boolean') {
+      this.workerDebugCompiled = reply.debugCompiled;
+    }
     /*
      * The debugger's own notices, which the worker pushes rather than
      * answering: the program stopped, or it moved on. They carry no id,
@@ -1219,12 +1301,18 @@ class WorkerClientImpl implements WorkerClient {
    * `Simulation` does in-page.
    */
   private landCompileFailure(project: FirmwareProject, detail: string): void {
+    // A failed build has no source rows to watch. Clear the staged map even
+    // when no bundled HEX lands, so a previous run's rows cannot be reused.
+    this.stagedDebug = null;
+    this.workerDebugWatchable = null;
+    this.workerDebugCompiled = null;
     const bundled = hexForSourcesHash(sourcesHashForProject(project));
     if (bundled !== null) {
       try {
         const program = parseIntelHex(bundled);
         this.loadFirmware(project);
         this.stagedHex = program;
+        this.avrFallback = false;
         this.faultText = `compile failed, running bundled HEX: ${detail}`;
         this.postFlash();
         return;
@@ -1233,6 +1321,8 @@ class WorkerClientImpl implements WorkerClient {
       }
     }
     this.loadFirmware(project);
+    this.stagedHex = null;
+    this.avrFallback = true;
     this.faultText = detail.includes('compile failed') ? detail : `compile failed: ${detail}`;
   }
 
