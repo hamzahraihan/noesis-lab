@@ -61,7 +61,7 @@ import {
   type CompileResult,
   type ProjectLibraryContext,
 } from '@/features/simulation';
-import type { DebugFrame, FirmwareDebugger } from '@/features/simulation';
+import type { CompiledDebugInfo, DebugFrame, FirmwareDebugger } from '@/features/simulation';
 import {
   FirmwareRunner,
   toSingleFileProject,
@@ -661,7 +661,7 @@ export class Simulation {
   }
 
   /** Builds an AVR core from flash words over the same hooks `tryFlashAvr` uses. */
-  private flashAvrWords(program: Uint16Array): void {
+  private flashAvrWords(program: Uint16Array, debug?: CompiledDebugInfo): void {
     const flashed = new AvrBackend(program, {
       mcu: this.mcu,
       nowMs: () => this.engine.timeMs,
@@ -690,6 +690,8 @@ export class Simulation {
       serial: { serialWrite: (text) => this.pushSerial(text) },
       i2c: this.avrI2cSink(),
     });
+    flashed.attachDebug(debug ?? null);
+    flashed.setDebugStops(this.debugger);
     this.avrBackend = flashed;
   }
 
@@ -776,6 +778,7 @@ export class Simulation {
             this.compileState = 'compiling';
           },
           signal,
+          packed.lineMap,
         );
       }
     } catch (error) {
@@ -807,7 +810,7 @@ export class Simulation {
     // core, so serial, timing, and the runner start from t=0 together.
     this.loadFirmware(project);
     try {
-      this.flashAvrWords(compiled.hex);
+      this.flashAvrWords(compiled.hex, compiled.debug);
     } catch (error) {
       this.landCompileFailure(project, compileDetail(error));
       return;
@@ -926,6 +929,23 @@ export class Simulation {
   attachDebugger(watcher: FirmwareDebugger | null): void {
     this.debugger = watcher;
     this.runner?.runtime.attachDebugger(watcher);
+    this.avrBackend?.setDebugStops(watcher);
+  }
+
+  /**
+   * Whether the running sketch can be stopped at its source lines.
+   *
+   * The interpreter always can; a compiled core can only when the build
+   * carried DWARF rows. A bundled HEX flashed as a compile fallback has no
+   * source map, and saying so is better than a stop that never fires.
+   */
+  debugWatchable(): boolean {
+    return this.avrBackend === null || this.avrBackend.hasDebugInfo;
+  }
+
+  /** Whether the run that owns the bench is compiled AVR, not the script. */
+  debugCompiled(): boolean {
+    return this.avrBackend !== null;
   }
 
   /**
@@ -935,12 +955,12 @@ export class Simulation {
    * a frame is where the program *is*, not where it was.
    */
   debugFrame(): DebugFrame | null {
-    return this.runner?.stoppedAt ?? null;
+    return this.avrBackend?.debugFrame() ?? this.runner?.stoppedAt ?? null;
   }
 
   /** Whether the debugger has the program stopped. */
   get debugPaused(): boolean {
-    return this.runner?.paused === true;
+    return this.avrBackend?.debugPaused() ?? this.runner?.paused === true;
   }
 
   /**
@@ -950,6 +970,10 @@ export class Simulation {
    * statement, not on it.
    */
   resumeDebug(): void {
+    if (this.avrBackend?.hasDebugInfo) {
+      this.avrBackend.resumeDebug();
+      return;
+    }
     this.runner?.resume();
   }
 
@@ -960,6 +984,10 @@ export class Simulation {
    * one after the call and not the one inside it.
    */
   stepDebugOver(): void {
+    if (this.avrBackend?.hasDebugInfo) {
+      this.avrBackend.stepDebug('over');
+      return;
+    }
     const frame = this.debugFrame();
     if (frame === null) return;
     this.debugger?.stepOver(frame.depth);
@@ -968,6 +996,10 @@ export class Simulation {
 
   /** Runs the program to the very next statement, whatever level it is at. */
   stepDebugInto(): void {
+    if (this.avrBackend?.hasDebugInfo) {
+      this.avrBackend.stepDebug('into');
+      return;
+    }
     this.debugger?.stepInto();
     this.runner?.resume();
   }
