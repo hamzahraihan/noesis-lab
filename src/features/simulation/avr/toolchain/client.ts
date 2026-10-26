@@ -27,10 +27,12 @@ import { fetchIndex } from '../libraries/index';
 import { buildIndexObjects, selectIndexRelease } from '../libraries/index-build';
 import {
   BuildFailedError,
-  buildProjectHex,
+  buildProject,
   compileToolchainUnit,
+  type ProjectBuildResult,
   type ToolchainUnit,
 } from './tools';
+import { parseDebugInfo, type CompiledDebugInfo } from '../debug/lines';
 import type { ProjectCompileRequest } from './worker';
 
 /**
@@ -143,6 +145,8 @@ export function unsupportedIncludes(source: string, supported: ReadonlySet<strin
 export interface CompileResult {
   hex: Uint16Array;
   warnings: string[];
+  /** Source rows from the linked ELF's DWARF table, when it has one. */
+  debug?: CompiledDebugInfo;
 }
 
 let nextCompileId = 1;
@@ -150,14 +154,18 @@ const COMPILE_WATCHDOG_MS = 120_000;
 
 /**
  * Compiles the TU string in the worker and resolves with flash words parsed
- * from the returned Intel HEX. Rejects with CompileError on build failure,
- * Error('compile cancelled') on abort, and Error('library <X> is not
- * bundled (see <N> supported headers)') when the gate fires before compiling.
+ * from the returned Intel HEX. `lineMap` translates the TU's source rows back
+ * to the sketch tabs the packager flattened; without it the mapped rows are
+ * dropped and the build carries no source map. Rejects with CompileError
+ * on build failure, Error('compile cancelled') on abort, and
+ * Error('library <X> is not bundled (see <N> supported headers)') when the
+ * gate fires before compiling.
  */
 export async function compileInWorker(
   source: string,
   onProgress: (stage: string) => void,
   signal: AbortSignal,
+  lineMap?: readonly PackedLine[],
 ): Promise<CompileResult> {
   if (signal.aborted) throw new Error('compile cancelled');
   onProgress('manifest');
@@ -170,12 +178,20 @@ export async function compileInWorker(
   }
   if (signal.aborted) throw new Error('compile cancelled');
   onProgress('compile');
-  let hexText: string;
+  const unitMap =
+    lineMap !== undefined && lineMap.length > 0 ? lineMap : identityUnitMap(source, '');
+  const assembled: AssembledProject = {
+    units: [{ name: TU_BASENAME, source, headers: new Map() }],
+    prebuiltObjects: [],
+    unitMaps: [{ unit: TU_BASENAME, lineMap: unitMap }],
+    warnings: [],
+  };
+  let built: ProjectBuildResult;
   try {
-    hexText =
+    built =
       typeof Worker === 'undefined'
-        ? await buildInNode(source, signal)
-        : await buildInWorker(source, signal);
+        ? await buildProjectInNode(assembled, signal)
+        : await buildProjectInWorker(assembled, signal);
   } catch (error) {
     if (error instanceof BuildFailedError) {
       throw mapGccError(error.message, identityLineMap(source), '');
@@ -183,7 +199,11 @@ export async function compileInWorker(
     throw error;
   }
   onProgress('parse');
-  return { hex: parseIntelHex(hexText), warnings: [] };
+  return {
+    hex: parseIntelHex(built.hexText),
+    warnings: [],
+    ...(built.debug === null ? {} : { debug: built.debug }),
+  };
 }
 
 export interface ProjectLibraryContext {
@@ -432,9 +452,9 @@ export async function compileProjectWithLibraries(
   const assembled = await assembleProjectUnits(project, ctx, supported);
   if (signal.aborted) throw new Error('compile cancelled');
   onProgress('compile');
-  let hexText: string;
+  let built: ProjectBuildResult;
   try {
-    hexText =
+    built =
       typeof Worker === 'undefined'
         ? await buildProjectInNode(assembled, signal)
         : await buildProjectInWorker(assembled, signal);
@@ -445,7 +465,11 @@ export async function compileProjectWithLibraries(
     throw error;
   }
   onProgress('parse');
-  return { hex: parseIntelHex(hexText), warnings: assembled.warnings };
+  return {
+    hex: parseIntelHex(built.hexText),
+    warnings: assembled.warnings,
+    ...(built.debug === null ? {} : { debug: built.debug }),
+  };
 }
 
 /** TU line n -> line n with no tab: preserves the TU line for the caller. */
@@ -456,11 +480,10 @@ function identityLineMap(source: string): PackedLine[] {
   return map;
 }
 
-function buildInWorker(source: string, signal: AbortSignal): Promise<string> {
-  return runWorkerRequest({ source }, signal);
-}
-
-function buildProjectInWorker(assembled: AssembledProject, signal: AbortSignal): Promise<string> {
+function buildProjectInWorker(
+  assembled: AssembledProject,
+  signal: AbortSignal,
+): Promise<ProjectBuildResult> {
   const units = assembled.units.map((unit) => {
     const headers: Record<string, string> = {};
     for (const [name, content] of unit.headers) headers[name] = content;
@@ -469,16 +492,17 @@ function buildProjectInWorker(assembled: AssembledProject, signal: AbortSignal):
   const request: Omit<ProjectCompileRequest, 'id'> = {
     units,
     prebuiltObjects: assembled.prebuiltObjects,
+    lineMaps: assembled.unitMaps,
   };
   return runWorkerRequest(request, signal);
 }
 
 /** Same worker lifecycle (ids, cancel, watchdog) for both payload shapes. */
 function runWorkerRequest(
-  request: { source: string } | Omit<ProjectCompileRequest, 'id'>,
+  request: Omit<ProjectCompileRequest, 'id'>,
   signal: AbortSignal,
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
+): Promise<ProjectBuildResult> {
+  return new Promise<ProjectBuildResult>((resolve, reject) => {
     const id = nextCompileId++;
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     let settled = false;
@@ -501,6 +525,7 @@ function runWorkerRequest(
         ok?: unknown;
         hexText?: unknown;
         errors?: unknown;
+        debug?: unknown;
       };
       if (data === null || typeof data !== 'object' || data.id !== id || settled) return;
       settled = true;
@@ -508,7 +533,7 @@ function runWorkerRequest(
       signal.removeEventListener('abort', onAbort);
       worker.terminate();
       if (data.ok === true && typeof data.hexText === 'string' && data.hexText.length > 0) {
-        resolve(data.hexText);
+        resolve({ hexText: data.hexText, debug: parseDebugInfo(data.debug) });
       } else if (data.ok === false) {
         reject(
           new BuildFailedError(typeof data.errors === 'string' ? data.errors : 'compile failed'),
@@ -562,43 +587,30 @@ function contentTypeFor(path: string): string {
   return 'application/octet-stream';
 }
 
-/**
- * Node fallback for the vitest environment, where the Vite web-worker entry
- * cannot be instantiated. Same package, same assetsBase, same TU, same
- * FetchCache/SRI path as the worker — just in-thread instead of in-worker.
- * Never runs in the browser.
- */
-async function buildInNode(source: string, signal: AbortSignal): Promise<string> {
-  if (signal.aborted) throw new Error('compile cancelled');
-  const hexText = await withToolchainFetch(async () => {
-    const toolchain = await import(/* @vite-ignore */ '@horang-corp/avr-gcc-wasm');
-    toolchain.setAssetsBase(CDN_BASE);
-    const result = await toolchain.buildFirmware({ source });
-    if (typeof result.hex !== 'string' || result.hex.length === 0)
-      throw new Error('toolchain returned no HEX');
-    return result.hex;
-  });
-  if (signal.aborted) throw new Error('compile cancelled');
-  return hexText;
-}
-
 /** Multi-TU node fallback: same shim, shared tools.ts driver, abort between stages. */
 async function buildProjectInNode(
   assembled: AssembledProject,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<ProjectBuildResult> {
   if (signal.aborted) throw new Error('compile cancelled');
   const units: ToolchainUnit[] = assembled.units.map((unit) => ({
     name: unit.name,
     source: unit.source,
     headers: unit.headers,
   }));
-  const hexText = await withToolchainFetch(() =>
-    buildProjectHex({ units, prebuiltObjects: assembled.prebuiltObjects }, signal),
+  const built = await withToolchainFetch(() =>
+    buildProject(
+      {
+        units,
+        prebuiltObjects: assembled.prebuiltObjects,
+        lineMaps: assembled.unitMaps,
+      },
+      signal,
+    ),
   );
   if (signal.aborted) throw new Error('compile cancelled');
-  if (hexText.length === 0) throw new Error('toolchain returned no HEX');
-  return hexText;
+  if (built.hexText.length === 0) throw new Error('toolchain returned no HEX');
+  return built;
 }
 
 /** Installs the SRI-verified FetchCache fetch shim, runs, and restores. */
