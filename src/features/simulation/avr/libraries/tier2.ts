@@ -103,6 +103,7 @@ export const TIER2_CC1_FLAGS: readonly string[] = Object.freeze([
   '-auxbase-strip',
   '<tu.s>',
   '-Os',
+  '-gdwarf-2',
   '-std=gnu++11',
   '-fpermissive',
   '-fno-exceptions',
@@ -116,7 +117,7 @@ export const TIER2_CC1_FLAGS: readonly string[] = Object.freeze([
 ]);
 
 /** Constant half of the package's avr-as argv (["-mmcu=atmega328p", "-o", out, in.s]). */
-export const TIER2_AS_FLAGS: readonly string[] = Object.freeze(['-mmcu=atmega328p']);
+export const TIER2_AS_FLAGS: readonly string[] = Object.freeze(['-mmcu=atmega328p', '-g']);
 
 function fnv1a32(text: string): string {
   let hash = 0x811c9dc5;
