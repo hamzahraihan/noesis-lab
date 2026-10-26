@@ -33,6 +33,12 @@ export interface DebugVariable {
   readonly scope: 'local' | 'field' | 'global';
 }
 
+/** One register as the compiled debugger reads it. */
+export interface DebugRegister {
+  readonly name: string;
+  readonly value: string;
+}
+
 /** Where the program stopped, and what it could see from there. */
 export interface DebugFrame {
   readonly file: string;
@@ -46,6 +52,17 @@ export interface DebugFrame {
    */
   readonly depth: number;
   readonly variables: readonly DebugVariable[];
+  /**
+   * Byte address of the program counter, for a compiled frame.
+   *
+   * DWARF and GDB name AVR instructions by byte address; avr8js names them by
+   * word index, so the backend converts once when it builds the frame.
+   */
+  readonly pc?: number;
+  /** Register file plus SREG/SP/PC, for a compiled frame. */
+  readonly registers?: readonly DebugRegister[];
+  /** True when the frame came from compiled firmware rather than a script. */
+  readonly compiled?: boolean;
 }
 
 export class FirmwareDebugger {
