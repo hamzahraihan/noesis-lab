@@ -13,6 +13,7 @@ describe('toolchain flag builders', () => {
   it('builds the avr-as argv around the unit assembly', () => {
     expect(avrAsArgsFor('/build/Foo.s', '/build/Foo.o')).toEqual([
       '-mmcu=atmega328p',
+      '-g',
       '-o',
       '/build/Foo.o',
       '/build/Foo.s',
