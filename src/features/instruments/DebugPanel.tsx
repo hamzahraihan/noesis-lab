@@ -6,9 +6,9 @@
  * things a person can ask of a stopped program -- carry on, step over the
  * call it is in, or step into it.
  *
- * Compiled AVR firmware has source lines but no source variables (there is no
- * DWARF variable reader yet), so a compiled stop shows its PC and register
- * file instead. The same buttons ask the same questions of either backend.
+ * Compiled AVR firmware carries source lines and DWARF variables, so a
+ * compiled stop shows the sketch's names, the register file and an SRAM
+ * snapshot. The same buttons ask the same questions of either backend.
  *
  * When nothing is stopped the panel lists the stops instead, because a stop
  * that is set on a line the program has not reached yet is the only thing a
@@ -18,6 +18,7 @@
 import { memo } from 'react';
 import type { Breakpoint, DebugFrame } from '@/features/simulation';
 import { Button } from '@/components';
+import { memoryRows } from './memory';
 
 export interface DebugPanelProps {
   /** Where the program stopped, while it is stopped. */
@@ -52,6 +53,8 @@ export const DebugPanel = memo(function DebugPanel({
   // The frame is the program the person is looking at; the prop only speaks
   // for a run that has not stopped yet.
   const compiledRun = frame !== null ? frame.compiled === true : compiled;
+  const spValue = frame?.registers?.find((register) => register.name === 'SP')?.value;
+  const sp = spValue === undefined ? undefined : Number.parseInt(spValue, 16);
   return (
     <section className="flex h-full flex-col gap-2 px-3 py-2">
       {frame === null ? (
@@ -63,8 +66,8 @@ export const DebugPanel = memo(function DebugPanel({
           </p>
           {watchable && compiledRun && (
             <p className="font-sans text-xs text-[var(--hd-faint)]">
-              Compiled AVR firmware: stops come from the build&apos;s source lines, and a stop shows
-              the PC and register file.
+              Compiled AVR firmware: stops come from the build&apos;s source lines; a stop shows
+              sketch variables, the register file and SRAM.
             </p>
           )}
           {stops.length > 0 && (
@@ -101,15 +104,15 @@ export const DebugPanel = memo(function DebugPanel({
           </div>
           {compiledRun && (
             <p className="font-sans text-xs text-[var(--hd-faint)]">
-              Compiled AVR firmware: source variables are not available; the register file is shown
-              below.
+              Compiled AVR firmware: variables and memory come from the build&apos;s DWARF. With
+              -Os, a name whose value is no longer live is shown as optimized out.
             </p>
           )}
           {frame.variables.length > 0 && (
             <table className="w-full font-mono text-xs">
               <tbody>
                 {frame.variables.map((variable) => (
-                  <tr key={`${variable.scope}:${variable.name}`}>
+                  <tr key={`${variable.scope}:${variable.name}:${variable.declLine ?? 0}`}>
                     <td className="w-16 py-0.5 pr-2 text-[var(--hd-faint)]">{variable.scope}</td>
                     <td className="py-0.5 pr-2 text-[var(--hd-text)]">{variable.name}</td>
                     <td className="py-0.5 text-[var(--hd-muted)]">{variable.value}</td>
@@ -132,6 +135,31 @@ export const DebugPanel = memo(function DebugPanel({
                 ))}
               </dl>
             </div>
+          )}
+          {frame.memory !== undefined && (
+            <details className="rounded border border-[var(--hd-border)]">
+              <summary className="cursor-pointer px-2 py-1 font-sans text-[11px] tracking-[0.08em] uppercase text-[var(--hd-faint)]">
+                Memory
+              </summary>
+              <div className="max-h-48 overflow-auto">
+                <table className="w-full font-mono text-[11px]">
+                  <tbody>
+                    {memoryRows(frame.memory, sp).map((row) => (
+                      <tr
+                        key={row.address}
+                        className={row.hasSp ? 'bg-[var(--hd-border)]/40' : undefined}
+                      >
+                        <td className="py-0.5 pr-2 text-[var(--hd-faint)]">
+                          {row.hasSp ? '>' : ' '}0x{row.address.toString(16).padStart(4, '0')}
+                        </td>
+                        <td className="py-0.5 pr-2 text-[var(--hd-text)]">{row.hex}</td>
+                        <td className="py-0.5 text-[var(--hd-muted)]">{row.ascii}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           )}
         </>
       )}

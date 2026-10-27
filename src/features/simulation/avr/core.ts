@@ -1,9 +1,10 @@
 import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8js';
 import type { McuRuntime } from '@/features/simulation/mcu';
-import type { DebugFrame, DebugRegister } from '../firmware/debugger';
+import type { DebugFrame, DebugMemory, DebugRegister } from '../firmware/debugger';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import type { AttachedWasm, WasmCore } from './wasm-core';
 import type { CompiledDebugInfo, DebugLine } from './debug/lines';
+import { readVariables } from './debug/evaluate';
 import { SREG_DATA_ADDR, pullWasmState, readShadowState } from './wasm/sync';
 import { attachGpioBridge } from './gpio';
 import { attachTimer1, bindTimer1Outputs } from './timer1';
@@ -500,23 +501,42 @@ export class AvrBackend implements ExecutionBackend {
   private frameFor(row: DebugLine): DebugFrame {
     const cpu = this.cpu;
     const registers: DebugRegister[] = [];
+    const registerBytes: number[] = [];
     for (let index = 0; index < 32; index += 1) {
+      const byte = cpu.data[index] ?? 0;
+      registerBytes.push(byte);
       registers.push({
         name: `r${index}`,
-        value: `0x${(cpu.data[index] ?? 0).toString(16).padStart(2, '0')}`,
+        value: `0x${byte.toString(16).padStart(2, '0')}`,
       });
     }
     registers.push({ name: 'SP', value: `0x${cpu.SP.toString(16)}` });
     registers.push({ name: 'SREG', value: `0x${cpu.SREG.toString(16).padStart(2, '0')}` });
     registers.push({ name: 'PC', value: `0x${(cpu.pc * 2).toString(16)}` });
+    const variables =
+      this.debugInfo === null
+        ? []
+        : readVariables(this.debugInfo, {
+            pc: cpu.pc * 2,
+            registers: registerBytes,
+            sp: cpu.SP,
+            data: cpu.data,
+          });
+    const memoryStart = 0x100;
+    const memoryEnd = Math.min(cpu.data.length, 0x900);
+    const memory: DebugMemory = {
+      start: memoryStart,
+      bytes: Array.from(cpu.data.subarray(memoryStart, memoryEnd)),
+    };
     return {
       file: row.file,
       line: row.line,
       column: 0,
       depth: 0,
-      variables: [],
+      variables,
       pc: cpu.pc * 2,
       registers,
+      memory,
       compiled: true,
     };
   }
