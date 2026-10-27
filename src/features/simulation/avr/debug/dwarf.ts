@@ -33,7 +33,7 @@ function cString(bytes: Uint8Array, at: number): string {
   return new TextDecoder().decode(bytes.subarray(at, end));
 }
 
-function sectionsOf(elf: Uint8Array): ReadonlyMap<string, Uint8Array> {
+export function sectionsOf(elf: Uint8Array): ReadonlyMap<string, Uint8Array> {
   if (elf.length < 52) throw new RangeError('ELF is truncated');
   if (
     elf[0] !== 0x7f ||
@@ -75,7 +75,7 @@ function sectionsOf(elf: Uint8Array): ReadonlyMap<string, Uint8Array> {
   return byName;
 }
 
-class Reader {
+export class Reader {
   readonly bytes: Uint8Array;
   readonly end: number;
   offset: number;
@@ -325,6 +325,27 @@ function readV4Files(reader: Reader): FileEntry[] {
     files.push({ name });
   }
   return files;
+}
+
+/** File table of the line-table unit at `offset`, 1-based, index 0 empty. */
+export function lineFilesAt(line: Uint8Array, offset: number): string[] {
+  try {
+    const reader = new Reader(line, line.length, offset);
+    reader.u32(); // unit length
+    const version = reader.u16();
+    if (version < 2 || version > 4) return [];
+    reader.u32(); // header length
+    reader.u8(); // minimum instruction length
+    if (version >= 4) reader.u8(); // maximum operations per instruction
+    reader.u8(); // default_is_stmt
+    reader.i8(); // line_base
+    reader.u8(); // line_range
+    const opcodeBase = reader.u8();
+    for (let index = 1; index < opcodeBase; index += 1) reader.uleb();
+    return readV4Files(reader).map((file) => file.name);
+  } catch {
+    return [];
+  }
 }
 
 interface State {
