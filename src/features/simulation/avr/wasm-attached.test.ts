@@ -32,6 +32,9 @@ describe('wasm-visible preservation', () => {
       setSreg: (v: number) => {
         sreg = v & 0xff;
       },
+      getCycles: () => 0,
+      setCycles: () => {},
+      getInstructions: () => 0,
     };
     // DIVERGENT shadow: wasm regs start zeroed, shadow carries regs[i]=i,
     // pc 5, sreg 3, so the post-run assertions prove wasm-visible state

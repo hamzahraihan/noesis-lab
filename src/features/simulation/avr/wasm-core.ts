@@ -8,6 +8,7 @@ export { SREG_DATA_ADDR, pullWasmState, readShadowState } from './wasm/sync';
 export interface WasmCore {
   stepCycles(n: number): void;
   getCycles(): number;
+  setCycles(v: number): void;
   getPc(): number;
 }
 
@@ -160,6 +161,9 @@ export interface AttachedWasm {
   setReg(i: number, v: number): void;
   getSreg(): number;
   setSreg(v: number): void;
+  getCycles(): number;
+  setCycles(v: number): void;
+  getInstructions(): number;
 }
 
 export interface AttachedShadow {
@@ -375,6 +379,9 @@ export async function loadWasmModule(
     get_sreg(): number;
     set_sreg(v: number): void;
     step(n: number): number;
+    get_cycles(): number;
+    set_cycles(v: number): void;
+    get_instructions(): number;
     memory: WebAssembly.Memory;
   };
   const core: AttachedWasm = {
@@ -385,6 +392,9 @@ export async function loadWasmModule(
     setReg: (i: number, v: number): void => e.set_reg(i, v),
     getSreg: (): number => e.get_sreg(),
     setSreg: (v: number): void => e.set_sreg(v),
+    getCycles: (): number => e.get_cycles(),
+    setCycles: (v: number): void => e.set_cycles(v),
+    getInstructions: (): number => e.get_instructions(),
   };
   return {
     ok: true,
@@ -403,7 +413,7 @@ export async function loadWasmModule(
 }
 
 /** Rollout default (Stage 3 flips this to true once the gates pass). */
-export const WASM_DEFAULT = true;
+export const WASM_DEFAULT = false;
 
 export function resolveWasmFlag(explicit?: boolean): boolean {
   return explicit ?? WASM_DEFAULT;

@@ -23,6 +23,9 @@ describe('trap adapter', () => {
       },
       getSreg: () => 0,
       setSreg: () => {},
+      getCycles: () => 0,
+      setCycles: () => {},
+      getInstructions: () => 0,
     };
     const r = runAttached(wasm, shadow, 10);
     expect(r.traps).toBe(3);

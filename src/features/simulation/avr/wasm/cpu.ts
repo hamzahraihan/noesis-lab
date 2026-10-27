@@ -9,13 +9,24 @@
 //
 // Trap ABI (single-PC): `step(n)` returns -1 when it consumed all `n`
 // cycles without trapping. Otherwise it returns the PC of the trapping
-// instruction (unported opcode, out-of-bounds flash). The host then handles
-// the trap and resumes.
+// instruction (unported opcode, out-of-bounds flash, or anything needing
+// JS side effects — I/O, SRAM, stack). The host then handles the trap
+// and resumes.
+//
+// PC is word-addressed, matching avr8js: each instruction is one 16-bit
+// word, and `pc` advances by 1 word per instruction unless a branch/jump
+// changes it.
+//
+// Interrupts: before each instruction fetch, the core checks for a pending
+// interrupt (global interrupt enable + mask flag + flag set). If pending,
+// it pushes PC onto the stack, jumps to the interrupt vector, clears the
+// global enable flag, and charges 3 cycles for the interrupt response.
+// RETI restores PC and re-enables interrupts.
 import { alu_add } from './ops-alu';
 import { alu_sub } from './ops-alu';
 
 const FLASH_BASE: i32 = 0;
-const FLASH_WORDS: i32 = 512;
+const FLASH_WORDS: i32 = 65536;
 const REGS_BASE: i32 = 1024;
 
 // SREG bit positions (matching avr8js data[95] layout).
@@ -27,6 +38,23 @@ const SREG_S = 0x10;
 const SREG_H = 0x20;
 const SREG_I = 0x80;
 
+// Interrupt vector table (word addresses). Timer0 overflow is at word 9
+// (byte 0x0012, the 10th vector).
+const TIMER0_OVF_VECTOR: i32 = 9;
+
+// Timer0 I/O port addresses (AVR I/O port numbering).
+const PORT_TCCR0A: i32 = 0x24;
+const PORT_TCCR0B: i32 = 0x25;
+const PORT_TCNT0: i32 = 0x26;
+const PORT_OCR0A: i32 = 0x27;
+const PORT_SREG: i32 = 0x5f;
+const PORT_TIMSK0: i32 = 0x6e;
+const PORT_TIFR0: i32 = 0x6f;
+
+// Timer0 flag bits.
+const TIFR0_TOV0: i32 = 0x01;
+const TIMSK0_TOIE0: i32 = 0x01;
+
 let pc: i32 = 0;
 let cycles: i32 = 0;
 let sreg: i32 = 0;
@@ -34,9 +62,35 @@ let sreg: i32 = 0;
 // Stack pointer (word address in data space; avr8js keeps it in data[93-94]).
 let sp: i32 = 0;
 
+// Remaining instruction budget for the current step() call.
+let remaining: i32 = 0;
+
+// Total instructions executed (for step budget tracking in the host).
+let instructions: i32 = 0;
+
 // RAMEND: top of data space. On ATmega328P it's 0x8FF (2303 bytes).
 // We only model registers + a small stack; SRAM access traps to JS.
 const RAMEND: i32 = 0x8ff;
+
+// ---------------------------------------------------------------------------
+// Timer0 model
+// ---------------------------------------------------------------------------
+// Timer0 is an 8-bit timer with a programmable prescaler. On the ATmega328P,
+// Arduino's init() configures prescaler = 64, so TCNT0 increments every 64
+// CPU cycles and overflows every 256 * 64 = 16384 cycles (~1 ms at 16 MHz).
+// Overflow sets TOV0 in TIFR0; if TOIE0 in TIMSK0 and the global I-bit in
+// SREG are set, the Timer0 overflow interrupt fires.
+//
+// Registers are I/O ports accessed via IN/OUT instructions. The prescaler
+// counter is internal (not an I/O port).
+
+let tcnt0: i32 = 0;    // Timer0 counter (0-255)
+let tccr0a: i32 = 0;   // Timer0 control register A
+let tccr0b: i32 = 0;   // Timer0 control register B (CS02:00 in bits 2:0)
+let _ocr0a: i32 = 0;   // Output compare register A (stub)
+let timsk0: i32 = 0;   // Timer0 interrupt mask (TOIE0 in bit 0)
+let tifr0: i32 = 0;    // Timer0 interrupt flag (TOV0 in bit 0)
+let prescaler0: i32 = 0; // Prescaler counter (internal)
 
 export function flash_base(): i32 {
   return FLASH_BASE;
@@ -47,7 +101,17 @@ export function reset_cpu(): void {
   pc = 0;
   cycles = 0;
   sreg = 0;
-  sp = RAMEND + 1;
+  sp = RAMEND + 1; // stack grows down from RAMEND+1
+  remaining = 0;
+  instructions = 0;
+  // Reset Timer0 state
+  tcnt0 = 0;
+  tccr0a = 0;
+  tccr0b = 0;
+  _ocr0a = 0;
+  timsk0 = 0;
+  tifr0 = 0;
+  prescaler0 = 0;
 }
 
 export function get_reg(i: i32): i32 {
@@ -78,6 +142,10 @@ export function get_cycles(): i32 {
   return cycles;
 }
 
+export function get_instructions(): i32 {
+  return instructions;
+}
+
 export function get_sp(): i32 {
   return sp;
 }
@@ -89,6 +157,13 @@ export function set_sp(v: i32): void {
 export function set_cycles(v: i32): void {
   cycles = v;
 }
+
+// Timer0 register getters/setters for cross-realm sync (core.ts).
+export function get_tcnt0(): i32 { return tcnt0; }
+export function set_tcnt0(v: i32): void { tcnt0 = v & 0xff; }
+export function get_tccr0b(): i32 { return tccr0b; }
+export function get_timsk0(): i32 { return timsk0; }
+export function get_tifr0(): i32 { return tifr0; }
 
 function readFlash(addr: i32): i32 {
   if (addr < 0 || addr >= FLASH_WORDS) return -1;
@@ -147,21 +222,85 @@ function setSubFlags(result: i32, val1: i32, val2: i32, borrow: boolean): void {
   sreg = flags;
 }
 
+// ---------------------------------------------------------------------------
+// Timer0 helpers
+// ---------------------------------------------------------------------------
+
+/** Prescaler division factor from TCCR0B CS02:00 bits. */
+function prescalerDiv(tccr0b: i32): i32 {
+  const cs = tccr0b & 0x07;
+  if (cs === 0) return 1; // no clock source (timer stopped)
+  if (cs === 1) return 1;
+  if (cs === 2) return 8;
+  if (cs === 3) return 64;
+  if (cs === 4) return 256;
+  if (cs === 5) return 1024;
+  return 1; // external pin toggling (bits 6,7): not supported
+}
+
+/**
+ * Advance the Timer0 prescaler and counter by `n` CPU cycles.
+ * Called for every cycle consumed by instruction execution or interrupt
+ * response, so TCNT0 and TOV0 stay in sync with real time.
+ */
+function advanceTimer(n: i32): void {
+  const div = prescalerDiv(tccr0b);
+  const total = prescaler0 + n;
+  const overflows = total / div; // integer division
+  prescaler0 = total % div;
+  const oldTcnt0 = tcnt0;
+  tcnt0 = (tcnt0 + overflows) & 0xff;
+  if (oldTcnt0 + overflows > 255) {
+    tifr0 |= TIFR0_TOV0;
+  }
+}
+
+/** Spend `n` cycles: update cycle counter, remaining instruction budget, and Timer0. */
+function spend(n: i32): void {
+  cycles += n;
+  remaining -= 1; // one instruction consumed
+  instructions += 1;
+  advanceTimer(n);
+}
+
+// ---------------------------------------------------------------------------
+// Main step loop
+// ---------------------------------------------------------------------------
+
 export function step(n: i32): i32 {
-  let remaining = n;
+  remaining = n;
   while (remaining > 0) {
     const w = readFlash(pc);
     if (w < 0) {
       return pc;
     }
 
+    // Check for a pending interrupt BEFORE executing the next instruction.
+    // Real AVR samples interrupts between instructions: if the global enable
+    // (I-bit in SREG), the peripheral mask (TOIE0 in TIMSK0), and the
+    // peripheral flag (TOV0 in TIFR0) are all set, the interrupt is taken.
+    // The push of PC takes 3 cycles; the vectored RJMP is fetched next.
+    if ((sreg & SREG_I) !== 0 && (timsk0 & TIMSK0_TOIE0) !== 0 && (tifr0 & TIFR0_TOV0) !== 0) {
+      // Push return address (PC points at the not-yet-executed instruction).
+      sp -= 1;
+      store<u8>(sp, (pc >> 8) & 0xff);
+      sp -= 1;
+      store<u8>(sp, pc & 0xff);
+      // Jump to the Timer0 overflow vector.
+      pc = TIMER0_OVF_VECTOR;
+      // Clear the global interrupt enable (nested interrupts disabled).
+      sreg &= ~SREG_I;
+      // Interrupt response: 3 cycles (push PC lo, push PC hi, load vector).
+      spend(3);
+      continue;
+    }
+
     // =====================================================================
-    // NOP: 0000 0000 0000 0000
+    // NOP: 0000 0000 0000 0000  (1 cycle)
     // =====================================================================
     if (w === 0x0000) {
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -172,27 +311,27 @@ export function step(n: i32): i32 {
       if (remaining < 2) return -1;
       let k = w & 0x0fff;
       if ((k & 0x0800) !== 0) k -= 0x1000;
-      pc += k + 1;
-      cycles += 2;
-      remaining -= 2;
+      // readFlash(pc) already advanced pc by 1; target = original_pc + k + 1
+      // = (pc - 1) + k + 1 = pc + k
+      pc += k;
+      spend(2);
       continue;
     }
 
     // =====================================================================
-    // RCALL: 1101 kkkk kkkk kkkk  (3 cycles)
+    // RCALL: 1101 kkkk kkkk kkkk  (4 cycles on 8-bit PC)
     // =====================================================================
     if ((w & 0xf000) === 0xd000) {
-      if (remaining < 3) return -1;
+      if (remaining < 4) return -1;
       let k = w & 0x0fff;
       if ((k & 0x0800) !== 0) k -= 0x1000;
-      const retAddr = pc + 1;
+      const retAddr = pc; // pc already points past this word
       sp -= 1;
       store<u8>(sp, (retAddr >> 8) & 0xff);
       sp -= 1;
       store<u8>(sp, retAddr & 0xff);
-      pc += k + 1;
-      cycles += 3;
-      remaining -= 3;
+      pc += k;
+      spend(4);
       continue;
     }
 
@@ -203,8 +342,7 @@ export function step(n: i32): i32 {
       if (remaining < 4) return -1;
       pc = (load<u8>(sp + 1) << 8) | load<u8>(sp);
       sp += 2;
-      cycles += 4;
-      remaining -= 4;
+      spend(4);
       continue;
     }
 
@@ -215,8 +353,7 @@ export function step(n: i32): i32 {
       if (remaining < 4) return -1;
       pc = (load<u8>(sp + 1) << 8) | load<u8>(sp);
       sp += 2;
-      cycles += 4;
-      remaining -= 4;
+      spend(4);
       sreg |= SREG_I;
       continue;
     }
@@ -229,8 +366,7 @@ export function step(n: i32): i32 {
       const k = ((w >> 8) & 0x0f) * 16 + (w & 0x0f);
       writeReg(rd, k);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -242,8 +378,7 @@ export function step(n: i32): i32 {
       const rr = decodeRr(w);
       writeReg(rd, readReg(rr));
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -257,8 +392,7 @@ export function step(n: i32): i32 {
       writeReg(rd, packed & 0xff);
       setFlagsFromAlu(packed);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -273,8 +407,7 @@ export function step(n: i32): i32 {
       writeReg(rd, packed & 0xff);
       setFlagsFromAlu(packed);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -288,8 +421,7 @@ export function step(n: i32): i32 {
       writeReg(rd, packed & 0xff);
       setFlagsFromAlu(packed);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -304,8 +436,7 @@ export function step(n: i32): i32 {
       writeReg(rd, packed & 0xff);
       setFlagsFromAlu(packed);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -319,8 +450,7 @@ export function step(n: i32): i32 {
       writeReg(rd, result);
       setSimpleFlags(result);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -334,8 +464,7 @@ export function step(n: i32): i32 {
       writeReg(rd, result);
       setSimpleFlags(result);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -349,8 +478,7 @@ export function step(n: i32): i32 {
       writeReg(rd, result);
       setSimpleFlags(result);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -363,20 +491,19 @@ export function step(n: i32): i32 {
       const result = (value >>> 1) | (value & 0x80);
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
+      const nn = (result & 0x80) !== 0;
       const c = (value & 1) !== 0;
-      const v = n !== ((sreg & SREG_C) !== 0);
-      const s = n !== v;
+      const v = nn !== ((sreg & SREG_C) !== 0);
+      const s = nn !== v;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (v) flags |= SREG_V;
       if (s) flags |= SREG_S;
       if (c) flags |= SREG_C;
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -389,20 +516,19 @@ export function step(n: i32): i32 {
       const result = value >>> 1;
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
+      const nn = (result & 0x80) !== 0;
       const c = (value & 1) !== 0;
-      const v = n !== ((sreg & SREG_C) !== 0);
-      const s = n !== v;
+      const v = nn !== ((sreg & SREG_C) !== 0);
+      const s = nn !== v;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (v) flags |= SREG_V;
       if (s) flags |= SREG_S;
       if (c) flags |= SREG_C;
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -416,20 +542,19 @@ export function step(n: i32): i32 {
       const result = ((value >>> 1) | (cIn << 7)) & 0xff;
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
+      const nn = (result & 0x80) !== 0;
       const cOut = (value & 1) !== 0;
-      const v = n !== ((sreg & SREG_C) !== 0);
-      const s = n !== v;
+      const v = nn !== ((sreg & SREG_C) !== 0);
+      const s = nn !== v;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (v) flags |= SREG_V;
       if (s) flags |= SREG_S;
       if (cOut) flags |= SREG_C;
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -441,17 +566,16 @@ export function step(n: i32): i32 {
       const result = 255 - readReg(rd);
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
-      const s = n;
+      const nn = (result & 0x80) !== 0;
+      const s = nn;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (s) flags |= SREG_S;
       flags |= SREG_C; // COM always sets C
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -464,16 +588,15 @@ export function step(n: i32): i32 {
       const result = (256 - value) & 0xff;
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
+      const nn = (result & 0x80) !== 0;
       const c = value !== 0;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (c) flags |= SREG_C;
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -486,8 +609,7 @@ export function step(n: i32): i32 {
       const result = ((value << 4) | (value >> 4)) & 0xff;
       writeReg(rd, result);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -500,18 +622,17 @@ export function step(n: i32): i32 {
       const result = (value + 1) & 0xff;
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
+      const nn = (result & 0x80) !== 0;
       const v = value === 0x7f;
-      const s = n !== v;
+      const s = nn !== v;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (v) flags |= SREG_V;
       if (s) flags |= SREG_S;
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -524,18 +645,17 @@ export function step(n: i32): i32 {
       const result = (value - 1) & 0xff;
       writeReg(rd, result);
       const z = result === 0;
-      const n = (result & 0x80) !== 0;
+      const nn = (result & 0x80) !== 0;
       const v = value === 0x80;
-      const s = n !== v;
+      const s = nn !== v;
       let flags = sreg & 0xc0;
       if (z) flags |= SREG_Z;
-      if (n) flags |= SREG_N;
+      if (nn) flags |= SREG_N;
       if (v) flags |= SREG_V;
       if (s) flags |= SREG_S;
       sreg = flags;
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -550,8 +670,7 @@ export function step(n: i32): i32 {
       const result = val1 - val2;
       setSubFlags(result, val1, val2, false);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -567,8 +686,7 @@ export function step(n: i32): i32 {
       const result = val1 - val2 - borrow;
       setSubFlags(result, val1, val2, borrow !== 0);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -580,18 +698,15 @@ export function step(n: i32): i32 {
       const rr = decodeRr(w);
       if (readReg(rd) === readReg(rr)) {
         pc += 1;
-        cycles += 1;
-        remaining -= 1;
+        spend(1);
         const nextW = readFlash(pc);
         if (nextW >= 0 && ((nextW & 0xfe0e) === 0x940e || (nextW & 0xfe0e) === 0x940c)) {
           pc += 1;
-          cycles += 1;
-          remaining -= 1;
+          spend(1);
         }
       } else {
         pc += 1;
-        cycles += 1;
-        remaining -= 1;
+        spend(1);
       }
       continue;
     }
@@ -607,13 +722,13 @@ export function step(n: i32): i32 {
         ? (sreg & (1 << s)) === 0  // BRBC: branch if bit clear
         : (sreg & (1 << s)) !== 0; // BRBS: branch if bit set
       if (taken) {
-        pc += offset + 1;
-        cycles += 2;
-        remaining -= 2;
+        // pc already advanced by readFlash; target = original_pc + offset + 1
+        // = (pc - 1) + offset + 1 = pc + offset
+        pc += offset;
+        spend(2);
       } else {
-        pc += 1;
-        cycles += 1;
-        remaining -= 1;
+        // pc already points to next instruction by readFlash
+        spend(1);
       }
       continue;
     }
@@ -625,8 +740,7 @@ export function step(n: i32): i32 {
       const s = (w >> 4) & 7;
       sreg |= (1 << s);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -637,8 +751,7 @@ export function step(n: i32): i32 {
       const s = (w >> 4) & 7;
       sreg &= ~(1 << s);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -652,8 +765,7 @@ export function step(n: i32): i32 {
       const result = val1 - k;
       setSubFlags(result, val1, k, false);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -668,8 +780,7 @@ export function step(n: i32): i32 {
       setSubFlags(result, val1, k, false);
       writeReg(rd, result & 0xff);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -685,8 +796,7 @@ export function step(n: i32): i32 {
       setSubFlags(result, val1, k, borrow !== 0);
       writeReg(rd, result & 0xff);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -700,8 +810,7 @@ export function step(n: i32): i32 {
       writeReg(rd, result);
       setSimpleFlags(result);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
       continue;
     }
 
@@ -715,8 +824,107 @@ export function step(n: i32): i32 {
       writeReg(rd, result);
       setSimpleFlags(result);
       pc += 1;
-      cycles += 1;
-      remaining -= 1;
+      spend(1);
+      continue;
+    }
+
+    // =====================================================================
+    // IN: 1011 0AAd dddd AAAA  (1 cycle)
+    // Read an I/O port into Rd.
+    // Ports: 0x24 TCCR0A, 0x25 TCCR0B, 0x26 TCNT0, 0x5F SREG,
+    //        0x6E TIMSK0, 0x6F TIFR0. Other ports trap to JS.
+    // =====================================================================
+    if ((w & 0xf800) === 0xb000) {
+      const rd = decodeRd(w);
+      const port = (w & 0x0f) | ((w & 0x600) >> 5);
+      if (port === PORT_TCCR0A) {
+        writeReg(rd, tccr0a);
+      } else if (port === PORT_TCCR0B) {
+        writeReg(rd, tccr0b);
+      } else if (port === PORT_TCNT0) {
+        writeReg(rd, tcnt0);
+      } else if (port === PORT_SREG) {
+        writeReg(rd, sreg);
+      } else if (port === PORT_TIMSK0) {
+        writeReg(rd, timsk0);
+      } else if (port === PORT_TIFR0) {
+        writeReg(rd, tifr0);
+      } else {
+        return pc; // trap to JS for unsupported ports
+      }
+      pc += 1;
+      spend(1);
+      continue;
+    }
+
+    // =====================================================================
+    // OUT: 1011 1AAr rrrr AAAA  (1 cycle)
+    // Write Rr to an I/O port.
+    // =====================================================================
+    if ((w & 0xf800) === 0xb800) {
+      const port = (w & 0x0f) | ((w & 0x600) >> 5);
+      const rr = decodeRd(w);
+      const val = readReg(rr);
+      if (port === PORT_TCCR0A) {
+        tccr0a = val;
+      } else if (port === PORT_TCCR0B) {
+        tccr0b = val;
+      } else if (port === PORT_TCNT0) {
+        tcnt0 = val & 0xff;
+      } else if (port === PORT_OCR0A) {
+        _ocr0a = val & 0xff;
+      } else if (port === PORT_SREG) {
+        sreg = val & 0xff;
+      } else if (port === PORT_TIMSK0) {
+        timsk0 = val & 0xff;
+      } else if (port === PORT_TIFR0) {
+        // Writing 1 to a flag bit clears it (AVR behavior).
+        tifr0 &= ~(val & 0xff);
+      } else {
+        return pc; // trap to JS for unsupported ports
+      }
+      pc += 1;
+      spend(1);
+      continue;
+    }
+
+    // =====================================================================
+    // SBI: 1001 1010 AAAA Abbb  (2 cycles)  Set bit in I/O port.
+    // CBI: 1001 1000 AAAA Abbb  (2 cycles)  Clear bit in I/O port.
+    // These are implemented minimally for Timer0 ports; others trap to JS.
+    // =====================================================================
+    if ((w & 0xff00) === 0x9a00) {
+      // SBI: 1001 1010 AAAA Abbb
+      const isrPort = (w & 0xf8) >> 3;
+      const mask = 1 << (w & 7);
+      if (isrPort === 0x25) { // TCCR0B at I/O port 0x25
+        tccr0b |= mask;
+      } else if (isrPort === 0x6e) { // TIMSK0 at I/O port 0x6e
+        timsk0 |= mask;
+      } else if (isrPort === 0x6f) { // TIFR0 at I/O port 0x6f
+        tifr0 |= mask;
+      } else {
+        return pc;
+      }
+      pc += 1;
+      spend(2);
+      continue;
+    }
+    if ((w & 0xff00) === 0x9800) {
+      // CBI: 1001 1000 AAAA Abbb
+      const isrPort = (w & 0xf8) >> 3;
+      const mask = 1 << (w & 7);
+      if (isrPort === 0x25) {
+        tccr0b &= ~mask;
+      } else if (isrPort === 0x6e) {
+        timsk0 &= ~mask;
+      } else if (isrPort === 0x6f) {
+        tifr0 &= ~mask;
+      } else {
+        return pc;
+      }
+      pc += 1;
+      spend(2);
       continue;
     }
 

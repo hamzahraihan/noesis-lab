@@ -58,6 +58,9 @@ interface BlinkWasmExports {
   get_sreg(): number;
   set_sreg(v: number): void;
   step(n: number): number;
+  get_cycles(): number;
+  set_cycles(v: number): void;
+  get_instructions(): number;
   memory: WebAssembly.Memory;
 }
 
@@ -69,6 +72,9 @@ interface AttachedCore {
   setReg(i: number, v: number): void;
   getSreg(): number;
   setSreg(v: number): void;
+  getCycles(): number;
+  setCycles(v: number): void;
+  getInstructions(): number;
 }
 
 async function instantiateBlinkCore(words: Uint16Array): Promise<AttachedCore> {
@@ -95,6 +101,9 @@ async function instantiateBlinkCore(words: Uint16Array): Promise<AttachedCore> {
     setReg: (i: number, v: number): void => ex.set_reg(i, v),
     getSreg: (): number => ex.get_sreg(),
     setSreg: (v: number): void => ex.set_sreg(v),
+    getCycles: (): number => ex.get_cycles(),
+    setCycles: (v: number): void => ex.set_cycles(v),
+    getInstructions: (): number => ex.get_instructions(),
   };
 }
 
@@ -120,6 +129,7 @@ describe('blink leg', () => {
     const jsEdges: Edge[] = [];
     const js = backendWithEdges(words, jsEdges);
     js.step(16);
+    console.log(`JS cycles: ${js.cycles}, edges: ${jsEdges.length}`);
     expect(js.fault).toBeNull();
     expect(jsEdges.length).toBeGreaterThan(0);
 
@@ -160,7 +170,8 @@ describe('blink leg', () => {
     };
     realAttached.attachWasm(realCore as never);
     realAttached.step(16);
-    console.log(`leg=blink traps=${realTraps}`);
+    console.log(`WASM cycles: ${realCore.getCycles()}, traps: ${realTraps}, edges: ${realEdges.length}`);
+    console.log(`JS cycles: ${js.cycles}, edges: ${jsEdges.length}`);
     expect(realTraps).toBeGreaterThan(0);
     expect(realAttached.fault).toBeNull();
     expect(realEdges).toEqual(jsEdges);

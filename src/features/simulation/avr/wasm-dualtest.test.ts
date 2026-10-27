@@ -40,6 +40,9 @@ describe('dual path', () => {
       setReg: () => {},
       getSreg: () => 0,
       setSreg: () => {},
+      getCycles: () => 0,
+      setCycles: () => {},
+      getInstructions: () => 0,
     };
     const r = runAttached(wasm, shadow, 4);
     expect(r.traps).toBe(4);

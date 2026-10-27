@@ -248,8 +248,9 @@ export class AvrBackend implements ExecutionBackend {
   private runWasmSlice(totalCycles: number, settleEvery: number): void {
     const wasm = this.wasm as unknown as {
       step(n: number): number;
-      get_cycles(): number;
-      set_cycles(v: number): void;
+      getInstructions(): number;
+      getCycles(): number;
+      setCycles(v: number): void;
       get_pc(): number;
       get_reg(i: number): number;
       get_sreg(): number;
@@ -267,7 +268,7 @@ export class AvrBackend implements ExecutionBackend {
       return;
     }
 
-    const hasCycleTracking = typeof wasm.get_cycles === 'function';
+    const hasCycleTracking = typeof wasm.getCycles === 'function';
 
     // Without cycle tracking we cannot know how many cycles Wasm consumed
     // before a trap, so fall back to the catch-up dispatch: Wasm runs, the
@@ -352,7 +353,7 @@ export class AvrBackend implements ExecutionBackend {
         const sp = (this.cpu.data[94] << 8) | this.cpu.data[93];
         wasm.set_sp(sp);
       }
-      if (typeof wasm.set_cycles === 'function') wasm.set_cycles(this.cpu.cycles);
+      if (typeof wasm.setCycles === 'function') wasm.setCycles(this.cpu.cycles);
     };
 
     /** Pull Wasm state back into the avr8js CPU after stepping (only methods that exist). */
@@ -368,21 +369,26 @@ export class AvrBackend implements ExecutionBackend {
         this.cpu.data[93] = sp & 0xff;
         this.cpu.data[94] = (sp >> 8) & 0xff;
       }
-      if (typeof wasm.get_cycles === 'function') this.cpu.cycles = wasm.get_cycles();
+      if (typeof wasm.getCycles === 'function') this.cpu.cycles = wasm.getCycles();
     };
 
     // Prime Wasm from the shadow so a mid-run attach resumes correctly.
     syncJsToWasm();
 
-    let remaining = totalCycles;
+    let remaining = totalCycles * 10000;
     let settledCycles = 0;
     while (remaining > 0) {
       if (this.failed) return;
 
-      const cyclesBefore = wasm.get_cycles();
+      // Give Wasm a very large budget per call so it can execute through
+      // delay loops and reach GPIO writes. remaining only counts shadow
+      // instructions (1 per trap), so Wasm can execute far more
+      // instructions per call without exhausting the frame budget.
+      const wasmBudget = 0x7fffffff;
+      const instructionsBefore = wasm.getInstructions();
       let trappedPc: number;
       try {
-        trappedPc = wasm.step(remaining);
+        trappedPc = wasm.step(wasmBudget);
       } catch {
         // Wasm-side failure: fall back to the JS shadow for the rest of the
         // slice, preserving settle cadence and fault contract.
@@ -393,9 +399,11 @@ export class AvrBackend implements ExecutionBackend {
         return;
       }
 
-      const cyclesConsumed = wasm.get_cycles() - cyclesBefore;
-      remaining -= cyclesConsumed;
-      settledCycles += cyclesConsumed;
+      // Don't count Wasm instructions against remaining — only shadow
+      // instructions (1 per trap) count against the per-frame budget. This
+      // lets Wasm execute millions of instructions in delay loops between
+      // GPIO-write traps.
+      settledCycles += wasm.getInstructions() - instructionsBefore;
 
       // Pull Wasm state back into JS so msCounter, onSettle cadence, and any
       // trap handling see consistent state.
@@ -408,7 +416,7 @@ export class AvrBackend implements ExecutionBackend {
       }
 
       if (trappedPc === -1) {
-        // All remaining cycles consumed cleanly by Wasm.
+        // All remaining instructions consumed cleanly by Wasm.
         break;
       }
 
@@ -429,13 +437,15 @@ export class AvrBackend implements ExecutionBackend {
         // Wasm's PC should already be at the trap site, but align defensively.
         this.cpu.pc = trappedPc;
       }
+      const shadowCyclesBefore = this.cpu.cycles;
       if (!this.stepShadowInstruction(settleEvery)) return;
-      settledCycles += 1;
+      const shadowCycles = this.cpu.cycles - shadowCyclesBefore;
+      settledCycles += shadowCycles;
       while (settledCycles >= settleEvery) {
         settledCycles -= settleEvery;
         this.hooks.onSettle();
       }
-      remaining -= 1;
+      remaining -= shadowCycles;
 
       // Sync the JS-updated state back to Wasm before resuming.
       syncJsToWasm();
