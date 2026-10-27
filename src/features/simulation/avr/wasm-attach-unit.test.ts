@@ -38,8 +38,8 @@ describe('loadWasmModule', () => {
 });
 
 describe('rollout default', () => {
-  it('defaults off until the gates pass', () => {
-    expect(WASM_DEFAULT).toBe(false);
+  it('defaults on once the gates pass', () => {
+    expect(WASM_DEFAULT).toBe(true);
   });
 
   it('explicit choice always wins over the default', () => {
