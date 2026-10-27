@@ -114,6 +114,9 @@ describe('debug info boundary guard', () => {
   it('accepts dense rows and rejects malformed payloads', () => {
     expect(parseDebugInfo({ lines: [{ pc: 4, file: 'main.ino', line: 2 }] })).toEqual({
       lines: [{ pc: 4, file: 'main.ino', line: 2 }],
+      functions: [],
+      globals: [],
+      types: [],
     });
     expect(parseDebugInfo(null)).toBeNull();
     expect(parseDebugInfo({ lines: 'nope' })).toBeNull();

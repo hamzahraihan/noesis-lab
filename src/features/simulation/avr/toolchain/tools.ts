@@ -366,7 +366,8 @@ export async function buildProject(
   // Debug info is an aid, never a build gate: a malformed line table returns
   // an empty list, and the HEX below still flashes exactly as before.
   const rows = buildDebugLines(parseElfDebugLines(elf), request.lineMaps ?? []);
-  const debug = rows.length > 0 ? { lines: rows } : null;
+  const debug =
+    rows.length > 0 ? { lines: rows, functions: [], globals: [], types: [] } : null;
   const hexBytes = await runTool(
     'avr-objcopy',
     ['-O', 'ihex', '-R', '.eeprom', '/build/HorangFirmware.elf', '/build/HorangFirmware.hex'],

@@ -31,6 +31,15 @@ export interface DebugVariable {
   readonly name: string;
   readonly value: string;
   readonly scope: 'local' | 'field' | 'global';
+  /** Sketch line the name was declared on, for a stable UI key. */
+  readonly declLine?: number;
+}
+
+/** A snapshot of the AVR's data space, for the debug panel. */
+export interface DebugMemory {
+  /** First data-space address, 0x0100 for the Uno's SRAM. */
+  readonly start: number;
+  readonly bytes: readonly number[];
 }
 
 /** One register as the compiled debugger reads it. */
@@ -61,6 +70,8 @@ export interface DebugFrame {
   readonly pc?: number;
   /** Register file plus SREG/SP/PC, for a compiled frame. */
   readonly registers?: readonly DebugRegister[];
+  /** SRAM snapshot for a compiled stop. */
+  readonly memory?: DebugMemory;
   /** True when the frame came from compiled firmware rather than a script. */
   readonly compiled?: boolean;
 }

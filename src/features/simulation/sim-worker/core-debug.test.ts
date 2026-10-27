@@ -33,6 +33,9 @@ const straightLines: CompiledDebugInfo = {
     { pc: 0, file: 'main.ino', line: 1 },
     { pc: 1, file: 'main.ino', line: 2 },
   ],
+  functions: [],
+  globals: [],
+  types: [],
 };
 
 const callLines: CompiledDebugInfo = {
@@ -42,6 +45,9 @@ const callLines: CompiledDebugInfo = {
     { pc: 2, file: 'main.ino', line: 2 },
     { pc: 3, file: 'main.ino', line: 3 },
   ],
+  functions: [],
+  globals: [],
+  types: [],
 };
 
 describe('worker core compiled debugging', () => {

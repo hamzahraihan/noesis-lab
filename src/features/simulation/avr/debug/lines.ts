@@ -10,32 +10,11 @@
  */
 
 import type { PackedLine } from '../packager';
+import type { DebugLine, DebugUnitMap } from './model';
 import type { RawDebugLine } from './dwarf';
 
-/** A source row the compiled program can stop on. */
-export interface DebugLine {
-  /** Flash word address (avr8js `cpu.pc`). */
-  readonly pc: number;
-  readonly file: string;
-  readonly line: number;
-}
-
-/** One compiler unit and how its lines map back to sketch tabs. */
-export interface DebugUnitMap {
-  readonly unit: string;
-  readonly lineMap: readonly PackedLine[];
-}
-
-/** Everything the backend needs to debug a compiled sketch. */
-export interface CompiledDebugInfo {
-  /**
-   * PC-sorted source rows. Several rows may share a PC: one instruction can
-   * sit on the boundary between two statements (a function's opening brace
-   * and its first statement, for example), and each must stay a valid
-   * breakpoint target.
-   */
-  readonly lines: readonly DebugLine[];
-}
+export type { CompiledDebugInfo, DebugLine, DebugUnitMap } from './model';
+export { parseDebugInfo } from './validate';
 
 function baseName(path: string): string {
   const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -144,22 +123,4 @@ export function nextDebugLine(lines: readonly DebugLine[], pc: number): DebugLin
     if (row.file !== current.file || row.line !== current.line) return row;
   }
   return null;
-}
-
-/** Validates debug info crossing a worker boundary. Null when malformed. */
-export function parseDebugInfo(value: unknown): CompiledDebugInfo | null {
-  if (value === null || typeof value !== 'object' || !('lines' in value)) return null;
-  const raw = (value as { lines: unknown }).lines;
-  if (!Array.isArray(raw)) return null;
-  const lines: DebugLine[] = [];
-  for (const entry of raw) {
-    if (entry === null || typeof entry !== 'object') return null;
-    if (!('pc' in entry) || !('file' in entry) || !('line' in entry)) return null;
-    const row = entry as { pc: unknown; file: unknown; line: unknown };
-    if (typeof row.pc !== 'number' || !Number.isInteger(row.pc) || row.pc < 0) return null;
-    if (typeof row.file !== 'string' || row.file === '') return null;
-    if (typeof row.line !== 'number' || !Number.isInteger(row.line) || row.line <= 0) return null;
-    lines.push({ pc: row.pc, file: row.file, line: row.line });
-  }
-  return lines.length > 0 ? { lines } : null;
 }
