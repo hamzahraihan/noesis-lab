@@ -98,48 +98,80 @@ function staticBody<P extends object>(render: (props: P) => React.ReactNode) {
   return memo(render);
 }
 
-export const PartFootprint = memo(function PartFootprint({
-  part,
-  state,
-  onTogglePressed,
-}: {
-  part: PartInstance;
-  state: FootprintState;
-  /** Forwarded to parts whose own element reports a press. */
-  onTogglePressed?: (partId: string, pressed: boolean) => void;
-}) {
-  const { definition } = part;
-  const kind = definition.component.kind;
+/**
+ * Compares two PartFootprint renders for the same part, skipping the re-render
+ * when the part's own electrical state (pin voltages) has not changed.
+ *
+ * `state.pinVolts` is now a fresh Map every frame (worker-client copyFrame no
+ * longer mutates in place), so previous and next prop values can be compared
+ * pin by pin. Parts whose pins are quiet -- resistors, unlit LEDs, idle
+ * buttons -- skip React reconciliation entirely while the simulation runs.
+ */
+function footprintPropsEqual(
+  prev: { part: PartInstance; state: FootprintState; onTogglePressed?: (partId: string, pressed: boolean) => void },
+  next: { part: PartInstance; state: FootprintState; onTogglePressed?: (partId: string, pressed: boolean) => void },
+): boolean {
+  const p = prev.part;
+  const n = next.part;
+  // Part objects are mutated in place (x/y/rotation change), so compare by value,
+  // not just by reference. If the part moved or turned, it must re-render.
+  if (p.id !== n.id || p.x !== n.x || p.y !== n.y || p.rotation !== n.rotation) return false;
+  const { definition } = n;
+  const id = n.id;
+  const prevVolts = prev.state.pinVolts;
+  const nextVolts = next.state.pinVolts;
+  for (const pin of definition.pins) {
+    const key = `${id}:${pin.id}`;
+    if ((prevVolts.get(key) ?? 0) !== (nextVolts.get(key) ?? 0)) return false;
+  }
+  return true;
+}
 
-  /*
-   * A breadboard, a board with its headers, and a display with its header
-   * strip all draw their own holes; ringing each of them again would double
-   * the element count to say nothing. Everything else gets a visible hole so a
-   * lead going into it reads as going in.
-   */
-  const showsOwnHoles = kind === 'breadboard' || kind === 'mcu' || kind === 'display';
+export const PartFootprint = memo(
+  function PartFootprint({
+    part,
+    state,
+    onTogglePressed,
+  }: {
+    part: PartInstance;
+    state: FootprintState;
+    /** Forwarded to parts whose own element reports a press. */
+    onTogglePressed?: (partId: string, pressed: boolean) => void;
+  }) {
+    const { definition } = part;
+    const kind = definition.component.kind;
 
-  return (
-    <g data-part-id={part.id}>
-      {shapeFor(definition, part, state, onTogglePressed)}
-      {!showsOwnHoles &&
-        definition.pins.map((pin) => <PinMark key={pin.id} pin={pin} part={part} state={state} />)}
-      {part.name !== undefined && part.name !== '' && (
-        <text
-          x={definition.widthMm / 2}
-          y={definition.heightMm + 2.4}
-          textAnchor="middle"
-          fontSize={2}
-          fontFamily={SILKSCREEN_FONT}
-          fill={definition.legendColour}
-          opacity={0.85}
-        >
-          {part.name}
-        </text>
-      )}
-    </g>
-  );
-});
+    /*
+     * A breadboard, a board with its headers, and a display with its header
+     * strip all draw their own holes; ringing each of them again would double
+     * the element count to say nothing. Everything else gets a visible hole so a
+     * lead going into it reads as going in.
+     */
+    const showsOwnHoles = kind === 'breadboard' || kind === 'mcu' || kind === 'display';
+
+    return (
+      <g data-part-id={part.id}>
+        {shapeFor(definition, part, state, onTogglePressed)}
+        {!showsOwnHoles &&
+          definition.pins.map((pin) => <PinMark key={pin.id} pin={pin} part={part} state={state} />)}
+        {part.name !== undefined && part.name !== '' && (
+          <text
+            x={definition.widthMm / 2}
+            y={definition.heightMm + 2.4}
+            textAnchor="middle"
+            fontSize={2}
+            fontFamily={SILKSCREEN_FONT}
+            fill={definition.legendColour}
+            opacity={0.85}
+          >
+            {part.name}
+          </text>
+        )}
+      </g>
+    );
+  },
+  footprintPropsEqual,
+);
 
 function shapeFor(
   definition: PartDefinition,

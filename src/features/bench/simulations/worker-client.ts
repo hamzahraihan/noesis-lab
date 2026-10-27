@@ -210,15 +210,19 @@ export function ingestSnapshot(
 function copyFrame(state: MirrorState, buf: SharedArrayBuffer): void {
   const nets = netView(buf);
   const pins = pinNodeView(buf);
-  state.pinVolts.clear();
+  // Build a fresh map each frame so the previous frame's values are preserved
+  // for change detection (PartFootprint memo compares pin voltages per part).
+  const pinVolts = new Map<string, number>();
   for (let i = 0; i < pins.length; i++) {
     const node = pins.read(i);
-    state.pinVolts.set(`pin:${i}`, node < nets.length ? nets.read(node) : 0);
+    pinVolts.set(`pin:${i}`, node < nets.length ? nets.read(node) : 0);
   }
+  state.pinVolts = pinVolts;
   const display = displayView(buf);
-  state.values.clear();
-  state.values.set('raw', Array.from(display.array));
-  state.colon.clear();
+  const values = new Map<string, number[]>();
+  values.set('raw', Array.from(display.array));
+  state.values = values;
+  state.colon = new Map<string, boolean>();
   const frame = tftView(buf).readFrame();
   tftFrames.set(state, frame.width > 0 && frame.height > 0 ? frame : null);
   const drained = serialRing(buf).drain();
@@ -286,10 +290,11 @@ export function remapWithBench(state: MirrorState, bench: Bench): void {
       colon.set(part.id, (slice[slice.length - 1] ?? 0) !== 0);
     }
   }
-  state.values.clear();
-  for (const [id, bytes] of perPart) state.values.set(id, bytes);
-  state.colon.clear();
-  for (const [id, lit] of colon) state.colon.set(id, lit);
+  const values = new Map<string, number[]>();
+  for (const [id, bytes] of perPart) values.set(id, bytes);
+  state.values = values;
+  const nextColon = new Map<string, boolean>(colon);
+  state.colon = nextColon;
 
   const remapped = new Map<string, number>();
   let slot = 0;
@@ -301,8 +306,7 @@ export function remapWithBench(state: MirrorState, bench: Bench): void {
       if (!isBreadboard) remapped.set(`${part.id}:${pinId}`, volts);
     }
   }
-  state.pinVolts.clear();
-  for (const [key, volts] of remapped) state.pinVolts.set(key, volts);
+  state.pinVolts = new Map<string, number>(remapped);
 }
 
 /**
@@ -619,6 +623,8 @@ export interface WorkerClient {
   stepDebug(mode: 'over' | 'into'): void;
   readonly fault: string | null;
   readonly timeMs: number;
+  /** Generation of the last ingested snapshot frame. */
+  readonly snapshotGeneration: number;
   readonly serialOverflow: boolean;
   dispose(): void;
 }
@@ -758,6 +764,8 @@ class WorkerClientImpl implements WorkerClient {
   private disposed = false;
   private samples: Array<{ wall: number; timeMs: number }> = [];
   private lastTimeMs = 0;
+  /** Generation of the last ingested snapshot frame; used by renderState to skip rebuilds. */
+  private snapshotGen = 0;
   private port: SimWorkerPort | null = null;
   private onPortFallback: ((reason: string) => void) | null = null;
   private nextId = 1;
@@ -808,6 +816,11 @@ class WorkerClientImpl implements WorkerClient {
 
   get timeMs(): number {
     return this.lastTimeMs;
+  }
+
+  /** Generation of the last ingested snapshot frame; changes only when the sim produced a new frame. */
+  get snapshotGeneration(): number {
+    return this.snapshotGen;
   }
 
   get serialOverflow(): boolean {
@@ -1006,6 +1019,7 @@ class WorkerClientImpl implements WorkerClient {
       const now = performance.now();
       this.samples.push({ wall: now, timeMs: this.lastTimeMs });
       this.pruneSamples(now);
+      this.snapshotGen = headerView(buf).generation;
       // Drain the entry's backpressure: one ack per consumed frame carries
       // the generation just drawn, so the worker never stalls past
       // MAX_UNREAD_FRAMES while frames are being consumed.

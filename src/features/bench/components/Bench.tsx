@@ -852,25 +852,36 @@ export default function Bench(props: BenchProps) {
   );
   // One animation frame drives both the firmware and the circuit solver. The
   // wall-clock delta is what keeps simulated time honest: without it the bench
-  // would advance as fast as the solver could go, not as fast as real time.
+  // Cap the bench redraw rate while the sim is running: drawing is capped at
+  // ~30 fps so React reconciliation does not compete with the worker's
+  // stepping. The worker still steps every tick; only the paint is throttled,
+  // and every tick still polls the buffer so the worker is never starved of
+  // its ack. RENDER_INTERVAL_MS is the code-side knob for the cap.
+  const RENDER_INTERVAL_MS = 33;
+
   useEffect(() => {
     let frame = 0;
     let running = true;
     let previous = performance.now();
+    let lastRender = 0;
     const tick = () => {
       const now = performance.now();
       const deltaSeconds = Math.min((now - previous) / 1000, 0.25);
       previous = now;
+      const shouldRender = now - lastRender >= RENDER_INTERVAL_MS;
       if (workerClient && workerLive) {
         /*
          * The worker owns stepping; per rAF ingest the live buffer. `'ok'`
          * carries a new frame to draw (and posts one `ack` with its
          * generation, draining the entry's backpressure), `'stale'` renders
          * the last copy (no re-render), and `'reallocated'` rebinds and drops
-         * one frame.
+         * one frame. We poll every tick but only paint when the interval has
+         * elapsed, keeping the UI responsive without re-rendering 60 times a
+         * second while the sim is idle.
          */
-        if (workerClient.poll() === 'ok') {
+        if (workerClient.poll() === 'ok' && shouldRender) {
           forceRender((n) => n + 1);
+          lastRender = now;
         }
       } else {
         // In-page owns stepping: solely while no worker is constructed, and
@@ -881,8 +892,10 @@ export default function Bench(props: BenchProps) {
           // Handshake success: transfer stepping ownership exactly once.
           setWorkerLive(true);
           forceRender((n) => n + 1);
-        } else if (running && simulation.isAnimating()) {
+          lastRender = now;
+        } else if (running && simulation.isAnimating() && shouldRender) {
           forceRender((n) => n + 1);
+          lastRender = now;
         }
       }
 
@@ -1072,15 +1085,20 @@ export default function Bench(props: BenchProps) {
   const workerStatus = workerActive && workerClient !== null ? workerClient.status() : null;
 
   /*
-   * Rebuilt every frame while running, not only when the bench changes.
+   * Rebuilt only when the sim produces a new frame, not on every animation tick.
    *
    * An example adds its parts to a simulation that already exists, so this
    * cannot key on the simulation alone — but it also cannot key on the bench
    * alone: ticking the simulation advances voltages and display frames without
-   * touching the bench at all. Keying on the frame counter keeps the glass,
-   * the Inspector and the LEDs live while running, and still refreshes when
-   * parts are added while stopped.
+   * touching the bench at all. Keying on the worker's snapshot generation keeps
+   * the glass, the Inspector and the LEDs live while running, and still refreshes
+   * when parts are added while stopped.
+   *
+   * The in-page path (no worker) ticks every frame, so it keys on frameTick to
+   * stay fresh.
    */
+  const renderStateKey =
+    workerClient !== null && workerLive ? workerClient.snapshotGeneration : frameTick;
   const renderState = useMemo<FootprintState>(() => {
     if (workerClient !== null && workerLive) {
       /*
@@ -1219,7 +1237,7 @@ export default function Bench(props: BenchProps) {
       parts: bench.parts.length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulation, bench, frameTick, workerClient, workerLive]);
+  }, [simulation, bench, renderStateKey, workerClient, workerLive]);
 
   // Meter probes come from the same pin list as the scope's. The black probe
   // defaults to bench ground, which is where it sits when unclipped.
