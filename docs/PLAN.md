@@ -881,6 +881,21 @@ when the Wasm accelerator is attached: the accelerator's trap path knows
 nothing about breakpoints, and a debugger that exists to observe the shadow
 does not need it to be fast.
 
+**A compiled stop now says what the names hold.** The toolchain emits DWARF
+`.debug_info`, `.debug_abbrev`, `.debug_str` and `.debug_loc` beside the line
+table. The bench reads them once at build time, keeps only declarations whose
+`DW_AT_decl_file`/`DW_AT_decl_line` map back through the packager's `lineMap`
+to a sketch tab, and sends the compact model with the flash words. At a stop
+the core evaluates each location against its registers and data memory and
+formats the bytes through the DIE's type: locals and globals, scalars, pointers,
+arrays, structs and enums. `-Os` is the fixed optimization level, so a name can
+be a constant, a register, a frame-relative slot or gone; a name with no live
+location is shown as `optimized out` rather than disappearing. The AVR register
+map is explicit because DWARF register 28 is the 16-bit Y pair, not the 8-bit
+`r28`. The same frame carries a read-only 2 KB SRAM snapshot for the panel's
+memory view. GDB remote, watchpoints and RP2040/ESP32 source debugging remain
+the gaps.
+
 **The stops travel with the sketch, not with the run.** The bench's sketch
 may be running in a worker, and the worker is the realm that holds the
 program: so the stops ride with the sketch when it is loaded, and the frame

@@ -49,6 +49,9 @@ leaves as a VCD that PulseView reads.
 the panel says where it is, what it can see from there, and carries on, steps
 over the call, or steps into it.
 
+- Compiled AVR stops show sketch variables and an SRAM memory view, with
+  `optimized out` for names the compiler no longer keeps.
+
 **Twelve exercises**, from a first LED to interrupts, each runnable on the
 bench it describes, with long-form worksheets, hints and worked solutions.
 
@@ -82,7 +85,7 @@ or individually:
 | `npm run dev` | The dev server, with the worker path's isolation headers already set |
 | `npm run build` | Typecheck and a production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle the way a static host would |
-| `npm test` | The full Vitest suite — 221 files, 1,833 tests |
+| `npm test` | The full Vitest suite — 239 files, 2,018 tests |
 | `npm run test:watch` | The same, in watch mode |
 | `npm run typecheck` | `tsc -b` |
 | `npm run lint` | oxlint |
