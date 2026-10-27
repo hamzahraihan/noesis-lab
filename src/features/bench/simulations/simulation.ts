@@ -1701,11 +1701,17 @@ export class Simulation {
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
       }
-      // A delay still in flight blocks the firmware outright. Spending only
-      // what fits in this frame and then resuming would let a 400 ms delay
-      // complete in 400/frame-budget frames while the sketch carried on as
-      // though it had waited -- turning a blink into a flicker.
+      // A delay still in flight blocks the firmware outright. When nothing in
+      // the circuit can change (no PWM, no capacitors), skip the entire
+      // remaining delay at once rather than parceling it out frame by frame --
+      // that is the wait-for-interrupt optimization: a `delay(1000)` costs one
+      // solve instead of twenty-five.
       if (this.pendingDelayMs > 0) {
+        if (!this.engine.hasDynamics()) {
+          this.engine.skip(this.pendingDelayMs / 1000);
+          this.pendingDelayMs = 0;
+          continue;
+        }
         const spend = Math.min(this.pendingDelayMs, frameEnd - this.engine.timeMs);
         this.pendingDelayMs -= spend;
         this.advanceBy(spend);
