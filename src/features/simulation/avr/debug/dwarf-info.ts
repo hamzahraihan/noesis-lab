@@ -259,28 +259,63 @@ function parseDie(
   return die;
 }
 
+const MAX_LOCATION_BYTES = 1024;
+
 function parseLocationLists(bytes: Uint8Array): Map<number, RawDebugRange[]> {
   const reader = new Reader(bytes, bytes.length);
   const lists = new Map<number, RawDebugRange[]>();
   let listStart = -1;
   let ranges: RawDebugRange[] = [];
   let base: number | null = null;
+  const finish = (): void => {
+    if (listStart >= 0) lists.set(listStart, ranges);
+    listStart = -1;
+    ranges = [];
+    base = null;
+  };
+  // A malformed list (often a padding byte before the terminator) must not
+  // discard the lists after it. Skip to the next 8-byte zero terminator.
+  const resync = (): boolean => {
+    let at = reader.offset;
+    while (at + 8 <= bytes.length) {
+      let zero = true;
+      for (let index = 0; index < 8; index += 1) {
+        if (bytes[at + index] !== 0) {
+          zero = false;
+          break;
+        }
+      }
+      if (zero) {
+        reader.offset = at + 8;
+        return true;
+      }
+      at += 1;
+    }
+    reader.offset = bytes.length;
+    return false;
+  };
   while (reader.remaining >= 8) {
     if (listStart < 0) listStart = reader.offset;
     const begin = reader.u32();
     const end = reader.u32();
     if (begin === 0 && end === 0) {
-      lists.set(listStart, ranges);
-      listStart = -1;
-      ranges = [];
-      base = null;
+      finish();
       continue;
     }
     if (begin === 0xffffffff) {
       base = end;
       continue;
     }
+    if (reader.remaining < 2) {
+      finish();
+      break;
+    }
     const length = reader.u16();
+    if (length > MAX_LOCATION_BYTES || length > reader.remaining) {
+      finish();
+      if (!resync()) break;
+      continue;
+    }
     const expr = readBytes(reader, length);
     if (length > 0) {
       ranges.push({
@@ -290,7 +325,7 @@ function parseLocationLists(bytes: Uint8Array): Map<number, RawDebugRange[]> {
       });
     }
   }
-  if (listStart >= 0) lists.set(listStart, ranges);
+  finish();
   return lists;
 }
 
