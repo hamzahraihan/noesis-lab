@@ -1299,7 +1299,7 @@ export default function Bench(props: BenchProps) {
       // moved it in the model and left it exactly where it was on screen.
       forceRender((n) => n + 1);
     },
-    [simulation, layoutLocked, bench],
+    [simulation, layoutLocked],
   );
 
   /**
