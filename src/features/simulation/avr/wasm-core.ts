@@ -403,7 +403,7 @@ export async function loadWasmModule(
 }
 
 /** Rollout default (Stage 3 flips this to true once the gates pass). */
-export const WASM_DEFAULT = false;
+export const WASM_DEFAULT = true;
 
 export function resolveWasmFlag(explicit?: boolean): boolean {
   return explicit ?? WASM_DEFAULT;
