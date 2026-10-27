@@ -2,7 +2,7 @@ import { AVRTimer, CPU, avrInstruction, timer0Config, timer2Config } from 'avr8j
 import type { McuRuntime } from '@/features/simulation/mcu';
 import type { DebugFrame, DebugMemory, DebugRegister } from '../firmware/debugger';
 import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
-import type { AttachedWasm, WasmCore } from './wasm-core';
+import type { WasmCore } from './wasm-core';
 import type { CompiledDebugInfo, DebugLine } from './debug/lines';
 import { readVariables } from './debug/evaluate';
 import { SREG_DATA_ADDR, pullWasmState, readShadowState } from './wasm/sync';
@@ -239,110 +239,206 @@ export class AvrBackend implements ExecutionBackend {
   }
 
   /**
-   * Attached dispatch (tests only): Wasm runs each slice until it traps;
-   * the shadow then catches up from its slice-start pc up to and including
-   * the trapped pc (executing the prefix with side effects exactly once —
-   * Wasm prefix execution is side-effect-free by invariant), syncs state
-   * into Wasm, and the slice resumes. `remaining` counts shadow
-   * instructions so the shadow always executes exactly `totalCycles`
-   * instructions — the same count as the JS loop — keeping cycles,
-   * msCarry, msCounter, and settles shadow-authoritative. The `wasm.step`
-   * budget is an acceleration hint in Wasm units; correctness never depends
-   * on it. SREG rides along
-   * opaquely via setSreg (no flag-reading op is ported yet).
+   * WASM-authoritative dispatch: Wasm owns PC, registers, SREG, SP, and cycle
+   * count during execution. The JS shadow (avr8js CPU) only runs instructions
+   * that Wasm traps on (I/O, SRAM, stack, unported opcodes). After each Wasm
+   * step, state is synced Wasm→JS; after a JS-handled trap, state is synced
+   * JS→Wasm before resuming.
    */
-  private runAttachedSlice(totalCycles: number, settleEvery: number): void {
-    // AttachedWasm is type-only (erased at compile), so this keeps the
-    // core<->wasm-core seam free of a runtime import cycle. Partial because
-    // a degenerate attach may lack every method; each use guards with
-    // `typeof ... === 'function'`.
-    const wasm = this.wasm as unknown as Partial<AttachedWasm> | null;
-    if (wasm === null) return;
-    // Degenerate attach without a step function (test placeholder): the
-    // shadow runs the whole slice, preserving settle cadence and fault
-    // contract exactly.
-    if (typeof wasm.step !== 'function') {
+  private runWasmSlice(totalCycles: number, settleEvery: number): void {
+    const wasm = this.wasm as unknown as {
+      step(n: number): number;
+      get_cycles(): number;
+      set_cycles(v: number): void;
+      get_pc(): number;
+      get_reg(i: number): number;
+      get_sreg(): number;
+      get_sp(): number;
+      set_reg(i: number, v: number): void;
+      set_pc(v: number): void;
+      set_sreg(v: number): void;
+      set_sp(v: number): void;
+    } | null;
+    if (wasm === null || typeof wasm.step !== 'function') {
+      // Degenerate attach: fall back to the JS shadow for the whole slice.
       for (let i = 0; i < totalCycles; i++) {
         if (!this.stepShadowInstruction(settleEvery)) return;
       }
       return;
     }
-    const syncShadowToWasm = (): void => {
-      if (
-        typeof wasm.setReg !== 'function' ||
-        typeof wasm.setPc !== 'function' ||
-        typeof wasm.setSreg !== 'function'
-      ) {
-        return;
-      }
-      // SREG address coupling stays explicit via the shared leaf constant
-      // (state itself flows through the leaf helpers).
-      void SREG_DATA_ADDR;
-      pullWasmState(
-        wasm as unknown as {
+
+    const hasCycleTracking = typeof wasm.get_cycles === 'function';
+
+    // Without cycle tracking we cannot know how many cycles Wasm consumed
+    // before a trap, so fall back to the catch-up dispatch: Wasm runs, the
+    // shadow catches up from its PC to the trap PC instruction by instruction.
+    if (!hasCycleTracking) {
+      const syncShadowToWasm = (): void => {
+        const w = wasm as unknown as {
           setReg(i: number, v: number): void;
           setPc(v: number): void;
           setSreg(v: number): void;
-        },
-        readShadowState(this.cpu),
-      );
-    };
-    // Prime Wasm from the shadow so a mid-run attach resumes correctly.
-    syncShadowToWasm();
-    let remaining = totalCycles;
-    while (remaining > 0) {
-      if (this.failed) return;
-      let trappedPc: number;
-      try {
-        trappedPc = wasm.step(remaining);
-      } catch {
-        // Wasm-side failure: the shadow stays authoritative and runs the
-        // rest of the slice on its own.
-        for (let i = 0; i < remaining; i++) {
-          if (!this.stepShadowInstruction(settleEvery)) return;
+        };
+        if (typeof w.setReg !== 'function' || typeof w.setPc !== 'function' || typeof w.setSreg !== 'function') {
+          return;
         }
-        syncShadowToWasm();
-        return;
-      }
-      if (trappedPc === -1) {
-        for (let i = 0; i < remaining; i++) {
-          if (!this.stepShadowInstruction(settleEvery)) return;
+        pullWasmState(
+          w,
+          readShadowState(this.cpu),
+        );
+      };
+      // Prime Wasm from the shadow.
+      syncShadowToWasm();
+      let remaining = totalCycles;
+      while (remaining > 0) {
+        if (this.failed) return;
+        let trappedPc: number;
+        try {
+          trappedPc = wasm.step(remaining);
+        } catch {
+          for (let i = 0; i < remaining; i++) {
+            if (!this.stepShadowInstruction(settleEvery)) return;
+          }
+          syncShadowToWasm();
+          return;
         }
-        syncShadowToWasm();
-        return;
-      }
-      if (!Number.isInteger(trappedPc) || trappedPc < 0) {
-        // Malformed trap channel: same fallback as a Wasm-side failure.
-        for (let i = 0; i < remaining; i++) {
-          if (!this.stepShadowInstruction(settleEvery)) return;
+        if (trappedPc === -1) {
+          for (let i = 0; i < remaining; i++) {
+            if (!this.stepShadowInstruction(settleEvery)) return;
+          }
+          syncShadowToWasm();
+          return;
         }
-        syncShadowToWasm();
-        return;
-      }
-      // Trap at trappedPc: the shadow catches up from its current pc up to
-      // and including the trapped op.
-      let steps = 0;
-      let guard = totalCycles + 1024;
-      while (this.cpu.pc !== trappedPc) {
-        if (!this.stepShadowInstruction(settleEvery)) return;
-        steps += 1;
-        guard -= 1;
-        if (guard <= 0) {
-          // Wasm and shadow disagree about control flow; keep the shadow
-          // authoritative by running out the slice from the shadow pc
-          // (the same instructions the JS path runs from here).
-          const owed = Math.max(0, remaining - steps);
+        if (!Number.isInteger(trappedPc) || trappedPc < 0) {
+          const owed = Math.max(0, remaining);
           for (let i = 0; i < owed; i++) {
             if (!this.stepShadowInstruction(settleEvery)) return;
           }
           syncShadowToWasm();
           return;
         }
+        // Shadow catches up to the trap PC.
+        let steps = 0;
+        let guard = totalCycles + 1024;
+        while (this.cpu.pc !== trappedPc) {
+          if (!this.stepShadowInstruction(settleEvery)) return;
+          steps += 1;
+          guard -= 1;
+          if (guard <= 0) {
+            for (let i = 0; i < remaining - steps; i++) {
+              if (!this.stepShadowInstruction(settleEvery)) return;
+            }
+            syncShadowToWasm();
+            return;
+          }
+        }
+        if (!this.stepShadowInstruction(settleEvery)) return;
+        steps += 1;
+        syncShadowToWasm();
+        remaining -= steps;
+      }
+      return;
+    }
+
+    /** Push avr8js CPU state into Wasm before stepping (only methods that exist). */
+    const syncJsToWasm = (): void => {
+      if (typeof wasm.set_pc === 'function') wasm.set_pc(this.cpu.pc);
+      if (typeof wasm.set_sreg === 'function')
+        wasm.set_sreg(this.cpu.data[SREG_DATA_ADDR]);
+      if (typeof wasm.set_reg === 'function') {
+        for (let i = 0; i < 32; i++) wasm.set_reg(i, this.cpu.data[i]);
+      }
+      if (typeof wasm.set_sp === 'function') {
+        const sp = (this.cpu.data[94] << 8) | this.cpu.data[93];
+        wasm.set_sp(sp);
+      }
+      if (typeof wasm.set_cycles === 'function') wasm.set_cycles(this.cpu.cycles);
+    };
+
+    /** Pull Wasm state back into the avr8js CPU after stepping (only methods that exist). */
+    const syncWasmToJs = (): void => {
+      if (typeof wasm.get_pc === 'function') this.cpu.pc = wasm.get_pc();
+      if (typeof wasm.get_sreg === 'function')
+        this.cpu.data[SREG_DATA_ADDR] = wasm.get_sreg();
+      if (typeof wasm.get_reg === 'function') {
+        for (let i = 0; i < 32; i++) this.cpu.data[i] = wasm.get_reg(i);
+      }
+      if (typeof wasm.get_sp === 'function') {
+        const sp = wasm.get_sp();
+        this.cpu.data[93] = sp & 0xff;
+        this.cpu.data[94] = (sp >> 8) & 0xff;
+      }
+      if (typeof wasm.get_cycles === 'function') this.cpu.cycles = wasm.get_cycles();
+    };
+
+    // Prime Wasm from the shadow so a mid-run attach resumes correctly.
+    syncJsToWasm();
+
+    let remaining = totalCycles;
+    let settledCycles = 0;
+    while (remaining > 0) {
+      if (this.failed) return;
+
+      const cyclesBefore = wasm.get_cycles();
+      let trappedPc: number;
+      try {
+        trappedPc = wasm.step(remaining);
+      } catch {
+        // Wasm-side failure: fall back to the JS shadow for the rest of the
+        // slice, preserving settle cadence and fault contract.
+        for (let i = 0; i < remaining; i++) {
+          if (!this.stepShadowInstruction(settleEvery)) return;
+        }
+        syncWasmToJs();
+        return;
+      }
+
+      const cyclesConsumed = wasm.get_cycles() - cyclesBefore;
+      remaining -= cyclesConsumed;
+      settledCycles += cyclesConsumed;
+
+      // Pull Wasm state back into JS so msCounter, onSettle cadence, and any
+      // trap handling see consistent state.
+      syncWasmToJs();
+
+      // Call onSettle at settle boundaries.
+      while (settledCycles >= settleEvery) {
+        settledCycles -= settleEvery;
+        this.hooks.onSettle();
+      }
+
+      if (trappedPc === -1) {
+        // All remaining cycles consumed cleanly by Wasm.
+        break;
+      }
+
+      // Trap at trappedPc: Wasm could not execute this instruction (I/O,
+      // SRAM, stack, or unported opcode). Handle it with the JS shadow: one
+      // instruction, then sync back to Wasm and resume.
+      if (!Number.isInteger(trappedPc) || trappedPc < 0) {
+        // Malformed trap: fall back to JS for the rest of the slice.
+        for (let i = 0; i < remaining; i++) {
+          if (!this.stepShadowInstruction(settleEvery)) return;
+        }
+        syncWasmToJs();
+        return;
+      }
+
+      // Execute one shadow instruction at the trapped PC.
+      if (this.cpu.pc !== trappedPc) {
+        // Wasm's PC should already be at the trap site, but align defensively.
+        this.cpu.pc = trappedPc;
       }
       if (!this.stepShadowInstruction(settleEvery)) return;
-      steps += 1;
-      syncShadowToWasm();
-      remaining -= steps;
+      settledCycles += 1;
+      while (settledCycles >= settleEvery) {
+        settledCycles -= settleEvery;
+        this.hooks.onSettle();
+      }
+      remaining -= 1;
+
+      // Sync the JS-updated state back to Wasm before resuming.
+      syncJsToWasm();
     }
   }
 
@@ -379,20 +475,19 @@ export class AvrBackend implements ExecutionBackend {
       this.debugInfo !== null &&
       (this.debugStep !== null || this.debugStops?.armed === true);
     if (this.wasm !== null && !debugActive) {
-      // Attached dispatch (tests only): Wasm runs each slice until it traps;
-      // the shadow then catches up from the slice start (executing the prefix
-      // with side effects exactly once — Wasm prefix execution is
-      // side-effect-free by invariant) plus the trapped op, syncs state into
-      // Wasm, and the slice resumes. Cycles, msCarry, msCounter, and settles
-      // stay shadow-authoritative. SREG rides along opaquely via set_sreg
-      // (no flag-reading op is ported yet).
-      this.runAttachedSlice(totalCycles, settleEvery);
+      // Wasm-authoritative dispatch: Wasm runs each slice until it traps;
+      // the JS shadow handles trapped opcodes (I/O, SRAM, stack). Cycles,
+      // msCarry, msCounter, and settles stay Wasm-authoritative.
+      this.runWasmSlice(totalCycles, settleEvery);
       // Fault path: the JS loop returns early without advancing msCarry, so
       // a partial attached slice must too — otherwise the next step would
       // under-budget and diverge from the JS cadence.
       if (this.failed) return;
       const consumedMs = totalCycles / perMs;
       this.msCarry = ms - consumedMs;
+      // avr8js's Timer0 clock event (which advances msCounter) does not run
+      // under Wasm execution, so track milliseconds here from consumed cycles.
+      this.msCounter += Math.floor(consumedMs);
       return;
     } else if (debugActive) {
       /*
