@@ -1101,6 +1101,44 @@ void loop() {
     }
   }, 60_000);
 
+  it('wakes on INTA when a button on an expander port moves', () => {
+    const build = galleryById('expander-interrupt')!.builds[0]!;
+    const simulation = benchFor(build);
+    simulation.execution = 'interpreter';
+    simulation.loadFirmware(firmwareForBuild(build, 'arduino-cpp'));
+    expect(simulation.firmwareError).toBeNull();
+    simulation.start();
+
+    const button = simulation.bench.parts.find((part) => part.definition.id === 'button-tactile')!;
+    const led = simulation.bench.parts.find((part) => part.definition.id === 'led-red')!;
+    const lit = (): boolean => {
+      const net = simulation.engine.currentNetlist.pinNode.get(`${led.id}:anode`);
+      return (net === undefined ? 0 : simulation.engine.voltageOfNet(net)) > 1;
+    };
+
+    for (let frame = 0; frame < 20; frame++) simulation.tick(0.05);
+    const setupLog = simulation.serialLines().join('');
+    expect(setupLog, 'the sketch says what it is watching').toContain('watching PA0');
+    // The pull-up coming up is an edge on the port, and the sketch clears it
+    // before it starts watching: a bench that reported it would be reporting
+    // its own setup as a press.
+    expect(setupLog, 'setup is not a press').not.toContain('pressed');
+    expect(lit(), 'the light starts dark').toBe(false);
+
+    simulation.setPressed(button.id, true);
+    for (let frame = 0; frame < 40; frame++) simulation.tick(0.05);
+    const pressedLog = simulation.serialLines().join('');
+    expect(pressedLog, 'the press came in through INTA').toContain('pressed');
+    expect(lit(), 'the press lit the light').toBe(true);
+
+    simulation.setPressed(button.id, false);
+    for (let frame = 0; frame < 40; frame++) simulation.tick(0.05);
+    expect(simulation.serialLines().join(''), 'the release came in the same way').toContain(
+      'released',
+    );
+    expect(lit(), 'the release put the light out').toBe(false);
+  }, 60_000);
+
   it('dims sixteen lights in sixteenths of a PWM frame', () => {
     const build = galleryById('pca9685')!.builds[0]!;
     const simulation = benchFor(build);

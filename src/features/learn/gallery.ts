@@ -2235,6 +2235,107 @@ void loop() {
 };
 
 /* ------------------------------------------------------------------ *
+ * One pin, sixteen inputs — the expander does the watching
+ * ------------------------------------------------------------------ */
+
+const EXPANDER_INTERRUPT: GalleryProject = {
+  id: 'expander-interrupt',
+  title: 'One Pin, Sixteen Inputs',
+  blurb:
+    'A button sits on an MCP23017 port, and the expander watches it itself. When the button moves the chip pulls INTA, so the sketch reads one pin it already has instead of asking the expander over I²C on every pass of loop().',
+  parts: [
+    { name: 'I/O expander (MCP23017)', qty: 1 },
+    { name: 'Tactile Button', qty: 1 },
+    { name: 'Red LED', qty: 1 },
+    { name: '220 Resistor', qty: 1 },
+  ],
+  builds: [
+    {
+      board: 'uno',
+      libraries: [],
+      sketch: `#include <Arduino.h>
+#include <Wire.h>
+
+/*
+ * Sixteen pins on two wires, and one more wire for the interrupt.
+ *
+ * The sketch tells the expander which port to watch and then leaves: the
+ * chip samples PA0 itself and pulls INTA low when it moves. That turns a
+ * decision the sketch would have to poll for into a level it can read with
+ * one digitalRead.
+ *
+ * The pull-up is the chip's own, switched on with GPPU, so the button only
+ * has to connect the port to ground. It is switched on and allowed to settle,
+ * and the port is read once before the pin is watched: that read is the level
+ * the chip compares against, and a pin coming up is an edge too.
+ */
+const byte EXPANDER = 0x20;
+const byte IODIR_A = 0x00;
+const byte INTCON_A = 0x08;
+const byte GPPU_A = 0x0C;
+const byte GPIO_A = 0x12;
+const byte GPINTEN_A = 0x04;
+const int INTA_PIN = 2;
+const int LED_PIN = 8;
+
+byte readRegister(byte address) {
+  Wire.beginTransmission(EXPANDER);
+  Wire.write(address);
+  Wire.endTransmission();
+  Wire.requestFrom(EXPANDER, 1);
+  return Wire.available() ? Wire.read() : 0;
+}
+
+void writeRegister(byte address, byte value) {
+  Wire.beginTransmission(EXPANDER);
+  Wire.write(address);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(INTA_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  Wire.begin();
+
+  writeRegister(IODIR_A, 0xFF);   // PA0 is an input
+  writeRegister(INTCON_A, 0x00);  // any change is an interrupt
+  writeRegister(GPPU_A, 0x01);    // the chip supplies the pull-up
+  delay(10);
+  readRegister(GPIO_A);           // the read is the level it compares against
+  writeRegister(GPINTEN_A, 0x01); // now watch PA0
+
+  Serial.println("watching PA0");
+}
+
+void loop() {
+  // One read of one pin, instead of a bus transaction per pass.
+  if (digitalRead(INTA_PIN) == LOW) {
+    // Reading the port clears the flag and says which way the button went.
+    byte port = readRegister(GPIO_A);
+    if ((port & 0x01) == 0) {
+      digitalWrite(LED_PIN, HIGH);
+      Serial.println("pressed");
+    } else {
+      digitalWrite(LED_PIN, LOW);
+      Serial.println("released");
+    }
+  }
+  delay(5);
+}
+`,
+      circuit: CIRCUITS['expander-interrupt'],
+    },
+  ],
+  working: [
+    'The serial log says the expander is watching PA0, and nothing else until the button is touched.',
+    'A press pulls INTA low, the sketch reads the port, and the light comes on with a press line in the log.',
+    'Releasing the button raises the port again, and the same path puts the light out.',
+  ],
+};
+
+/* ------------------------------------------------------------------ *
  * Sixteen levels — a PWM frame, one light per step
  * ------------------------------------------------------------------ */
 
@@ -3758,6 +3859,7 @@ export const GALLERY: readonly GalleryProject[] = [
   MICROSTEP,
   EXPANDER,
   MCP23017_EXPANDER,
+  EXPANDER_INTERRUPT,
   PCA9685_DIMMER,
   DS3231_CLOCK,
   THERMOCOUPLE,
