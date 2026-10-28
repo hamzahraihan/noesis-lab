@@ -373,9 +373,34 @@ adds the thing the older chip does not have: every pin can be an input or an
 output. The direction registers power up as all ones, so a fresh chip is
 sixteen inputs and a latch written before the direction is cleared moves
 nothing. That is the lesson the part carries, and the bench keeps it. The
-engine stamps only the pins the sketch made outputs; an input is left alone,
-because there is no wiring to report and a driven input would be a lie. Reads
-of a port answer the latch, and the interrupt registers are stored but inert.
+engine stamps a pin the sketch made an output, and an input whose pull-up is
+on; an input with no pull-up is left alone, because the chip listens to it
+rather than driving it. A GPIO read is answered pin by pin: an output reports
+its latch, an input reports the level its wiring holds, and the polarity
+register inverts the byte either way. The engine hands
+the model that level from the solve -- a rebuild installs the sampler, because
+the device survives a rebuild but the netlist under it does not -- so a button
+tied to a port is a button. A port with nothing on it reads low until its
+pull-up is switched on: `GPPU` stamps the chip's own ~100k to the rail into the
+same solve, so an unwired input sits at the supply and a wire to ground still
+wins over it, because the pull-up is a resistor rather than a reading that
+assumes the answer.
+
+The interrupt half of the chip is modelled too. `GPINTEN` names the input pins
+to watch, and the engine samples every port once per solve, so an edge is seen
+between transactions rather than only when a sketch reads. `INTCON` chooses
+what counts: a zero flags a change from the level the pin held last time, and
+a one flags a pin that differs from `DEFVAL`, which is a level rather than an
+edge -- a pin already away from its default is an interrupt the moment the
+sketch asks for one. A flag set in `INTF` also captures the port into
+`INTCAP`, as a port read would show it: the latch for a pin the chip drives,
+the wire for a pin it listens to. Reading `GPIO` or `INTCAP` takes the flag
+down, which is what the chip does; reading `INTF` is a report and leaves the
+line up. The two outputs are stamped like the ports are: push-pull and active
+low by default, active high with `INTPOL`, open-drain with `ODR` (which
+overrides the polarity and releases the pin rather than driving it high), and
+`MIRROR` ties the two pins together internally, so both carry either port's
+interrupt.
 
 **Sixteen of one thing, and a frame to put them in.** The PCA9685 is the
 expander's opposite: sixteen outputs, each one switching rather than latching.
