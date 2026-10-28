@@ -36,6 +36,11 @@ export default function App() {
         <Route path="/learn" element={<ExercisesPage />} />
         <Route path="/learn/references" element={<ReferencesPage />} />
         <Route path="/learn/:id" element={<ExercisePage />} />
+        {/* A bare `/projects` picks the default board, the way `/bench` does. */}
+        <Route
+          path="/projects"
+          element={<Navigate to={`/projects/${DEFAULT_BOARD_ID}`} replace />}
+        />
         <Route path="/projects/:boardId" element={<ProjectsRoute />} />
         <Route path="/" element={<HomeRoute />} />
         <Route path="/boards" element={<BoardsPage />} />
