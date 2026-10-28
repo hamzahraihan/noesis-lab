@@ -56,7 +56,19 @@ const holeY = (row: number): number => stripRowY(row);
  * only by being wired there -- which is the mistake worth being able to make,
  * and the reason every test here routes the header rather than assuming it.
  */
-function i2cBench(definition: PartDefinition) {
+function i2cBench(
+  definition: PartDefinition,
+  /*
+   * Anything else the test wants wired to the part, after the bus itself. The
+   * expander's ports are the case this exists for: what a port reads is the
+   * wiring, so a test of that has to be able to wire one.
+   */
+  extra?: (
+    wire: (from: { x: number; y: number }, to: { x: number; y: number }) => void,
+    headerPin: (pin: string) => { x: number; y: number },
+    boardPin: (id: string) => { x: number; y: number },
+  ) => void,
+) {
   const builder = new BenchBuilder();
   builder.addPart(breadboardDefinition(), BOARD_ORIGIN_X, 0);
   const esp32 = builder.addPart(esp32DevKitV1(), 0, 0);
@@ -77,6 +89,7 @@ function i2cBench(definition: PartDefinition) {
   wire(headerPin('SCL'), boardPin('R_D22'));
   wire(headerPin('VCC'), boardPin('R_3V3'));
   wire(headerPin('GND'), boardPin('L_GND'));
+  extra?.(wire, headerPin, boardPin);
 
   const mcu = new McuRuntime(esp32.definition);
   const dynamicState = new DynamicState();
@@ -580,6 +593,105 @@ describe('mcp23017 on a live bench', () => {
 
     // Port B is a different direction register and is still an input.
     expect(volts('PB0')).toBeLessThan(0.5);
+  });
+
+  it('reads the ports it is not driving from the wiring', () => {
+    const { bus, engine } = i2cBench(mcp23017Definition(), (wire, headerPin, boardPin) => {
+      // One port tied to the supply and one to ground: the two levels a sketch
+      // has to tell apart, with nothing on the chip driving either.
+      wire(headerPin('PA0'), boardPin('R_3V3'));
+      wire(headerPin('PA1'), boardPin('L_GND'));
+    });
+    const write = (register: number, value: number): void => {
+      bus.beginTransmission(0x20);
+      bus.write(register);
+      bus.write(value);
+      bus.endTransmission();
+    };
+    engine.step(0.001);
+
+    // The latch says every port high, but every port is an input, so the byte
+    // the sketch reads is the wiring: PA0 on 3V3, the rest low.
+    write(0x14, 0xff);
+    engine.step(0.001);
+    expect(readRegister(bus, 0x20, 0x12, 1)).toEqual([0b0000_0001]);
+
+    // Polarity inverts that reading, and not the latch it is read beside.
+    write(0x02, 0xff);
+    expect(readRegister(bus, 0x20, 0x12, 1)).toEqual([0b1111_1110]);
+    expect(readRegister(bus, 0x20, 0x14, 1)).toEqual([0xff]);
+
+    // A port the sketch turns round reports its latch instead, in the same
+    // byte as the ports still listening to their wires.
+    write(0x02, 0x00);
+    write(0x00, 0b1111_1011);
+    write(0x12, 0b0000_0100);
+    engine.step(0.001);
+    expect(readRegister(bus, 0x20, 0x12, 1)).toEqual([0b0000_0101]);
+  });
+
+  it('pulls an unwired input high, and still loses to a wire to ground', () => {
+    const { bus, engine } = i2cBench(mcp23017Definition(), (wire, headerPin, boardPin) => {
+      wire(headerPin('PA1'), boardPin('L_GND'));
+    });
+    const write = (register: number, value: number): void => {
+      bus.beginTransmission(0x20);
+      bus.write(register);
+      bus.write(value);
+      bus.endTransmission();
+    };
+    engine.step(0.001);
+
+    // Pull-ups on PA1 and PA3. PA3 has nothing attached, so the chip's own
+    // ~100k is what establishes its level; PA1 is wired to ground and the
+    // wire wins, which is the whole point of a pull-up being a resistor.
+    write(0x0c, 0b0000_1010);
+    engine.step(0.001);
+    expect(readRegister(bus, 0x20, 0x12, 1)).toEqual([0b0000_1000]);
+
+    // Turning the pull-up off puts the unwired pin back where it started.
+    write(0x0c, 0b0000_0010);
+    engine.step(0.001);
+    expect(readRegister(bus, 0x20, 0x12, 1)).toEqual([0b0000_0000]);
+  });
+
+  it('pulls INTA on a watched edge, and releases it when the port is read', () => {
+    const { bus, engine, device } = i2cBench(mcp23017Definition());
+    const volts = (pin: string): number => {
+      const net = engine.currentNetlist.pinNode.get(`${device.id}:${pin}`);
+      return net === undefined ? 0 : engine.voltageOfNet(net);
+    };
+    const write = (register: number, value: number): void => {
+      bus.beginTransmission(0x20);
+      bus.write(register);
+      bus.write(value);
+      bus.endTransmission();
+    };
+
+    // Watch PA0 for any change. The port starts low, and an idle push-pull
+    // interrupt is active low, so it drives high.
+    write(0x04, 0x01); // GPINTEN_A
+    write(0x08, 0x00); // INTCON_A: any change
+    engine.step(0.001);
+    expect(volts('INTA'), 'idle drives high').toBeGreaterThan(3);
+
+    // Switching on PA0's pull-up raises the pin, which is the edge the chip
+    // is watching for. The sampler sees the level on the next solve.
+    write(0x0c, 0x01); // GPPU_A
+    for (let frame = 0; frame < 3; frame++) engine.step(0.001);
+    expect(volts('PA0'), 'the pull-up raised the pin').toBeGreaterThan(3);
+    expect(volts('INTA'), 'the change pulled the interrupt low').toBeLessThan(0.5);
+    expect(readRegister(bus, 0x20, 0x0e, 1), 'the flag names PA0').toEqual([0x01]);
+
+    // The flag register is a report, not a control: reading it leaves the
+    // interrupt asserted, which is what the datasheet says.
+    engine.step(0.001);
+    expect(volts('INTA'), 'reading the flag did not clear it').toBeLessThan(0.5);
+
+    // Reading the port is what clears it, and the pin goes back to idle.
+    expect(readRegister(bus, 0x20, 0x12, 1), 'the port reads PA0 high').toEqual([0x01]);
+    engine.step(0.001);
+    expect(volts('INTA')).toBeGreaterThan(3);
   });
 });
 
