@@ -47,6 +47,7 @@ import {
   Mcp23017,
   MCP23017_OUTPUT_OHMS,
   MCP23017_PORT_PINS,
+  MCP23017_PULLUP_OHMS,
   Pca9685,
   PCA9685_CHANNELS,
   PCA9685_OUTPUT_OHMS,
@@ -595,6 +596,19 @@ export class Engine {
         const seed = part.initialRtc;
         device.applyPreset(seed.hours, seed.minutes, seed.seconds);
         this.seededRtcParts.add(part.id);
+      }
+      /*
+       * The expander listens to the pins it is not driving, and only the solve
+       * knows what the wiring holds there. The bench supplies the reading
+       * rather than the chip guessing at it: a port the sketch left an input
+       * answers with its net's level, so a button on a port means something.
+       *
+       * Installed on every rebuild for the same reason the presets above run
+       * there: the device is carried across rebuilds, while the netlist it
+       * reads through is replaced.
+       */
+      if (device instanceof Mcp23017) {
+        device.setPinLevels((index) => this.expanderPortLevel(part.id, index));
       }
       if (device) this.devices.set(part.id, device);
       /*
@@ -1548,6 +1562,19 @@ export class Engine {
     return !this.reachableFromGroundOrSource().has(net);
   }
 
+  /**
+   * The level on one port of an MCP23017, as the solve has it.
+   *
+   * Both the sketch's readback and the chip's interrupt logic need this, and
+   * they have to agree: a port a sketch reads and a port the chip watches are
+   * the same wire, so they are answered from one place.
+   */
+  private expanderPortLevel(partId: string, index: number): boolean {
+    const net = this.currentNetlist.pinNode.get(`${partId}:${MCP23017_PORT_PINS[index]}`);
+    if (net === undefined) return false;
+    return this.voltageOfNet(net) >= this.mcu.board.logicVolts / 2;
+  }
+
   private solveAt(timeMs: number, dtSeconds: number): Solution {
     let solution: Solution;
     if (
@@ -2126,23 +2153,72 @@ export class Engine {
     }
     /*
      * The sixteen-port expander has a direction register in front of each
-     * port: only a pin the sketch made an output gets stamped. An input pin
-     * is left alone, because the bench has nothing wired to report and a
-     * driven input would be a lie about the chip.
+     * port. A pin the sketch made an output is stamped from its latch against
+     * the supply or ground. A pin it left an input is stamped only when its
+     * pull-up is on -- a resistor to the rail, which is what makes an unwired
+     * input readable -- and is otherwise left alone, because the chip listens
+     * to it rather than drives it. The model is handed the resulting level,
+     * from the wiring, when the sketch reads the register.
      */
     for (const [partId, device] of this.devices) {
       if (!(device instanceof Mcp23017)) continue;
       const supply = netlist.pinNode.get(`${partId}:VCC`);
       if (supply === undefined) continue;
+      /*
+       * The interrupt logic watches the pins between transactions, so it is
+       * given every port's level once per solve. It reads the previous
+       * solution, which is the last level the solver found, and the flag it
+       * raises is stamped below in the same pass.
+       */
+      device.updateInputs(
+        MCP23017_PORT_PINS.map((_, index) => this.expanderPortLevel(partId, index)),
+      );
       for (let index = 0; index < MCP23017_PORT_PINS.length; index++) {
-        if (!device.isOutput(index)) continue;
         const pin = MCP23017_PORT_PINS[index]!;
         const output = netlist.pinNode.get(`${partId}:${pin}`);
         if (output === undefined) continue;
+        if (device.isOutput(index)) {
+          elements.push({
+            kind: 'resistor',
+            a: output,
+            b: device.output(index) ? supply : GROUND,
+            ohms: MCP23017_OUTPUT_OHMS,
+            label: pin,
+          });
+          continue;
+        }
+        /*
+         * An input with its pull-up enabled is a resistor to the rail, and
+         * that is what makes an unwired pin readable: the chip holds it up
+         * until something wired to it pulls it down.
+         */
+        if (!device.pullUp(index)) continue;
         elements.push({
           kind: 'resistor',
           a: output,
-          b: device.output(index) ? supply : GROUND,
+          b: supply,
+          ohms: MCP23017_PULLUP_OHMS,
+          label: `${pin} pull-up`,
+        });
+      }
+      /*
+       * The two interrupt outputs are pushed by the same circuit the ports
+       * are: a level when the chip's output stage is on, nothing at all when an
+       * open-drain pin is released -- which is why an open-drain interrupt
+       * still needs a pull-up on the wire.
+       */
+      for (const [pin, port] of [
+        ['INTA', 0],
+        ['INTB', 1],
+      ] as const) {
+        const node = netlist.pinNode.get(`${partId}:${pin}`);
+        if (node === undefined) continue;
+        const level = device.interruptLevel(port);
+        if (level === null) continue;
+        elements.push({
+          kind: 'resistor',
+          a: node,
+          b: level ? supply : GROUND,
           ohms: MCP23017_OUTPUT_OHMS,
           label: pin,
         });
