@@ -26,7 +26,7 @@ import { alu_add } from './ops-alu';
 import { alu_sub } from './ops-alu';
 
 const FLASH_BASE: i32 = 0;
-const FLASH_WORDS: i32 = 65536;
+const FLASH_WORDS: i32 = 512;
 const REGS_BASE: i32 = 1024;
 
 // SREG bit positions (matching avr8js data[95] layout).
@@ -258,7 +258,7 @@ function advanceTimer(n: i32): void {
 /** Spend `n` cycles: update cycle counter, remaining instruction budget, and Timer0. */
 function spend(n: i32): void {
   cycles += n;
-  remaining -= 1; // one instruction consumed
+  remaining -= n;
   instructions += 1;
   advanceTimer(n);
 }
@@ -309,11 +309,11 @@ export function step(n: i32): i32 {
     // =====================================================================
     if ((w & 0xf000) === 0xc000) {
       if (remaining < 2) return -1;
-      let k = w & 0x0fff;
-      if ((k & 0x0800) !== 0) k -= 0x1000;
-      // readFlash(pc) already advanced pc by 1; target = original_pc + k + 1
-      // = (pc - 1) + k + 1 = pc + k
-      pc += k;
+      let k = w & 0x07ff;
+      if ((k & 0x0400) !== 0) k -= 0x0800;
+      // avr8js increments pc before executing, so its cpu.pc already points
+      // past this word; target = (pc + 1) + k. Match that here.
+      pc += k + 1;
       spend(2);
       continue;
     }
@@ -322,16 +322,16 @@ export function step(n: i32): i32 {
     // RCALL: 1101 kkkk kkkk kkkk  (4 cycles on 8-bit PC)
     // =====================================================================
     if ((w & 0xf000) === 0xd000) {
-      if (remaining < 4) return -1;
+      if (remaining < 3) return -1;
       let k = w & 0x0fff;
       if ((k & 0x0800) !== 0) k -= 0x1000;
-      const retAddr = pc; // pc already points past this word
+      const retAddr = pc + 1;
       sp -= 1;
       store<u8>(sp, (retAddr >> 8) & 0xff);
       sp -= 1;
       store<u8>(sp, retAddr & 0xff);
-      pc += k;
-      spend(4);
+      pc += k + 1;
+      spend(3);
       continue;
     }
 
