@@ -48,6 +48,7 @@ import mcp23017 from './mcp23017.json';
 import mcp4725 from './mcp4725.json';
 import pca9685 from './pca9685.json';
 import eeprom24lc256 from './eeprom24lc256.json';
+import expanderInterrupt from './expander-interrupt.json';
 import weather from './weather.json';
 
 /** The exercise or project id a document belongs to. */
@@ -85,6 +86,7 @@ export type CircuitId =
   | 'mcp4725'
   | 'pca9685'
   | 'eeprom24lc256'
+  | 'expander-interrupt'
   | 'weather';
 
 export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
@@ -121,5 +123,6 @@ export const CIRCUITS: Readonly<Record<CircuitId, CircuitDocument>> = {
   mcp4725: parseCircuit(mcp4725, 'mcp4725'),
   pca9685: parseCircuit(pca9685, 'pca9685'),
   eeprom24lc256: parseCircuit(eeprom24lc256, 'eeprom24lc256'),
+  'expander-interrupt': parseCircuit(expanderInterrupt, 'expander-interrupt'),
   weather: parseCircuit(weather, 'weather'),
 };
