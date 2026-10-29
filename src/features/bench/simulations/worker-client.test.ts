@@ -767,17 +767,23 @@ describe('worker port protocol', () => {
     client.dispose();
   });
 
-  it('posts the speed multiplier for the worker tick', () => {
+  it('posts each selected simulation pacing mode to the worker', () => {
     const onFallback = vi.fn();
     const port = fakePort();
     const client = portClient(port, onFallback);
     replyInitOk(port);
     expect(client.poll()).toBe('ok');
     port.sent.length = 0;
-    client.setSpeed(2);
-    const speed = port.sent[0] as { type: string; scale: number };
-    expect(speed.type).toBe('speed');
-    expect(speed.scale).toBe(2);
+
+    client.setSpeed('fast');
+    client.setSpeed('max');
+    client.setSpeed('realtime');
+
+    expect(port.sent).toEqual([
+      expect.objectContaining({ type: 'speed', speed: 'fast' }),
+      expect.objectContaining({ type: 'speed', speed: 'max' }),
+      expect.objectContaining({ type: 'speed', speed: 'realtime' }),
+    ]);
     expect(onFallback).not.toHaveBeenCalled();
     client.dispose();
   });
