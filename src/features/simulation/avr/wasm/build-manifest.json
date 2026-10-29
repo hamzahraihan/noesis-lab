@@ -1,7 +1,7 @@
 {
   "file": "avr-core.wasm",
-  "sha256": "c7800705aa1183c5d5d589c304f26e496a81a9bc1608fdacaa3af13b7d68ecd7",
-  "sourcesHash": "fb8ea87f7ba5b4de8177d9bac3f77d28228fcdb6a14085ba9e1e1b20ad55420a",
+  "sha256": "d8fd68ebc115c55dbae889bf749e9545a9de4bba9c0132c5ff9e7f72612fd144",
+  "sourcesHash": "03cd50acfe039b1bfeffbdd6cd218553a4785b86a9c26cec1ea70c66686cb12d",
   "counter": {
     "file": "counter.wasm",
     "sha256": "ead38edd5cfc978833bc87db8a5d72f466c10007247efa328bccd23bca8a6742"
