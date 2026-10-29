@@ -151,7 +151,7 @@ function buildOnce() {
     });
     execFileSync(
       process.execPath,
-      [ASC, join(WASM_DIR, 'index.ts'), '--outFile', tmpCore, '--optimize', '--memoryBase', '2048'],
+      [ASC, join(WASM_DIR, 'index.ts'), '--outFile', tmpCore, '--optimize', '--memoryBase', '35328'],
       { cwd: ROOT, stdio: 'inherit', timeout: 240_000 },
     );
     // Replace committed artifacts only after both compiles succeeded, by
