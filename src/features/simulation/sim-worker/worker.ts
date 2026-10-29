@@ -1,5 +1,5 @@
 /**
- * Sim worker entry: message port, self-paced loop, backpressure. Wiring only.
+ * Sim worker entry: message port, paced/batched loop, backpressure. Wiring only.
  * Frames travel via SAB, polled per rAF main-side. Ticks pause on an unread
  * backlog only while the reader is also stale (no `ack` within
  * ACK_STALE_MS, i.e. a hidden tab) — a slow-but-alive reader must never
@@ -9,15 +9,13 @@
  */
 import { createSimCore, type CoreHandle } from './core';
 import { clearReportedFaults } from '../scripted/diagnostics';
-import { ACK_STALE_MS, headerView, shouldThrottle } from './protocol';
+import { ACK_STALE_MS, headerView, shouldThrottle, type SimulationSpeed } from './protocol';
+import { runStepBatch, stepBudgetMs, TICK_MS } from './scheduler';
 import type { Bench } from '../bench';
 import { parseDebugInfo, type CompiledDebugInfo } from '../avr/debug/lines';
 import type { Breakpoint, DebugFrame } from '../firmware/debugger';
 import type { FirmwareProject } from '../firmware/project';
 import type { KnobSpec } from '@/features/parts';
-
-/** Simulated milliseconds one self-paced tick advances, before the multiplier. */
-const TICK_MS = 16;
 
 export const MAX_UNREAD_FRAMES = 4;
 type Incoming =
@@ -45,23 +43,22 @@ type Incoming =
   | { id: number; type: 'knob'; partId: string; spec: KnobSpec; value: number }
   | { id: number; type: 'edit'; bench: Bench }
   | { id: number; type: 'flash'; words: Uint16Array; debug?: CompiledDebugInfo }
-  | { id: number; type: 'speed'; scale: number }
+  | { id: number; type: 'speed'; speed: SimulationSpeed }
   | { id: number; type: 'ack'; generation: number }
   | { id: number; type: 'faults' }
   | { id: number; type: 'debug-stops'; stops: Breakpoint[] }
   | { id: number; type: 'debug-resume' }
   | { id: number; type: 'debug-step'; mode: 'over' | 'into' };
+
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
 let execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
 let wasm = false;
 let running = false;
-/**
- * Fast-forward multiplier for the tick budget: 1 is real time, 2 buys twice
- * the sketch time per tick. Kept across `edit` rebuilds so the operator's
- * choice survives a recompile; a page reload starts a fresh worker at 1.
- */
-let speed = 1;
+/** The worker pacing mode, kept across edits/rebuilds. */
+let speed: SimulationSpeed = 'realtime';
+let scheduleWorkerTick = (_delayMs: number): void => undefined;
+let cancelWorkerTick = (): void => undefined;
 let unread = 0;
 let lastAckMs = 0;
 /**
@@ -98,6 +95,7 @@ function handle(port: Port, msg: Incoming): void {
         execution = msg.execution;
         wasm = msg.wasm ?? false;
         running = false;
+        cancelWorkerTick();
         unread = 0;
         pausedFrame = null;
         // The stops are set before the rebuild, so the runner the rebuild
@@ -162,13 +160,22 @@ function handle(port: Port, msg: Incoming): void {
       break;
     }
     case 'start':
+      running = true;
+      ok(msg.id);
+      scheduleWorkerTick(speed === 'max' ? 0 : TICK_MS);
+      break;
     case 'stop':
-      running = msg.type === 'start';
+      running = false;
+      cancelWorkerTick();
       ok(msg.id);
       break;
     case 'speed':
-      speed = Number.isFinite(msg.scale) && msg.scale > 0 ? msg.scale : 1;
+      speed =
+        msg.speed === 'fast' || msg.speed === 'max' || msg.speed === 'realtime'
+          ? msg.speed
+          : 'realtime';
       ok(msg.id);
+      if (running) scheduleWorkerTick(speed === 'max' ? 0 : TICK_MS);
       break;
     case 'ack':
       unread = 0;
@@ -199,34 +206,39 @@ function handle(port: Port, msg: Incoming): void {
     case 'debug-resume':
       core?.resumeDebug();
       ok(msg.id);
+      if (running) scheduleWorkerTick(speed === 'max' ? 0 : TICK_MS);
       break;
     case 'debug-step':
       core?.stepDebug(msg.mode);
       ok(msg.id);
+      if (running) scheduleWorkerTick(speed === 'max' ? 0 : TICK_MS);
       break;
   }
 }
+
 if (typeof self !== 'undefined' && 'postMessage' in self) {
   const port = self as unknown as Port & {
     onmessage: ((event: { data: Incoming }) => void) | null;
   };
-  port.onmessage = (event) => handle(port, event.data);
-  setInterval(() => {
+  let intervalTimer: ReturnType<typeof setInterval> | null = null;
+  let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function cancelTick(): void {
+    if (intervalTimer !== null) clearInterval(intervalTimer);
+    if (timeoutTimer !== null) clearTimeout(timeoutTimer);
+    intervalTimer = null;
+    timeoutTimer = null;
+  }
+
+  function scheduleTick(delayMs: number): void {
+    cancelTick();
     if (!running || !core) return;
-    if (
-      shouldThrottle({
-        unread,
-        maxUnread: MAX_UNREAD_FRAMES,
-        nowMs: Date.now(),
-        lastAckMs,
-        staleMs: ACK_STALE_MS,
-      })
-    )
-      return;
-    // The core clamps each slice, so even a runaway multiplier steps at most
-    // one MAX_FRAME_MS slice per tick.
-    core.step(TICK_MS * speed);
-    core.snapshot();
+    if (speed === 'max') timeoutTimer = setTimeout(tick, delayMs);
+    else intervalTimer = setInterval(tick, TICK_MS);
+  }
+
+  function publishFrame(activeCore: CoreHandle): void {
+    activeCore.snapshot();
     unread += 1;
     /*
      * The program stopped. The page has to hear about it, because the
@@ -235,20 +247,66 @@ if (typeof self !== 'undefined' && 'postMessage' in self) {
      * stop appears as soon as it happens -- and it is pushed again when the
      * frame changes, because a step stops somewhere new.
      */
-    if (core.debugPaused()) {
-      const frame = core.debugFrame();
+    if (activeCore.debugPaused()) {
+      const frame = activeCore.debugFrame();
       if (frame !== pausedFrame) {
         pausedFrame = frame;
         port.postMessage({
           type: 'debug-paused',
           frame,
-          debugWatchable: core.debugWatchable(),
-          debugCompiled: core.debugCompiled(),
+          debugWatchable: activeCore.debugWatchable(),
+          debugCompiled: activeCore.debugCompiled(),
         });
       }
     } else if (pausedFrame !== null) {
       pausedFrame = null;
       port.postMessage({ type: 'debug-resumed' });
     }
-  }, TICK_MS);
+  }
+
+  function tick(): void {
+    if (speed === 'max') timeoutTimer = null;
+    const activeCore = core;
+    if (!running || activeCore === null) return;
+    if (
+      shouldThrottle({
+        unread,
+        maxUnread: MAX_UNREAD_FRAMES,
+        nowMs: Date.now(),
+        lastAckMs,
+        staleMs: ACK_STALE_MS,
+      })
+    ) {
+      if (speed === 'max') scheduleTick(TICK_MS);
+      return;
+    }
+
+    if (speed === 'max') {
+      if (activeCore.debugPaused()) {
+        // A debugger step can leave the program paused; still publish its new
+        // frame even though the throughput batch itself must not advance.
+        publishFrame(activeCore);
+        return;
+      }
+      runStepBatch(
+        () => activeCore.step(stepBudgetMs('max')),
+        () => running && core === activeCore && !activeCore.debugPaused(),
+        () => publishFrame(activeCore),
+      );
+    } else {
+      activeCore.step(stepBudgetMs(speed));
+      publishFrame(activeCore);
+    }
+
+    // Max mode schedules the next bounded batch immediately. Returning to the
+    // event loop between batches lets worker messages (pause, input, debugger)
+    // take precedence instead of blocking them behind an unbounded run loop.
+    if (speed === 'max' && running && core === activeCore && !activeCore.debugPaused()) {
+      scheduleTick(0);
+    }
+  }
+
+  scheduleWorkerTick = scheduleTick;
+  cancelWorkerTick = cancelTick;
+  port.onmessage = (event) => handle(port, event.data);
 }
