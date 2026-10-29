@@ -460,12 +460,10 @@ export default function Bench(props: BenchProps) {
   const [esp32Mode, setEsp32Mode] = useState(projectBuild?.execution === 'esp32');
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
-  /*
-   * Fast forward: run the sketch at twice speed until switched off. A
-   * property of the run rather than of either backend, so the toggle
-   * survives pause/resume and recompiles, and takes effect mid-run.
-   */
-  const [fastForward, setFastForward] = useState(false);
+  /* The selected simulation pacing survives pause/resume and recompiles. */
+  const [simulationSpeed, setSimulationSpeed] = useState<'realtime' | 'fast' | 'max'>(
+    'realtime',
+  );
   /* Guards the progress flag when a second Run supersedes the first. */
   const compileSeq = useRef(0);
   /*
@@ -755,22 +753,22 @@ export default function Bench(props: BenchProps) {
      */
   }, [simulation, projectBuild?.execution, liveNetwork, forceNoWorker]);
 
-  /*
-   * The speed multiplier belongs to the run, not to either backend: push it
-   * to the in-page tick and to the worker (which keeps its copy across
-   * recompiles) whenever the toggle flips or a worker appears. The worker's
-   * post queue holds the message until the handshake, so setting it before
-   * the first Run is safe.
-   */
-  useEffect(() => {
-    const speed = fastForward ? 2 : 1;
-    simulation.setTimeScale(speed);
-    workerClient?.setSpeed(speed);
-  }, [simulation, workerClient, fastForward]);
-
   /* Which backend owns stepping + its running flag. One owner only: the
    * worker once its first live frame has landed, else the in-page simulation. */
   const workerActive = workerLive && workerClient !== null;
+
+  /*
+   * The selected pacing belongs to the run. The in-page backend retains the
+   * clock-scaled 1×/2× modes; maximum throughput is a worker-only scheduler.
+   * If the worker drops, return to real time rather than leaving a selected
+   * Max mode that the fallback cannot honor.
+   */
+  useEffect(() => {
+    const speed = simulationSpeed === 'max' && !workerActive ? 'realtime' : simulationSpeed;
+    if (speed !== simulationSpeed) setSimulationSpeed(speed);
+    simulation.setTimeScale(speed === 'fast' ? 2 : 1);
+    workerClient?.setSpeed(speed);
+  }, [simulation, workerClient, simulationSpeed, workerActive]);
   const isRunning = workerActive ? workerClient.running : simulation.running;
   /*
    * Where the debugger has the program stopped. The worker owns the sketch
@@ -1845,25 +1843,43 @@ export default function Bench(props: BenchProps) {
             {isRunning ? 'Pause' : 'Run'}
           </Button>
 
-          {/*
-           * Fast forward: the sketch's clock at twice wall-clock speed. No
-           * 4× option on purpose -- a worker tick caps its slice, so a bigger
-           * multiplier would promise more than the engine could deliver.
-           */}
-          <Button
-            type="button"
-            variant={fastForward ? 'default' : 'secondary'}
-            size="sm"
-            aria-pressed={fastForward}
-            onClick={() => setFastForward((on) => !on)}
-            title={
-              fastForward
-                ? 'Running at 2× — click to return to real time'
-                : 'Fast forward: run the sketch at 2× until you switch it off'
-            }
-          >
-            2×
-          </Button>
+          <div role="group" aria-label="Simulation speed" className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant={simulationSpeed === 'realtime' ? 'default' : 'secondary'}
+              size="sm"
+              aria-pressed={simulationSpeed === 'realtime'}
+              onClick={() => setSimulationSpeed('realtime')}
+              title="Run at real-time pacing"
+            >
+              1×
+            </Button>
+            <Button
+              type="button"
+              variant={simulationSpeed === 'fast' ? 'default' : 'secondary'}
+              size="sm"
+              aria-pressed={simulationSpeed === 'fast'}
+              onClick={() => setSimulationSpeed('fast')}
+              title="Run at 2× simulated time"
+            >
+              2×
+            </Button>
+            <Button
+              type="button"
+              variant={simulationSpeed === 'max' ? 'default' : 'secondary'}
+              size="sm"
+              aria-pressed={simulationSpeed === 'max'}
+              disabled={!workerActive}
+              onClick={() => setSimulationSpeed('max')}
+              title={
+                workerActive
+                  ? 'Run as fast as possible; simulated timing no longer follows wall-clock time'
+                  : 'Maximum throughput requires the simulation worker'
+              }
+            >
+              Max
+            </Button>
+          </div>
 
           {/*
            * Which backend the next Run executes on. The AVR option is
