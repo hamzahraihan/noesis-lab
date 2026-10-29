@@ -1,18 +1,19 @@
-// Linear-memory layout map (all byte addresses, --memoryBase 2048 keeps
+// Linear-memory layout map (all byte addresses, --memoryBase 35328 keeps
 // AS-managed statics/heap above these regions; raw load/store only — no
 // `new`, so no `env.abort` import and `{}` instantiation keeps working):
-//   flash [0, 1024)     cpu.ts: 512 words of program flash (u16)
-//   regs  [1024, 1056)  cpu.ts: 32 AVR registers (u8)
-//   pins  [1056, 1076)  here: 20 GPIO pin input levels (u8)
-//   ring  [1076, 1204)  here: 64 port-event entries x 2 bytes (gpio, high)
-//   head  [1204, 1208)  here: event-ring head counter (i32, monotonic)
-//   tail  [1208, 1212)  here: event-ring tail counter (i32, monotonic)
-const PIN_BASE: i32 = 1056;
+//   flash [0, 32768)      cpu.ts: 16384 words of program flash (u16)
+//   regs  [32768, 32800)  cpu.ts: 32 AVR registers (u8)
+//   pins  [32800, 32820)  here: 20 GPIO pin input levels (u8)
+//   ring  [32820, 32948)  here: 64 port-event entries x 2 bytes (gpio, high)
+//   head  [32948, 32952)  here: event-ring head counter (i32, monotonic)
+//   tail  [32952, 32956)  here: event-ring tail counter (i32, monotonic)
+//   stack [33024, 35328)  cpu.ts: AVR data-space stack (STACK_BASE + sp)
+const PIN_BASE: i32 = 32800;
 const PIN_COUNT: i32 = 20;
-const EVENT_BASE: i32 = 1076;
+const EVENT_BASE: i32 = 32820;
 const EVENT_CAP: i32 = 64;
-const HEAD_OFF: i32 = 1204;
-const TAIL_OFF: i32 = 1208;
+const HEAD_OFF: i32 = 32948;
+const TAIL_OFF: i32 = 32952;
 
 export function pin_base(): i32 {
   return PIN_BASE;
