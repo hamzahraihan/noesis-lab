@@ -34,6 +34,9 @@
 export const SNAP_MAGIC = 0x53494d57; // 'SIMW'
 export const SNAP_VERSION = 2;
 
+/** Worker scheduler mode: clock-paced, accelerated clock, or maximum throughput. */
+export type SimulationSpeed = 'realtime' | 'fast' | 'max';
+
 export interface SnapshotLayout {
   headerBytes: number;
   netFloats: number;
