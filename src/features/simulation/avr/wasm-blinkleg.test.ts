@@ -89,10 +89,11 @@ async function instantiateBlinkCore(words: Uint16Array): Promise<AttachedCore> {
     );
   }
   ex.reset_cpu();
-  // Wasm flash holds 512 words; longer firmware runs past it and OOB-traps
-  // to the shadow, which stays authoritative — edges still match.
-  const len = Math.min(words.length, 512);
-  new Uint16Array(ex.memory.buffer, ex.flash_base(), len).set(words.subarray(0, len));
+  // Wasm flash holds the Uno's 16384 words; the full image must be written.
+  if (words.length > 16384) {
+    throw new Error(`firmware is ${words.length} words, wasm flash holds 16384`);
+  }
+  new Uint16Array(ex.memory.buffer, ex.flash_base(), words.length).set(words);
   return {
     step: (n: number): number => ex.step(n),
     getPc: (): number => ex.get_pc(),
