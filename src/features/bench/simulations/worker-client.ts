@@ -84,6 +84,7 @@ import {
   type ProjectLibraryContext,
   type ScriptFault,
   type SnapshotLayout,
+  type SimulationSpeed,
 } from '@/features/simulation';
 import {
   createLcd,
@@ -585,8 +586,8 @@ export interface WorkerClient {
   serialLines(): readonly string[];
   setPressed(partId: string, pressed: boolean): void;
   setKnob(partId: string, spec: KnobSpec, value: number): void;
-  /** Fast-forward multiplier for the self-paced tick: 1 is real time. */
-  setSpeed(scale: number): void;
+  /** Selects the worker's clock-paced or maximum-throughput scheduler. */
+  setSpeed(speed: SimulationSpeed): void;
   /** Chooses the backend the next init runs on. */
   setExecution(execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32'): void;
   loadFirmware(project: FirmwareProject): void;
@@ -867,13 +868,9 @@ class WorkerClientImpl implements WorkerClient {
     this.post('knob', { partId, spec, value });
   }
 
-  /**
-   * Fast-forward multiplier for the worker's self-paced tick: 1 is real
-   * time, 2 buys twice the sketch time per tick. The worker keeps the value
-   * across rebuilds; a fresh worker starts at 1 until this arrives.
-   */
-  setSpeed(scale: number): void {
-    this.post('speed', { scale });
+  /** Selects the worker scheduler; its choice persists across rebuilds. */
+  setSpeed(speed: SimulationSpeed): void {
+    this.post('speed', { speed });
   }
 
   /**
