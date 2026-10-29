@@ -1618,7 +1618,8 @@ function expanderInterruptChecks(build: GalleryBuild): CheckDef[] {
         if (!sim.serialText().includes('released')) {
           return verdict(name, started, 'fail', 'no released line: the second edge was missed');
         }
-        if (lit(sim)) return verdict(name, started, 'fail', 'the light stayed lit after the release');
+        if (lit(sim))
+          return verdict(name, started, 'fail', 'the light stayed lit after the release');
         return verdict(name, started, 'pass');
       },
     },
