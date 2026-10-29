@@ -164,6 +164,11 @@ export interface AttachedWasm {
   getCycles(): number;
   setCycles(v: number): void;
   getInstructions(): number;
+  /** Words addressable in the module's own flash image. Optional — sync checks typeof. */
+  getFlashCapacity?(): number;
+  /** Stack pointer (AVR data-space address). Optional — sync checks typeof. */
+  getSp?(): number;
+  setSp?(v: number): void;
 }
 
 export interface AttachedShadow {
@@ -219,16 +224,24 @@ export function drainPortEvents(
   return events.length;
 }
 
-// NOTE (Task 1 coupling): layout constants below duplicate wasm/io.ts
-// (PIN_BASE 1056 / EVENT_BASE 1076 / CAP 64 / HEAD 1204 / TAIL 1208).
-// Wasm linear memory has no shared header, so any Task 1 address change
-// must be mirrored here.
-const WASM_PIN_BASE = 1056;
-const WASM_PIN_COUNT = 20;
-const WASM_EVENT_BASE = 1076;
-const WASM_EVENT_CAP = 64;
-const WASM_HEAD_OFF = 1204;
-const WASM_TAIL_OFF = 1208;
+// NOTE: layout constants below duplicate wasm/io.ts
+// (PIN_BASE 32800 / EVENT_BASE 32820 / CAP 64 / HEAD 32948 / TAIL 32952).
+// Wasm linear memory has no shared header, so any layout change in io.ts must
+// be mirrored here (and in the tests that index raw memory).
+export const WASM_LAYOUT = {
+  pinBase: 32800,
+  pinCount: 20,
+  eventBase: 32820,
+  eventCap: 64,
+  headOff: 32948,
+  tailOff: 32952,
+} as const;
+const WASM_PIN_BASE = WASM_LAYOUT.pinBase;
+const WASM_PIN_COUNT = WASM_LAYOUT.pinCount;
+const WASM_EVENT_BASE = WASM_LAYOUT.eventBase;
+const WASM_EVENT_CAP = WASM_LAYOUT.eventCap;
+const WASM_HEAD_OFF = WASM_LAYOUT.headOff;
+const WASM_TAIL_OFF = WASM_LAYOUT.tailOff;
 
 export function samplePinsToWasm(memory: ArrayBuffer, levels: ReadonlyMap<number, boolean>): void {
   const bytes = new Uint8Array(memory);
@@ -334,7 +347,10 @@ export const REQUIRED_WASM_EXPORTS = [
   'memory',
 ] as const;
 
-const WASM_FLASH_WORDS = 512;
+// The wasm flash region is the Uno's real program flash. Anything shorter
+// silently truncates firmware, and every instruction past the cut then traps
+// to the JS shadow one at a time — which looks exactly like a frozen bench.
+const WASM_FLASH_WORDS = 16384;
 
 export interface WasmModule {
   core: AttachedWasm;
@@ -382,6 +398,8 @@ export async function loadWasmModule(
     get_cycles(): number;
     set_cycles(v: number): void;
     get_instructions(): number;
+    get_sp(): number;
+    set_sp(v: number): void;
     memory: WebAssembly.Memory;
   };
   const core: AttachedWasm = {
@@ -392,18 +410,25 @@ export async function loadWasmModule(
     setReg: (i: number, v: number): void => e.set_reg(i, v),
     getSreg: (): number => e.get_sreg(),
     setSreg: (v: number): void => e.set_sreg(v),
+    getSp: (): number => e.get_sp(),
+    setSp: (v: number): void => e.set_sp(v),
     getCycles: (): number => e.get_cycles(),
     setCycles: (v: number): void => e.set_cycles(v),
     getInstructions: (): number => e.get_instructions(),
+    getFlashCapacity: (): number => WASM_FLASH_WORDS,
   };
   return {
     ok: true,
     module: {
       core,
       flashWords: (words: Uint16Array): void => {
+        if (words.length > WASM_FLASH_WORDS) {
+          throw new Error(
+            `program is ${words.length} words, wasm flash holds ${WASM_FLASH_WORDS}`,
+          );
+        }
         e.reset_cpu();
-        const len = Math.min(words.length, WASM_FLASH_WORDS);
-        new Uint16Array(e.memory.buffer, e.flash_base(), len).set(words.subarray(0, len));
+        new Uint16Array(e.memory.buffer, e.flash_base(), words.length).set(words);
       },
       reset: (): void => {
         e.reset_cpu();
