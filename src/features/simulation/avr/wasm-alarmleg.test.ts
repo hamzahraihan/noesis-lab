@@ -64,8 +64,11 @@ describe('alarm leg', () => {
       memory: WebAssembly.Memory;
     };
     ex.reset_cpu();
-    const len = Math.min(words.length, 512);
-    new Uint16Array(ex.memory.buffer, ex.flash_base(), len).set(words.subarray(0, len));
+    // Wasm flash holds the Uno's 16384 words; the full image must be written.
+    if (words.length > 16384) {
+      throw new Error(`firmware is ${words.length} words, wasm flash holds 16384`);
+    }
+    new Uint16Array(ex.memory.buffer, ex.flash_base(), words.length).set(words);
     let traps = 0;
     const origStep = ex.step.bind(ex);
     const counting = {
