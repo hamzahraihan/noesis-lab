@@ -14,6 +14,7 @@ export * from './vcd';
 export * from './multimeter';
 export * from './units';
 export * from './matrix';
+export * from './wasm-solver';
 export * from './bus/i2c';
 export * from './bus/spi';
 export * from './bus/log';
