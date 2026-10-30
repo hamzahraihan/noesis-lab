@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:wasm && npm run build:solver && tsc -b && vite build",
     "build:wasm": "node scripts/build-avr-wasm.mjs",
+<<<<<<< HEAD
     "build:engine": "node scripts/build-engine-wasm.mjs",
+=======
+    "build:solver": "node scripts/build-solver-wasm.mjs",
+>>>>>>> origin/main
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
