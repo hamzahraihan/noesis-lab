@@ -81,6 +81,10 @@ export type {
 // The bench's colour panel, exported for the same reason: both backends drive
 // one port, and the gate that makes it obey the wires lives in the port.
 export * from './display/tft';
+// Issue #20 phase 1: the C++ solver's wasm seam. It stays off the default
+// solve path until the final cutover; exported here so later phases and tests
+// reach it through the public seam instead of a deep import.
+export * from './engine-wasm/solver';
 // Rollout seam (Stages 2-3): bench threads the wasm default through this
 // barrel (bare `@/features/simulation` — the boundary gate forbids bench-deep
 // imports). Named re-export only, so the harness-only helpers in wasm-core
