@@ -107,6 +107,9 @@ struct ADS1115Context {
     bool conversion_ready = true;
     // Simulated input voltages (from knobs)
     double input_voltage[4] = {0.0, 0.0, 0.0, 0.0};
+    // 16-bit register write assembly (two bytes per register)
+    uint8_t write_first_byte = 0;
+    bool have_first_byte = false;
 };
 
 // MCP4725 - 12-bit DAC
@@ -213,6 +216,8 @@ struct SPIPartImpl {
     uint32_t dc_net;  // For displays
     // Function pointers
     void (*receive)(void* ctx, uint8_t byte, bool data_select, bool chip_selected);
+    // MISO read callback - returns byte to send back on MISO
+    uint8_t (*read)(void* ctx, bool data_select, bool chip_selected);
     void* ctx;
 };
 
@@ -371,7 +376,12 @@ extern "C" uint8_t spi_bus_transfer(uint8_t byte, bool data_select, bool chip_se
         }
     }
     
-    // Return MISO data (simplified - returns 0 for now)
+    // Return MISO data from the first part that has a read callback
+    for (auto& part : g_spi_parts) {
+        if (part.read && chip_selected) {
+            return part.read(part.ctx, data_select, chip_selected);
+        }
+    }
     return 0;
 }
 
@@ -603,20 +613,18 @@ static bool ads1115_receive(void* ctx, uint8_t byte, bool is_control) {
     ADS1115Context* dev = static_cast<ADS1115Context*>(ctx);
     if (is_control) {
         dev->reg_ptr = byte & 0x03;
+        dev->have_first_byte = false;
         return true;
     }
     
-    static uint8_t first_byte = 0;
-    static bool have_first = false;
-    
-    if (!have_first) {
-        first_byte = byte;
-        have_first = true;
+    if (!dev->have_first_byte) {
+        dev->write_first_byte = byte;
+        dev->have_first_byte = true;
         return true;
     }
     
-    uint16_t value = (static_cast<uint16_t>(first_byte) << 8) | byte;
-    have_first = false;
+    uint16_t value = (static_cast<uint16_t>(dev->write_first_byte) << 8) | byte;
+    dev->have_first_byte = false;
     
     switch (dev->reg_ptr) {
         case 0x01:
@@ -717,11 +725,22 @@ static void spi_max6675_receive(void* ctx, uint8_t byte, bool data_select, bool 
     (void)ctx; (void)byte; (void)data_select; (void)chip_selected;
 }
 
-static int16_t spi_max6675_receive_read(void* ctx) {
+static uint8_t spi_max6675_read(void* ctx, bool data_select, bool chip_selected) {
+    (void)data_select; (void)chip_selected;
     MAX6675Context* dev = static_cast<MAX6675Context*>(ctx);
-    uint16_t value = static_cast<uint16_t>(dev->temp_quarter_deg) << 3;
-    if (dev->fault) value |= 0x0001;
-    return static_cast<int16_t>(value);
+    // MAX6675 returns 16-bit value over two SPI transfers
+    // First transfer: upper 8 bits of temperature
+    // Second transfer: lower 5 bits of temp + 3 bits fault/status
+    static bool first_byte = true;
+    if (first_byte) {
+        first_byte = false;
+        return static_cast<uint8_t>(dev->temp_quarter_deg >> 5);  // Upper 8 bits of 13-bit temp
+    } else {
+        first_byte = true;
+        uint8_t lower = static_cast<uint8_t>((dev->temp_quarter_deg & 0x1F) << 3);
+        if (dev->fault) lower |= 0x01;
+        return lower;
+    }
 }
 
 static void spi_mfrc522_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
@@ -745,6 +764,18 @@ static void spi_mfrc522_receive(void* ctx, uint8_t byte, bool data_select, bool 
             case 0x00: dev->state = MFRC522Context::IDLE; break;
         }
     }
+}
+
+static uint8_t spi_mfrc522_read(void* ctx, bool data_select, bool chip_selected) {
+    (void)data_select;
+    if (!chip_selected) return 0;
+    MFRC522Context* dev = static_cast<MFRC522Context*>(ctx);
+    // Read from FIFO or register
+    if (dev->reg_ptr == 0x09 && dev->fifo_level > 0) {  // FIFODataReg
+        return dev->fifo[--dev->fifo_level];
+    }
+    // Register reads - simplified
+    return 0;
 }
 
 static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
@@ -985,6 +1016,7 @@ extern "C" void* part_create_thermocouple(uint32_t part_id) {
     spi_part.dc_net = 0;
     spi_part.ctx = ctx;
     spi_part.receive = spi_max6675_receive;
+    spi_part.read = spi_max6675_read;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
@@ -1004,6 +1036,7 @@ extern "C" void* part_create_rfid(uint32_t part_id, uint8_t address) {
     spi_part.dc_net = 0;
     spi_part.ctx = ctx;
     spi_part.receive = spi_mfrc522_receive;
+    spi_part.read = spi_mfrc522_read;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
@@ -1142,6 +1175,12 @@ extern "C" void bus_reset(void) {
     g_spi_transfer_count = 0;
     g_i2c_devices.clear();
     g_spi_parts.clear();
+    
+    // Clean up part implementation contexts
+    for (void* ptr : g_part_impls) {
+        delete ptr;
+    }
+    g_part_impls.clear();
 }
 
 } // namespace engine
