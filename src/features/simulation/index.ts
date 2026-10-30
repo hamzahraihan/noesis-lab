@@ -1,7 +1,7 @@
 // Public seam for features/simulation. Populated in Task 3.
 // Code outside this folder must import from '@/features/simulation', never deep.
 export * from './engine';
-export * from './circuit';
+export { solveCircuit, elementCurrent, type SolveOptions, type Solution } from './circuit';
 export * from './circuit-doc';
 export * from './circuit-edit';
 export * from './netlist';
@@ -14,7 +14,15 @@ export * from './vcd';
 export * from './multimeter';
 export * from './units';
 export * from './matrix';
-export * from './wasm-solver';
+export {
+  solveCircuit as solveCircuitWasm,
+  elementCurrent as elementCurrentWasm,
+  preloadWasmSolver,
+  enableWasmSolver,
+  isWasmSolverEnabled,
+  resolveWasmSolver,
+} from './wasm-solver';
+export { loadWasmSolver, type WasmSolver } from './engine-wasm/solver';
 export * from './bus/i2c';
 export * from './bus/spi';
 export * from './bus/log';
