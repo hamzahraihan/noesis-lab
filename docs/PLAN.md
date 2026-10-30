@@ -963,3 +963,43 @@ on the interpreter, because that is the path a machine without a browser can
 run: the compiled path needs a HEX built by a toolchain the workflow would
 have to fetch, and a project that wants its firmware compiled should build
 it in its own workflow and check the HEX there.
+
+### 6.8 The C++ engine, phase 1: the solver
+
+**Issue #20 ports the simulation core to C++/Wasm; the first phase is the
+solver.** `engine-wasm/solver.cpp` is a freestanding C++20 port of
+`circuit.ts` and `matrix.ts`: MNA stamping, Newton-Raphson with the same
+junction walk, dense LU with partial pivoting, and the same grow-only scratch
+store. The React/Canvas UI, the circuit document and the TypeScript engine
+are untouched, so the existing suite still runs the oracle by default.
+
+**Freestanding is the point, and the toolchain is the system clang.** There
+is no Emscripten and no libc in the module: clang targets `wasm32` with
+`-nostdlib`, the allocator is a bump pointer over `__heap_base`, and
+`memcpy`/`memset` are defined in the source because the compiler may emit
+them anyway. The two host imports are `js_exp` and `js_log1p`, used only
+when a diode curve is built. Importing the host's math is what makes exact
+parity meaningful: the curve is built from the same V8 functions the oracle
+calls, and every later operation is `+`, `-`, `*` or `/` in the same order
+with `-ffp-contract=off`. A future native build replaces those two imports
+with an fdlibm port and leaves the solver alone.
+
+**The ABI is an element record, not a serialized document.** A 24-byte
+`ElementIn` (`kind`, `a`, `b`, profile index, value) and a 56-byte profile
+table are written into wasm memory by `solver.ts`; `set_profiles` copies the
+table in and rebuilds curves only when the bytes changed. `solve` takes the
+element array, net count, timestep, previous voltages and the Newton budget,
+and the result accessors point at the core's own scratch -- no per-solve
+serialization of the answer. The loader is exported from the simulation
+barrel but is not on the default path.
+
+**Parity is a bit-for-bit test, not a tolerance.** `solver.test.ts` solves
+every fixed circuit the oracle's own tests cover, then 400 generated
+circuits across resistors, sources, capacitors, diodes and ground elements,
+and asserts identical voltages, branch currents, convergence flags and
+iteration counts. The committed `solver.wasm` is a build output with a
+manifest over the source, flags and compiler version; `npm run build:engine`
+rebuilds it when those change, and the tests read the artifact without
+needing clang. Later phases move the netlist, the AVR core, the parts, the
+interpreter and finally the engine loop across this same seam.
+
