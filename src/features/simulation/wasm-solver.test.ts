@@ -5,13 +5,16 @@
  * to the TypeScript solver within the specified tolerance (1e-7 V).
  */
 
-import { describe, expect, it, beforeAll, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { describe, expect, it, beforeAll } from 'vitest';
 import { GROUND, type DiodeProfile, type Element } from './elements';
 import { DIODE_PROFILES } from '@/features/parts';
-import { solveCircuit, elementCurrent, type Solution } from './circuit';
-import { solveCircuitWasm, elementCurrentWasm, enableWasmSolver, isWasmSolverEnabled } from './wasm-solver';
+import { solveCircuit, elementCurrent, type Solution, type SolveOptions } from './circuit';
+import { loadWasmSolver, type WasmSolver } from './engine-wasm/solver';
 
 const TOLERANCE = 1e-7;
+
+let wasm: WasmSolver;
 
 // Helper to compare two solutions
 function expectSolutionsClose(wasm: Solution, ts: Solution, label: string) {
@@ -76,9 +79,9 @@ async function runToSettleWasm(
   steps: number,
   initial?: Float64Array,
 ): Promise<Solution> {
-  let solution = await solveCircuitWasm(elements, { nodeCount, dtSeconds, previousVoltages: initial });
+  let solution = await wasm.solve(elements, { nodeCount, dtSeconds, previousVoltages: initial });
   for (let step = 0; step < steps; step++) {
-    solution = await solveCircuitWasm(elements, {
+    solution = await wasm.solve(elements, {
       nodeCount,
       dtSeconds,
       previousVoltages: solution.voltages,
@@ -88,15 +91,13 @@ async function runToSettleWasm(
 }
 
 describe('Wasm Solver Parity', () => {
-  beforeAll(() => {
-    // Enable Wasm solver for these tests
-    enableWasmSolver(true);
-    // Also set the env var for Node.js test environment
-    process.env.VITE_WASM_SOLVER = 'true';
-  });
-
-  it('should be enabled for testing', () => {
-    expect(isWasmSolverEnabled()).toBe(true);
+  beforeAll(async () => {
+    const buffer = readFileSync('src/features/simulation/engine-wasm/solver.wasm');
+    const bytes = buffer.buffer.slice(
+      buffer.byteOffset,
+      buffer.byteOffset + buffer.byteLength,
+    ) as ArrayBuffer;
+    wasm = await loadWasmSolver(async () => bytes);
   });
 
   describe('MNA solver parity', () => {
@@ -108,9 +109,9 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'resistive divider');
+      expectSolutionsClose(wasmSol, ts, 'resistive divider');
     });
 
     it('reports the current drawn by the divider through the source branch', async () => {
@@ -121,18 +122,18 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'divider source current');
+      expectSolutionsClose(wasmSol, ts, 'divider source current');
     });
 
     it('settles a genuinely unconnected net at ground', async () => {
       const elements: Element[] = [{ kind: 'voltageSource', a: 0, b: GROUND, volts: 5 }];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'unconnected net');
+      expectSolutionsClose(wasmSol, ts, 'unconnected net');
     });
 
     it('holds a resistor dangling from the rail at rail voltage', async () => {
@@ -142,9 +143,9 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'dangling resistor');
+      expectSolutionsClose(wasmSol, ts, 'dangling resistor');
     });
 
     it('biases a voltage divider formed by pull-up and pull-down', async () => {
@@ -155,26 +156,26 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'pull-up pull-down divider');
+      expectSolutionsClose(wasmSol, ts, 'pull-up pull-down divider');
     });
   });
 
   describe('nonlinear junctions parity', () => {
     it('settles a red LED on its measured forward voltage', async () => {
       const { elements, solution: ts } = ledCircuit(5, 330, DIODE_PROFILES.red);
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'red LED');
+      expectSolutionsClose(wasmSol, ts, 'red LED');
     });
 
     it('makes a blue LED dimmer than a red one from the same supply', async () => {
       const red = ledCircuit(5, 330, DIODE_PROFILES.red);
       const blue = ledCircuit(5, 330, DIODE_PROFILES.blue);
 
-      const redWasm = await solveCircuitWasm(red.elements, { nodeCount: 2 });
-      const blueWasm = await solveCircuitWasm(blue.elements, { nodeCount: 2 });
+      const redWasm = await wasm.solve(red.elements, { nodeCount: 2 });
+      const blueWasm = await wasm.solve(blue.elements, { nodeCount: 2 });
 
       expectSolutionsClose(redWasm, red.solution, 'red LED wasm');
       expectSolutionsClose(blueWasm, blue.solution, 'blue LED wasm');
@@ -189,8 +190,8 @@ describe('Wasm Solver Parity', () => {
       const atFive = ledCircuit(5, 330, DIODE_PROFILES.red);
       const atThreeThree = ledCircuit(3.3, 330, DIODE_PROFILES.red);
 
-      const atFiveWasm = await solveCircuitWasm(atFive.elements, { nodeCount: 2 });
-      const atThreeThreeWasm = await solveCircuitWasm(atThreeThree.elements, { nodeCount: 2 });
+      const atFiveWasm = await wasm.solve(atFive.elements, { nodeCount: 2 });
+      const atThreeThreeWasm = await wasm.solve(atThreeThree.elements, { nodeCount: 2 });
 
       expectSolutionsClose(atFiveWasm, atFive.solution, '5V LED');
       expectSolutionsClose(atThreeThreeWasm, atThreeThree.solution, '3.3V LED');
@@ -202,16 +203,16 @@ describe('Wasm Solver Parity', () => {
 
     it('leaves a reverse-biased LED essentially non-conducting', async () => {
       const { elements, solution: ts } = ledCircuit(5, 1000, DIODE_PROFILES.red, true);
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'reverse LED');
+      expectSolutionsClose(wasmSol, ts, 'reverse LED');
     });
 
     it('holds a signal diode near its 0.7 V forward drop', async () => {
       const { elements, solution: ts } = ledCircuit(5, 1000, DIODE_PROFILES.silicon);
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'silicon diode');
+      expectSolutionsClose(wasmSol, ts, 'silicon diode');
     });
   });
 
@@ -224,9 +225,9 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = runToSettle(elements, 2, 1e-5, 1000);
-      const wasm = await runToSettleWasm(elements, 2, 1e-5, 1000);
+      const wasmSol = await runToSettleWasm(elements, 2, 1e-5, 1000);
 
-      expectSolutionsClose(wasm, ts, 'capacitor charge');
+      expectSolutionsClose(wasmSol, ts, 'capacitor charge');
     });
 
     it('keeps charging toward the supply and holds once there', async () => {
@@ -277,16 +278,16 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'dead short');
+      expectSolutionsClose(wasmSol, ts, 'dead short');
     });
 
     it('collapses an LED wired straight across the rail', async () => {
       const { elements, solution: ts } = ledCircuit(5, 0.1, DIODE_PROFILES.red);
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
-      expectSolutionsClose(wasm, ts, 'LED short');
+      expectSolutionsClose(wasmSol, ts, 'LED short');
     });
   });
 
@@ -299,20 +300,20 @@ describe('Wasm Solver Parity', () => {
       ];
 
       const ts = solveCircuit(elements, { nodeCount: 2 });
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
       const tsCurrent = elementCurrent(elements[1], ts);
-      const wasmCurrent = await elementCurrentWasm(elements[1], wasm);
+      const wasmCurrent = wasm.elementCurrent(1, elements, wasmSol);
 
       expectCurrentsClose(wasmCurrent, tsCurrent, 'resistor current');
     });
 
     it('computes diode current correctly', async () => {
       const { elements, solution: ts } = ledCircuit(5, 330, DIODE_PROFILES.red);
-      const wasm = await solveCircuitWasm(elements, { nodeCount: 2 });
+      const wasmSol = await wasm.solve(elements, { nodeCount: 2 });
 
       const tsCurrent = elementCurrent(elements[2], ts);
-      const wasmCurrent = await elementCurrentWasm(elements[2], wasm);
+      const wasmCurrent = wasm.elementCurrent(2, elements, wasmSol);
 
       expectCurrentsClose(wasmCurrent, tsCurrent, 'diode current');
     });
@@ -354,9 +355,9 @@ describe('Wasm Solver Parity', () => {
         }
 
         const ts = solveCircuit(elements, { nodeCount, dtSeconds: 1e-4 });
-        const wasm = await solveCircuitWasm(elements, { nodeCount, dtSeconds: 1e-4 });
+        const wasmSol = await wasm.solve(elements, { nodeCount, dtSeconds: 1e-4 });
 
-        expectSolutionsClose(wasm, ts, `random circuit ${trial}`);
+        expectSolutionsClose(wasmSol, ts, `random circuit ${trial}`);
       }
     });
   });
