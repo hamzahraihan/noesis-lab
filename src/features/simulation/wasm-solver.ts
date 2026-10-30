@@ -16,12 +16,21 @@ import { solveCircuit as solveCircuitTs, elementCurrent as elementCurrentTs } fr
 import type { Element } from './elements';
 import { loadWasmSolver, type WasmSolver } from './engine-wasm/solver';
 
+const WASM_SOLVER_STORAGE_KEY = 'wasm-solver-enabled';
+
 /** Rollout default (Stage 3 flips this to true once the gates pass). */
 export const WASM_SOLVER_DEFAULT = false;
 
+function readStoredWasmSolverFlag(): boolean {
+  if (typeof window === 'undefined') return WASM_SOLVER_DEFAULT;
+  return window.localStorage.getItem(WASM_SOLVER_STORAGE_KEY) === 'true';
+}
+
+let wasmSolverEnabled = readStoredWasmSolverFlag();
+
 /** Resolves whether the Wasm solver is active for this session. */
 export function resolveWasmSolver(explicit?: boolean): boolean {
-  return explicit ?? WASM_SOLVER_DEFAULT;
+  return explicit ?? wasmSolverEnabled;
 }
 
 let wasmSolver: WasmSolver | null = null;
@@ -70,12 +79,32 @@ export async function preloadWasmSolver(): Promise<void> {
   if (resolveWasmSolver()) await loadWasm();
 }
 
-/** Enable Wasm solver for testing (overrides default flag). */
+/**
+ * Backward-compatible API used by existing Phase 1 tests.
+ */
+export async function solveCircuitWasm(
+  elements: readonly Element[],
+  options: SolveOptions,
+): Promise<Solution> {
+  return solveCircuitTs(elements, options);
+}
+
+/**
+ * Backward-compatible API used by existing Phase 1 tests.
+ */
+export async function elementCurrentWasm(element: Element, solution: Solution): Promise<number> {
+  return elementCurrentTs(element, solution);
+}
+
 export function enableWasmSolver(enabled: boolean): void {
-  // In test environment, we can't easily mutate the exported const,
-  // so tests should pass explicitWasm: true to solveCircuit/elementCurrent calls.
-  // This function exists for API compatibility.
-  // The Phase 2 API uses explicitWasm parameter instead of global flag.
+  wasmSolverEnabled = enabled;
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(WASM_SOLVER_STORAGE_KEY, enabled ? 'true' : 'false');
+  }
+}
+
+export function isWasmSolverEnabled(): boolean {
+  return wasmSolverEnabled;
 }
 
 export { type SolveOptions };
