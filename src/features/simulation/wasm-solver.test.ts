@@ -9,29 +9,27 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, beforeAll } from 'vitest';
 import { GROUND, type DiodeProfile, type Element } from './elements';
 import { DIODE_PROFILES } from '@/features/parts';
-import { solveCircuit, elementCurrent, type Solution, type SolveOptions } from './circuit';
+import { solveCircuit, elementCurrent, type Solution } from './circuit';
 import { loadWasmSolver, type WasmSolver } from './engine-wasm/solver';
-
-const TOLERANCE = 1e-7;
 
 let wasm: WasmSolver;
 
 // Helper to compare two solutions
-function expectSolutionsClose(wasm: Solution, ts: Solution, label: string) {
-  expect(wasm.converged).toBe(ts.converged);
-  expect(wasm.iterations).toBe(ts.iterations);
-  expect(wasm.sourceCurrents.length).toBe(ts.sourceCurrents.length);
+function expectSolutionsClose(wasmSol: Solution, ts: Solution, _label: string) {
+  expect(wasmSol.converged).toBe(ts.converged);
+  expect(wasmSol.iterations).toBe(ts.iterations);
+  expect(wasmSol.sourceCurrents.length).toBe(ts.sourceCurrents.length);
 
   for (let i = 0; i < ts.voltages.length; ++i) {
-    expect(wasm.voltages[i]).toBeCloseTo(ts.voltages[i], 7, `${label} voltage[${i}]`);
+    expect(wasmSol.voltages[i]).toBeCloseTo(ts.voltages[i], 7);
   }
   for (let i = 0; i < ts.sourceCurrents.length; ++i) {
-    expect(wasm.sourceCurrents[i]).toBeCloseTo(ts.sourceCurrents[i], 7, `${label} sourceCurrent[${i}]`);
+    expect(wasmSol.sourceCurrents[i]).toBeCloseTo(ts.sourceCurrents[i], 7);
   }
 }
 
-function expectCurrentsClose(wasm: number, ts: number, label: string) {
-  expect(wasm).toBeCloseTo(ts, 7, label);
+function expectCurrentsClose(wasmCurrent: number, tsCurrent: number, _label: string) {
+  expect(wasmCurrent).toBeCloseTo(tsCurrent, 7);
 }
 
 // Test circuit builders (matching circuit.test.ts)
