@@ -507,6 +507,17 @@ class WasmNetlistImpl implements WasmNetlist {
     return { nodeOfTerminal, nodeCount, nets, elements, pinNode };
   }
 
+  buildElements(
+    netlist: Netlist,
+    _timeMs: number,
+  ): { elements: Element[]; nodeCount: number } {
+    // The wasm netlist builder computes all elements in `build()`.
+    // Dynamic elements (servos, shift registers, stepper drivers) are not
+    // yet supported in the wasm path; they are added by the TypeScript
+    // engine's buildElements. For parity testing, return the static elements.
+    return { elements: [...netlist.elements], nodeCount: netlist.nodeCount };
+  }
+
   private elementAt(
     view: DataView,
     offset: number,
