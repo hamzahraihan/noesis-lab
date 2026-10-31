@@ -81,7 +81,6 @@ const EXPORTED_FUNCTIONS = [
   '_part_register',
   '_part_stamp',
   '_part_get_state',
-  '_part_get_scalars',
   '_part_set_knob',
   '_part_set_pin_level',
   '_part_set_i2c_address',

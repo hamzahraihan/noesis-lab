@@ -34,6 +34,11 @@ enum class PartContextType : uint8_t {
     MFRC522,
     ILI9341,
     MAX7219,
+    PCD8544,
+    HD44780,
+    SERVO,
+    STEPPER,
+    STEPPER_DRIVER,
     POWER_SUPPLY,
     RELAY,
     BUTTON,
@@ -202,6 +207,42 @@ struct MAX7219Context : PartContext {
     uint8_t digit_data[8] = {0};
     uint8_t reg_ptr = 0x00;
     PartContextType type() const override { return PartContextType::MAX7219; }
+};
+
+// PCD8544 - Nokia 5110 LCD (SPI)
+struct PCD8544Context : PartContext {
+    uint16_t width = 84;
+    uint16_t height = 48;
+    std::vector<uint8_t> framebuffer;  // 1 bit per pixel
+    uint8_t reg_ptr = 0x00;
+    bool data_mode = false;
+    PartContextType type() const override { return PartContextType::PCD8544; }
+};
+
+// HD44780 - Character LCD (parallel/I2C)
+struct HD44780Context : PartContext {
+    uint8_t rows = 2;
+    uint8_t cols = 16;
+    uint8_t chars[80] = {0};  // Max 4x20 = 80 chars
+    PartContextType type() const override { return PartContextType::HD44780; }
+};
+
+// Servo - RC servo motor
+struct ServoContext : PartContext {
+    uint8_t current_angle = 90;  // 0-180 degrees
+    PartContextType type() const override { return PartContextType::SERVO; }
+};
+
+// Stepper - Stepper motor
+struct StepperContext : PartContext {
+    int16_t current_angle_deci_deg = 0;  // 0-3600 (0.1 degree steps)
+    PartContextType type() const override { return PartContextType::STEPPER; }
+};
+
+// StepperDriver - A4988/Driver
+struct StepperDriverContext : PartContext {
+    uint8_t coil_outputs[4] = {0, 0, 0, 0};  // 1A, 1B, 2A, 2B
+    PartContextType type() const override { return PartContextType::STEPPER_DRIVER; }
 };
 
 // ============================================================================
@@ -1119,6 +1160,79 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
             // Could add RTC time fields to snapshot
             break;
         }
+        case PART_KIND_DISPLAY_I2C: {
+            // SSD1306Context
+            SSD1306Context* ctx = static_cast<SSD1306Context*>(inst->impl);
+            snap.framebuffer = ctx->framebuffer.data();
+            snap.framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
+            snap.width = ctx->width;
+            snap.height = ctx->height;
+            break;
+        }
+        case PART_KIND_DISPLAY_SPI: {
+            // ILI9341, PCD8544, MAX7219 — detect by context type
+            // All have framebuffer + width/height
+            PartContext* base = static_cast<PartContext*>(inst->impl);
+            if (base->type() == PartContextType::ILI9341) {
+                ILI9341Context* ctx = static_cast<ILI9341Context*>(base);
+                snap.framebuffer = reinterpret_cast<uint8_t*>(ctx->framebuffer.data());
+                snap.framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size() * sizeof(uint16_t));
+                snap.width = ctx->width;
+                snap.height = ctx->height;
+            } else if (base->type() == PartContextType::PCD8544) {
+                PCD8544Context* ctx = static_cast<PCD8544Context*>(base);
+                snap.framebuffer = ctx->framebuffer.data();
+                snap.framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
+                snap.width = ctx->width;
+                snap.height = ctx->height;
+            } else if (base->type() == PartContextType::MAX7219) {
+                MAX7219Context* ctx = static_cast<MAX7219Context*>(base);
+                for (int i = 0; i < 8; i++) snap.seven_seg_digits[i] = ctx->digit_data[i];
+                // MAX7219 doesn't have a colon field, but we can use shutdown or display_test as placeholder
+                snap.seven_seg_colon = 0;
+            }
+            break;
+        }
+        case PART_KIND_DISPLAY_7SEG: {
+            // TM1637 — uses MAX7219Context or similar
+            MAX7219Context* ctx = static_cast<MAX7219Context*>(inst->impl);
+            for (int i = 0; i < 8; i++) snap.seven_seg_digits[i] = ctx->digit_data[i];
+            snap.seven_seg_colon = 0;
+            break;
+        }
+        case PART_KIND_DISPLAY_LCD: {
+            // HD44780
+            HD44780Context* ctx = static_cast<HD44780Context*>(inst->impl);
+            for (int i = 0; i < 80; i++) snap.lcd_chars[i] = ctx->chars[i];
+            snap.lcd_rows = ctx->rows;
+            snap.lcd_cols = ctx->cols;
+            break;
+        }
+        case PART_KIND_SERVO: {
+            ServoContext* ctx = static_cast<ServoContext*>(inst->impl);
+            snap.servo_angle = ctx->current_angle;
+            break;
+        }
+        case PART_KIND_STEPPER: {
+            StepperContext* ctx = static_cast<StepperContext*>(inst->impl);
+            snap.stepper_angle_deci_deg = ctx->current_angle_deci_deg;
+            break;
+        }
+        case PART_KIND_STEPPER_DRIVER: {
+            StepperDriverContext* ctx = static_cast<StepperDriverContext*>(inst->impl);
+            for (int i = 0; i < 4; i++) snap.stepper_driver_outputs[i] = ctx->coil_outputs[i];
+            break;
+        }
+        case PART_KIND_THERMOCOUPLE: {
+            MAX6675Context* ctx = static_cast<MAX6675Context*>(inst->impl);
+            snap.thermocouple_temp_quarter_deg = ctx->temp_quarter_deg;
+            break;
+        }
+        case PART_KIND_RFID: {
+            MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
+            snap.rfid_card_present = ctx->card_present;
+            break;
+        }
         default:
             break;
     }
@@ -1302,18 +1416,30 @@ extern "C" void* part_create_relay(uint32_t part_id, double coil_ohms, double co
 }
 
 extern "C" void* part_create_servo(uint32_t part_id) {
-    part_register(part_id, PART_KIND_SERVO, "{}");
-    return &g_parts[part_id];
+    void* handle = part_register(part_id, PART_KIND_SERVO, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    ServoContext* ctx = new ServoContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
 }
 
 extern "C" void* part_create_stepper(uint32_t part_id, double step_angle_deg) {
-    part_register(part_id, PART_KIND_STEPPER, "{}");
-    return &g_parts[part_id];
+    void* handle = part_register(part_id, PART_KIND_STEPPER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    StepperContext* ctx = new StepperContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
 }
 
 extern "C" void* part_create_stepper_driver(uint32_t part_id, double output_ohms) {
-    part_register(part_id, PART_KIND_STEPPER_DRIVER, "{}");
-    return &g_parts[part_id];
+    void* handle = part_register(part_id, PART_KIND_STEPPER_DRIVER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    StepperDriverContext* ctx = new StepperDriverContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
 }
 
 extern "C" void* part_create_shift_register(uint32_t part_id) {
@@ -1338,8 +1464,14 @@ extern "C" void* part_create_shift_register(uint32_t part_id) {
 }
 
 extern "C" void* part_create_lcd(uint32_t part_id, uint8_t cols, uint8_t rows) {
-    part_register(part_id, PART_KIND_DISPLAY_LCD, "{}");
-    return &g_parts[part_id];
+    void* handle = part_register(part_id, PART_KIND_DISPLAY_LCD, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    HD44780Context* ctx = new HD44780Context();
+    ctx->cols = cols;
+    ctx->rows = rows;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
 }
 
 extern "C" void* part_create_i2c_expander(uint32_t part_id, uint8_t ports, uint8_t address) {
