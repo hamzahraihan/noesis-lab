@@ -192,6 +192,15 @@ typedef struct {
     
     // Shift register outputs
     uint8_t shift_register_outputs[8];
+
+    // Relay contact state (true = contact closed)
+    bool relay_contacts_closed;
+
+    // Button pressed state (true = pressed)
+    bool button_pressed;
+
+    // Potentiometer wiper position, 0.0 - 1.0
+    double pot_wiper;
     
     // RF ID card presence
     bool rfid_card_present;

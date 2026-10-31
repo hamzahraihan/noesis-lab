@@ -236,7 +236,8 @@ struct ShiftRegisterContext : PartContext {
     uint8_t shift_reg = 0x00;          // Shift register
     uint8_t storage_reg = 0x00;        // Storage register (output)
     uint8_t bit_count = 0;             // Bits shifted in current transfer
-    bool oe_active = false;            // Output enable (active low)
+    bool ds_level = false;             // Current DS pin level, sampled on SHCP rise
+    bool outputs_enabled = true;       // OE is active low, so this inverts it
     int32_t ds_net = -1;               // Data input (DS)
     int32_t shcp_net = -1;             // Shift clock (SHCP)
     int32_t stcp_net = -1;             // Storage clock (STCP)
@@ -339,7 +340,7 @@ static std::vector<PartContext*> g_part_impls;
 // Utility Functions
 // ============================================================================
 
-inline double voltageOfNet(SolverSolution* sol, int32_t net) {
+inline double voltageOfNet(const SolverSolution* sol, int32_t net) {
     if (net >= 0 && net < sol->sourceCount + 100) {  // Approximate node count
         return sol->voltages[net];
     }
@@ -969,7 +970,8 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
         case PART_KIND_RELAY: {
             RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
             if (ctx->coil_pos_net >= 0 && ctx->coil_neg_net >= 0) {
-                double v_coil = sol->voltages[ctx->coil_pos_net] - sol->voltages[ctx->coil_neg_net];
+                double v_coil = voltageOfNet(sol, ctx->coil_pos_net)
+                              - voltageOfNet(sol, ctx->coil_neg_net);
                 bool should_pull_in = v_coil >= ctx->pull_in_voltage;
                 bool should_drop_out = v_coil <= ctx->drop_out_voltage;
                 
@@ -1025,23 +1027,26 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
         }
         case PART_KIND_RELAY: {
             RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
-            snap.rfid_card_present = ctx->contacts_closed;  // Reuse field for contact state
+            snap.relay_contacts_closed = ctx->contacts_closed;
             break;
         }
         case PART_KIND_BUTTON: {
             ButtonContext* ctx = static_cast<ButtonContext*>(inst->impl);
-            snap.rfid_card_present = ctx->pressed;  // Reuse field
+            snap.button_pressed = ctx->pressed;
             break;
         }
         case PART_KIND_POTENTIOMETER: {
             PotentiometerContext* ctx = static_cast<PotentiometerContext*>(inst->impl);
-            snap.servo_angle = static_cast<uint8_t>(ctx->wiper_position * 180);  // Reuse as 0-180
+            snap.pot_wiper = ctx->wiper_position;
             break;
         }
         case PART_KIND_SHIFT_REGISTER: {
             ShiftRegisterContext* ctx = static_cast<ShiftRegisterContext*>(inst->impl);
-            for (int i = 0; i < 8; i++) {
-                snap.shift_register_outputs[i] = (ctx->storage_reg >> i) & 1;
+            // Q pins are high-impedance when OE is deasserted, so report 0.
+            if (ctx->outputs_enabled) {
+                for (int i = 0; i < 8; i++) {
+                    snap.shift_register_outputs[i] = (ctx->storage_reg >> i) & 1;
+                }
             }
             break;
         }
@@ -1112,12 +1117,14 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
         }
         case PART_KIND_SHIFT_REGISTER: {
             ShiftRegisterContext* ctx = static_cast<ShiftRegisterContext*>(inst->impl);
+            // Pin order follows the 74HC595 wiring: DS=0, SHCP=1, STCP=2, OE=3.
             if (pin_index == 0) {  // DS (data)
-                // Data is sampled on SHCP edge in part_stamp
+                ctx->ds_level = high;
             } else if (pin_index == 1) {  // SHCP (shift clock)
                 if (high && !ctx->last_shcp) {
-                    // Rising edge - shift in DS value
-                    ctx->shift_reg = (ctx->shift_reg << 1) | 1;  // Simplified
+                    // Rising edge: the bit present on DS enters the shift register.
+                    ctx->shift_reg = static_cast<uint8_t>((ctx->shift_reg << 1) | (ctx->ds_level ? 1 : 0));
+                    if (ctx->bit_count < 8) ctx->bit_count++;
                 }
                 ctx->last_shcp = high;
             } else if (pin_index == 2) {  // STCP (storage clock)
@@ -1127,7 +1134,7 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
                 }
                 ctx->last_stcp = high;
             } else if (pin_index == 3) {  // OE (output enable, active low)
-                ctx->oe_active = !high;
+                ctx->outputs_enabled = !high;
             }
             break;
         }
