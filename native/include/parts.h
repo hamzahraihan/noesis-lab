@@ -221,10 +221,6 @@ extern "C" void part_stamp(PartHandle handle, const SolverSolution* solution, do
 // Get part state snapshot for UI
 extern "C" PartStateSnapshot part_get_state(PartHandle handle);
 
-// Write this part's current scalar state into out[0..n), returns n.
-// Layout per kind is documented in parts.h and mirrored in TS adapters.
-extern "C" uint32_t part_get_scalars(PartHandle handle, double* out, uint32_t max);
-
 // Part-specific setters (called from engine when conditions change)
 extern "C" void part_set_knob(PartHandle handle, const char* knob_name, double value);
 extern "C" void part_set_pin_level(PartHandle handle, uint32_t pin_index, bool high);
