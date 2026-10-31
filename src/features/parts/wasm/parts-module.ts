@@ -15,7 +15,10 @@ const WASM_PATH = join(new URL('.', import.meta.url).pathname, 'parts.wasm');
 
 /** Memory view helpers for reading/writing wasm linear memory. */
 class WasmMemory {
-  constructor(public readonly memory: WebAssembly.Memory) {}
+  public readonly memory: WebAssembly.Memory;
+  constructor(memory: WebAssembly.Memory) {
+    this.memory = memory;
+  }
 
   getF64(ptr: number): number {
     return new DataView(this.memory.buffer).getFloat64(ptr, true);
@@ -131,7 +134,6 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
   const rI16 = () => { const v = view.getInt16(offset, true); offset += 2; return v; };
   const rF64 = () => { const v = view.getFloat64(offset, true); offset += 8; return v; };
   const rArr8 = (len: number) => { const arr = new Uint8Array(wasmMemory.memory.buffer, ptr + offset, len); offset += len; return Array.from(arr); };
-  const rArr16 = (len: number) => { const arr = new Uint16Array(wasmMemory.memory.buffer, ptr + offset, len); offset += len * 2; return Array.from(arr); };
   const snap = {
     framebuffer: rU32(),
     framebuffer_size: rU32(),

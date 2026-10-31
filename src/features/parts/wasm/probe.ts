@@ -52,15 +52,17 @@ export interface PartProbe {
 export class WasmPartProbe implements PartProbe {
   private handle: number;
   private adapter: PartAdapter;
+  private module: PartsModule;
 
   constructor(
     kind: string,
     factoryArgs: unknown[],
-    private module: PartsModule,
+    module: PartsModule,
     adapters: Record<string, PartAdapter>
   ) {
     const adapter = adapters[kind];
     if (!adapter) throw new Error(`No adapter for part kind: ${kind}`);
+    this.module = module;
     this.adapter = adapter;
     this.handle = adapter.create(factoryArgs, module) as number;
   }
@@ -85,11 +87,10 @@ export class WasmPartProbe implements PartProbe {
 /** Probe that drives a TypeScript oracle device. */
 export class TsDeviceProbe implements PartProbe {
   private instance: unknown;
+  private adapter: PartAdapter;
 
-  constructor(
-    private adapter: PartAdapter,
-    factoryArgs: unknown[]
-  ) {
+  constructor(adapter: PartAdapter, factoryArgs: unknown[]) {
+    this.adapter = adapter;
     this.instance = adapter.create(factoryArgs);
   }
 
