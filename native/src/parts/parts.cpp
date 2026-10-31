@@ -22,14 +22,36 @@ namespace engine {
 // Common base so owned contexts can be destroyed through a typed pointer.
 // Deleting a void* is undefined behaviour and skips destructors, which leaks
 // the framebuffers held by the display contexts.
+enum class PartContextType : uint8_t {
+    NONE = 0,
+    PCF8574,
+    MCP23017,
+    PCA9685,
+    SSD1306,
+    ADS1115,
+    MCP4725,
+    MAX6675,
+    MFRC522,
+    ILI9341,
+    MAX7219,
+    POWER_SUPPLY,
+    RELAY,
+    BUTTON,
+    POTENTIOMETER,
+    SHIFT_REGISTER,
+    RTC,
+};
+
 struct PartContext {
     virtual ~PartContext() = default;
+    virtual PartContextType type() const = 0;
 };
 
 // PCF8574 - 8-bit I/O expander with quasi-bidirectional pins
 struct PCF8574Context : PartContext {
     uint8_t output_reg = 0xFF;  // All pins high (weak pull-up) at reset
     uint8_t input_reg = 0xFF;   // Input latch
+    PartContextType type() const override { return PartContextType::PCF8574; }
 };
 
 // MCP23017 - 16-bit I/O expander with full bidirectional ports
@@ -60,6 +82,7 @@ struct MCP23017Context : PartContext {
     
     uint8_t reg_ptr = 0x00;  // Current register pointer
     bool seqop = false;      // Sequential operation mode
+    PartContextType type() const override { return PartContextType::MCP23017; }
 };
 
 // PCA9685 - 16-channel 12-bit PWM driver
@@ -77,6 +100,7 @@ struct PCA9685Context : PartContext {
     uint8_t all_led_off_h = 0;
     uint8_t reg_ptr = 0x00;
     bool auto_increment = true;
+    PartContextType type() const override { return PartContextType::PCA9685; }
 };
 
 // SSD1306 - OLED display controller
@@ -101,6 +125,7 @@ struct SSD1306Context : PartContext {
     uint8_t vcom_detect = 0x40;
     uint8_t reg_ptr = 0x00;
     bool expecting_data = false;  // After 0x40 (data) vs 0x00 (command)
+    PartContextType type() const override { return PartContextType::SSD1306; }
 };
 
 // ADS1115 - 16-bit ADC
@@ -117,6 +142,7 @@ struct ADS1115Context : PartContext {
     // 16-bit register write assembly (two bytes per register)
     uint8_t write_first_byte = 0;
     bool have_first_byte = false;
+    PartContextType type() const override { return PartContextType::ADS1115; }
 };
 
 // MCP4725 - 12-bit DAC
@@ -128,12 +154,14 @@ struct MCP4725Context : PartContext {
     bool multi_byte = false;
     uint8_t write_buffer[3];
     uint8_t write_count = 0;
+    PartContextType type() const override { return PartContextType::MCP4725; }
 };
 
 // MAX6675 - Thermocouple (SPI)
 struct MAX6675Context : PartContext {
     int16_t temp_quarter_deg = 0;  // Temperature in 0.25°C steps
     bool fault = false;  // Open thermocouple detection
+    PartContextType type() const override { return PartContextType::MAX6675; }
 };
 
 // MFRC522 - RFID reader (SPI)
@@ -147,6 +175,7 @@ struct MFRC522Context : PartContext {
     bool card_present = true;
     uint8_t key_a[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t key_b[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    PartContextType type() const override { return PartContextType::MFRC522; }
 };
 
 // ILI9341 - TFT display (SPI)
@@ -160,6 +189,7 @@ struct ILI9341Context : PartContext {
     uint8_t cmd_args[16];
     uint8_t cmd_arg_count = 0;
     uint8_t expected_args = 0;
+    PartContextType type() const override { return PartContextType::ILI9341; }
 };
 
 // MAX7219 - 8x8 LED matrix (SPI)
@@ -171,6 +201,7 @@ struct MAX7219Context : PartContext {
     uint8_t display_test = 0x00;
     uint8_t digit_data[8] = {0};
     uint8_t reg_ptr = 0x00;
+    PartContextType type() const override { return PartContextType::MAX7219; }
 };
 
 // ============================================================================
@@ -187,6 +218,7 @@ struct PowerSupplyContext : PartContext {
     int32_t neg_net = -1;           // Negative terminal net
     int32_t en_net = -1;            // Enable pin net
     int32_t vsource_idx = -1;       // Voltage source index in solver
+    PartContextType type() const override { return PartContextType::POWER_SUPPLY; }
 };
 
 // Relay - Electromechanical relay with coil and contacts
@@ -205,6 +237,7 @@ struct RelayContext : PartContext {
     int32_t nc_net = -1;               // Normally closed contact
     int32_t coil_vsource_idx = -1;     // Coil voltage source index
     int32_t contact_g_idx = -1;        // Contact conductance index
+    PartContextType type() const override { return PartContextType::RELAY; }
 };
 
 // Button - Debounced push button
@@ -218,6 +251,7 @@ struct ButtonContext : PartContext {
     int32_t gnd_net = -1;              // Ground net
     int32_t pullup_vsource_idx = -1;   // Pull-up voltage source
     int32_t switch_g_idx = -1;         // Switch conductance index
+    PartContextType type() const override { return PartContextType::BUTTON; }
 };
 
 // Potentiometer - 3-terminal voltage divider
@@ -229,6 +263,7 @@ struct PotentiometerContext : PartContext {
     int32_t wiper_net = -1;            // Wiper terminal
     int32_t g_upper_idx = -1;          // Upper resistance conductance
     int32_t g_lower_idx = -1;          // Lower resistance conductance
+    PartContextType type() const override { return PartContextType::POTENTIOMETER; }
 };
 
 // Shift Register 74HC595 - Serial-in, parallel-out
@@ -247,6 +282,7 @@ struct ShiftRegisterContext : PartContext {
     int32_t gnd_net = -1;              // GND
     bool last_shcp = false;            // Last SHCP state for edge detection
     bool last_stcp = false;            // Last STCP state for edge detection
+    PartContextType type() const override { return PartContextType::SHIFT_REGISTER; }
 };
 
 // RTC - DS1307/DS3231 Real-Time Clock (I2C)
@@ -274,6 +310,7 @@ struct RTCContext : PartContext {
     int32_t scl_net = -1;
     int32_t vcc_net = -1;
     int32_t gnd_net = -1;
+    PartContextType type() const override { return PartContextType::RTC; }
 };
 
 // ============================================================================
@@ -335,6 +372,16 @@ static std::vector<SPIPartImpl> g_spi_parts;
 
 // Part implementations - every context here is owned and freed by bus_reset()
 static std::vector<PartContext*> g_part_impls;
+
+// Explicitly construct global STL containers (needed when using -Wl,--no-entry
+// with emcc or when using clang++ -nostdlib without automatic constructor calls).
+extern "C" void init_globals() {
+    new (&g_parts) std::unordered_map<uint32_t, PartInstance>();
+    new (&g_part_order) std::vector<PartInstance*>();
+    new (&g_i2c_devices) std::vector<I2CDeviceImpl>();
+    new (&g_spi_parts) std::vector<SPIPartImpl>();
+    new (&g_part_impls) std::vector<PartContext*>();
+}
 
 // ============================================================================
 // Utility Functions
@@ -552,7 +599,10 @@ static bool mcp23017_receive(void* ctx, uint8_t byte, bool is_control) {
         case 0x15: dev->olatb = byte; break;
     }
     
-    if (dev->seqop) {
+    // SEQOP=0 (default) means sequential operation ENABLED (auto-increment).
+// seqop flag is true when SEQOP=1 (sequential disabled).
+// So we increment when seqop is false (sequential enabled).
+    if (!dev->seqop) {
         dev->reg_ptr = (dev->reg_ptr + 1) & 0x1F;
     }
     return true;
@@ -831,6 +881,20 @@ static void mcp4725_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out
 // SPI Device Callback Implementations
 // ============================================================================
 
+// Shift595 (74HC595) SPI receive - shifts in a byte (8 bits at once, like 8 clock edges)
+static void spi_shift_register_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
+    (void)data_select;
+    if (!chip_selected) return;
+    ShiftRegisterContext* dev = static_cast<ShiftRegisterContext*>(ctx);
+    // Shift in 8 bits, MSB first (like the TS implementation)
+    for (int edge = 0; edge < 8; edge++) {
+        const bool arriving = (byte & 0x80) != 0;
+        dev->shift_reg = static_cast<uint8_t>((dev->shift_reg << 1) | (arriving ? 1 : 0));
+        byte = static_cast<uint8_t>(byte << 1);
+    }
+    dev->bit_count = 8;
+}
+
 static void spi_max6675_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
     (void)ctx; (void)byte; (void)data_select; (void)chip_selected;
 }
@@ -1061,6 +1125,67 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
     return snap;
 }
 
+extern "C" uint32_t part_get_scalars(void* handle, double* out, uint32_t max) {
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    if (!inst || !inst->impl || !out || max == 0) return 0;
+
+    uint32_t count = 0;
+    auto write = [&](double value) {
+        if (count < max) out[count] = value;
+        count++;
+    };
+
+    PartContext* base = static_cast<PartContext*>(inst->impl);
+
+    switch (inst->kind) {
+        case PART_KIND_I2C_EXPANDER: {
+            // Distinguish PCF8574 (8 ports) vs MCP23017 (16 ports) by context type
+            if (base->type() == PartContextType::PCF8574) {
+                auto* ctx = static_cast<PCF8574Context*>(base);
+                // PCF8574: output_reg, input_reg (2 scalars)
+                // Note: input_reg reflects pin levels which require engine/solver.
+                // In the probe (no pin wiring), both scalars report output_reg.
+                write(static_cast<double>(ctx->output_reg));
+                write(static_cast<double>(ctx->output_reg));
+            } else if (base->type() == PartContextType::MCP23017) {
+                auto* ctx = static_cast<MCP23017Context*>(base);
+                // MCP23017: iodira, iodirb, gpioa, gpiob, olata, olatb (6 scalars)
+                write(static_cast<double>(ctx->iodira));
+                write(static_cast<double>(ctx->iodirb));
+                write(static_cast<double>(ctx->gpioa));
+                write(static_cast<double>(ctx->gpiob));
+                write(static_cast<double>(ctx->olata));
+                write(static_cast<double>(ctx->olatb));
+            }
+            break;
+        }
+        case PART_KIND_ADC: {
+            // ADS1115: config, conversion, conversion_ready (3 scalars)
+            // reg_ptr omitted as it's an internal implementation detail
+            if (base->type() == PartContextType::ADS1115) {
+                auto* ctx = static_cast<ADS1115Context*>(base);
+                write(static_cast<double>(ctx->config));
+                write(static_cast<double>(ctx->conversion));
+                write(static_cast<double>(ctx->conversion_ready ? 1.0 : 0.0));
+            }
+            break;
+        }
+        case PART_KIND_SHIFT_REGISTER: {
+            // 74HC595: shift_reg, storage_reg, outputs_enabled (3 scalars)
+            if (base->type() == PartContextType::SHIFT_REGISTER) {
+                auto* ctx = static_cast<ShiftRegisterContext*>(base);
+                write(static_cast<double>(ctx->shift_reg));
+                write(static_cast<double>(ctx->storage_reg));
+                write(static_cast<double>(ctx->outputs_enabled ? 1.0 : 0.0));
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    return count;
+}
+
 extern "C" void part_set_knob(void* handle, const char* knob_name, double value) {
     PartInstance* inst = static_cast<PartInstance*>(handle);
     if (!inst || !inst->impl) return;
@@ -1092,6 +1217,14 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             if (strcmp(knob_name, "hours") == 0) ctx->hours = static_cast<uint8_t>(value);
             else if (strcmp(knob_name, "minutes") == 0) ctx->minutes = static_cast<uint8_t>(value);
             else if (strcmp(knob_name, "seconds") == 0) ctx->seconds = static_cast<uint8_t>(value);
+            break;
+        }
+        case PART_KIND_ADC: {
+            ADS1115Context* ctx = static_cast<ADS1115Context*>(inst->impl);
+            if (strcmp(knob_name, "ain0") == 0) ctx->input_voltage[0] = value;
+            else if (strcmp(knob_name, "ain1") == 0) ctx->input_voltage[1] = value;
+            else if (strcmp(knob_name, "ain2") == 0) ctx->input_voltage[2] = value;
+            else if (strcmp(knob_name, "ain3") == 0) ctx->input_voltage[3] = value;
             break;
         }
         default:
@@ -1190,6 +1323,17 @@ extern "C" void* part_create_shift_register(uint32_t part_id) {
     ShiftRegisterContext* ctx = new ShiftRegisterContext();
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
+    
+    // Register as SPI device
+    SPIPartImpl spi_part;
+    spi_part.part_id = part_id;
+    spi_part.cs_net = 0;  // Will be set when circuit is built
+    spi_part.dc_net = 0;
+    spi_part.ctx = ctx;
+    spi_part.receive = spi_shift_register_receive;
+    spi_part.read = nullptr;  // Shift595 is output-only, no MISO
+    g_spi_parts.push_back(spi_part);
+    
     return handle;
 }
 
