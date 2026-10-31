@@ -5,10 +5,10 @@
  * TS:  new Ads1115()
  */
 import { Ads1115 } from '@/features/parts/devices/ads1115';
-import type { PartAdapter } from './probe';
-import type { PartsModule } from './parts-module';
-import type { Stimulus } from './probe';
-import type { PartStateSnapshot } from './parts-module';
+import type { PartAdapter } from '../probe';
+import type { PartsModule } from '../parts-module';
+import type { Stimulus } from '../probe';
+import type { PartStateSnapshot } from '../parts-module';
 
 declare module '@/features/parts/devices/ads1115' {
   interface Ads1115 {

@@ -5,10 +5,10 @@
  * TS:  new Mcp23017()
  */
 import { Mcp23017 } from '@/features/parts/devices/mcp23017';
-import type { PartAdapter } from './probe';
-import type { PartsModule } from './parts-module';
-import type { Stimulus } from './probe';
-import type { PartStateSnapshot } from './parts-module';
+import type { PartAdapter } from '../probe';
+import type { PartsModule } from '../parts-module';
+import type { Stimulus } from '../probe';
+import type { PartStateSnapshot } from '../parts-module';
 
 declare module '@/features/parts/devices/mcp23017' {
   interface Mcp23017 {
@@ -43,7 +43,7 @@ export const mcp23017Adapter: PartAdapter = {
 
   apply(instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
     if (module) {
-      const handle = instance as number;
+      // Wasm path: instance is a handle (number) - unused for I2C expanders
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
         stimulus.bytes.forEach((byte: number) => module.i2c_bus_write(byte));

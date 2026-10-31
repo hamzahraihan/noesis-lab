@@ -5,10 +5,10 @@
  * TS:  new Pcf8574()
  */
 import { Pcf8574 } from '@/features/parts/devices/pcf8574';
-import type { PartAdapter } from './probe';
-import type { PartsModule } from './parts-module';
-import type { Stimulus } from './probe';
-import type { PartStateSnapshot } from './parts-module';
+import type { PartAdapter } from '../probe';
+import type { PartsModule } from '../parts-module';
+import type { Stimulus } from '../probe';
+import type { PartStateSnapshot } from '../parts-module';
 
 /** Read-only accessors added to Pcf8574 for probe visibility. */
 declare module '@/features/parts/devices/pcf8574' {
@@ -44,8 +44,7 @@ export const pcf8574Adapter: PartAdapter = {
 
   apply(instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
     if (module) {
-      // Wasm path: instance is a handle (number)
-      const handle = instance as number;
+      // Wasm path: instance is a handle (number) - unused for I2C expanders
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
         stimulus.bytes.forEach((byte: number) => {

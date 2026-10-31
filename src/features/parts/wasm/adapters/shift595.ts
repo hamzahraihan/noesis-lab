@@ -5,22 +5,21 @@
  * TS:  new Shift595()
  */
 import { Shift595 } from '@/features/parts/devices/shift595';
-import type { PartAdapter } from './probe';
-import type { PartsModule } from './parts-module';
-import type { Stimulus } from './probe';
-import type { PartStateSnapshot } from './parts-module';
+import type { PartAdapter } from '../probe';
+import type { PartsModule } from '../parts-module';
+import type { Stimulus } from '../probe';
+import type { PartStateSnapshot } from '../parts-module';
 
 declare module '@/features/parts/devices/shift595' {
   interface Shift595 {
     readonly shiftReg: number;
     readonly storageReg: number;
-    readonly _enabled: boolean;
+    // enabled getter already exists on the class
   }
 }
 
 Object.defineProperty(Shift595.prototype, 'shiftReg', { get() { return (this as any).shift; } });
 Object.defineProperty(Shift595.prototype, 'storageReg', { get() { return (this as any).latched; } });
-Object.defineProperty(Shift595.prototype, 'enabled', { get() { return (this as any)._enabled; } });
 
 export const shift595Adapter: PartAdapter = {
   kind: 'shift595',

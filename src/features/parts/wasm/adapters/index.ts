@@ -7,7 +7,7 @@ import { pcf8574Adapter } from './pcf8574';
 import { mcp23017Adapter } from './mcp23017';
 import { ads1115Adapter } from './ads1115';
 import { shift595Adapter } from './shift595';
-import type { PartAdapter } from './probe';
+import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
   pcf8574: pcf8574Adapter,
