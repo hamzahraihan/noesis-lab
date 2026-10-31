@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadPartsModule, type PartsModule } from './parts-module';
 import { WasmPartProbe, TsDeviceProbe, ADAPTERS, type Stimulus } from './probe';
-import { FIXTURES, FIXTURE_LIST, type Fixture } from './fixtures';
+import { FIXTURES, type Fixture } from './fixtures';
 
 let module: PartsModule;
 
@@ -73,7 +73,6 @@ describe('Parts differential harness', () => {
 
   // Differ test: a deliberately wrong fixture must fail
   it('rejects a mismatched observation (meta-test)', () => {
-    const adapter = ADAPTERS.pcf8574;
     const wasmProbe = new WasmPartProbe('pcf8574', [1, 32], module, ADAPTERS);
     // Create a mock TS probe that returns zeros (wrong)
     const mockTsProbe: { apply: (s: Stimulus) => void; observe: () => { labels: string[]; values: number[] } } = {

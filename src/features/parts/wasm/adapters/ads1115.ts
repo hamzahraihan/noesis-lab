@@ -42,7 +42,7 @@ export const ads1115Adapter: PartAdapter = {
       const handle = instance as number;
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
-        stimulus.bytes.forEach((byte) => module.i2c_bus_write(byte));
+        stimulus.bytes.forEach((byte: number) => module.i2c_bus_write(byte));
         module.i2c_bus_end_transmission();
       } else if (stimulus.kind === 'i2c-read') {
         module.i2c_bus_request_from(stimulus.address, stimulus.count);
@@ -57,7 +57,7 @@ export const ads1115Adapter: PartAdapter = {
     } else {
       const dev = instance as Ads1115;
       if (stimulus.kind === 'i2c-write') {
-        stimulus.bytes.forEach((byte, idx) => dev.receive(byte, idx === 0));
+        stimulus.bytes.forEach((byte: number, idx: number) => dev.receive(byte, idx === 0));
       } else if (stimulus.kind === 'i2c-read') {
         dev.read(stimulus.count);
       } else if (stimulus.kind === 'knob') {
@@ -74,12 +74,12 @@ export const ads1115Adapter: PartAdapter = {
     }
   },
 
-  readScalars(instance: unknown, module?: PartsModule): number[] {
+  readScalars(_instance: unknown, module?: PartsModule): number[] {
     if (module) {
       // Wasm path - now uses snapshotToScalars via probe
       throw new Error('ADS1115: wasm path should use snapshotToScalars');
     } else {
-      const dev = instance as Ads1115;
+      const dev = _instance as Ads1115;
       return [dev.configReg, dev.conversionReg, dev.conversionReadyFlag];
     }
   },
@@ -93,7 +93,7 @@ export const ads1115Adapter: PartAdapter = {
     ];
   },
 
-  reset(instance: unknown, module?: PartsModule): void {
+  reset(_instance: unknown, module?: PartsModule): void {
     if (module) {
       module.bus_reset();
     }

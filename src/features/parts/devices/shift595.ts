@@ -59,7 +59,11 @@ export class Shift595 implements SpiDevice {
   /** The byte the outputs are holding. */
   private latched = 0;
   /** Whether the outputs are driving at all; the enable line is active low. */
-  private enabled = true;
+  private _enabled = true;
+
+  public get enabled(): boolean {
+    return this._enabled;
+  }
 
   /**
    * One byte out to the chip.
@@ -101,13 +105,13 @@ export class Shift595 implements SpiDevice {
    * low, and with the outputs disabled they float rather than drive.
    */
   output(index: number): boolean {
-    if (!this.enabled) return false;
+    if (!this._enabled) return false;
     return ((this.latched >> index) & 1) === 1;
   }
 
   /** Sets the enable line's level, active low as the chip is. */
   setEnableLevel(low: boolean): void {
-    this.enabled = !low;
+    this._enabled = !low;
   }
 }
 

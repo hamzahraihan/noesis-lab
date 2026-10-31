@@ -7,6 +7,7 @@
 
 import type { PartsModule } from './parts-module';
 import { readPartStateSnapshot, type PartStateSnapshot } from './parts-module';
+import { ADAPTERS } from './adapters';
 
 /** A single stimulus applied to a part. */
 export type Stimulus =
@@ -105,8 +106,6 @@ export class TsDeviceProbe implements PartProbe {
     this.adapter.reset?.(this.instance);
   }
 }
-
-import { ADAPTERS } from './adapters';
 
 /** Re-export the adapter registry for convenience. */
 export { ADAPTERS };

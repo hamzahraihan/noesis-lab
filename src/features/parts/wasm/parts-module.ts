@@ -9,11 +9,9 @@
  * the wasm import/export surface.
  */
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const WASM_PATH = join(__dirname, 'parts.wasm');
+const WASM_PATH = join(new URL('.', import.meta.url).pathname, 'parts.wasm');
 
 /** Memory view helpers for reading/writing wasm linear memory. */
 class WasmMemory {
@@ -325,9 +323,9 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     spi_bus_transfer: exp.spi_bus_transfer as (byte: number, data_select: number, chip_selected: number) => number,
 
     // Part runtime
-    part_register: (part_id: number, kind: number, definition_json: string) => {
+    part_register: (part_id: number, kind: number, definition_json: string): number => {
       const ptr = wasmMemory.allocString(definition_json);
-      (exp.part_register as (part_id: number, kind: number, definition_json: number) => number)(part_id, kind, ptr);
+      return (exp.part_register as (part_id: number, kind: number, definition_json: number) => number)(part_id, kind, ptr);
     },
     part_stamp: exp.part_stamp as (handle: number, solution: number, time_ms: number) => void,
     part_get_state: exp.part_get_state as (handle: number) => number,

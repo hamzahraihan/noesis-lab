@@ -14,13 +14,13 @@ declare module '@/features/parts/devices/shift595' {
   interface Shift595 {
     readonly shiftReg: number;
     readonly storageReg: number;
-    readonly enabled: boolean;
+    readonly _enabled: boolean;
   }
 }
 
 Object.defineProperty(Shift595.prototype, 'shiftReg', { get() { return (this as any).shift; } });
 Object.defineProperty(Shift595.prototype, 'storageReg', { get() { return (this as any).latched; } });
-Object.defineProperty(Shift595.prototype, 'enabled', { get() { return (this as any).enabled; } });
+Object.defineProperty(Shift595.prototype, 'enabled', { get() { return (this as any)._enabled; } });
 
 export const shift595Adapter: PartAdapter = {
   kind: 'shift595',
@@ -66,12 +66,12 @@ export const shift595Adapter: PartAdapter = {
     }
   },
 
-  readScalars(instance: unknown, module?: PartsModule): number[] {
+  readScalars(_instance: unknown, module?: PartsModule): number[] {
     if (module) {
       // Wasm path - now uses snapshotToScalars via probe
       throw new Error('Shift595: wasm path should use snapshotToScalars');
     } else {
-      const dev = instance as Shift595;
+      const dev = _instance as Shift595;
       return [dev.shiftReg, dev.storageReg, dev.enabled ? 1 : 0];
     }
   },
@@ -85,7 +85,7 @@ export const shift595Adapter: PartAdapter = {
     ];
   },
 
-  reset(instance: unknown, module?: PartsModule): void {
+  reset(_instance: unknown, module?: PartsModule): void {
     if (module) {
       module.bus_reset();
     }

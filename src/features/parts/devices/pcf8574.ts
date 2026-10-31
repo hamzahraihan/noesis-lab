@@ -41,7 +41,6 @@ export const PCF8574_OUTPUT_OHMS = 1000;
  * was written, which is what the chip does -- the input register is the one
  * that reads the wiring, and the bench does not model that.
  */
-const OUTPUT_REGISTER = 0x00;
 export class Pcf8574 implements I2cDevice {
   readonly address = PCF8574_ADDRESS;
   onBus = false;

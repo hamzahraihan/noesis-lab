@@ -46,7 +46,7 @@ export const mcp23017Adapter: PartAdapter = {
       const handle = instance as number;
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
-        stimulus.bytes.forEach((byte) => module.i2c_bus_write(byte));
+        stimulus.bytes.forEach((byte: number) => module.i2c_bus_write(byte));
         module.i2c_bus_end_transmission();
       } else if (stimulus.kind === 'i2c-read') {
         module.i2c_bus_request_from(stimulus.address, stimulus.count);
@@ -55,19 +55,19 @@ export const mcp23017Adapter: PartAdapter = {
     } else {
       const dev = instance as Mcp23017;
       if (stimulus.kind === 'i2c-write') {
-        stimulus.bytes.forEach((byte, idx) => dev.receive(byte, idx === 0));
+        stimulus.bytes.forEach((byte: number, idx: number) => dev.receive(byte, idx === 0));
       } else if (stimulus.kind === 'i2c-read') {
         dev.read(stimulus.count);
       }
     }
   },
 
-  readScalars(instance: unknown, module?: PartsModule): number[] {
+  readScalars(_instance: unknown, module?: PartsModule): number[] {
     if (module) {
       // Wasm path - now uses snapshotToScalars via probe
       throw new Error('MCP23017: wasm path should use snapshotToScalars');
     } else {
-      const dev = instance as Mcp23017;
+      const dev = _instance as Mcp23017;
       return [dev.iodira, dev.iodirb, dev.gpioa, dev.gpiob, dev.olata, dev.olatb];
     }
   },
@@ -84,7 +84,7 @@ export const mcp23017Adapter: PartAdapter = {
     ];
   },
 
-  reset(instance: unknown, module?: PartsModule): void {
+  reset(_instance: unknown, module?: PartsModule): void {
     if (module) {
       module.bus_reset();
     }

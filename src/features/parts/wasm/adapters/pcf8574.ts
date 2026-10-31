@@ -48,7 +48,7 @@ export const pcf8574Adapter: PartAdapter = {
       const handle = instance as number;
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
-        stimulus.bytes.forEach((byte) => {
+        stimulus.bytes.forEach((byte: number) => {
           module.i2c_bus_write(byte);
         });
         module.i2c_bus_end_transmission();
@@ -62,7 +62,7 @@ export const pcf8574Adapter: PartAdapter = {
       // TS oracle path: instance is a Pcf8574
       const dev = instance as Pcf8574;
       if (stimulus.kind === 'i2c-write') {
-        stimulus.bytes.forEach((byte, idx) => {
+        stimulus.bytes.forEach((byte: number, idx: number) => {
           dev.receive(byte, idx === 0);
         });
       } else if (stimulus.kind === 'i2c-read') {
@@ -71,13 +71,13 @@ export const pcf8574Adapter: PartAdapter = {
     }
   },
 
-  readScalars(instance: unknown, module?: PartsModule): number[] {
+  readScalars(_instance: unknown, module?: PartsModule): number[] {
     if (module) {
       // Wasm path - now uses snapshotToScalars via probe
       throw new Error('PCF8574: wasm path should use snapshotToScalars');
     } else {
       // TS oracle path: PCF8574 has no separate input register in the model
-      const dev = instance as Pcf8574;
+      const dev = _instance as Pcf8574;
       return [dev.outputReg, dev.outputReg];
     }
   },
@@ -87,7 +87,7 @@ export const pcf8574Adapter: PartAdapter = {
     return [snap.pcf8574_output_reg, snap.pcf8574_input_reg];
   },
 
-  reset(instance: unknown, module?: PartsModule): void {
+  reset(_instance: unknown, module?: PartsModule): void {
     if (module) {
       module.bus_reset();
     } else {
