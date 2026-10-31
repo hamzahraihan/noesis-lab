@@ -1,0 +1,12 @@
+{
+  "part": "shift595",
+  "factoryArgs": [4],
+  "stimuli": [
+    { "kind": "spi-transfer", "byte": 85, "dc": true, "cs": true },
+    { "kind": "pin", "index": 2, "high": true },
+    { "kind": "spi-transfer", "byte": 170, "dc": true, "cs": true },
+    { "kind": "pin", "index": 2, "high": true }
+  ],
+  "labels": ["shift_reg", "storage_reg", "outputs_enabled"],
+  "note": "Shift 0x55, latch (STCP rising); shift 0xAA, latch again"
+}
