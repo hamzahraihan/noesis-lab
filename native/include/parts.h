@@ -192,6 +192,15 @@ typedef struct {
     
     // Shift register outputs
     uint8_t shift_register_outputs[8];
+
+    // Relay contact state (true = contact closed)
+    bool relay_contacts_closed;
+
+    // Button pressed state (true = pressed)
+    bool button_pressed;
+
+    // Potentiometer wiper position, 0.0 - 1.0
+    double pot_wiper;
     
     // RF ID card presence
     bool rfid_card_present;
@@ -207,7 +216,7 @@ typedef void* PartHandle;
 extern "C" PartHandle part_register(uint32_t part_id, PartKind kind, const char* definition_json);
 
 // Stamp part elements into the solver (called each solve)
-extern "C" void part_stamp(PartHandle handle, double time_ms);
+extern "C" void part_stamp(PartHandle handle, const SolverSolution* solution, double time_ms);
 
 // Get part state snapshot for UI
 extern "C" PartStateSnapshot part_get_state(PartHandle handle);
