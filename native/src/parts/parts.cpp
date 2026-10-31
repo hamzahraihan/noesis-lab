@@ -373,6 +373,16 @@ static std::vector<SPIPartImpl> g_spi_parts;
 // Part implementations - every context here is owned and freed by bus_reset()
 static std::vector<PartContext*> g_part_impls;
 
+// Explicitly construct global STL containers (needed when using -Wl,--no-entry
+// with emcc or when using clang++ -nostdlib without automatic constructor calls).
+extern "C" void init_globals() {
+    new (&g_parts) std::unordered_map<uint32_t, PartInstance>();
+    new (&g_part_order) std::vector<PartInstance*>();
+    new (&g_i2c_devices) std::vector<I2CDeviceImpl>();
+    new (&g_spi_parts) std::vector<SPIPartImpl>();
+    new (&g_part_impls) std::vector<PartContext*>();
+}
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -589,7 +599,10 @@ static bool mcp23017_receive(void* ctx, uint8_t byte, bool is_control) {
         case 0x15: dev->olatb = byte; break;
     }
     
-    if (dev->seqop) {
+    // SEQOP=0 (default) means sequential operation ENABLED (auto-increment).
+// seqop flag is true when SEQOP=1 (sequential disabled).
+// So we increment when seqop is false (sequential enabled).
+    if (!dev->seqop) {
         dev->reg_ptr = (dev->reg_ptr + 1) & 0x1F;
     }
     return true;
@@ -868,6 +881,20 @@ static void mcp4725_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out
 // SPI Device Callback Implementations
 // ============================================================================
 
+// Shift595 (74HC595) SPI receive - shifts in a byte (8 bits at once, like 8 clock edges)
+static void spi_shift_register_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
+    (void)data_select;
+    if (!chip_selected) return;
+    ShiftRegisterContext* dev = static_cast<ShiftRegisterContext*>(ctx);
+    // Shift in 8 bits, MSB first (like the TS implementation)
+    for (int edge = 0; edge < 8; edge++) {
+        const bool arriving = (byte & 0x80) != 0;
+        dev->shift_reg = static_cast<uint8_t>((dev->shift_reg << 1) | (arriving ? 1 : 0));
+        byte = static_cast<uint8_t>(byte << 1);
+    }
+    dev->bit_count = 8;
+}
+
 static void spi_max6675_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
     (void)ctx; (void)byte; (void)data_select; (void)chip_selected;
 }
@@ -1116,8 +1143,10 @@ extern "C" uint32_t part_get_scalars(void* handle, double* out, uint32_t max) {
             if (base->type() == PartContextType::PCF8574) {
                 auto* ctx = static_cast<PCF8574Context*>(base);
                 // PCF8574: output_reg, input_reg (2 scalars)
+                // Note: input_reg reflects pin levels which require engine/solver.
+                // In the probe (no pin wiring), both scalars report output_reg.
                 write(static_cast<double>(ctx->output_reg));
-                write(static_cast<double>(ctx->input_reg));
+                write(static_cast<double>(ctx->output_reg));
             } else if (base->type() == PartContextType::MCP23017) {
                 auto* ctx = static_cast<MCP23017Context*>(base);
                 // MCP23017: iodira, iodirb, gpioa, gpiob, olata, olatb (6 scalars)
@@ -1131,12 +1160,12 @@ extern "C" uint32_t part_get_scalars(void* handle, double* out, uint32_t max) {
             break;
         }
         case PART_KIND_ADC: {
-            // ADS1115: config, conversion, reg_ptr, conversion_ready (4 scalars)
+            // ADS1115: config, conversion, conversion_ready (3 scalars)
+            // reg_ptr omitted as it's an internal implementation detail
             if (base->type() == PartContextType::ADS1115) {
                 auto* ctx = static_cast<ADS1115Context*>(base);
                 write(static_cast<double>(ctx->config));
                 write(static_cast<double>(ctx->conversion));
-                write(static_cast<double>(ctx->reg_ptr));
                 write(static_cast<double>(ctx->conversion_ready ? 1.0 : 0.0));
             }
             break;
@@ -1188,6 +1217,14 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             if (strcmp(knob_name, "hours") == 0) ctx->hours = static_cast<uint8_t>(value);
             else if (strcmp(knob_name, "minutes") == 0) ctx->minutes = static_cast<uint8_t>(value);
             else if (strcmp(knob_name, "seconds") == 0) ctx->seconds = static_cast<uint8_t>(value);
+            break;
+        }
+        case PART_KIND_ADC: {
+            ADS1115Context* ctx = static_cast<ADS1115Context*>(inst->impl);
+            if (strcmp(knob_name, "ain0") == 0) ctx->input_voltage[0] = value;
+            else if (strcmp(knob_name, "ain1") == 0) ctx->input_voltage[1] = value;
+            else if (strcmp(knob_name, "ain2") == 0) ctx->input_voltage[2] = value;
+            else if (strcmp(knob_name, "ain3") == 0) ctx->input_voltage[3] = value;
             break;
         }
         default:
@@ -1286,6 +1323,17 @@ extern "C" void* part_create_shift_register(uint32_t part_id) {
     ShiftRegisterContext* ctx = new ShiftRegisterContext();
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
+    
+    // Register as SPI device
+    SPIPartImpl spi_part;
+    spi_part.part_id = part_id;
+    spi_part.cs_net = 0;  // Will be set when circuit is built
+    spi_part.dc_net = 0;
+    spi_part.ctx = ctx;
+    spi_part.receive = spi_shift_register_receive;
+    spi_part.read = nullptr;  // Shift595 is output-only, no MISO
+    g_spi_parts.push_back(spi_part);
+    
     return handle;
 }
 

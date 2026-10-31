@@ -88,6 +88,8 @@ const EXPORTED_FUNCTIONS = [
   // Bus state
   '_bus_get_state',
   '_bus_reset',
+  // Explicit global constructor for STL containers (needed with -Wl,--no-entry)
+  '_init_globals',
 ];
 
 const FLAGS = [
@@ -99,6 +101,7 @@ const FLAGS = [
   '-s', 'ALLOW_MEMORY_GROWTH=1',
   '-s', 'INITIAL_MEMORY=16777216',
   '-s', 'ENVIRONMENT=node',
+  '-s', 'INVOKE_RUN=0',
   '-std=c++17',
   '-I', join(NATIVE_DIR, 'include'),
   '-fno-exceptions',
