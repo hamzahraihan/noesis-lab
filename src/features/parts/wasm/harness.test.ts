@@ -61,7 +61,7 @@ describe('Parts differential harness', () => {
   // Loader test: verify wasm loads with all expected exports
   it('loads parts.wasm with all exports and memory', () => {
     expect(module.part_create_i2c_expander).toBeTypeOf('function');
-    expect(module.part_get_scalars).toBeTypeOf('function');
+    expect(module.part_get_state).toBeTypeOf('function');
     expect(module.bus_reset).toBeTypeOf('function');
     expect(module.memory).toBeInstanceOf(WebAssembly.Memory);
     // Spot-check a few more exports

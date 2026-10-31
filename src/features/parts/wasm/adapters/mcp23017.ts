@@ -8,6 +8,7 @@ import { Mcp23017 } from '@/features/parts/devices/mcp23017';
 import type { PartAdapter } from './probe';
 import type { PartsModule } from './parts-module';
 import type { Stimulus } from './probe';
+import type { PartStateSnapshot } from './parts-module';
 
 declare module '@/features/parts/devices/mcp23017' {
   interface Mcp23017 {
@@ -63,15 +64,24 @@ export const mcp23017Adapter: PartAdapter = {
 
   readScalars(instance: unknown, module?: PartsModule): number[] {
     if (module) {
-      const handle = instance as number;
-      const outPtr = module.wasmMemory.allocDoubles(6);
-      const count = module.part_get_scalars(handle, outPtr, 6);
-      if (count !== 6) throw new Error(`MCP23017: expected 6 scalars, got ${count}`);
-      return module.wasmMemory.readDoubles(outPtr, 6);
+      // Wasm path - now uses snapshotToScalars via probe
+      throw new Error('MCP23017: wasm path should use snapshotToScalars');
     } else {
       const dev = instance as Mcp23017;
       return [dev.iodira, dev.iodirb, dev.gpioa, dev.gpiob, dev.olata, dev.olatb];
     }
+  },
+
+  snapshotToScalars(snap: PartStateSnapshot): number[] {
+    // MCP23017: iodira, iodirb, gpioa, gpiob, olata, olatb
+    return [
+      snap.mcp23017_iodira,
+      snap.mcp23017_iodirb,
+      snap.mcp23017_gpioa,
+      snap.mcp23017_gpiob,
+      snap.mcp23017_olata,
+      snap.mcp23017_olatb,
+    ];
   },
 
   reset(instance: unknown, module?: PartsModule): void {

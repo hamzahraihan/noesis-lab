@@ -8,6 +8,7 @@ import { Shift595 } from '@/features/parts/devices/shift595';
 import type { PartAdapter } from './probe';
 import type { PartsModule } from './parts-module';
 import type { Stimulus } from './probe';
+import type { PartStateSnapshot } from './parts-module';
 
 declare module '@/features/parts/devices/shift595' {
   interface Shift595 {
@@ -67,15 +68,21 @@ export const shift595Adapter: PartAdapter = {
 
   readScalars(instance: unknown, module?: PartsModule): number[] {
     if (module) {
-      const handle = instance as number;
-      const outPtr = module.wasmMemory.allocDoubles(3);
-      const count = module.part_get_scalars(handle, outPtr, 3);
-      if (count !== 3) throw new Error(`Shift595: expected 3 scalars, got ${count}`);
-      return module.wasmMemory.readDoubles(outPtr, 3);
+      // Wasm path - now uses snapshotToScalars via probe
+      throw new Error('Shift595: wasm path should use snapshotToScalars');
     } else {
       const dev = instance as Shift595;
       return [dev.shiftReg, dev.storageReg, dev.enabled ? 1 : 0];
     }
+  },
+
+  snapshotToScalars(snap: PartStateSnapshot): number[] {
+    // Shift595: shift_reg, storage_reg, outputs_enabled
+    return [
+      snap.shift595_shift_reg,
+      snap.shift595_storage_reg,
+      snap.shift595_outputs_enabled ? 1 : 0,
+    ];
   },
 
   reset(instance: unknown, module?: PartsModule): void {

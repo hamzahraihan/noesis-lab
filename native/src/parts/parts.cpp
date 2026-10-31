@@ -1119,8 +1119,14 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
     }
 }
 
-extern "C" PartStateSnapshot part_get_state(void* handle) {
-    PartStateSnapshot snap = {};
+// Static buffer for part_get_state return value (single-threaded wasm use)
+static PartStateSnapshot g_part_state_snapshot = {};
+
+extern "C" PartStateSnapshot* part_get_state(void* handle) {
+    PartStateSnapshot* snap = &g_part_state_snapshot;
+    // Zero out the snapshot
+    memset(snap, 0, sizeof(PartStateSnapshot));
+    
     PartInstance* inst = static_cast<PartInstance*>(handle);
     if (!inst || !inst->impl) return snap;
     
@@ -1132,17 +1138,17 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
         }
         case PART_KIND_RELAY: {
             RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
-            snap.relay_contacts_closed = ctx->contacts_closed;
+            snap->relay_contacts_closed = ctx->contacts_closed;
             break;
         }
         case PART_KIND_BUTTON: {
             ButtonContext* ctx = static_cast<ButtonContext*>(inst->impl);
-            snap.button_pressed = ctx->pressed;
+            snap->button_pressed = ctx->pressed;
             break;
         }
         case PART_KIND_POTENTIOMETER: {
             PotentiometerContext* ctx = static_cast<PotentiometerContext*>(inst->impl);
-            snap.pot_wiper = ctx->wiper_position;
+            snap->pot_wiper = ctx->wiper_position;
             break;
         }
         case PART_KIND_SHIFT_REGISTER: {
@@ -1150,9 +1156,13 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
             // Q pins are high-impedance when OE is deasserted, so report 0.
             if (ctx->outputs_enabled) {
                 for (int i = 0; i < 8; i++) {
-                    snap.shift_register_outputs[i] = (ctx->storage_reg >> i) & 1;
+                    snap->shift_register_outputs[i] = (ctx->storage_reg >> i) & 1;
                 }
             }
+            // Also populate the dedicated shift595 fields for probe access
+            snap->shift595_shift_reg = ctx->shift_reg;
+            snap->shift595_storage_reg = ctx->storage_reg;
+            snap->shift595_outputs_enabled = ctx->outputs_enabled;
             break;
         }
         case PART_KIND_RTC: {
@@ -1163,10 +1173,10 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
         case PART_KIND_DISPLAY_I2C: {
             // SSD1306Context
             SSD1306Context* ctx = static_cast<SSD1306Context*>(inst->impl);
-            snap.framebuffer = ctx->framebuffer.data();
-            snap.framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
-            snap.width = ctx->width;
-            snap.height = ctx->height;
+            snap->framebuffer = ctx->framebuffer.data();
+            snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
+            snap->width = ctx->width;
+            snap->height = ctx->height;
             break;
         }
         case PART_KIND_DISPLAY_SPI: {
@@ -1175,129 +1185,96 @@ extern "C" PartStateSnapshot part_get_state(void* handle) {
             PartContext* base = static_cast<PartContext*>(inst->impl);
             if (base->type() == PartContextType::ILI9341) {
                 ILI9341Context* ctx = static_cast<ILI9341Context*>(base);
-                snap.framebuffer = reinterpret_cast<uint8_t*>(ctx->framebuffer.data());
-                snap.framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size() * sizeof(uint16_t));
-                snap.width = ctx->width;
-                snap.height = ctx->height;
+                snap->framebuffer = reinterpret_cast<uint8_t*>(ctx->framebuffer.data());
+                snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size() * sizeof(uint16_t));
+                snap->width = ctx->width;
+                snap->height = ctx->height;
             } else if (base->type() == PartContextType::PCD8544) {
                 PCD8544Context* ctx = static_cast<PCD8544Context*>(base);
-                snap.framebuffer = ctx->framebuffer.data();
-                snap.framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
-                snap.width = ctx->width;
-                snap.height = ctx->height;
+                snap->framebuffer = ctx->framebuffer.data();
+                snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
+                snap->width = ctx->width;
+                snap->height = ctx->height;
             } else if (base->type() == PartContextType::MAX7219) {
                 MAX7219Context* ctx = static_cast<MAX7219Context*>(base);
-                for (int i = 0; i < 8; i++) snap.seven_seg_digits[i] = ctx->digit_data[i];
+                for (int i = 0; i < 8; i++) snap->seven_seg_digits[i] = ctx->digit_data[i];
                 // MAX7219 doesn't have a colon field, but we can use shutdown or display_test as placeholder
-                snap.seven_seg_colon = 0;
+                snap->seven_seg_colon = 0;
             }
             break;
         }
         case PART_KIND_DISPLAY_7SEG: {
             // TM1637 — uses MAX7219Context or similar
             MAX7219Context* ctx = static_cast<MAX7219Context*>(inst->impl);
-            for (int i = 0; i < 8; i++) snap.seven_seg_digits[i] = ctx->digit_data[i];
-            snap.seven_seg_colon = 0;
+            for (int i = 0; i < 8; i++) snap->seven_seg_digits[i] = ctx->digit_data[i];
+            snap->seven_seg_colon = 0;
             break;
         }
         case PART_KIND_DISPLAY_LCD: {
             // HD44780
             HD44780Context* ctx = static_cast<HD44780Context*>(inst->impl);
-            for (int i = 0; i < 80; i++) snap.lcd_chars[i] = ctx->chars[i];
-            snap.lcd_rows = ctx->rows;
-            snap.lcd_cols = ctx->cols;
+            for (int i = 0; i < 80; i++) snap->lcd_chars[i] = ctx->chars[i];
+            snap->lcd_rows = ctx->rows;
+            snap->lcd_cols = ctx->cols;
             break;
         }
         case PART_KIND_SERVO: {
             ServoContext* ctx = static_cast<ServoContext*>(inst->impl);
-            snap.servo_angle = ctx->current_angle;
+            snap->servo_angle = ctx->current_angle;
             break;
         }
         case PART_KIND_STEPPER: {
             StepperContext* ctx = static_cast<StepperContext*>(inst->impl);
-            snap.stepper_angle_deci_deg = ctx->current_angle_deci_deg;
+            snap->stepper_angle_deci_deg = ctx->current_angle_deci_deg;
             break;
         }
         case PART_KIND_STEPPER_DRIVER: {
             StepperDriverContext* ctx = static_cast<StepperDriverContext*>(inst->impl);
-            for (int i = 0; i < 4; i++) snap.stepper_driver_outputs[i] = ctx->coil_outputs[i];
+            for (int i = 0; i < 4; i++) snap->stepper_driver_outputs[i] = ctx->coil_outputs[i];
             break;
         }
         case PART_KIND_THERMOCOUPLE: {
             MAX6675Context* ctx = static_cast<MAX6675Context*>(inst->impl);
-            snap.thermocouple_temp_quarter_deg = ctx->temp_quarter_deg;
+            snap->thermocouple_temp_quarter_deg = ctx->temp_quarter_deg;
             break;
         }
         case PART_KIND_RFID: {
             MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
-            snap.rfid_card_present = ctx->card_present;
+            snap->rfid_card_present = ctx->card_present;
+            break;
+        }
+        case PART_KIND_I2C_EXPANDER: {
+            PartContext* base = static_cast<PartContext*>(inst->impl);
+            if (base->type() == PartContextType::PCF8574) {
+                PCF8574Context* ctx = static_cast<PCF8574Context*>(base);
+                snap->pcf8574_output_reg = ctx->output_reg;
+                // In probe mode (no pin wiring), input_reg mirrors output_reg
+                snap->pcf8574_input_reg = ctx->output_reg;
+            } else if (base->type() == PartContextType::MCP23017) {
+                MCP23017Context* ctx = static_cast<MCP23017Context*>(base);
+                snap->mcp23017_iodira = ctx->iodira;
+                snap->mcp23017_iodirb = ctx->iodirb;
+                snap->mcp23017_gpioa = ctx->gpioa;
+                snap->mcp23017_gpiob = ctx->gpiob;
+                snap->mcp23017_olata = ctx->olata;
+                snap->mcp23017_olatb = ctx->olatb;
+            }
+            break;
+        }
+        case PART_KIND_ADC: {
+            PartContext* base = static_cast<PartContext*>(inst->impl);
+            if (base->type() == PartContextType::ADS1115) {
+                ADS1115Context* ctx = static_cast<ADS1115Context*>(base);
+                snap->ads1115_config = ctx->config;
+                snap->ads1115_conversion = ctx->conversion;
+                snap->ads1115_conversion_ready = ctx->conversion_ready;
+            }
             break;
         }
         default:
             break;
     }
     return snap;
-}
-
-extern "C" uint32_t part_get_scalars(void* handle, double* out, uint32_t max) {
-    PartInstance* inst = static_cast<PartInstance*>(handle);
-    if (!inst || !inst->impl || !out || max == 0) return 0;
-
-    uint32_t count = 0;
-    auto write = [&](double value) {
-        if (count < max) out[count] = value;
-        count++;
-    };
-
-    PartContext* base = static_cast<PartContext*>(inst->impl);
-
-    switch (inst->kind) {
-        case PART_KIND_I2C_EXPANDER: {
-            // Distinguish PCF8574 (8 ports) vs MCP23017 (16 ports) by context type
-            if (base->type() == PartContextType::PCF8574) {
-                auto* ctx = static_cast<PCF8574Context*>(base);
-                // PCF8574: output_reg, input_reg (2 scalars)
-                // Note: input_reg reflects pin levels which require engine/solver.
-                // In the probe (no pin wiring), both scalars report output_reg.
-                write(static_cast<double>(ctx->output_reg));
-                write(static_cast<double>(ctx->output_reg));
-            } else if (base->type() == PartContextType::MCP23017) {
-                auto* ctx = static_cast<MCP23017Context*>(base);
-                // MCP23017: iodira, iodirb, gpioa, gpiob, olata, olatb (6 scalars)
-                write(static_cast<double>(ctx->iodira));
-                write(static_cast<double>(ctx->iodirb));
-                write(static_cast<double>(ctx->gpioa));
-                write(static_cast<double>(ctx->gpiob));
-                write(static_cast<double>(ctx->olata));
-                write(static_cast<double>(ctx->olatb));
-            }
-            break;
-        }
-        case PART_KIND_ADC: {
-            // ADS1115: config, conversion, conversion_ready (3 scalars)
-            // reg_ptr omitted as it's an internal implementation detail
-            if (base->type() == PartContextType::ADS1115) {
-                auto* ctx = static_cast<ADS1115Context*>(base);
-                write(static_cast<double>(ctx->config));
-                write(static_cast<double>(ctx->conversion));
-                write(static_cast<double>(ctx->conversion_ready ? 1.0 : 0.0));
-            }
-            break;
-        }
-        case PART_KIND_SHIFT_REGISTER: {
-            // 74HC595: shift_reg, storage_reg, outputs_enabled (3 scalars)
-            if (base->type() == PartContextType::SHIFT_REGISTER) {
-                auto* ctx = static_cast<ShiftRegisterContext*>(base);
-                write(static_cast<double>(ctx->shift_reg));
-                write(static_cast<double>(ctx->storage_reg));
-                write(static_cast<double>(ctx->outputs_enabled ? 1.0 : 0.0));
-            }
-            break;
-        }
-        default:
-            break;
-    }
-    return count;
 }
 
 extern "C" void part_set_knob(void* handle, const char* knob_name, double value) {

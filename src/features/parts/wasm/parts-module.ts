@@ -79,6 +79,106 @@ class WasmMemory {
   private heapPtr = 1024 * 1024; // Start after 1MB (initial memory)
 }
 
+/** Part state snapshot matching the C++ PartStateSnapshot struct layout (packed, no padding). */
+export interface PartStateSnapshot {
+  framebuffer: number;
+  framebuffer_size: number;
+  width: number;
+  height: number;
+  servo_angle: number;
+  stepper_angle_deci_deg: number;
+  stepper_driver_outputs: number[];
+  seven_seg_digits: number[];
+  seven_seg_colon: number;
+  lcd_chars: number[];
+  lcd_rows: number;
+  lcd_cols: number;
+  shift_register_outputs: number[];
+  relay_contacts_closed: boolean;
+  button_pressed: boolean;
+  pot_wiper: number;
+  rfid_card_present: boolean;
+  thermocouple_temp_quarter_deg: number;
+
+  // PCF8574 I2C expander state
+  pcf8574_output_reg: number;
+  pcf8574_input_reg: number;
+
+  // MCP23017 I2C expander state
+  mcp23017_iodira: number;
+  mcp23017_iodirb: number;
+  mcp23017_gpioa: number;
+  mcp23017_gpiob: number;
+  mcp23017_olata: number;
+  mcp23017_olatb: number;
+
+  // ADS1115 ADC state
+  ads1115_config: number;
+  ads1115_conversion: number;
+  ads1115_conversion_ready: boolean;
+
+  // Shift register (74HC595) state
+  shift595_shift_reg: number;
+  shift595_storage_reg: number;
+  shift595_outputs_enabled: boolean;
+}
+
+/** Reads a PartStateSnapshot from wasm memory at the given pointer. */
+export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): PartStateSnapshot {
+  const view = new DataView(wasmMemory.memory.buffer, ptr);
+  let offset = 0;
+  const rU32 = () => { const v = view.getUint32(offset, true); offset += 4; return v; };
+  const rU16 = () => { const v = view.getUint16(offset, true); offset += 2; return v; };
+  const rU8 = () => { const v = view.getUint8(offset); offset += 1; return v; };
+  const rI16 = () => { const v = view.getInt16(offset, true); offset += 2; return v; };
+  const rF64 = () => { const v = view.getFloat64(offset, true); offset += 8; return v; };
+  const rArr8 = (len: number) => { const arr = new Uint8Array(wasmMemory.memory.buffer, ptr + offset, len); offset += len; return Array.from(arr); };
+  const rArr16 = (len: number) => { const arr = new Uint16Array(wasmMemory.memory.buffer, ptr + offset, len); offset += len * 2; return Array.from(arr); };
+  const snap = {
+    framebuffer: rU32(),
+    framebuffer_size: rU32(),
+    width: rU16(),
+    height: rU16(),
+    servo_angle: rU8(),
+    stepper_angle_deci_deg: rI16(),
+    stepper_driver_outputs: rArr8(4),
+    seven_seg_digits: rArr8(8),
+    seven_seg_colon: rU8(),
+    lcd_chars: rArr8(80),
+    lcd_rows: rU8(),
+    lcd_cols: rU8(),
+    shift_register_outputs: rArr8(8),
+    relay_contacts_closed: rU8() !== 0,
+    button_pressed: rU8() !== 0,
+    pot_wiper: rF64(),
+    rfid_card_present: rU8() !== 0,
+    thermocouple_temp_quarter_deg: rI16(),
+
+    // PCF8574 I2C expander state
+    pcf8574_output_reg: rU8(),
+    pcf8574_input_reg: rU8(),
+
+    // MCP23017 I2C expander state
+    mcp23017_iodira: rU8(),
+    mcp23017_iodirb: rU8(),
+    mcp23017_gpioa: rU8(),
+    mcp23017_gpiob: rU8(),
+    mcp23017_olata: rU8(),
+    mcp23017_olatb: rU8(),
+
+    // ADS1115 ADC state
+    ads1115_config: rU16(),
+    ads1115_conversion: rI16(),
+    ads1115_conversion_ready: rU8() !== 0,
+
+    // Shift register (74HC595) state
+    shift595_shift_reg: rU8(),
+    shift595_storage_reg: rU8(),
+    shift595_outputs_enabled: rU8() !== 0,
+  };
+  return snap;
+}
+
 /** Typed wrapper around all exported C ABI functions. */
 export interface PartsModule {
   memory: WebAssembly.Memory;
@@ -131,7 +231,6 @@ export interface PartsModule {
   part_register(part_id: number, kind: number, definition_json: string): number;
   part_stamp(handle: number, solution: number, time_ms: number): void;
   part_get_state(handle: number): number; // Returns pointer to PartStateSnapshot in wasm memory
-  part_get_scalars(handle: number, out: number, max: number): number; // Returns count
   part_set_knob(handle: number, knob_name: string, value: number): void;
   part_set_pin_level(handle: number, pin_index: number, high: number): void;
   part_set_i2c_address(handle: number, address: number): void;
@@ -232,7 +331,6 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     },
     part_stamp: exp.part_stamp as (handle: number, solution: number, time_ms: number) => void,
     part_get_state: exp.part_get_state as (handle: number) => number,
-    part_get_scalars: exp.part_get_scalars as (handle: number, out: number, max: number) => number,
     part_set_knob: (handle: number, knob_name: string, value: number) => {
       const ptr = wasmMemory.allocString(knob_name);
       (exp.part_set_knob as (handle: number, knob_name: number, value: number) => void)(handle, ptr, value);

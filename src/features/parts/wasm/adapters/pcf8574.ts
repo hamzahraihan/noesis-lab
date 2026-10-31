@@ -8,6 +8,7 @@ import { Pcf8574 } from '@/features/parts/devices/pcf8574';
 import type { PartAdapter } from './probe';
 import type { PartsModule } from './parts-module';
 import type { Stimulus } from './probe';
+import type { PartStateSnapshot } from './parts-module';
 
 /** Read-only accessors added to Pcf8574 for probe visibility. */
 declare module '@/features/parts/devices/pcf8574' {
@@ -72,17 +73,18 @@ export const pcf8574Adapter: PartAdapter = {
 
   readScalars(instance: unknown, module?: PartsModule): number[] {
     if (module) {
-      // Wasm path
-      const handle = instance as number;
-      const outPtr = module.wasmMemory.allocDoubles(2);
-      const count = module.part_get_scalars(handle, outPtr, 2);
-      if (count !== 2) throw new Error(`PCF8574: expected 2 scalars, got ${count}`);
-      return module.wasmMemory.readDoubles(outPtr, 2);
+      // Wasm path - now uses snapshotToScalars via probe
+      throw new Error('PCF8574: wasm path should use snapshotToScalars');
     } else {
       // TS oracle path: PCF8574 has no separate input register in the model
       const dev = instance as Pcf8574;
       return [dev.outputReg, dev.outputReg];
     }
+  },
+
+  snapshotToScalars(snap: PartStateSnapshot): number[] {
+    // PCF8574: output_reg, input_reg
+    return [snap.pcf8574_output_reg, snap.pcf8574_input_reg];
   },
 
   reset(instance: unknown, module?: PartsModule): void {

@@ -6,6 +6,7 @@
  */
 
 import type { PartsModule } from './parts-module';
+import { readPartStateSnapshot, type PartStateSnapshot } from './parts-module';
 
 /** A single stimulus applied to a part. */
 export type Stimulus =
@@ -28,8 +29,10 @@ export interface PartAdapter {
   create(factoryArgs: unknown[], module?: PartsModule): unknown;
   /** Applies a stimulus to the oracle instance. */
   apply(instance: unknown, stimulus: Stimulus, module?: PartsModule): void;
-  /** Reads the current scalar state from the oracle instance. */
+  /** Reads the current scalar state from the oracle instance (legacy TS oracle path). */
   readScalars(instance: unknown, module?: PartsModule): number[];
+  /** Converts a PartStateSnapshot to scalar values (wasm path). */
+  snapshotToScalars(snap: PartStateSnapshot): number[];
   /** Resets the oracle to initial state (called between fixtures). */
   reset?(instance: unknown, module?: PartsModule): void;
 }
@@ -66,7 +69,9 @@ export class WasmPartProbe implements PartProbe {
   }
 
   observe(): Observation {
-    const values = this.adapter.readScalars(this.handle, this.module);
+    const snapPtr = this.module.part_get_state(this.handle);
+    const snap = readPartStateSnapshot(this.module.wasmMemory, snapPtr);
+    const values = this.adapter.snapshotToScalars(snap);
     return { labels: this.adapter.labels, values };
   }
 

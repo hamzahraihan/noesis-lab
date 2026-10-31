@@ -165,6 +165,8 @@ extern "C" int16_t spi_thermocouple_receive(SPIPartHandle handle);
 // ============================================================================
 
 // Part state snapshots for UI rendering
+// Packed to match TypeScript DataView sequential reading (no padding)
+#pragma pack(push, 1)
 typedef struct {
     // Display framebuffers
     uint8_t* framebuffer;
@@ -207,19 +209,36 @@ typedef struct {
     
     // Thermocouple temperature (0.25 degree steps)
     int16_t thermocouple_temp_quarter_deg;
+
+    // PCF8574 I2C expander state
+    uint8_t pcf8574_output_reg;
+    uint8_t pcf8574_input_reg;
+
+    // MCP23017 I2C expander state
+    uint8_t mcp23017_iodira;
+    uint8_t mcp23017_iodirb;
+    uint8_t mcp23017_gpioa;
+    uint8_t mcp23017_gpiob;
+    uint8_t mcp23017_olata;
+    uint8_t mcp23017_olatb;
+
+    // ADS1115 ADC state
+    uint16_t ads1115_config;
+    int16_t ads1115_conversion;
+    bool ads1115_conversion_ready;
+
+    // Shift register (74HC595) state
+    uint8_t shift595_shift_reg;
+    uint8_t shift595_storage_reg;
+    bool shift595_outputs_enabled;
 } PartStateSnapshot;
+#pragma pack(pop)
 
 // Part handle for engine
 typedef void* PartHandle;
 
-// Register a part with the engine (called during rebuild)
-extern "C" PartHandle part_register(uint32_t part_id, PartKind kind, const char* definition_json);
-
-// Stamp part elements into the solver (called each solve)
-extern "C" void part_stamp(PartHandle handle, const SolverSolution* solution, double time_ms);
-
-// Get part state snapshot for UI
-extern "C" PartStateSnapshot part_get_state(PartHandle handle);
+// Static buffer for part_get_state return value (thread-local for wasm single-threaded use)
+extern "C" PartStateSnapshot* part_get_state(PartHandle handle);
 
 // Part-specific setters (called from engine when conditions change)
 extern "C" void part_set_knob(PartHandle handle, const char* knob_name, double value);

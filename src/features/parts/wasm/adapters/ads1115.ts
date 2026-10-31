@@ -8,6 +8,7 @@ import { Ads1115 } from '@/features/parts/devices/ads1115';
 import type { PartAdapter } from './probe';
 import type { PartsModule } from './parts-module';
 import type { Stimulus } from './probe';
+import type { PartStateSnapshot } from './parts-module';
 
 declare module '@/features/parts/devices/ads1115' {
   interface Ads1115 {
@@ -75,15 +76,21 @@ export const ads1115Adapter: PartAdapter = {
 
   readScalars(instance: unknown, module?: PartsModule): number[] {
     if (module) {
-      const handle = instance as number;
-      const outPtr = module.wasmMemory.allocDoubles(3);
-      const count = module.part_get_scalars(handle, outPtr, 3);
-      if (count !== 3) throw new Error(`ADS1115: expected 3 scalars, got ${count}`);
-      return module.wasmMemory.readDoubles(outPtr, 3);
+      // Wasm path - now uses snapshotToScalars via probe
+      throw new Error('ADS1115: wasm path should use snapshotToScalars');
     } else {
       const dev = instance as Ads1115;
       return [dev.configReg, dev.conversionReg, dev.conversionReadyFlag];
     }
+  },
+
+  snapshotToScalars(snap: PartStateSnapshot): number[] {
+    // ADS1115: config, conversion, conversion_ready
+    return [
+      snap.ads1115_config,
+      snap.ads1115_conversion,
+      snap.ads1115_conversion_ready ? 1 : 0,
+    ];
   },
 
   reset(instance: unknown, module?: PartsModule): void {
