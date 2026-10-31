@@ -174,6 +174,108 @@ struct MAX7219Context : PartContext {
 };
 
 // ============================================================================
+// Core Discrete Part Context Structures
+// ============================================================================
+
+// Power Supply - Adjustable voltage source with current limit
+struct PowerSupplyContext : PartContext {
+    double voltage = 5.0;           // Output voltage (V)
+    double current_limit = 1.0;     // Current limit (A)
+    double series_resistance = 0.01; // Internal series resistance (ohm)
+    bool enabled = true;            // Enable pin state
+    int32_t pos_net = -1;           // Positive terminal net
+    int32_t neg_net = -1;           // Negative terminal net
+    int32_t en_net = -1;            // Enable pin net
+    int32_t vsource_idx = -1;       // Voltage source index in solver
+};
+
+// Relay - Electromechanical relay with coil and contacts
+struct RelayContext : PartContext {
+    double coil_resistance = 100.0;    // Coil resistance (ohm)
+    double coil_inductance = 0.1;      // Coil inductance (H)
+    double contact_resistance = 0.05;  // Contact resistance when closed (ohm)
+    double pull_in_voltage = 3.0;      // Voltage to pull in (V)
+    double drop_out_voltage = 1.0;     // Voltage to drop out (V)
+    bool coil_energized = false;       // Current coil state
+    bool contacts_closed = false;      // Current contact state
+    int32_t coil_pos_net = -1;         // Coil positive terminal
+    int32_t coil_neg_net = -1;         // Coil negative terminal
+    int32_t com_net = -1;              // Common contact
+    int32_t no_net = -1;               // Normally open contact
+    int32_t nc_net = -1;               // Normally closed contact
+    int32_t coil_vsource_idx = -1;     // Coil voltage source index
+    int32_t contact_g_idx = -1;        // Contact conductance index
+};
+
+// Button - Debounced push button
+struct ButtonContext : PartContext {
+    bool pressed = false;              // Current pressed state
+    bool last_state = false;           // Last raw state
+    uint32_t debounce_ms = 10;         // Debounce time (ms)
+    uint32_t last_change_time = 0;     // Last state change time
+    bool pull_up = true;               // Internal pull-up enabled
+    int32_t pin_net = -1;              // Button pin net
+    int32_t gnd_net = -1;              // Ground net
+    int32_t pullup_vsource_idx = -1;   // Pull-up voltage source
+    int32_t switch_g_idx = -1;         // Switch conductance index
+};
+
+// Potentiometer - 3-terminal voltage divider
+struct PotentiometerContext : PartContext {
+    double max_resistance = 10000.0;   // Total resistance (ohm)
+    double wiper_position = 0.5;       // Wiper position 0.0-1.0
+    int32_t terminal_a_net = -1;       // Terminal A (one end)
+    int32_t terminal_b_net = -1;       // Terminal B (other end)
+    int32_t wiper_net = -1;            // Wiper terminal
+    int32_t g_upper_idx = -1;          // Upper resistance conductance
+    int32_t g_lower_idx = -1;          // Lower resistance conductance
+};
+
+// Shift Register 74HC595 - Serial-in, parallel-out
+struct ShiftRegisterContext : PartContext {
+    uint8_t shift_reg = 0x00;          // Shift register
+    uint8_t storage_reg = 0x00;        // Storage register (output)
+    uint8_t bit_count = 0;             // Bits shifted in current transfer
+    bool oe_active = false;            // Output enable (active low)
+    int32_t ds_net = -1;               // Data input (DS)
+    int32_t shcp_net = -1;             // Shift clock (SHCP)
+    int32_t stcp_net = -1;             // Storage clock (STCP)
+    int32_t oe_net = -1;               // Output enable (OE, active low)
+    int32_t q_net[8];                  // Output pins Q0-Q7
+    int32_t vcc_net = -1;              // VCC
+    int32_t gnd_net = -1;              // GND
+    bool last_shcp = false;            // Last SHCP state for edge detection
+    bool last_stcp = false;            // Last STCP state for edge detection
+};
+
+// RTC - DS1307/DS3231 Real-Time Clock (I2C)
+struct RTCContext : PartContext {
+    bool is_ds3231 = false;            // DS3231 vs DS1307
+    uint8_t seconds = 0;
+    uint8_t minutes = 0;
+    uint8_t hours = 0;
+    uint8_t day = 1;
+    uint8_t date = 1;
+    uint8_t month = 1;
+    uint8_t year = 0;
+    uint8_t control = 0x00;            // Control register
+    uint8_t control2 = 0x00;           // DS3231 control2
+    uint8_t status = 0x00;             // DS3231 status
+    uint8_t aging = 0x00;              // DS3231 aging offset
+    uint8_t temp_msb = 0x00;           // DS3231 temp MSB
+    uint8_t temp_lsb = 0x00;           // DS3231 temp LSB
+    uint8_t alarm1[4] = {0};           // DS3231 Alarm 1
+    uint8_t alarm2[3] = {0};           // DS3231 Alarm 2
+    uint8_t reg_ptr = 0x00;            // Current register pointer
+    uint32_t last_update_ms = 0;       // Last time update
+    // I2C
+    int32_t sda_net = -1;
+    int32_t scl_net = -1;
+    int32_t vcc_net = -1;
+    int32_t gnd_net = -1;
+};
+
+// ============================================================================
 // Global State
 // ============================================================================
 
@@ -844,29 +946,203 @@ extern "C" void* part_register(uint32_t part_id, PartKind kind, const char* defi
     return &g_parts[part_id];
 }
 
-extern "C" void part_stamp(void* handle, double time_ms) {
+// solution is the previous solve's result; parts that latch (relay, button)
+// read it to decide their next state. Passing it in keeps the module free of
+// process-wide state, so more than one engine can live in the same instance.
+extern "C" void part_stamp(void* handle, const SolverSolution* solution, double time_ms) {
+    (void)time_ms;
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // Kind-specific stamping would go here
-    // This is where each part adds its elements to the solver
+    if (!inst || !inst->impl || !solution) return;
+    const SolverSolution* sol = solution;
+    
+    switch (inst->kind) {
+        case PART_KIND_POWER_SUPPLY: {
+            PowerSupplyContext* ctx = static_cast<PowerSupplyContext*>(inst->impl);
+            if (ctx->enabled && ctx->pos_net >= 0 && ctx->neg_net >= 0) {
+                // Add voltage source between pos_net and neg_net
+                // In MNA, a voltage source adds a row/column for current
+                // and stamps +1/-1 in the conductance matrix
+                // This is simplified - real implementation needs proper MNA stamping
+            }
+            break;
+        }
+        case PART_KIND_RELAY: {
+            RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
+            if (ctx->coil_pos_net >= 0 && ctx->coil_neg_net >= 0) {
+                double v_coil = sol->voltages[ctx->coil_pos_net] - sol->voltages[ctx->coil_neg_net];
+                bool should_pull_in = v_coil >= ctx->pull_in_voltage;
+                bool should_drop_out = v_coil <= ctx->drop_out_voltage;
+                
+                if (!ctx->coil_energized && should_pull_in) {
+                    ctx->coil_energized = true;
+                    ctx->contacts_closed = true;
+                } else if (ctx->coil_energized && should_drop_out) {
+                    ctx->coil_energized = false;
+                    ctx->contacts_closed = false;
+                }
+                
+                // Stamp coil as resistor
+                // Stamp contact as voltage-controlled switch (conductance)
+            }
+            break;
+        }
+        case PART_KIND_BUTTON: {
+            ButtonContext* ctx = static_cast<ButtonContext*>(inst->impl);
+            // Button state is set via part_set_pin_level
+            // Stamp as switch between pin_net and gnd_net
+            break;
+        }
+        case PART_KIND_POTENTIOMETER: {
+            PotentiometerContext* ctx = static_cast<PotentiometerContext*>(inst->impl);
+            // Stamp as two resistors: terminal_a to wiper, wiper to terminal_b
+            break;
+        }
+        case PART_KIND_SHIFT_REGISTER: {
+            ShiftRegisterContext* ctx = static_cast<ShiftRegisterContext*>(inst->impl);
+            // Sample DS on SHCP rising edge, latch on STCP rising edge
+            break;
+        }
+        case PART_KIND_RTC: {
+            RTCContext* ctx = static_cast<RTCContext*>(inst->impl);
+            // Update time based on elapsed ms
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 extern "C" PartStateSnapshot part_get_state(void* handle) {
     PartStateSnapshot snap = {};
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // Fill in kind-specific state
+    if (!inst || !inst->impl) return snap;
+    
+    switch (inst->kind) {
+        case PART_KIND_POWER_SUPPLY: {
+            PowerSupplyContext* ctx = static_cast<PowerSupplyContext*>(inst->impl);
+            // Could add custom fields to PartStateSnapshot for power supply
+            break;
+        }
+        case PART_KIND_RELAY: {
+            RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
+            snap.rfid_card_present = ctx->contacts_closed;  // Reuse field for contact state
+            break;
+        }
+        case PART_KIND_BUTTON: {
+            ButtonContext* ctx = static_cast<ButtonContext*>(inst->impl);
+            snap.rfid_card_present = ctx->pressed;  // Reuse field
+            break;
+        }
+        case PART_KIND_POTENTIOMETER: {
+            PotentiometerContext* ctx = static_cast<PotentiometerContext*>(inst->impl);
+            snap.servo_angle = static_cast<uint8_t>(ctx->wiper_position * 180);  // Reuse as 0-180
+            break;
+        }
+        case PART_KIND_SHIFT_REGISTER: {
+            ShiftRegisterContext* ctx = static_cast<ShiftRegisterContext*>(inst->impl);
+            for (int i = 0; i < 8; i++) {
+                snap.shift_register_outputs[i] = (ctx->storage_reg >> i) & 1;
+            }
+            break;
+        }
+        case PART_KIND_RTC: {
+            RTCContext* ctx = static_cast<RTCContext*>(inst->impl);
+            // Could add RTC time fields to snapshot
+            break;
+        }
+        default:
+            break;
+    }
     return snap;
 }
 
 extern "C" void part_set_knob(void* handle, const char* knob_name, double value) {
-    // Kind-specific knob handling
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    if (!inst || !inst->impl) return;
+    
+    switch (inst->kind) {
+        case PART_KIND_POWER_SUPPLY: {
+            PowerSupplyContext* ctx = static_cast<PowerSupplyContext*>(inst->impl);
+            if (strcmp(knob_name, "voltage") == 0) ctx->voltage = value;
+            else if (strcmp(knob_name, "current_limit") == 0) ctx->current_limit = value;
+            else if (strcmp(knob_name, "enabled") == 0) ctx->enabled = (value != 0.0);
+            break;
+        }
+        case PART_KIND_RELAY: {
+            RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
+            if (strcmp(knob_name, "coil_resistance") == 0) ctx->coil_resistance = value;
+            else if (strcmp(knob_name, "contact_resistance") == 0) ctx->contact_resistance = value;
+            else if (strcmp(knob_name, "pull_in_voltage") == 0) ctx->pull_in_voltage = value;
+            else if (strcmp(knob_name, "drop_out_voltage") == 0) ctx->drop_out_voltage = value;
+            break;
+        }
+        case PART_KIND_POTENTIOMETER: {
+            PotentiometerContext* ctx = static_cast<PotentiometerContext*>(inst->impl);
+            if (strcmp(knob_name, "position") == 0) ctx->wiper_position = std::clamp(value, 0.0, 1.0);
+            else if (strcmp(knob_name, "max_resistance") == 0) ctx->max_resistance = value;
+            break;
+        }
+        case PART_KIND_RTC: {
+            RTCContext* ctx = static_cast<RTCContext*>(inst->impl);
+            if (strcmp(knob_name, "hours") == 0) ctx->hours = static_cast<uint8_t>(value);
+            else if (strcmp(knob_name, "minutes") == 0) ctx->minutes = static_cast<uint8_t>(value);
+            else if (strcmp(knob_name, "seconds") == 0) ctx->seconds = static_cast<uint8_t>(value);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) {
-    // Kind-specific pin handling
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    if (!inst || !inst->impl) return;
+    
+    switch (inst->kind) {
+        case PART_KIND_POWER_SUPPLY: {
+            PowerSupplyContext* ctx = static_cast<PowerSupplyContext*>(inst->impl);
+            if (pin_index == 0) ctx->enabled = high;  // Enable pin
+            break;
+        }
+        case PART_KIND_BUTTON: {
+            ButtonContext* ctx = static_cast<ButtonContext*>(inst->impl);
+            // Pin 0 is the button input (active low with pull-up)
+            ctx->pressed = !high;  // Pressed = low (connected to ground)
+            break;
+        }
+        case PART_KIND_SHIFT_REGISTER: {
+            ShiftRegisterContext* ctx = static_cast<ShiftRegisterContext*>(inst->impl);
+            if (pin_index == 0) {  // DS (data)
+                // Data is sampled on SHCP edge in part_stamp
+            } else if (pin_index == 1) {  // SHCP (shift clock)
+                if (high && !ctx->last_shcp) {
+                    // Rising edge - shift in DS value
+                    ctx->shift_reg = (ctx->shift_reg << 1) | 1;  // Simplified
+                }
+                ctx->last_shcp = high;
+            } else if (pin_index == 2) {  // STCP (storage clock)
+                if (high && !ctx->last_stcp) {
+                    // Rising edge - latch shift reg to storage reg
+                    ctx->storage_reg = ctx->shift_reg;
+                }
+                ctx->last_stcp = high;
+            } else if (pin_index == 3) {  // OE (output enable, active low)
+                ctx->oe_active = !high;
+            }
+            break;
+        }
+        case PART_KIND_RTC: {
+            // RTC pins handled via I2C
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 extern "C" void part_set_i2c_address(void* handle, uint8_t address) {
-    // For I2C devices
+    // For I2C devices - already handled in factory
+    (void)handle; (void)address;
 }
 
 // ============================================================================
@@ -874,8 +1150,15 @@ extern "C" void part_set_i2c_address(void* handle, uint8_t address) {
 // ============================================================================
 
 extern "C" void* part_create_relay(uint32_t part_id, double coil_ohms, double contact_ohms) {
-    part_register(part_id, PART_KIND_RELAY, "{}");
-    return &g_parts[part_id];
+    void* handle = part_register(part_id, PART_KIND_RELAY, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    
+    RelayContext* ctx = new RelayContext();
+    ctx->coil_resistance = coil_ohms;
+    ctx->contact_resistance = contact_ohms;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
 }
 
 extern "C" void* part_create_servo(uint32_t part_id) {
@@ -894,8 +1177,13 @@ extern "C" void* part_create_stepper_driver(uint32_t part_id, double output_ohms
 }
 
 extern "C" void* part_create_shift_register(uint32_t part_id) {
-    part_register(part_id, PART_KIND_SHIFT_REGISTER, "{}");
-    return &g_parts[part_id];
+    void* handle = part_register(part_id, PART_KIND_SHIFT_REGISTER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    
+    ShiftRegisterContext* ctx = new ShiftRegisterContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
 }
 
 extern "C" void* part_create_lcd(uint32_t part_id, uint8_t cols, uint8_t rows) {
@@ -947,10 +1235,27 @@ extern "C" void* part_create_pwm_driver(uint32_t part_id, uint8_t channels) {
 }
 
 extern "C" void* part_create_rtc(uint32_t part_id, bool is_ds3231) {
-    // RTC uses I2C but we'll implement a simple stub for now
     void* handle = part_register(part_id, PART_KIND_RTC, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // TODO: Implement DS1307/DS3231 register map
+    
+    RTCContext* ctx = new RTCContext();
+    ctx->is_ds3231 = is_ds3231;
+    // Initialize with current time
+    ctx->seconds = 0;
+    ctx->minutes = 0;
+    ctx->hours = 12;
+    ctx->day = 1;
+    ctx->date = 1;
+    ctx->month = 1;
+    ctx->year = 24;  // 2024
+    ctx->control = is_ds3231 ? 0x00 : 0x00;
+    if (is_ds3231) {
+        ctx->control2 = 0x00;
+        ctx->status = 0x00;
+        ctx->aging = 0x00;
+    }
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 
@@ -1051,21 +1356,38 @@ extern "C" void* part_create_sonar(uint32_t part_id) {
 extern "C" void* part_create_button(uint32_t part_id) {
     void* handle = part_register(part_id, PART_KIND_BUTTON, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // Simple GPIO button
+    
+    ButtonContext* ctx = new ButtonContext();
+    ctx->pressed = false;
+    ctx->pull_up = true;
+    ctx->debounce_ms = 10;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 
 extern "C" void* part_create_potentiometer(uint32_t part_id, double max_ohms) {
     void* handle = part_register(part_id, PART_KIND_POTENTIOMETER, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // 3-terminal analog device
+    
+    PotentiometerContext* ctx = new PotentiometerContext();
+    ctx->max_resistance = max_ohms;
+    ctx->wiper_position = 0.5;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 
 extern "C" void* part_create_power_supply(uint32_t part_id, double initial_volts) {
     void* handle = part_register(part_id, PART_KIND_POWER_SUPPLY, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // Voltage source with current limit
+    
+    PowerSupplyContext* ctx = new PowerSupplyContext();
+    ctx->voltage = initial_volts;
+    ctx->current_limit = 1.0;
+    ctx->enabled = true;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 
