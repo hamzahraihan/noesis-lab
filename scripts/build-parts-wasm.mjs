@@ -21,7 +21,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep, basename } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -77,6 +77,9 @@ function computeSourcesHash() {
   const lines = files
     .sort()
     .map((file) => `${relative(ROOT, file).split(sep).join('/')}\t${sha256(readFileSync(file))}`);
+  // The build script carries the flags, so editing it must also invalidate the
+  // cache; otherwise a rebuild silently keeps artifacts from the old flags.
+  lines.push(`build\t${sha256(readFileSync(fileURLToPath(import.meta.url)))}`);
   lines.push(`tool\temcc@${toolVersion()}`);
   return sha256(lines.join('\n'));
 }
@@ -157,6 +160,18 @@ function buildOnce() {
       ],
       { cwd: ROOT, stdio: 'inherit', timeout: 300000 },
     );
+
+    // Emscripten embeds the -o basename in the glue code, so the reference has
+    // to be rewritten when the wasm is published under its final name.
+    // Without this the module aborts looking for a .build-tmp-*.wasm file.
+    const tmpWasmName = basename(tmpWasm);
+    const finalWasmName = basename(WASM_FILE);
+    if (tmpWasmName !== finalWasmName) {
+      writeFileSync(
+        tmpJs,
+        readFileSync(tmpJs, 'utf8').split(tmpWasmName).join(finalWasmName),
+      );
+    }
 
     renameSync(tmpJs, JS_FILE);
     const generatedWasm = tmpJs.replace('.js', '.wasm');

@@ -41,6 +41,15 @@ the bus only when it fires — that is the idiom the MCP23017 project uses.
 compile legs. Verify with `npx vitest run <changed paths>` instead; `npm run
 check` is the full gate when there is no cap.
 
+`native/` is invisible to `tsc` and `npm test`. `npm run check:native`
+syntax-checks the two wasm entry points (`native/src/solver.cpp`,
+`native/src/parts/parts.cpp`) and is part of `npm run check`, so run it before
+claiming a C++ change works. The other `.cpp` files are `#include`d by one of
+those two — compiling `elements.cpp` or `units.cpp` on its own fails on purpose.
+A real wasm build needs emsdk; `scripts/build-parts-wasm.mjs` embeds the wasm
+filename in the glue code, so the published `parts.js` only loads if the build
+rewrites it (it does).
+
 `npm run format:check` fails across the repo on CRLF line endings and is not
 part of `npm run check`. It is not a gate; do not reformat files to satisfy it.
 

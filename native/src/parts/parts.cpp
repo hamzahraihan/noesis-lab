@@ -19,14 +19,21 @@ namespace engine {
 // Device-Specific Context Structures
 // ============================================================================
 
+// Common base so owned contexts can be destroyed through a typed pointer.
+// Deleting a void* is undefined behaviour and skips destructors, which leaks
+// the framebuffers held by the display contexts.
+struct PartContext {
+    virtual ~PartContext() = default;
+};
+
 // PCF8574 - 8-bit I/O expander with quasi-bidirectional pins
-struct PCF8574Context {
+struct PCF8574Context : PartContext {
     uint8_t output_reg = 0xFF;  // All pins high (weak pull-up) at reset
     uint8_t input_reg = 0xFF;   // Input latch
 };
 
 // MCP23017 - 16-bit I/O expander with full bidirectional ports
-struct MCP23017Context {
+struct MCP23017Context : PartContext {
     // Register map (bank 0, sequential)
     uint8_t iodira = 0xFF;   // Port A direction (1=input)
     uint8_t iodirb = 0xFF;   // Port B direction
@@ -56,7 +63,7 @@ struct MCP23017Context {
 };
 
 // PCA9685 - 16-channel 12-bit PWM driver
-struct PCA9685Context {
+struct PCA9685Context : PartContext {
     uint8_t mode1 = 0x00;
     uint8_t mode2 = 0x04;  // Totem-pole outputs
     uint8_t prescale = 0x1E;  // Default ~200Hz
@@ -73,7 +80,7 @@ struct PCA9685Context {
 };
 
 // SSD1306 - OLED display controller
-struct SSD1306Context {
+struct SSD1306Context : PartContext {
     uint8_t width;
     uint8_t height;
     uint8_t pages;
@@ -97,7 +104,7 @@ struct SSD1306Context {
 };
 
 // ADS1115 - 16-bit ADC
-struct ADS1115Context {
+struct ADS1115Context : PartContext {
     uint16_t config = 0x8583;  // Default: AIN0, +/-6.144V, single-shot, 128SPS
     uint16_t lo_thresh = 0x8000;
     uint16_t hi_thresh = 0x7FFF;
@@ -113,7 +120,7 @@ struct ADS1115Context {
 };
 
 // MCP4725 - 12-bit DAC
-struct MCP4725Context {
+struct MCP4725Context : PartContext {
     uint16_t dac_value = 0x0000;  // 12-bit value
     uint8_t power_down = 0x00;
     bool eeprom_write = false;
@@ -124,13 +131,13 @@ struct MCP4725Context {
 };
 
 // MAX6675 - Thermocouple (SPI)
-struct MAX6675Context {
+struct MAX6675Context : PartContext {
     int16_t temp_quarter_deg = 0;  // Temperature in 0.25°C steps
     bool fault = false;  // Open thermocouple detection
 };
 
 // MFRC522 - RFID reader (SPI)
-struct MFRC522Context {
+struct MFRC522Context : PartContext {
     enum State { IDLE, AUTHENTICATING, TRANSCEIVING, CALCULATING_CRC } state = IDLE;
     uint8_t fifo[64];
     uint8_t fifo_level = 0;
@@ -143,7 +150,7 @@ struct MFRC522Context {
 };
 
 // ILI9341 - TFT display (SPI)
-struct ILI9341Context {
+struct ILI9341Context : PartContext {
     uint16_t width;
     uint16_t height;
     std::vector<uint16_t> framebuffer;  // RGB565
@@ -156,7 +163,7 @@ struct ILI9341Context {
 };
 
 // MAX7219 - 8x8 LED matrix (SPI)
-struct MAX7219Context {
+struct MAX7219Context : PartContext {
     uint8_t decode_mode = 0x00;
     uint8_t intensity = 0x00;
     uint8_t scan_limit = 0x07;
@@ -223,8 +230,8 @@ struct SPIPartImpl {
 
 static std::vector<SPIPartImpl> g_spi_parts;
 
-// Part implementations
-static std::vector<void*> g_part_impls;  // Owned pointers
+// Part implementations - every context here is owned and freed by bus_reset()
+static std::vector<PartContext*> g_part_impls;
 
 // ============================================================================
 // Utility Functions
@@ -891,21 +898,6 @@ extern "C" void* part_create_shift_register(uint32_t part_id) {
     return &g_parts[part_id];
 }
 
-extern "C" void* part_create_display_i2c(uint32_t part_id, uint8_t address, uint16_t width, uint16_t height) {
-    part_register(part_id, PART_KIND_DISPLAY_I2C, "{}");
-    return &g_parts[part_id];
-}
-
-extern "C" void* part_create_display_spi(uint32_t part_id, uint16_t width, uint16_t height, bool has_dc) {
-    part_register(part_id, PART_KIND_DISPLAY_SPI, "{}");
-    return &g_parts[part_id];
-}
-
-extern "C" void* part_create_7segment(uint32_t part_id, uint8_t digits) {
-    part_register(part_id, PART_KIND_DISPLAY_7SEG, "{}");
-    return &g_parts[part_id];
-}
-
 extern "C" void* part_create_lcd(uint32_t part_id, uint8_t cols, uint8_t rows) {
     part_register(part_id, PART_KIND_DISPLAY_LCD, "{}");
     return &g_parts[part_id];
@@ -1176,11 +1168,15 @@ extern "C" void bus_reset(void) {
     g_i2c_devices.clear();
     g_spi_parts.clear();
     
-    // Clean up part implementation contexts
-    for (void* ptr : g_part_impls) {
-        delete ptr;
+    // Free part contexts. Handles stay alive in g_parts, so null their impl
+    // pointer rather than leaving a dangling reference behind.
+    for (PartContext* ctx : g_part_impls) {
+        delete ctx;
     }
     g_part_impls.clear();
+    for (auto& entry : g_parts) {
+        entry.second.impl = nullptr;
+    }
 }
 
 } // namespace engine
