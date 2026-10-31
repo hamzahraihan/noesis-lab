@@ -108,8 +108,9 @@ export class Ads1115 implements I2cDevice {
    */
   private refresh(): void {
     const config = this.readWord(CONFIG);
-    const gain = config & 0x07;
-    const range = REFERENCE_VOLTS / 2 ** gain;
+    // PGA is in bits 11-9 of the config register (per ADS1115 datasheet)
+    const pga = (config >> 9) & 0x07;
+    const range = REFERENCE_VOLTS / 2 ** pga;
     const volts = this.selectedVolts((config >> 12) & 0x07);
     const counts = Math.round((volts / range) * 32767);
     this.writeWord(CONVERSION, Math.max(-32768, Math.min(32767, counts)));

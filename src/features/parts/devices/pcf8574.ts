@@ -42,33 +42,21 @@ export const PCF8574_OUTPUT_OHMS = 1000;
  * that reads the wiring, and the bench does not model that.
  */
 const OUTPUT_REGISTER = 0x00;
-/** The register that reads the ports' levels back. */
-export const PCF8574_INPUT_REGISTER = 0x01;
-
 export class Pcf8574 implements I2cDevice {
   readonly address = PCF8574_ADDRESS;
   onBus = false;
 
   /** The output latch: the ports the chip is driving. */
   private latch = 0xff;
-  /** Which register the next byte goes to or comes from. */
-  private pointer = OUTPUT_REGISTER;
 
   /**
    * One written byte.
    *
-   * The first byte of a transaction is the register: zero is the output
-   * register, one is the input register. A write to the input register is
-   * refused, because the chip refuses it too.
+   * The PCF8574 has no register pointer: every byte written after the
+   * address is treated as output register data. The chip does not implement
+   * a register pointer like the MCP23017 does.
    */
-  receive(byte: number, isControlPosition: boolean): boolean {
-    if (isControlPosition) {
-      this.pointer = byte & 0x01;
-      return true;
-    }
-    // A write to the input register is refused, because the chip refuses it
-    // too: the ports are read-only from the other side.
-    if (this.pointer !== OUTPUT_REGISTER) return false;
+  receive(byte: number, _isControlPosition: boolean): boolean {
     this.latch = byte & 0xff;
     return true;
   }
