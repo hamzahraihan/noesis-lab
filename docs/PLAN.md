@@ -100,7 +100,7 @@ An interactive simulation platform designed to bridge the gap between software c
 - **Simulation Engine:** SPICE-like fast transient circuit simulation combined with cycle-accurate micro-controller emulation (e.g., AVR/ARM instruction execution).
 - **Asset Rendering:** Low-poly 3D / high-DPI Vector 2D models using WebGL/Canvas to ensure smooth web/desktop rendering while preserving component labels and pin pitch detail.
 - **Extensibility:** Moddable component framework allowing users to define custom sensor behavior using JS/Lua scripting or JSON specs.
-  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 39
+  **JSON half shipped** (2026-10-18): a part is a `.part.json` over one of the 50
   component kinds the simulator implements — geometry, parameters, pins, knobs and
   colours, validated at import and resolvable by the compiler like any shipped
   part. **Scripting half shipped** (2026-10-19, spec
@@ -259,7 +259,7 @@ and a convincing one, and it costs about a hundred lines rather than a dependenc
 
 ### 6.4 Boards, panels and what else is on the bench
 
-**Twelve boards, each with its own pin numbering and its own buses.** The ESP32
+**12 boards, each with its own pin numbering and its own buses.** The ESP32
 DevKit V1 and the Arduino Uno came first; the Mega 2560, the Nano and the Nano
 RP2040 Connect joined them, and the Raspberry Pi Pico and the Pi 4 after
 that. They are not interchangeable, and the differences are the point -- A0 is
