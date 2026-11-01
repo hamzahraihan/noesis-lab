@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["projects"],
+  "properties": {
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "blurb", "parts", "builds", "working"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "title": { "type": "string" },
+          "blurb": { "type": "string" },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "qty"],
+              "properties": {
+                "name": { "type": "string" },
+                "qty": { "type": "integer", "minimum": 1 }
+              }
+            }
+          },
+          "builds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["board", "circuit", "sketch"],
+              "properties": {
+                "board": { "type": "string" },
+                "variant": { "type": "string" },
+                "execution": { "type": "string", "enum": ["interpreter", "avr", "rp2040", "esp32"] },
+                "network": { "type": "string", "enum": ["live"] },
+                "circuit": { "type": "string" },
+                "sketch": { "type": "string" },
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "content"],
+                    "properties": {
+                      "name": { "type": "string" },
+                      "content": { "type": "string" }
+                    }
+                  }
+                },
+                "libraries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "source"],
+                    "properties": {
+                      "name": { "type": "string" },
+                      "source": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "working": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
