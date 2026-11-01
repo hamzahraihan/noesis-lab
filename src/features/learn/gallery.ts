@@ -22,6 +22,8 @@ import {
 
 export { GALLERY };
 
+export type GalleryProjectId = typeof GALLERY[number]['id'];
+
 export interface GalleryBuild {
   readonly board: BoardId;
   /** Build flavor on one board (`'library'`); absent means the default build. */

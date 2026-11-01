@@ -1,4 +1,4 @@
-import type { GalleryBuild } from '@/features/learn/gallery';
+import type { GalleryBuild, GalleryProjectId } from '@/features/learn/gallery';
 import type { CheckDef } from '@/features/learn/diagnostics/harness';
 import {
   alarmRawChecks,
@@ -32,7 +32,7 @@ import {
   nokia5110Checks,
 } from '@/features/learn/diagnostics/checks';
 
-export const CHECKS_MAP: Record<string, (build: GalleryBuild) => CheckDef[]> = {
+export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => CheckDef[]> = {
   "alarm-clock": (build) => build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks,
   "safe": () => safeChecks,
   "dashboard": () => dashboardChecks,
