@@ -72,6 +72,20 @@ const WIRE_FLOORS: Record<string, number> = {
   'soil-probe': 3,
 };
 
+// Projects whose checks run in the "network projects" test leg.
+// Derived from the board: any project that ships an ESP32 build.
+// (Kept as a derived list in generateTestCoverage.)
+
+// Projects whose checks run in the "new part projects" test leg.
+const NEW_PART_PROJECT_IDS = [
+  'ds3231',
+  'mcp23017',
+  'expander-interrupt',
+  'pca9685',
+  'microstep',
+  'environment-bench',
+];
+
 function tsString(value: string): string {
   return JSON.stringify(value);
 }
@@ -237,11 +251,16 @@ function generateTestCoverage(source: Source): string {
       build.variant === undefined ? `${project.id}@${build.board}` : `${project.id}@${build.board}:${build.variant}`,
     ),
   );
+  const networkIds = source.projects
+    .filter((project) => project.builds.some((build) => build.board === 'esp32'))
+    .map((project) => project.id);
   const wireFloorsEntries = Object.entries(WIRE_FLOORS)
     .map(([key, value]) => `  ${JSON.stringify(key)}: ${value},`)
     .join('\n');
   return `export const GALLERY_PROJECT_IDS = ${JSON.stringify(ids)} as const;
 export const GALLERY_BUILD_LABELS = ${JSON.stringify(labels)} as const;
+export const NETWORK_PROJECT_IDS = ${JSON.stringify(networkIds)} as const;
+export const NEW_PART_PROJECT_IDS = ${JSON.stringify(NEW_PART_PROJECT_IDS)} as const;
 export const WIRE_FLOORS: Record<string, number> = {
 ${wireFloorsEntries}
 };

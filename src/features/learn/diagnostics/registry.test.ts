@@ -1,22 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { GALLERY } from '../gallery';
 import { buildRegistry } from './registry';
 import { runHarness } from './harness';
 import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH } from './probes';
+import {
+  GALLERY_PROJECT_IDS,
+  GALLERY_BUILD_LABELS,
+  NETWORK_PROJECT_IDS,
+  NEW_PART_PROJECT_IDS,
+} from '../generated/test-coverage';
 
 describe('registry', () => {
   it('covers every gallery project and build', () => {
-    const expected = GALLERY.flatMap((entry) =>
-      entry.builds.map(
-        (build) =>
-          `${entry.id}@${build.board}${build.variant === undefined ? '' : `:${build.variant}`}`,
-      ),
-    );
+    const expected = [...GALLERY_BUILD_LABELS];
     const actual = buildRegistry().map((entry) => `${entry.projectId}@${entry.buildLabel}`);
     expect(actual.sort()).toEqual(expected.sort());
     for (const entry of buildRegistry()) {
       expect(entry.checks.length, `${entry.projectId} checks`).toBeGreaterThan(0);
     }
+    expect(
+      [...new Set(buildRegistry().map((entry) => entry.projectId))].sort(),
+    ).toEqual([...GALLERY_PROJECT_IDS].sort());
   });
 
   /*
@@ -30,7 +33,7 @@ describe('registry', () => {
      * the harness builds a bench with no live bridge, so they pin the join and
      * the reported failure rather than a third party's answer.
      */
-    for (const id of ['net-clock', 'sensor-feed', 'net-weather', 'live-weather'] as const) {
+    for (const id of NETWORK_PROJECT_IDS) {
       const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
       const report = await runHarness(entry.checks, entry.makeSim);
       const failed = report.results.filter((result) => result.status === 'fail');
@@ -43,14 +46,7 @@ describe('registry', () => {
   }, 30_000);
 
   it('passes its live checks for the new part projects', async () => {
-    for (const id of [
-      'ds3231',
-      'mcp23017',
-      'expander-interrupt',
-      'pca9685',
-      'microstep',
-      'environment-bench',
-    ] as const) {
+    for (const id of NEW_PART_PROJECT_IDS) {
       const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
       const report = await runHarness(entry.checks, entry.makeSim);
       const failed = report.results.filter((result) => result.status === 'fail');
