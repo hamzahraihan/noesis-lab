@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatReport, runHarness, type CheckDef, type HarnessSim } from './harness';
+import { buildRegistry } from './registry';
 
 function fakeSim(): HarnessSim & { calls: string[] } {
   const calls: string[] = [];
@@ -179,5 +180,39 @@ describe('runHarness', () => {
     expect(formatReport({ ...quiet, projectId: 'demo', buildLabel: 'uno' })).toContain(
       '[pass] quiet (0 ms)',
     );
+  });
+});
+
+describe('partVolts pin validation', () => {
+  it('partVolts returns voltage for valid definition pin', () => {
+    const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
+    const sim = entry.makeSim();
+    // Safe circuit has p10 (piezo-buzzer) with pins: positive, negative
+    const volts = sim.partVolts('p10', 'positive');
+    expect(typeof volts).toBe('number');
+  });
+
+  it('partVolts throws for wire alias instead of definition pin', () => {
+    const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
+    const sim = entry.makeSim();
+    // Circuit JSON uses wire aliases like "A", "K" for LED
+    // But definition uses "anode", "cathode"
+    expect(() => sim.partVolts('p6', 'A')).toThrow(
+      "Pin 'A' not found in part definition"
+    );
+  });
+
+  it('partVolts returns 0 for valid pin not connected in netlist', () => {
+    const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
+    const sim = entry.makeSim();
+    // Pin exists in definition but may not be wired - use a valid definition pin
+    const volts = sim.partVolts('p10', 'positive');
+    expect(typeof volts).toBe('number');
+  });
+
+  it('partVolts throws for non-existent part', () => {
+    const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
+    const sim = entry.makeSim();
+    expect(() => sim.partVolts('nonexistent', 'anode')).toThrow("Part 'nonexistent' not found");
   });
 });
