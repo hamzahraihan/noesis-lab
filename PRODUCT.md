@@ -48,7 +48,7 @@ Confirmed capabilities:
 - A bench-local network: `WiFi.begin`/`status`/`localIP` with Arduino's `WL_*` codes, and a poll-based `net` port — `get`/`read` for HTTP and `subscribe`/`available`/`message` for a sensor that publishes. It is simulated, so it is deterministic and needs no internet; the answer arrives on simulated time, which is why a sketch polls for it. The Arduino libraries over it answer too — `HTTPClient http;` (blocking, the way a real request blocks), `PubSubClient mqtt;`, and `WiFiUdp udp;` for the clock the network keeps.
 - A serial plotter, which reads the sketch's own output as numbers — a line that is a number, or several numbers separated by tabs, is a sample — and a capture that leaves as a VCD, the format PulseView reads. The x axis is the sample, not the second: the serial output carries no time of its own.
 - A debugger on the interpreted sketch: a stop set in the editor's margin, the program held there with the names in scope and what each holds, and three ways on — continue, step over the call, step into it. The stops travel with the sketch into the worker, which is the realm that holds the program. Nothing on a compiled core: no GDB, no memory view, no watchpoints.
-- Guided exercise ladder: 12 exercises (0.1 first circuit; 1.1–1.2 GPIO; 2.1–2.2 analog; 3.1–3.2 bus protocols; 4.1–4.2 interrupts; 5.1 maps; 5.2 single-board computers; 5.3 networks).
+- Guided exercise ladder: <!-- COUNT:EXERCISES --> exercises (0.1 first circuit; 1.1–1.2 GPIO; 2.1–2.2 analog; 3.1–3.2 bus protocols; 4.1–4.2 interrupts; 5.1 maps; 5.2 single-board computers; 5.3 networks).
 - Project gallery per board; glossary; references page; diagnostics harness.
 - Real 1:1 scale parts on 2.54 mm pitch; pin coordinates in millimetres.
 
