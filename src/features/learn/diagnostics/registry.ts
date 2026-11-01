@@ -41,6 +41,7 @@ import {
 } from './probes';
 import type { CheckDef, CheckResult, CheckStatus, CountingSim, HarnessSim } from './harness';
 import { CHECKS_MAP } from '../generated/checks-map';
+import type { GalleryProjectId } from '../gallery';
 
 export interface RegistryEntry {
   readonly projectId: string;
@@ -163,7 +164,7 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
 
 
 function checksFor(projectId: string, build: GalleryBuild): CheckDef[] {
-  const factory = CHECKS_MAP[projectId];
+  const factory = CHECKS_MAP[projectId as GalleryProjectId];
   if (!factory) return [];
   return factory(build);
 }
