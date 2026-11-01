@@ -197,6 +197,19 @@ let instructions: i32 = 0;
 const RAMEND: i32 = 0x8ff;
 const SRAM_BASE: i32 = STACK_BASE;
 
+// Data space below 0x60 is the register file and the I/O space, which the
+// host owns: the shadow CPU is the single source of truth for DDR/PORT/PIN,
+// timers, and every other peripheral register. A store to PORTB modelled here
+// would land in this module's SRAM window instead, silently dropping the pin
+// write and desynchronising the host's GPIO bridge — so any data-space access
+// outside the SRAM window traps to the shadow. Addresses above RAMEND are not
+// modelled either, and trap for the same reason.
+const HOST_DATA_END: i32 = 0x60;
+
+function hostOwned(addr: i32): boolean {
+  return addr < HOST_DATA_END || addr > RAMEND;
+}
+
 // ---------------------------------------------------------------------------
 // Timer0 model
 // ---------------------------------------------------------------------------
@@ -955,22 +968,15 @@ export function step(n: i32): i32 {
 
     // =====================================================================
     // IN: 1011 0AAd dddd AAAA  (1 cycle)
-    // Read an I/O port into Rd. All AVR I/O ports implemented.
+    // Read an I/O port into Rd. Timer/counter and stack ports are owned here;
+    // the pin ports (PINx/DDRx/PORTx) trap, because the host owns pin state and
+    // returning a fabricated 0 would diverge from the shadow.
     // =====================================================================
     if ((w & 0xf800) === 0xb000) {
       const rd = decodeRd(w);
       const port = (w & 0x0f) | ((w & 0x600) >> 5);
       let val: i32 = 0;
-      if (port === PORT_PINB) val = 0;
-      else if (port === PORT_DDRB) val = 0;
-      else if (port === PORT_PORTB) val = 0;
-      else if (port === PORT_PINC) val = 0;
-      else if (port === PORT_DDRC) val = 0;
-      else if (port === PORT_PORTC) val = 0;
-      else if (port === PORT_PIND) val = 0;
-      else if (port === PORT_DDRD) val = 0;
-      else if (port === PORT_PORTD) val = 0;
-      else if (port === PORT_TCCR0A) val = tccr0a;
+      if (port === PORT_TCCR0A) val = tccr0a;
       else if (port === PORT_TCCR0B) val = tccr0b;
       else if (port === PORT_TCNT0) val = tcnt0;
       else if (port === PORT_OCR0A) val = _ocr0a;
@@ -1087,25 +1093,17 @@ export function step(n: i32): i32 {
 
     // =====================================================================
     // OUT: 1011 1AAr rrrr AAAA  (1 cycle)
-    // Write Rr to an I/O port. All AVR I/O ports implemented.
+    // Write Rr to an I/O port. Timer/counter and stack ports are owned here;
+    // the pin ports (DDRx/PORTx) deliberately fall through to the trap so the
+    // host's GPIO bridge observes every direction/latch change exactly once.
+    // Swallowing them here silently drops every pin write: the shadow never
+    // sees the port update and no edge is ever reported.
     // =====================================================================
     if ((w & 0xf800) === 0xb800) {
       const port = (w & 0x0f) | ((w & 0x600) >> 5);
       const rr = decodeRd(w);
       const val = readReg(rr);
-      if (port === PORT_DDRB) {
-        // DDRB - data direction register B
-      } else if (port === PORT_PORTB) {
-        // PORTB - output register B
-      } else if (port === PORT_DDRC) {
-        // DDRC - data direction register C
-      } else if (port === PORT_PORTC) {
-        // PORTC - output register C
-      } else if (port === PORT_DDRD) {
-        // DDRD - data direction register D
-      } else if (port === PORT_PORTD) {
-        // PORTD - output register D
-      } else if (port === PORT_TCCR0A) {
+      if (port === PORT_TCCR0A) {
         tccr0a = val;
       } else if (port === PORT_TCCR0B) {
         tccr0b = val;
@@ -1381,6 +1379,7 @@ export function step(n: i32): i32 {
       // LDZ: 1000 000d dddd 0000
       const rd = decodeRd(w);
       const z = (readReg(31) << 8) | readReg(30);
+      if (hostOwned(z)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + z));
       pc += 1;
       spend(2);
@@ -1390,6 +1389,7 @@ export function step(n: i32): i32 {
       // STZ: 1000 001r rrrr 0000
       const rr = decodeRd(w);
       const z = (readReg(31) << 8) | readReg(30);
+      if (hostOwned(z)) return pc;
       store<u8>(SRAM_BASE + z, readReg(rr));
       pc += 1;
       spend(2);
@@ -1405,7 +1405,7 @@ export function step(n: i32): i32 {
       // LDS: load from data space address into Rd
       const rd = decodeRd(w);
       const addr = readFlash(pc + 1);
-      if (addr < 0) return pc;
+      if (addr < 0 || hostOwned(addr)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + addr));
       pc += 2;
       spend(2);
@@ -1415,7 +1415,7 @@ export function step(n: i32): i32 {
       // STS: store Rd to data space address
       const rr = decodeRd(w);
       const addr = readFlash(pc + 1);
-      if (addr < 0) return pc;
+      if (addr < 0 || hostOwned(addr)) return pc;
       store<u8>(SRAM_BASE + addr, readReg(rr));
       pc += 2;
       spend(2);
@@ -1441,6 +1441,18 @@ export function step(n: i32): i32 {
       sp += 2;
       sreg |= SREG_I;
       spend(4);
+      continue;
+    }
+
+    // =====================================================================
+    // JMP: 1001 100k kkkk 110k kkkk kkkk kkkk kkkk  (3 cycles, 2 words)
+    // =====================================================================
+    if ((w & 0xfe0e) === 0x940c) {
+      const kHigh = ((w & 1) << 16) | ((w & 0x1f0) << 13);
+      const addrLow = readFlash(pc + 1);
+      if (addrLow < 0) return pc;
+      pc = kHigh | addrLow;
+      spend(3);
       continue;
     }
 
@@ -1505,6 +1517,7 @@ export function step(n: i32): i32 {
       // LD rd, X
       const rd = decodeRd(w);
       const x = (readReg(27) << 8) | readReg(26);
+      if (hostOwned(x)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + x));
       pc += 1;
       spend(2);
@@ -1514,6 +1527,7 @@ export function step(n: i32): i32 {
       // LD rd, X+
       const rd = decodeRd(w);
       const x = (readReg(27) << 8) | readReg(26);
+      if (hostOwned(x)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + x));
       const nx = (x + 1) & 0xffff;
       writeReg(26, nx & 0xff);
@@ -1526,6 +1540,7 @@ export function step(n: i32): i32 {
       // LD rd, -X (also -Z, same encoding)
       const rd = decodeRd(w);
       let x = (readReg(27) << 8) | readReg(26);
+      if (hostOwned((x - 1) & 0xffff)) return pc;
       const nx = (x - 1) & 0xffff;
       writeReg(26, nx & 0xff);
       writeReg(27, (nx >> 8) & 0xff);
@@ -1539,6 +1554,7 @@ export function step(n: i32): i32 {
       // LD rd, Z+
       const rd = decodeRd(w);
       let z = (readReg(31) << 8) | readReg(30);
+      if (hostOwned(z)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + z));
       const nz = (z + 1) & 0xffff;
       writeReg(30, nz & 0xff);
@@ -1554,6 +1570,7 @@ export function step(n: i32): i32 {
     if ((w & 0xfe0f) === 0x920d) {
       // ST X+, r0
       let x = (readReg(27) << 8) | readReg(26);
+      if (hostOwned(x)) return pc;
       store<u8>(SRAM_BASE + x, readReg(0));
       const nx = (x + 1) & 0xffff;
       writeReg(26, nx & 0xff);
@@ -1565,6 +1582,7 @@ export function step(n: i32): i32 {
     if ((w & 0xfe0f) === 0x921d) {
       // ST Y+, r0
       let y = (readReg(29) << 8) | readReg(28);
+      if (hostOwned(y)) return pc;
       store<u8>(SRAM_BASE + y, readReg(0));
       const ny = (y + 1) & 0xffff;
       writeReg(28, ny & 0xff);
@@ -1576,6 +1594,7 @@ export function step(n: i32): i32 {
     if ((w & 0xfe0f) === 0x920e) {
       // ST Z, r0
       const z = (readReg(31) << 8) | readReg(30);
+      if (hostOwned(z)) return pc;
       store<u8>(SRAM_BASE + z, readReg(0));
       pc += 1;
       spend(2);
@@ -1584,6 +1603,7 @@ export function step(n: i32): i32 {
     if ((w & 0xfe0f) === 0x921e) {
       // ST Z+, r0
       let z = (readReg(31) << 8) | readReg(30);
+      if (hostOwned(z)) return pc;
       store<u8>(SRAM_BASE + z, readReg(0));
       const nz = (z + 1) & 0xffff;
       writeReg(30, nz & 0xff);
@@ -1602,6 +1622,7 @@ export function step(n: i32): i32 {
       const rd = (w & 0x1f0) >> 4;
       const y = (readReg(29) << 8) | readReg(28);
       const disp = (w & 7) | ((w & 0xc00) >> 7) | ((w & 0x2000) >> 8);
+      if (hostOwned((y + disp) & 0xffff)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + ((y + disp) & 0xffff)));
       pc += 1;
       spend(2);
@@ -1612,6 +1633,7 @@ export function step(n: i32): i32 {
       const rd = (w & 0x1f0) >> 4;
       const z = (readReg(31) << 8) | readReg(30);
       const disp = (w & 7) | ((w & 0xc00) >> 7) | ((w & 0x2000) >> 8);
+      if (hostOwned((z + disp) & 0xffff)) return pc;
       writeReg(rd, load<u8>(SRAM_BASE + ((z + disp) & 0xffff)));
       pc += 1;
       spend(2);
@@ -1622,6 +1644,7 @@ export function step(n: i32): i32 {
       const rr = (w & 0x1f0) >> 4;
       const y = (readReg(29) << 8) | readReg(28);
       const disp = (w & 7) | ((w & 0xc00) >> 7) | ((w & 0x2000) >> 8);
+      if (hostOwned((y + disp) & 0xffff)) return pc;
       store<u8>(SRAM_BASE + ((y + disp) & 0xffff), readReg(rr));
       pc += 1;
       spend(2);
@@ -1632,6 +1655,7 @@ export function step(n: i32): i32 {
       const rr = (w & 0x1f0) >> 4;
       const z = (readReg(31) << 8) | readReg(30);
       const disp = (w & 7) | ((w & 0xc00) >> 7) | ((w & 0x2000) >> 8);
+      if (hostOwned((z + disp) & 0xffff)) return pc;
       store<u8>(SRAM_BASE + ((z + disp) & 0xffff), readReg(rr));
       pc += 1;
       spend(2);
@@ -1639,15 +1663,11 @@ export function step(n: i32): i32 {
     }
 
     // =====================================================================
-    // Unknown opcodes that avr8js treats as NOP — handle natively to avoid
-    // trap overhead. These appear in vector tables and padding.
+    // Opcodes this core does not model trap to the shadow. Do not special-case
+    // "harmless" bit patterns here: 0x932c (ST X, r18) and the 0x94xx/0x91xx
+    // forms that used to live in this list are real instructions, and treating
+    // them as NOP silently drops their side effects (pin writes included).
     // =====================================================================
-    if (w === 0x940c || w === 0x01fc || w === 0x9124 || w === 0x91b4 || w === 0x91d4 || w === 0x932c) {
-      pc += 1;
-      spend(1);
-      continue;
-    }
-
     // =====================================================================
     // Everything else: trap to JS (I/O, SRAM, stack, complex instructions)
     // =====================================================================

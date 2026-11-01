@@ -5,7 +5,7 @@ import { UNO_CLOCK_HZ, cyclesPerMs, type ExecutionBackend } from './backend';
 import type { WasmAvrCpu } from '@/features/simulation/engine-wasm/cpu';
 import type { CompiledDebugInfo, DebugLine } from './debug/lines';
 import { readVariables } from './debug/evaluate';
-import { SREG_DATA_ADDR } from './wasm/sync';
+import { pullWasmState, readShadowState } from './wasm/sync';
 import { attachGpioBridge } from './gpio';
 import { attachTimer1, bindTimer1Outputs } from './timer1';
 import { attachTwiBridge } from './twi';
@@ -237,98 +237,116 @@ export class AvrBackend implements ExecutionBackend {
   }
 
   /**
-   * WASM-authoritative dispatch: Wasm owns PC, registers, SREG, SP, and cycle
-   * count during execution. The JS shadow (avr8js CPU) only runs instructions
-   * that Wasm traps on (I/O, SRAM, stack, unported opcodes). After each Wasm
-   * step, state is synced Wasm→JS; after a JS-handled trap, state is synced
-   * JS→Wasm before resuming.
+   * Attached dispatch: the JS shadow stays authoritative.
+   *
+   * The host owns the whole data space — registers, I/O, SRAM, stack, pins —
+   * and therefore owns every side effect. Wasm runs the ported,
+   * side-effect-free prefix of the slice; when it traps, the shadow replays
+   * from its own PC up to the trap site and then executes the trapped
+   * instruction itself, so each instruction's effects are applied exactly
+   * once. Wasm is re-primed from the shadow and resumes.
+   *
+   * State is never pulled back out of Wasm: a ported op that diverges would
+   * silently corrupt the shadow, and the acceptance legs (blink/alarm/timer1)
+   * pin the shadow as truth. A core without cycle tracking is handled by the
+   * same loop — `step` plus the three sync writers are all it needs.
    */
   private runWasmSlice(totalCycles: number, settleEvery: number): void {
-    const wasm = this.wasm;
+    const wasm = this.wasm as unknown as {
+      step(n: number): number;
+      setReg(i: number, v: number): void;
+      setPc(v: number): void;
+      setSreg(v: number): void;
+    } | null;
     if (wasm === null || typeof wasm.step !== 'function') {
+      // Degenerate attach: fall back to the JS shadow for the whole slice.
       for (let i = 0; i < totalCycles; i++) {
         if (!this.stepShadowInstruction(settleEvery)) return;
       }
       return;
     }
 
-    const syncJsToWasm = (): void => {
-      wasm.setPc(this.cpu.pc);
-      wasm.setSreg(this.cpu.data[SREG_DATA_ADDR]);
-      for (let i = 0; i < 32; i++) wasm.setReg(i, this.cpu.data[i]);
-      const sp = (this.cpu.data[94] << 8) | this.cpu.data[93];
-      wasm.setSp(sp);
-      wasm.setCycles(this.cpu.cycles);
-    };
-
-    const syncWasmToJs = (): void => {
-      this.cpu.pc = wasm.getPc();
-      this.cpu.data[SREG_DATA_ADDR] = wasm.getSreg();
-      for (let i = 0; i < 32; i++) this.cpu.data[i] = wasm.getReg(i);
-      const sp = wasm.getSp();
-      this.cpu.data[93] = sp & 0xff;
-      this.cpu.data[94] = (sp >> 8) & 0xff;
-      this.cpu.cycles = wasm.getCycles();
-    };
-
-    syncJsToWasm();
-
-    const runShadowRemainder = (): void => {
-      const startedAt = this.cpu.cycles;
-      while (this.cpu.cycles - startedAt < totalCycles) {
-        if (!this.stepShadowInstruction(settleEvery)) return;
+    /** Push avr8js CPU state into Wasm before stepping (only methods that exist). */
+    const syncShadowToWasm = (): void => {
+      const w = wasm as unknown as {
+        setReg(i: number, v: number): void;
+        setPc(v: number): void;
+        setSreg(v: number): void;
+      };
+      if (
+        typeof w.setReg !== 'function' ||
+        typeof w.setPc !== 'function' ||
+        typeof w.setSreg !== 'function'
+      ) {
+        return;
       }
+      pullWasmState(w, readShadowState(this.cpu));
     };
 
-    const flashCapacity = wasm.getFlashCapacity();
+    // Settle cadence is owned by `stepShadowInstruction`: the attached path
+    // steps the shadow one instruction at a time too, so the settle counter
+    // and the JS-only path stay on the same schedule. Accounting for settles
+    // again here would fire every `settleEvery` twice.
+    const stepShadow = (): boolean => this.stepShadowInstruction(settleEvery);
 
-    let consumedInstr = 0;
-    let settledCycles = 0;
-    while (consumedInstr < totalCycles) {
+    // Prime Wasm from the shadow so a mid-run attach resumes correctly.
+    syncShadowToWasm();
+
+    let remaining = totalCycles;
+    while (remaining > 0) {
       if (this.failed) return;
-
-      const budget = Math.max(1, Math.floor(totalCycles - consumedInstr));
-      const instructionsBefore = wasm.getInstructions();
       let trappedPc: number;
       try {
-        // Each instruction costs at least one cycle, so the instruction
-        // budget doubles as a cycle budget: we never cap below it.
-        trappedPc = wasm.step(budget);
+        trappedPc = wasm.step(remaining);
       } catch {
-        runShadowRemainder();
+        // Wasm-side failure: finish the slice on the JS shadow.
+        for (let i = 0; i < remaining; i++) {
+          if (!stepShadow()) return;
+        }
+        syncShadowToWasm();
         return;
       }
-
-      const wasmExecuted = wasm.getInstructions() - instructionsBefore;
-      settledCycles += wasmExecuted;
-      consumedInstr += wasmExecuted;
-      syncWasmToJs();
-
-      while (settledCycles >= settleEvery) {
-        settledCycles -= settleEvery;
-        this.hooks.onSettle();
+      if (trappedPc === -1) {
+        // The module consumed the rest of the slice's instruction budget
+        // cleanly; the shadow still owes the slice its own execution.
+        for (let i = 0; i < remaining; i++) {
+          if (!stepShadow()) return;
+        }
+        syncShadowToWasm();
+        return;
       }
-
-      if (trappedPc === -1) break;
-
       if (!Number.isInteger(trappedPc) || trappedPc < 0) {
-        runShadowRemainder();
+        // Malformed trap: finish the slice on the JS shadow.
+        for (let i = 0; i < Math.max(0, remaining); i++) {
+          if (!stepShadow()) return;
+        }
+        syncShadowToWasm();
         return;
       }
 
-      if (trappedPc >= flashCapacity) {
-        runShadowRemainder();
-        return;
+      // Shadow catches up to the trap PC, then executes the trapped op.
+      //
+      // The catch-up is capped by the slice budget, never by a wall-clock
+      // guard. A trap PC that the shadow's own path never reaches (wasm
+      // diverged and reported a PC behind, or off, the shadow's execution) is
+      // indistinguishable from a long forward jump until the budget runs out:
+      // stepping past `remaining` here would over-run the slice and hand the
+      // bench more simulated time than it asked for, which shows up as extra
+      // edges. When the cap is hit the slice is simply over — every
+      // instruction it owed has run on the shadow's true path — and Wasm is
+      // re-primed from the shadow for the next one.
+      let steps = 0;
+      while (this.cpu.pc !== trappedPc && steps < remaining) {
+        if (!stepShadow()) return;
+        steps += 1;
       }
-
-      if (this.cpu.pc !== trappedPc) this.cpu.pc = trappedPc;
-      if (!this.stepShadowInstruction(settleEvery)) return;
-      consumedInstr += 1;
-      while (settledCycles >= settleEvery) {
-        settledCycles -= settleEvery;
-        this.hooks.onSettle();
+      if (this.cpu.pc === trappedPc && steps < remaining) {
+        // The trapped op itself, executed once by the shadow.
+        if (!stepShadow()) return;
+        steps += 1;
       }
-      syncJsToWasm();
+      syncShadowToWasm();
+      remaining -= steps;
     }
   }
 
