@@ -1,0 +1,245 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PartStateSnapshot ABI",
+  "type": "object",
+  "required": ["version", "parts"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "parts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["partId", "kind", "data"],
+        "properties": {
+          "partId": { "type": "string" },
+          "kind": { "type": "string", "enum": ["resistor", "capacitor", "led", "button", "potentiometer", "powerSupply", "breadboard", "mcu", "shift595", "pcf8574", "mcp23017", "ads1115", "max7219", "pcd8544", "tm1637", "stepper", "max6675", "mcp4725", "eeprom24lc256", "ds3231", "bmp180", "ina219", "bh1750", "tmp102", "sht31", "rc522", "pca9685", "a4988", "scripted"] },
+          "data": { "type": "object" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Shift595Data": {
+      "type": "object",
+      "required": ["outputRegister", "shiftRegister"],
+      "properties": {
+        "outputRegister": { "type": "integer" },
+        "shiftRegister": { "type": "integer" }
+      }
+    },
+    "PCF8574Data": {
+      "type": "object",
+      "required": ["outputLatch", "inputPort"],
+      "properties": {
+        "outputLatch": { "type": "integer" },
+        "inputPort": { "type": "integer" }
+      }
+    },
+    "MCP23017Data": {
+      "type": "object",
+      "required": ["iodirA", "iodirB", "gpioA", "gpioB", "olatA", "olatB", "intcapA", "intcapB", "intfA", "intfB", "intconA", "intconB", "gppuA", "gppuB"],
+      "properties": {
+        "iodirA": { "type": "integer" }, "iodirB": { "type": "integer" },
+        "gpioA": { "type": "integer" }, "gpioB": { "type": "integer" },
+        "olatA": { "type": "integer" }, "olatB": { "type": "integer" },
+        "intcapA": { "type": "integer" }, "intcapB": { "type": "integer" },
+        "intfA": { "type": "integer" }, "intfB": { "type": "integer" },
+        "intconA": { "type": "integer" }, "intconB": { "type": "integer" },
+        "gppuA": { "type": "integer" }, "gppuB": { "type": "integer" }
+      }
+    },
+    "ADS1115Data": {
+      "type": "object",
+      "required": ["config", "conversion"],
+      "properties": {
+        "config": { "type": "integer" },
+        "conversion": { "type": "integer" }
+      }
+    },
+    "Max7219Data": {
+      "type": "object",
+      "required": ["digitRegisters", "decodeMode", "intensity", "scanLimit", "shutdown", "displayTest"],
+      "properties": {
+        "digitRegisters": { "type": "array", "items": { "type": "integer" }, "minItems": 8, "maxItems": 8 },
+        "decodeMode": { "type": "integer" },
+        "intensity": { "type": "integer" },
+        "scanLimit": { "type": "integer" },
+        "shutdown": { "type": "boolean" },
+        "displayTest": { "type": "boolean" }
+      }
+    },
+    "PCD8544Data": {
+      "type": "object",
+      "required": ["displayMemory", "cursorX", "cursorY", "functionSet", "displayControl", "tempCoeff", "bias", "vop"],
+      "properties": {
+        "displayMemory": { "type": "array", "items": { "type": "integer" }, "minItems": 504, "maxItems": 504 },
+        "cursorX": { "type": "integer" },
+        "cursorY": { "type": "integer" },
+        "functionSet": { "type": "integer" },
+        "displayControl": { "type": "integer" },
+        "tempCoeff": { "type": "integer" },
+        "bias": { "type": "integer" },
+        "vop": { "type": "integer" }
+      }
+    },
+    "TM1637Data": {
+      "type": "object",
+      "required": ["segments", "brightness", "colon"],
+      "properties": {
+        "segments": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "maxItems": 4 },
+        "brightness": { "type": "integer" },
+        "colon": { "type": "boolean" }
+      }
+    },
+    "StepperData": {
+      "type": "object",
+      "required": ["position", "targetPosition", "speed", "acceleration", "enabled", "direction", "microstep"],
+      "properties": {
+        "position": { "type": "number" },
+        "targetPosition": { "type": "number" },
+        "speed": { "type": "number" },
+        "acceleration": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "direction": { "type": "integer" },
+        "microstep": { "type": "integer" }
+      }
+    },
+    "Max6675Data": {
+      "type": "object",
+      "required": ["temperatureQuarterDeg"],
+      "properties": {
+        "temperatureQuarterDeg": { "type": "integer" }
+      }
+    },
+    "MCP4725Data": {
+      "type": "object",
+      "required": ["value"],
+      "properties": {
+        "value": { "type": "integer" }
+      }
+    },
+    "EEPROM24LC256Data": {
+      "type": "object",
+      "required": ["memory"],
+      "properties": {
+        "memory": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "DS3231Data": {
+      "type": "object",
+      "required": ["timeRegisters", "statusRegister", "nvram", "temperatureQuarterDeg"],
+      "properties": {
+        "timeRegisters": { "type": "array", "items": { "type": "integer" }, "minItems": 7, "maxItems": 7 },
+        "statusRegister": { "type": "integer" },
+        "nvram": { "type": "array", "items": { "type": "integer" }, "minItems": 56, "maxItems": 56 },
+        "temperatureQuarterDeg": { "type": "integer" }
+      }
+    },
+    "BMP180Data": {
+      "type": "object",
+      "required": ["calibration", "temperatureCounts", "pressureCounts"],
+      "properties": {
+        "calibration": {
+          "type": "object",
+          "required": ["ac1", "ac2", "ac3", "ac4", "ac5", "ac6", "b1", "b2", "mb", "mc", "md"],
+          "properties": {
+            "ac1": { "type": "integer" }, "ac2": { "type": "integer" }, "ac3": { "type": "integer" },
+            "ac4": { "type": "integer" }, "ac5": { "type": "integer" }, "ac6": { "type": "integer" },
+            "b1": { "type": "integer" }, "b2": { "type": "integer" },
+            "mb": { "type": "integer" }, "mc": { "type": "integer" }, "md": { "type": "integer" }
+          }
+        },
+        "temperatureCounts": { "type": "integer" },
+        "pressureCounts": { "type": "integer" }
+      }
+    },
+    "INA219Data": {
+      "type": "object",
+      "required": ["calibration", "shuntVoltage", "busVoltage", "current", "power"],
+      "properties": {
+        "calibration": { "type": "integer" },
+        "shuntVoltage": { "type": "integer" },
+        "busVoltage": { "type": "integer" },
+        "current": { "type": "integer" },
+        "power": { "type": "integer" }
+      }
+    },
+    "BH1750Data": {
+      "type": "object",
+      "required": ["mode", "lux"],
+      "properties": {
+        "mode": { "type": "integer" },
+        "lux": { "type": "number" }
+      }
+    },
+    "TMP102Data": {
+      "type": "object",
+      "required": ["temperatureCounts"],
+      "properties": {
+        "temperatureCounts": { "type": "integer" }
+      }
+    },
+    "SHT31Data": {
+      "type": "object",
+      "required": ["temperatureCounts", "humidityCounts", "crcValid"],
+      "properties": {
+        "temperatureCounts": { "type": "integer" },
+        "humidityCounts": { "type": "integer" },
+        "crcValid": { "type": "boolean" }
+      }
+    },
+    "RC522Data": {
+      "type": "object",
+      "required": ["registers", "fifo", "cardPresent", "cardUid"],
+      "properties": {
+        "registers": { "type": "array", "items": { "type": "integer" }, "minItems": 64, "maxItems": 64 },
+        "fifo": { "type": "array", "items": { "type": "integer" } },
+        "cardPresent": { "type": "boolean" },
+        "cardUid": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "maxItems": 4 }
+      }
+    },
+    "PCA9685Data": {
+      "type": "object",
+      "required": ["mode1", "mode2", "prescale", "leds"],
+      "properties": {
+        "mode1": { "type": "integer" },
+        "mode2": { "type": "integer" },
+        "prescale": { "type": "integer" },
+        "leds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["onL", "onH", "offL", "offH"],
+            "properties": {
+              "onL": { "type": "integer" }, "onH": { "type": "integer" },
+              "offL": { "type": "integer" }, "offH": { "type": "integer" }
+            }
+          },
+          "minItems": 16,
+          "maxItems": 16
+        }
+      }
+    },
+    "A4988Data": {
+      "type": "object",
+      "required": ["position", "targetPosition", "speed", "acceleration", "enabled", "direction", "microstep"],
+      "properties": {
+        "position": { "type": "number" },
+        "targetPosition": { "type": "number" },
+        "speed": { "type": "number" },
+        "acceleration": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "direction": { "type": "integer" },
+        "microstep": { "type": "integer" }
+      }
+    },
+    "ScriptedData": {
+      "type": "object",
+      "required": ["scriptId", "state"],
+      "properties": {
+        "scriptId": { "type": "string" },
+        "state": { "type": "object" }
+      }
+    }
+  }
+}
