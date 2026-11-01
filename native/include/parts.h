@@ -12,6 +12,7 @@
 #include "solver.h"
 #include <stddef.h>
 #include <stdint.h>
+#include "parts-generated.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -163,86 +164,6 @@ extern "C" int16_t spi_thermocouple_receive(SPIPartHandle handle);
 // ============================================================================
 // Part Stamping Interface
 // ============================================================================
-
-// Part state snapshots for UI rendering
-// Packed to match TypeScript DataView sequential reading (no padding)
-#pragma pack(push, 1)
-typedef struct {
-    // Display framebuffers
-    uint8_t* framebuffer;
-    uint32_t framebuffer_size;
-    uint16_t width;
-    uint16_t height;
-    
-    // Servo angle (0-180)
-    uint8_t servo_angle;
-    
-    // Stepper angle (0-360 degrees * 10 for 0.1 deg precision)
-    int16_t stepper_angle_deci_deg;
-    
-    // Stepper driver output states
-    uint8_t stepper_driver_outputs[4];  // 1A, 1B, 2A, 2B
-    
-    // 7-segment display state
-    uint8_t seven_seg_digits[8];
-    uint8_t seven_seg_colon;
-    
-    // Character LCD state
-    uint8_t lcd_chars[80];
-    uint8_t lcd_rows;
-    uint8_t lcd_cols;
-    
-    // Shift register outputs
-    uint8_t shift_register_outputs[8];
-
-    // Relay contact state (true = contact closed)
-    bool relay_contacts_closed;
-
-    // Button pressed state (true = pressed)
-    bool button_pressed;
-
-    // Potentiometer wiper position, 0.0 - 1.0
-    double pot_wiper;
-    
-    // RF ID card presence
-    bool rfid_card_present;
-    
-    // Thermocouple temperature (0.25 degree steps)
-    int16_t thermocouple_temp_quarter_deg;
-
-    // PCF8574 I2C expander state
-    uint8_t pcf8574_output_reg;
-    uint8_t pcf8574_input_reg;
-
-    // MCP23017 I2C expander state
-    uint8_t mcp23017_iodira;
-    uint8_t mcp23017_iodirb;
-    uint8_t mcp23017_gpioa;
-    uint8_t mcp23017_gpiob;
-    uint8_t mcp23017_olata;
-    uint8_t mcp23017_olatb;
-
-    // ADS1115 ADC state
-    uint16_t ads1115_config;
-    int16_t ads1115_conversion;
-    bool ads1115_conversion_ready;
-
-    // Shift register (74HC595) state
-    uint8_t shift595_shift_reg;
-    uint8_t shift595_storage_reg;
-    bool shift595_outputs_enabled;
-
-    // PCD8544 (Nokia 5110) state
-    uint8_t pcd8544_x;
-    uint8_t pcd8544_y;
-    bool pcd8544_vertical;
-    bool pcd8544_extended;
-    bool pcd8544_powerDown;
-    bool pcd8544_blanked;
-    bool pcd8544_inverse;
-    uint8_t pcd8544_vop;
-} PartStateSnapshot;
-#pragma pack(pop)
 
 // Part handle for engine
 typedef void* PartHandle;
