@@ -19,8 +19,9 @@
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:native": "node scripts/check-native.mjs",
     "generate:gallery": "tsx scripts/generate-gallery.ts",
+    "generate:abi": "tsx scripts/generate-abi.ts",
     "update:docs-counts": "tsx scripts/update-docs-counts.ts",
-    "prepare": "npm run generate:gallery",
+    "prepare": "npm run generate:gallery && npm run generate:abi",
     "preview": "vite preview",
     "check": "npm run typecheck && npm run lint && npm run check:boundaries && npm run check:native && npm test"
   },
@@ -65,6 +66,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "ajv-cli": "^5.0.0",
     "assemblyscript": "0.27.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "oxfmt": "^0.73.0",
