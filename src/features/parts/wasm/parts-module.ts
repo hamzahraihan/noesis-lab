@@ -122,6 +122,19 @@ export interface PartStateSnapshot {
   shift595_shift_reg: number;
   shift595_storage_reg: number;
   shift595_outputs_enabled: boolean;
+
+  // PCD8544 (Nokia 5110) state
+  pcd8544_x: number;
+  pcd8544_y: number;
+  pcd8544_vertical: boolean;
+  pcd8544_extended: boolean;
+  pcd8544_powerDown: boolean;
+  pcd8544_blanked: boolean;
+  pcd8544_inverse: boolean;
+  pcd8544_vop: number;
+
+  // Framebuffer data (populated by readPartStateSnapshot for displays)
+  framebufferData?: Uint8Array;
 }
 
 /** Reads a PartStateSnapshot from wasm memory at the given pointer. */
@@ -175,8 +188,22 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     shift595_shift_reg: rU8(),
     shift595_storage_reg: rU8(),
     shift595_outputs_enabled: rU8() !== 0,
+
+    // PCD8544 (Nokia 5110) state
+    pcd8544_x: rU8(),
+    pcd8544_y: rU8(),
+    pcd8544_vertical: rU8() !== 0,
+    pcd8544_extended: rU8() !== 0,
+    pcd8544_powerDown: rU8() !== 0,
+    pcd8544_blanked: rU8() !== 0,
+    pcd8544_inverse: rU8() !== 0,
+    pcd8544_vop: rU8(),
   };
-  return snap;
+  // Read framebuffer data if present
+  const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
+    ? new Uint8Array(wasmMemory.memory.buffer, snap.framebuffer, snap.framebuffer_size)
+    : undefined;
+  return { ...snap, framebufferData };
 }
 
 /** Typed wrapper around all exported C ABI functions. */
@@ -192,6 +219,7 @@ export interface PartsModule {
   part_create_shift_register(part_id: number): number;
   part_create_display_i2c(part_id: number, address: number, width: number, height: number): number;
   part_create_display_spi(part_id: number, width: number, height: number, has_dc: number): number;
+  part_create_display_pcd8544(part_id: number): number;
   part_create_7segment(part_id: number, digits: number): number;
   part_create_lcd(part_id: number, cols: number, rows: number): number;
   part_create_i2c_expander(part_id: number, ports: number, address: number): number;
@@ -263,6 +291,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
       fd_write: () => 0,
       fd_close: () => 0,
       fd_seek: () => 0,
+      proc_exit: () => 0,
     },
   };
 
@@ -289,6 +318,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_shift_register: exp.part_create_shift_register as (part_id: number) => number,
     part_create_display_i2c: exp.part_create_display_i2c as (part_id: number, address: number, width: number, height: number) => number,
     part_create_display_spi: exp.part_create_display_spi as (part_id: number, width: number, height: number, has_dc: number) => number,
+    part_create_display_pcd8544: exp.part_create_display_pcd8544 as (part_id: number) => number,
     part_create_7segment: exp.part_create_7segment as (part_id: number, digits: number) => number,
     part_create_lcd: exp.part_create_lcd as (part_id: number, cols: number, rows: number) => number,
     part_create_i2c_expander: exp.part_create_i2c_expander as (part_id: number, ports: number, address: number) => number,

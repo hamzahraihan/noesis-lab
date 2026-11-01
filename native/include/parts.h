@@ -231,6 +231,16 @@ typedef struct {
     uint8_t shift595_shift_reg;
     uint8_t shift595_storage_reg;
     bool shift595_outputs_enabled;
+
+    // PCD8544 (Nokia 5110) state
+    uint8_t pcd8544_x;
+    uint8_t pcd8544_y;
+    bool pcd8544_vertical;
+    bool pcd8544_extended;
+    bool pcd8544_powerDown;
+    bool pcd8544_blanked;
+    bool pcd8544_inverse;
+    uint8_t pcd8544_vop;
 } PartStateSnapshot;
 #pragma pack(pop)
 

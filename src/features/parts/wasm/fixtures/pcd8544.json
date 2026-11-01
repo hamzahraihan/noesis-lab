@@ -1,0 +1,13 @@
+{
+  "part": "pcd8544",
+  "factoryArgs": [5],
+  "stimuli": [
+    { "kind": "spi-transfer", "byte": 32, "dc": false, "cs": true },
+    { "kind": "spi-transfer", "byte": 12, "dc": false, "cs": true },
+    { "kind": "spi-transfer", "byte": 128, "dc": false, "cs": true },
+    { "kind": "spi-transfer", "byte": 64, "dc": false, "cs": true },
+    { "kind": "spi-transfer", "byte": 170, "dc": true, "cs": true }
+  ],
+  "labels": ["x", "y", "vertical", "extended", "powerDown", "blanked", "inverse", "vop", "framebuffer_0", "framebuffer_1", "framebuffer_2"],
+  "note": "Basic command sequence and one data byte"
+}

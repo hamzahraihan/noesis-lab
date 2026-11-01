@@ -60,22 +60,40 @@ const SET_VOP = 0x80;
  * switches (blanked, inverted), so a renderer can ask `isLit()` at any time.
  */
 export class Pcd8544 {
-  private readonly ram = new Uint8Array(PCD8544_FRAME_BYTES);
+  private readonly _ram = new Uint8Array(PCD8544_FRAME_BYTES);
 
-  private x = 0;
-  private y = 0;
+  private _x = 0;
+  private _y = 0;
 
   /** Function set: power down, vertical addressing, extended instruction set. */
-  private powerDown = false;
-  private vertical = false;
-  private extended = false;
+  private _powerDown = false;
+  private _vertical = false;
+  private _extended = false;
 
   /** Display control: blanked, and the whole-glass inversion. */
-  private blanked = true;
-  private inverse = false;
+  private _blanked = true;
+  private _inverse = false;
 
   /** Contrast voltage, 0..127. The chip powers up at zero, which is its dimmest. */
-  private vop = 0;
+  private _vop = 0;
+
+  get x(): number { return this._x; }
+  set x(v: number) { this._x = v; }
+  get y(): number { return this._y; }
+  set y(v: number) { this._y = v; }
+  get powerDown(): boolean { return this._powerDown; }
+  set powerDown(v: boolean) { this._powerDown = v; }
+  get vertical(): boolean { return this._vertical; }
+  set vertical(v: boolean) { this._vertical = v; }
+  get extended(): boolean { return this._extended; }
+  set extended(v: boolean) { this._extended = v; }
+  get blanked(): boolean { return this._blanked; }
+  set blanked(v: boolean) { this._blanked = v; }
+  get inverse(): boolean { return this._inverse; }
+  set inverse(v: boolean) { this._inverse = v; }
+  get vop(): number { return this._vop; }
+  set vop(v: number) { this._vop = v; }
+  get ram(): Uint8Array { return this._ram; }
 
   /** One byte from the SPI bus. */
   receive(byte: number, dataSelect: boolean, chipSelected: boolean): void {
@@ -92,15 +110,15 @@ export class Pcd8544 {
    * inventing a fact rather than modelling one.
    */
   reset(): void {
-    this.ram.fill(0);
-    this.x = 0;
-    this.y = 0;
-    this.powerDown = false;
-    this.vertical = false;
-    this.extended = false;
-    this.blanked = true;
-    this.inverse = false;
-    this.vop = 0;
+    this._ram.fill(0);
+    this._x = 0;
+    this._y = 0;
+    this._powerDown = false;
+    this._vertical = false;
+    this._extended = false;
+    this._blanked = true;
+    this._inverse = false;
+    this._vop = 0;
   }
 
   private command(byte: number): void {
@@ -110,64 +128,64 @@ export class Pcd8544 {
      * leave the extended set without guessing.
      */
     if ((byte & 0xf8) === FUNCTION_SET) {
-      this.powerDown = (byte & 0x04) !== 0;
-      this.vertical = (byte & 0x02) !== 0;
-      this.extended = (byte & 0x01) !== 0;
+      this._powerDown = (byte & 0x04) !== 0;
+      this._vertical = (byte & 0x02) !== 0;
+      this._extended = (byte & 0x01) !== 0;
       return;
     }
     if ((byte & 0xf8) === DISPLAY_CONTROL) {
-      this.blanked = (byte & 0x04) === 0;
-      this.inverse = (byte & 0x01) !== 0;
+      this._blanked = (byte & 0x04) === 0;
+      this._inverse = (byte & 0x01) !== 0;
       return;
     }
-    if (this.extended) {
+    if (this._extended) {
       // 0x80 takes the contrast voltage; 0x10..0x1F sets the bias and the
       // temperature coefficient, which a bench has no voltage and no
       // temperature to act on. The address commands are unreachable here,
       // which is the reason a driver has to switch back before drawing.
-      if (byte & SET_VOP) this.vop = byte & 0x7f;
+      if (byte & SET_VOP) this._vop = byte & 0x7f;
       return;
     }
     if (byte & SET_X) {
-      this.x = Math.min(byte & 0x7f, PCD8544_WIDTH - 1);
+      this._x = Math.min(byte & 0x7f, PCD8544_WIDTH - 1);
       return;
     }
     if ((byte & 0xf8) === SET_Y) {
-      this.y = Math.min(byte & 0x07, PCD8544_BANKS - 1);
+      this._y = Math.min(byte & 0x07, PCD8544_BANKS - 1);
     }
   }
 
   private writeData(byte: number): void {
-    this.ram[this.y * PCD8544_WIDTH + this.x] = byte;
-    if (this.vertical) {
-      this.y += 1;
-      if (this.y >= PCD8544_BANKS) {
-        this.y = 0;
-        this.x += 1;
-        if (this.x >= PCD8544_WIDTH) this.x = 0;
+    this._ram[this._y * PCD8544_WIDTH + this._x] = byte;
+    if (this._vertical) {
+      this._y += 1;
+      if (this._y >= PCD8544_BANKS) {
+        this._y = 0;
+        this._x += 1;
+        if (this._x >= PCD8544_WIDTH) this._x = 0;
       }
       return;
     }
-    this.x += 1;
-    if (this.x >= PCD8544_WIDTH) {
-      this.x = 0;
-      this.y += 1;
-      if (this.y >= PCD8544_BANKS) this.y = 0;
+    this._x += 1;
+    if (this._x >= PCD8544_WIDTH) {
+      this._x = 0;
+      this._y += 1;
+      if (this._y >= PCD8544_BANKS) this._y = 0;
     }
   }
 
   /** True when the pixel at `x`, `y` is lit, counting from the top left. */
   isLit(x: number, y: number): boolean {
     if (x < 0 || x >= PCD8544_WIDTH || y < 0 || y >= PCD8544_HEIGHT) return false;
-    if (this.blanked) return false;
-    if (this.powerDown) return false;
-    const bit = (this.ram[(y >> 3) * PCD8544_WIDTH + x] ?? 0) >> (y & 7);
-    return this.inverse ? (bit & 1) === 0 : (bit & 1) === 1;
+    if (this._blanked) return false;
+    if (this._powerDown) return false;
+    const bit = (this._ram[(y >> 3) * PCD8544_WIDTH + x] ?? 0) >> (y & 7);
+    return this._inverse ? (bit & 1) === 0 : (bit & 1) === 1;
   }
 
   /** The panel's memory, for a renderer that wants to copy it. */
   frame(): Uint8Array {
-    return this.ram.slice();
+    return this._ram.slice();
   }
 
   /**
@@ -180,37 +198,29 @@ export class Pcd8544 {
    */
   restore(frame: ArrayLike<number>, flags: number, contrast: number): void {
     for (let index = 0; index < PCD8544_FRAME_BYTES; index++) {
-      this.ram[index] = (frame[index] ?? 0) & 0xff;
+      this._ram[index] = (frame[index] ?? 0) & 0xff;
     }
-    this.blanked = (flags & PCD8544_FLAG_LIT) === 0;
-    this.inverse = (flags & PCD8544_FLAG_INVERSE) !== 0;
-    this.vop = Math.max(0, Math.min(0x7f, contrast));
+    this._blanked = (flags & PCD8544_FLAG_LIT) === 0;
+    this._inverse = (flags & PCD8544_FLAG_INVERSE) !== 0;
+    this._vop = Math.max(0, Math.min(0x7f, contrast));
   }
 
-  /** The glass is not blanked. */
+  /** The display is not blanked. */
   get lit(): boolean {
-    return !this.blanked;
+    return !this._blanked;
   }
 
-  /** Whether the whole glass is drawn inverted. */
-  get inverted(): boolean {
-    return this.inverse;
-  }
-
-  /** 0 at the chip's minimum contrast voltage, 1 at its maximum. */
+  /** Brightness as a 0..1 value (alias for vop scaled to 0..1). */
   get brightness(): number {
-    return this.vop / 0x7f;
+    return this._vop / 0x7f;
+  }
+
+  /** Whether the display is inverted (alias for inverse). */
+  get inverted(): boolean {
+    return this._inverse;
   }
 }
 
-/**
- * The Nokia 5110 module, as the breakout is sold.
- *
- * A 45 mm board with the glass across the top and an eight-pin header along
- * the bottom: reset, chip enable, data/command, data in, clock, supply and the
- * backlight anode. The backlight is a plain pin here -- it is an LED on the
- * board, not a register -- so the bench shows it as the header contact it is.
- */
 export function nokia5110Definition(): PartDefinition {
   const pitch = 2.54;
   const pins: PinSpec[] = [];

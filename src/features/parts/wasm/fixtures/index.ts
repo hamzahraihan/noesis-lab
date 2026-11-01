@@ -8,6 +8,7 @@ import pcf8574 from './pcf8574.json';
 import mcp23017 from './mcp23017.json';
 import ads1115 from './ads1115.json';
 import shift595 from './shift595.json';
+import pcd8544 from './pcd8544.json';
 
 export interface Fixture {
   part: string;
@@ -29,6 +30,7 @@ export const FIXTURES: Record<string, Fixture> = {
   mcp23017: mcp23017 as Fixture,
   ads1115: ads1115 as Fixture,
   shift595: shift595 as Fixture,
+  pcd8544: pcd8544 as Fixture,
 };
 
-export const FIXTURE_LIST = [pcf8574, mcp23017, ads1115, shift595] as Fixture[];
+export const FIXTURE_LIST = [pcf8574, mcp23017, ads1115, shift595, pcd8544] as Fixture[];

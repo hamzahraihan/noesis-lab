@@ -100,4 +100,5 @@ describe('Parts differential harness', () => {
   it('mcp23017 matches TS oracle', () => runFixture(FIXTURES.mcp23017));
   it('ads1115 matches TS oracle', () => runFixture(FIXTURES.ads1115));
   it('shift595 matches TS oracle', () => runFixture(FIXTURES.shift595));
+  it('pcd8544 matches TS oracle', () => runFixture(FIXTURES.pcd8544));
 });

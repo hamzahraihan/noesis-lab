@@ -46,6 +46,7 @@ const EXPORTED_FUNCTIONS = [
   '_part_create_shift_register',
   '_part_create_display_i2c',
   '_part_create_display_spi',
+  '_part_create_display_pcd8544',
   '_part_create_7segment',
   '_part_create_lcd',
   '_part_create_i2c_expander',
@@ -87,6 +88,8 @@ const EXPORTED_FUNCTIONS = [
   // Bus state
   '_bus_get_state',
   '_bus_reset',
+  // SPI callbacks (must be in function table for indirect calls)
+  '_spi_pcd8544_receive',
   // Explicit global constructor for STL containers (needed with -Wl,--no-entry)
   '_init_globals',
 ];
@@ -107,6 +110,7 @@ const FLAGS = [
   '-fno-rtti',
   '-Wl,--no-entry',
   '-Wl,--allow-undefined',
+  '-Wl,--no-gc-sections',
 ];
 
 const SOURCE = join(SRC_DIR, 'parts.cpp');

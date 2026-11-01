@@ -16,6 +16,21 @@
 namespace engine {
 
 // ============================================================================
+
+// ============================================================================
+// Display Constants
+// ============================================================================
+
+// PCD8544 (Nokia 5110) constants
+constexpr uint16_t PCD8544_WIDTH = 84;
+constexpr uint16_t PCD8544_HEIGHT = 48;
+constexpr uint8_t PCD8544_BANKS = 6;  // 48/8 = 6 banks
+constexpr uint16_t PCD8544_FRAME_BYTES = PCD8544_WIDTH * PCD8544_BANKS;
+
+
+// Debug counters for SPI debugging
+
+
 // Device-Specific Context Structures
 // ============================================================================
 
@@ -216,6 +231,19 @@ struct PCD8544Context : PartContext {
     std::vector<uint8_t> framebuffer;  // 1 bit per pixel
     uint8_t reg_ptr = 0x00;
     bool data_mode = false;
+    
+    // Position and addressing mode state
+    uint8_t x = 0;
+    uint8_t y = 0;
+    bool vertical = false;
+    bool extended = false;
+    
+    // Display state
+    bool powerDown = false;
+    bool blanked = true;
+    bool inverse = false;
+    uint8_t vop = 0;
+    
     PartContextType type() const override { return PartContextType::PCD8544; }
 };
 
@@ -561,6 +589,7 @@ extern "C" void spi_bus_end(void) {
 }
 
 extern "C" uint8_t spi_bus_transfer(uint8_t byte, bool data_select, bool chip_selected) {
+    static int transfer_count = 0; transfer_count++;
     if (!g_spi_selected) return 0;
     
     if (g_spi_payload_len < 256) {
@@ -1038,6 +1067,73 @@ static void spi_max7219_receive(void* ctx, uint8_t byte, bool data_select, bool 
     }
 }
 
+// PCD8544 (Nokia 5110) SPI receive - handles commands and framebuffer data
+extern "C" void spi_pcd8544_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
+    PCD8544Context* dev = static_cast<PCD8544Context*>(ctx);
+    if (!chip_selected) return;
+    
+    // Debug: count calls
+    static int call_count = 0; static int callback_count = 0; callback_count++;
+    call_count++;
+    
+    if (data_select) {
+        // Data byte - write to framebuffer at current (x, y) position
+        size_t idx = dev->y * dev->width + dev->x;
+        if (idx < dev->framebuffer.size()) {
+            dev->framebuffer[idx] = byte;
+        }
+        
+        // Advance position based on addressing mode
+        if (dev->vertical) {
+            dev->y += 1;
+            if (dev->y >= PCD8544_BANKS) {
+                dev->y = 0;
+                dev->x += 1;
+                if (dev->x >= dev->width) dev->x = 0;
+            }
+        } else {
+            dev->x += 1;
+            if (dev->x >= dev->width) {
+                dev->x = 0;
+                dev->y += 1;
+                if (dev->y >= PCD8544_BANKS) dev->y = 0;
+            }
+        }
+    } else {
+        // Command byte - handle PCD8544 command set
+        dev->reg_ptr = byte;
+        
+        // Handle commands that have immediate effect or set modes
+        if ((byte & 0xF8) == 0x20) {  // FUNCTION_SET (0x20-0x27)
+            // PD = bit 2, V = bit 1, H = bit 0
+            bool pd = (byte & 0x04) != 0;
+            bool v = (byte & 0x02) != 0;
+            bool h = (byte & 0x01) != 0;
+            dev->powerDown = pd;
+            dev->vertical = v;
+            dev->extended = h;
+        } else if ((byte & 0xF8) == 0x08) {  // DISPLAY_CONTROL (0x08-0x0F)
+            // D = bit 2, E = bit 0
+            dev->blanked = (byte & 0x04) == 0;  // D=0 means display on
+            dev->inverse = (byte & 0x01) != 0;  // E=1 means inverse
+        } else if (dev->extended) {
+            if (byte & 0x80) {  // SET_VOP (0x80-0xFF in extended mode)
+                dev->vop = byte & 0x7F;
+            }
+            // Extended mode also has bias/temp coeff commands (0x10-0x1F) - ignore for now
+        } else {
+            // Basic instruction set
+            if (byte & 0x80) {  // SET_X (0x80-0xFF)
+                dev->x = byte & 0x7F;
+                if (dev->x >= dev->width) dev->x = dev->width - 1;
+            } else if ((byte & 0xF8) == 0x40) {  // SET_Y (0x40-0x47)
+                dev->y = byte & 0x07;
+                if (dev->y >= PCD8544_BANKS) dev->y = PCD8544_BANKS - 1;
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Part Registration and Stamping
 // ============================================================================
@@ -1189,12 +1285,20 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size() * sizeof(uint16_t));
                 snap->width = ctx->width;
                 snap->height = ctx->height;
-            } else if (base->type() == PartContextType::PCD8544) {
+} else if (base->type() == PartContextType::PCD8544) {
                 PCD8544Context* ctx = static_cast<PCD8544Context*>(base);
                 snap->framebuffer = ctx->framebuffer.data();
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
+                snap->pcd8544_x = ctx->x;
+                snap->pcd8544_y = ctx->y;
+                snap->pcd8544_vertical = ctx->vertical;
+                snap->pcd8544_extended = ctx->extended;
+                snap->pcd8544_powerDown = ctx->powerDown;
+                snap->pcd8544_blanked = ctx->blanked;
+                snap->pcd8544_inverse = ctx->inverse;
+                snap->pcd8544_vop = ctx->vop;
             } else if (base->type() == PartContextType::MAX7219) {
                 MAX7219Context* ctx = static_cast<MAX7219Context*>(base);
                 for (int i = 0; i < 8; i++) snap->seven_seg_digits[i] = ctx->digit_data[i];
@@ -1674,7 +1778,7 @@ extern "C" void* part_create_display_i2c(uint32_t part_id, uint8_t address, uint
     return handle;
 }
 
-// SPI Display factory
+// SPI Display factory (ILI9341, etc.)
 extern "C" void* part_create_display_spi(uint32_t part_id, uint16_t width, uint16_t height, bool has_dc) {
     void* handle = part_register(part_id, PART_KIND_DISPLAY_SPI, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
@@ -1692,6 +1796,36 @@ extern "C" void* part_create_display_spi(uint32_t part_id, uint16_t width, uint1
     spi_part.dc_net = has_dc ? 1 : 0;
     spi_part.ctx = ctx;
     spi_part.receive = spi_ili9341_receive;
+    g_spi_parts.push_back(spi_part);
+    return handle;
+}
+
+// PCD8544 (Nokia 5110) SPI Display factory
+extern "C" void* part_create_display_pcd8544(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_DISPLAY_SPI, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    
+    PCD8544Context* ctx = new PCD8544Context();
+    ctx->width = PCD8544_WIDTH;
+    ctx->height = PCD8544_HEIGHT;
+    ctx->framebuffer.resize(PCD8544_FRAME_BYTES, 0x00);
+    ctx->x = 0;
+    ctx->y = 0;
+    ctx->powerDown = false;
+    ctx->vertical = false;
+    ctx->extended = false;
+    ctx->blanked = true;
+    ctx->inverse = false;
+    ctx->vop = 0;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    
+    SPIPartImpl spi_part;
+    spi_part.part_id = part_id;
+    spi_part.cs_net = 0;
+    spi_part.dc_net = 1;  // PCD8544 has D/C pin
+    spi_part.ctx = ctx;
+    spi_part.receive = spi_pcd8544_receive;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
