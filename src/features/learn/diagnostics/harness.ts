@@ -4,6 +4,9 @@ export function getPartDefinitionPins(sim: { bench: { parts: { id: string; defin
   return part?.definition.pins?.map((p) => p.id);
 }
 
+// Branded pin ID type for compile-time pin validation
+export type PinId<PartDef extends string> = string & { readonly __pinId: PartDef };
+
 export type CheckStatus = 'pass' | 'fail' | 'skip' | 'timeout';
 
 export interface CheckResult {
@@ -31,6 +34,8 @@ export interface HarnessSim {
    * the board's pin namespace.
    */
   partVolts?(partId: string, pinId: string): number;
+  /** Overload for branded pin IDs — provides compile-time pin validation. */
+  partVolts?<PartDef extends string>(partId: string, pinId: PinId<PartDef>): number;
   /**
    * A knob's current value, for a part that reads one.
    *
