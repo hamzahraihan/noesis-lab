@@ -30,7 +30,7 @@ import {
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
-} from '@/features/learn/diagnostics/registry';
+} from '@/features/learn/diagnostics/checks';
 
 export const CHECKS_MAP: Record<string, (build: GalleryBuild) => CheckDef[]> = {
   "alarm-clock": (build) => build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks,

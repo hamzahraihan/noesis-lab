@@ -222,7 +222,7 @@ function generateChecksMap(source: Source): string {
 import type { CheckDef } from '@/features/learn/diagnostics/harness';
 import {
   ${checkImports.join(',\n  ')},
-} from '@/features/learn/diagnostics/registry';
+} from '@/features/learn/diagnostics/checks';
 
 export const CHECKS_MAP: Record<string, (build: GalleryBuild) => CheckDef[]> = {
 ${entries}
