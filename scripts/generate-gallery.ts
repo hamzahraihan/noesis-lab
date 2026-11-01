@@ -138,7 +138,7 @@ function generateGalleryProjects(source: Source): string {
       if (build.files && build.files.length > 0) {
         fields.push(`files: ${tsValue(build.files)}`);
       }
-      if (build.libraries && build.libraries.length > 0) {
+      if (build.libraries !== undefined) {
         fields.push(`libraries: ${tsValue(build.libraries)}`);
       }
       if (build.variant !== undefined) {
