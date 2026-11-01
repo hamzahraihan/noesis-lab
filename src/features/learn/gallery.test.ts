@@ -25,7 +25,8 @@ import {
   galleryById,
   type GalleryBuild,
 } from './gallery';
-import { WIRE_FLOORS } from './generated/test-coverage';
+import { wireFloorFor } from './generated/test-coverage';
+import type { GalleryProjectId } from './gallery';
 import { TIER2_MANIFEST } from '@/features/simulation';
 import { previewBench } from './exercise-preview-data';
 import { Simulation } from '@/features/bench/simulations/simulation';
@@ -353,7 +354,7 @@ describe('the project gallery', () => {
           `${key} board`,
         ).toBe(true);
         expect(simulation.bench.wires.length, `${key} wires`).toBeGreaterThanOrEqual(
-          WIRE_FLOORS[entry.id] ?? 1,
+          wireFloorFor(entry.id as GalleryProjectId),
         );
         const real = partTerminals(simulation);
         const touched = new Set<number>();

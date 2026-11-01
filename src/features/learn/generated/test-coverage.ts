@@ -3,7 +3,7 @@ export type GalleryProjectId = typeof GALLERY_PROJECT_IDS[number];
 export const GALLERY_BUILD_LABELS = ["alarm-clock@uno","alarm-clock@uno:library","safe@uno","dashboard@uno","parking@uno","weather@uno","shift-register@uno","rfid@uno","tm1637@uno","a4988@uno","microstep@uno","pcf8574@uno","mcp23017@uno","expander-interrupt@uno","pca9685@uno","ds3231@uno","max6675@uno","mcp4725@uno","eeprom24lc256@uno","max7219@uno","nokia-5110@uno","reaction@uno","net-clock@esp32","sensor-feed@esp32","net-weather@esp32","live-weather@esp32","soil-probe@uno","instrument-bench@uno","environment-bench@uno"] as const;
 export const NETWORK_PROJECT_IDS = ["net-clock","sensor-feed","net-weather","live-weather"] as const;
 export const NEW_PART_PROJECT_IDS = ["ds3231","mcp23017","expander-interrupt","pca9685","microstep","environment-bench"] as const;
-export const WIRE_FLOORS: Record<string, number> = {
+export const WIRE_FLOORS: Record<GalleryProjectId, number> = {
   "alarm-clock": 25,
   "safe": 14,
   "dashboard": 14,
@@ -14,4 +14,8 @@ export const WIRE_FLOORS: Record<string, number> = {
   "sensor-feed": 6,
   "net-weather": 6,
   "soil-probe": 3,
-};
+} as const;
+
+export function wireFloorFor(projectId: GalleryProjectId): number {
+  return WIRE_FLOORS[projectId] ?? 1;
+}

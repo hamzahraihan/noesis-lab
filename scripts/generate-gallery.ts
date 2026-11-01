@@ -185,9 +185,10 @@ ${builds.join(',\n')}
   }`;
   });
   return `import type { GalleryProject } from '@/features/learn/gallery';
+import type { GalleryProjectId } from './test-coverage';
 import { CIRCUITS } from './circuits-registry';
 
-export const GALLERY: readonly GalleryProject[] = [
+export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId })[] = [
 ${projectLiterals.join(',\n')}
 ];
 `;
@@ -232,13 +233,13 @@ function generateChecksMap(source: Source): string {
       return `  ${JSON.stringify(project.id)}: ${expr},`;
     })
     .join('\n');
-  return `import type { GalleryBuild } from '@/features/learn/gallery';
+  return `import type { GalleryBuild, GalleryProjectId } from '@/features/learn/gallery';
 import type { CheckDef } from '@/features/learn/diagnostics/harness';
 import {
   ${checkImports.join(',\n  ')},
 } from '@/features/learn/diagnostics/checks';
 
-export const CHECKS_MAP: Record<string, (build: GalleryBuild) => CheckDef[]> = {
+export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => CheckDef[]> = {
 ${entries}
 };
 `;
@@ -258,12 +259,17 @@ function generateTestCoverage(source: Source): string {
     .map(([key, value]) => `  ${JSON.stringify(key)}: ${value},`)
     .join('\n');
   return `export const GALLERY_PROJECT_IDS = ${JSON.stringify(ids)} as const;
+export type GalleryProjectId = typeof GALLERY_PROJECT_IDS[number];
 export const GALLERY_BUILD_LABELS = ${JSON.stringify(labels)} as const;
 export const NETWORK_PROJECT_IDS = ${JSON.stringify(networkIds)} as const;
 export const NEW_PART_PROJECT_IDS = ${JSON.stringify(NEW_PART_PROJECT_IDS)} as const;
-export const WIRE_FLOORS: Record<string, number> = {
+export const WIRE_FLOORS: Record<GalleryProjectId, number> = {
 ${wireFloorsEntries}
-};
+} as const;
+
+export function wireFloorFor(projectId: GalleryProjectId): number {
+  return WIRE_FLOORS[projectId] ?? 1;
+}
 `;
 }
 
