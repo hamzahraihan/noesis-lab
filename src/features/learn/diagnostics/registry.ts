@@ -204,7 +204,7 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
  * solver bias) instead of the leg's Wokwi `colonValue` sampling.
  * ------------------------------------------------------------------ */
 
-const alarmRawChecks: CheckDef[] = [
+export const alarmRawChecks: CheckDef[] = [
   {
     name: 'multiplexes digits, blinks colon, rests released and silent',
     run: (sim) => {
@@ -319,7 +319,7 @@ const alarmRawChecks: CheckDef[] = [
  * glass (the bus log has no `HarnessSim` accessor).
  * ------------------------------------------------------------------ */
 
-const alarmLibraryChecks: CheckDef[] = [
+export const alarmLibraryChecks: CheckDef[] = [
   {
     name: 'idles at 15:00',
     run: (sim) => {
@@ -490,7 +490,7 @@ function pressAndSettle(sim: HarnessSim, index: number): void {
   for (let frame = 0; frame < 4; frame++) sim.tick(0.05);
 }
 
-const safeChecks: CheckDef[] = [
+export const safeChecks: CheckDef[] = [
   {
     name: 'starts locked',
     run: (sim) => {
@@ -552,7 +552,7 @@ const safeChecks: CheckDef[] = [
  * the LED bar has no `HarnessSim` accessor. Verified live.
  * ------------------------------------------------------------------ */
 
-const dashboardChecks: CheckDef[] = [
+export const dashboardChecks: CheckDef[] = [
   {
     name: 'reports knob and horn on serial',
     run: (sim) => {
@@ -589,7 +589,7 @@ const dashboardChecks: CheckDef[] = [
  * low. Pin levels, not brightness. Verified live.
  * ------------------------------------------------------------------ */
 
-const parkingChecks: CheckDef[] = [
+export const parkingChecks: CheckDef[] = [
   {
     name: 'reports centimetres on serial',
     run: (sim) => {
@@ -630,7 +630,7 @@ const parkingChecks: CheckDef[] = [
  * `t 25 C rh 50 %` at the default knobs. Verified live.
  * ------------------------------------------------------------------ */
 
-const weatherChecks: CheckDef[] = [
+export const weatherChecks: CheckDef[] = [
   {
     name: 'logs temperature on serial',
     run: (sim) => {
@@ -668,7 +668,7 @@ const weatherChecks: CheckDef[] = [
  * edge holds 3 frames past the 25 ms debounce. Verified live.
  * ------------------------------------------------------------------ */
 
-const reactionChecks: CheckDef[] = [
+export const reactionChecks: CheckDef[] = [
   {
     name: 'prompts press to arm',
     run: (sim) => {
@@ -735,7 +735,7 @@ const reactionChecks: CheckDef[] = [
  * it kept asking rather than reading once.
  * ------------------------------------------------------------------ */
 
-const netClockChecks: CheckDef[] = [
+export const netClockChecks: CheckDef[] = [
   {
     name: 'joins the bench network',
     run: (sim) => {
@@ -787,7 +787,7 @@ const netClockChecks: CheckDef[] = [
  * reading rather than the retained first one repeated.
  * ------------------------------------------------------------------ */
 
-const sensorFeedChecks: CheckDef[] = [
+export const sensorFeedChecks: CheckDef[] = [
   {
     name: 'subscribes to the sensor',
     run: (sim) => {
@@ -848,7 +848,7 @@ const sensorFeedChecks: CheckDef[] = [
  * if the loop resets and moves on after each answer.
  * ------------------------------------------------------------------ */
 
-const netWeatherChecks: CheckDef[] = [
+export const netWeatherChecks: CheckDef[] = [
   {
     name: 'joins the bench network',
     run: (sim) => {
@@ -900,7 +900,7 @@ const netWeatherChecks: CheckDef[] = [
  * and a check that needed it would fail whenever the internet does.
  * ------------------------------------------------------------------ */
 
-const liveWeatherChecks: CheckDef[] = [
+export const liveWeatherChecks: CheckDef[] = [
   {
     name: 'joins the bench network',
     run: (sim) => {
@@ -939,7 +939,7 @@ const liveWeatherChecks: CheckDef[] = [
  * the knob turn itself stays in the gallery leg, which has the bench.
  * ------------------------------------------------------------------ */
 
-const soilProbeChecks: CheckDef[] = [
+export const soilProbeChecks: CheckDef[] = [
   {
     name: 'reads the scripted probe on A0',
     run: async (sim) => {
@@ -968,7 +968,7 @@ const soilProbeChecks: CheckDef[] = [
  * dialled in.
  * ------------------------------------------------------------------ */
 
-const instrumentBenchChecks: CheckDef[] = [
+export const instrumentBenchChecks: CheckDef[] = [
   {
     name: 'reads the barometer, the monitor and the converter',
     run: (sim) => {
@@ -1007,7 +1007,7 @@ const instrumentBenchChecks: CheckDef[] = [
  * two CRC-protected words all have to read back at their knob defaults.
  * ------------------------------------------------------------------ */
 
-const environmentBenchChecks: CheckDef[] = [
+export const environmentBenchChecks: CheckDef[] = [
   {
     name: 'reads the light, the thermometer and the humidity sensor',
     run: (sim) => {
@@ -1045,7 +1045,7 @@ const environmentBenchChecks: CheckDef[] = [
  * time, because the chip holds one byte and not eight.
  * ------------------------------------------------------------------ */
 
-function shiftRegisterChecks(build: GalleryBuild): CheckDef[] {
+export function shiftRegisterChecks(build: GalleryBuild): CheckDef[] {
   const register = build.circuit.parts?.find((part) => part.type === 'shift595')?.id;
   return [
     {
@@ -1099,7 +1099,7 @@ function shiftRegisterChecks(build: GalleryBuild): CheckDef[] {
  * whole claim: the frame the sketch writes is the frame the glass shows.
  * ------------------------------------------------------------------ */
 
-function max7219Checks(build: GalleryBuild): CheckDef[] {
+export function max7219Checks(build: GalleryBuild): CheckDef[] {
   const matrix = build.circuit.parts?.find((part) => part.type === 'max7219-matrix')?.id;
   return [
     {
@@ -1150,7 +1150,7 @@ function max7219Checks(build: GalleryBuild): CheckDef[] {
  * is lit on: a still wave has one of them, a travelling one has many.
  * ------------------------------------------------------------------ */
 
-function nokia5110Checks(build: GalleryBuild): CheckDef[] {
+export function nokia5110Checks(build: GalleryBuild): CheckDef[] {
   const panel = build.circuit.parts?.find((part) => part.type === 'nokia-5110')?.id;
   return [
     {
@@ -1217,7 +1217,7 @@ function nokia5110Checks(build: GalleryBuild): CheckDef[] {
  * chip's states -- version, an empty field, a card, an empty field again.
  * ------------------------------------------------------------------ */
 
-const rfidChecks: CheckDef[] = [
+export const rfidChecks: CheckDef[] = [
   {
     name: 'the reader reports its version, times out, and sees a card',
     run: (sim) => {
@@ -1262,7 +1262,7 @@ const rfidChecks: CheckDef[] = [
  * reported: the glass and the log have to agree.
  * ------------------------------------------------------------------ */
 
-function tm1637Checks(build: GalleryBuild): CheckDef[] {
+export function tm1637Checks(build: GalleryBuild): CheckDef[] {
   const module = build.circuit.parts?.find((part) => part.type === 'tm1637')?.id;
   return [
     {
@@ -1311,7 +1311,7 @@ function tm1637Checks(build: GalleryBuild): CheckDef[] {
  * sketch asked for.
  * ------------------------------------------------------------------ */
 
-function a4988Checks(build: GalleryBuild): CheckDef[] {
+export function a4988Checks(build: GalleryBuild): CheckDef[] {
   const motor = build.circuit.parts?.find((part) => part.type === 'stepper-motor')?.id;
   const supply = build.circuit.parts?.find((part) => part.type === 'power-supply')?.id;
   return [
@@ -1395,7 +1395,7 @@ function a4988Checks(build: GalleryBuild): CheckDef[] {
  * the resolution and the average the bridge presents to the winding.
  * ------------------------------------------------------------------ */
 
-function microstepChecks(build: GalleryBuild): CheckDef[] {
+export function microstepChecks(build: GalleryBuild): CheckDef[] {
   const motor = build.circuit.parts?.find((part) => part.type === 'stepper-motor')?.id;
   const supply = build.circuit.parts?.find((part) => part.type === 'power-supply')?.id;
   return [
@@ -1473,7 +1473,7 @@ function microstepChecks(build: GalleryBuild): CheckDef[] {
  * matters is that the byte the sketch wrote is the byte the lights show.
  * ------------------------------------------------------------------ */
 
-function pcf8574Checks(build: GalleryBuild): CheckDef[] {
+export function pcf8574Checks(build: GalleryBuild): CheckDef[] {
   const leds =
     build.circuit.parts?.filter((part) => part.type === 'led-red').map((part) => part.id) ?? [];
   return [
@@ -1522,7 +1522,7 @@ function pcf8574Checks(build: GalleryBuild): CheckDef[] {
  * printed -- sixteen bits, low byte on port A and high byte on port B.
  * ------------------------------------------------------------------ */
 
-function mcp23017Checks(build: GalleryBuild): CheckDef[] {
+export function mcp23017Checks(build: GalleryBuild): CheckDef[] {
   const leds =
     build.circuit.parts?.filter((part) => part.type === 'led-red').map((part) => part.id) ?? [];
   return [
@@ -1573,7 +1573,7 @@ function mcp23017Checks(build: GalleryBuild): CheckDef[] {
  * precisely so setup is not reported as a press, which is the first check.
  * ------------------------------------------------------------------ */
 
-function expanderInterruptChecks(build: GalleryBuild): CheckDef[] {
+export function expanderInterruptChecks(build: GalleryBuild): CheckDef[] {
   const leds =
     build.circuit.parts?.filter((part) => part.type === 'led-red').map((part) => part.id) ?? [];
   const lit = (sim: HarnessSim): boolean =>
@@ -1635,7 +1635,7 @@ function expanderInterruptChecks(build: GalleryBuild): CheckDef[] {
  * the high part; the tolerance covers sampling on a count boundary.
  * ------------------------------------------------------------------ */
 
-function pca9685Checks(build: GalleryBuild): CheckDef[] {
+export function pca9685Checks(build: GalleryBuild): CheckDef[] {
   const leds =
     build.circuit.parts?.filter((part) => part.type === 'led-red').map((part) => part.id) ?? [];
   return [
@@ -1687,7 +1687,7 @@ function pca9685Checks(build: GalleryBuild): CheckDef[] {
  * temperature it read back, and the light toggling with the seconds.
  * ------------------------------------------------------------------ */
 
-function ds3231Checks(build: GalleryBuild): CheckDef[] {
+export function ds3231Checks(build: GalleryBuild): CheckDef[] {
   const clock = build.circuit.parts?.find((part) => part.type === 'ds3231-rtc')?.id;
   const led = build.circuit.parts?.find((part) => part.type === 'led-red')?.id;
   return [
@@ -1743,7 +1743,7 @@ function ds3231Checks(build: GalleryBuild): CheckDef[] {
  * all.
  * ------------------------------------------------------------------ */
 
-function max6675Checks(build: GalleryBuild): CheckDef[] {
+export function max6675Checks(build: GalleryBuild): CheckDef[] {
   const module = build.circuit.parts?.find((part) => part.type === 'max6675')?.id;
   return [
     {
@@ -1785,7 +1785,7 @@ function max6675Checks(build: GalleryBuild): CheckDef[] {
  * the output itself.
  * ------------------------------------------------------------------ */
 
-function mcp4725Checks(build: GalleryBuild): CheckDef[] {
+export function mcp4725Checks(build: GalleryBuild): CheckDef[] {
   const converter = build.circuit.parts?.find((part) => part.type === 'mcp4725')?.id;
   return [
     {
@@ -1841,7 +1841,7 @@ function mcp4725Checks(build: GalleryBuild): CheckDef[] {
  * by one every time is the proof that the memory kept it.
  * ------------------------------------------------------------------ */
 
-function eepromChecks(): CheckDef[] {
+export function eepromChecks(): CheckDef[] {
   return [
     {
       name: 'the memory keeps the count the sketch wrote',
