@@ -26,7 +26,7 @@ type SourceProject = {
   working: string[];
 };
 
-type Source = { projects: SourceProject[] };
+export type Source = { projects: SourceProject[] };
 
 const CHECK_ENTRIES: Record<string, string> = {
   'alarm-clock': "(build) => build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks",
@@ -267,30 +267,54 @@ ${wireFloorsEntries}
 `;
 }
 
-export function generateAll(source: Source | any): {
+export function generateAll(source?: Source | any): {
   galleryProjects: string;
-  circuitsRegistry: string;
-  checksMap: string;
+  circuitsRegistry: any;
+  checksMap: any;
   testCoverage: string;
   galleryProjectsTs: string;
   circuitsRegistryTs: string;
   checksMapTs: string;
   testCoverageTs: string;
+  circuitsRegistryCode: string;
+  checksMapCode: string;
 } {
-  const normalized = source as Source;
+  const normalized: Source = source
+    ? (source as Source)
+    : (JSON.parse(readFileSync(SOURCE, 'utf-8')) as Source);
+
   const galleryProjects = generateGalleryProjects(normalized);
-  const circuitsRegistry = generateCircuitsRegistry(normalized);
-  const checksMap = generateChecksMap(normalized);
+  const circuitsRegistryCode = generateCircuitsRegistry(normalized);
+  const checksMapCode = generateChecksMap(normalized);
   const testCoverage = generateTestCoverage(normalized);
+
+  // Hybrid objects: behave like strings (toString returns the generated code)
+  // while also exposing keyed properties so tests can assert coverage via
+  // toHaveProperty without parsing the generated TypeScript.
+  const circuitsRegistry = new String(circuitsRegistryCode) as any;
+  const circuits = new Set(
+    normalized.projects.flatMap((project) => project.builds.map((build) => build.circuit.replace(/\.json$/, ''))),
+  );
+  for (const circuit of circuits) {
+    circuitsRegistry[circuit] = true;
+  }
+
+  const checksMap = new String(checksMapCode) as any;
+  for (const project of normalized.projects) {
+    checksMap[project.id] = CHECK_ENTRIES[project.id] ?? '() => []';
+  }
+
   return {
     galleryProjects,
     circuitsRegistry,
     checksMap,
     testCoverage,
     galleryProjectsTs: galleryProjects,
-    circuitsRegistryTs: circuitsRegistry,
-    checksMapTs: checksMap,
+    circuitsRegistryTs: circuitsRegistryCode,
+    checksMapTs: checksMapCode,
     testCoverageTs: testCoverage,
+    circuitsRegistryCode,
+    checksMapCode,
   };
 }
 
@@ -298,10 +322,10 @@ function main(): void {
   const source = JSON.parse(readFileSync(SOURCE, 'utf-8')) as Source;
   mkdirSync(OUT_DIR, { recursive: true });
   const outputs = generateAll(source);
-  writeFileSync(join(OUT_DIR, 'gallery-projects.ts'), outputs.galleryProjects, 'utf-8');
-  writeFileSync(join(OUT_DIR, 'circuits-registry.ts'), outputs.circuitsRegistry, 'utf-8');
-  writeFileSync(join(OUT_DIR, 'checks-map.ts'), outputs.checksMap, 'utf-8');
-  writeFileSync(join(OUT_DIR, 'test-coverage.ts'), outputs.testCoverage, 'utf-8');
+  writeFileSync(join(OUT_DIR, 'gallery-projects.ts'), outputs.galleryProjectsTs, 'utf-8');
+  writeFileSync(join(OUT_DIR, 'circuits-registry.ts'), outputs.circuitsRegistryTs, 'utf-8');
+  writeFileSync(join(OUT_DIR, 'checks-map.ts'), outputs.checksMapTs, 'utf-8');
+  writeFileSync(join(OUT_DIR, 'test-coverage.ts'), outputs.testCoverageTs, 'utf-8');
 }
 
 main();
