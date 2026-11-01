@@ -1,7 +1,8 @@
 import type { GalleryProject } from '@/features/learn/gallery';
+import type { GalleryProjectId } from './test-coverage';
 import { CIRCUITS } from './circuits-registry';
 
-export const GALLERY: readonly GalleryProject[] = [
+export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId })[] = [
   {
     id: "alarm-clock",
     title: "Alarm Clock with RTC",

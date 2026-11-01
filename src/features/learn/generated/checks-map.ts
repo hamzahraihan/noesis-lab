@@ -62,6 +62,3 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "instrument-bench": () => instrumentBenchChecks,
   "environment-bench": () => environmentBenchChecks,
 };
-
-// Exhaustiveness check: ensures CHECKS_MAP has an entry for every GalleryProjectId
-const _exhaustiveCheck: Record<GalleryProjectId, typeof CHECKS_MAP[GalleryProjectId]> = CHECKS_MAP;
