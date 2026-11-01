@@ -40,6 +40,7 @@ import {
   type ProbeSim,
 } from './probes';
 import type { CheckDef, CheckResult, CheckStatus, CountingSim, HarnessSim } from './harness';
+import { getPartDefinitionPins } from './harness';
 import { CHECKS_MAP } from '../generated/checks-map';
 import type { GalleryProjectId } from '../gallery';
 
@@ -104,6 +105,16 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
       scriptedReady: () => sim.scriptedReady(),
       readGpio: (gpio: number) => sim.engine.readDigital(gpio),
       partVolts: (partId: string, pinId: string) => {
+        const validPins = getPartDefinitionPins(sim, partId);
+        if (validPins === undefined) {
+          throw new Error(`Part '${partId}' not found`);
+        }
+        if (!validPins.includes(pinId)) {
+          throw new Error(
+            `Pin '${pinId}' not found in part definition for '${partId}'. ` +
+            `Valid pins: ${validPins.join(', ')}`
+          );
+        }
         const net = sim.engine.currentNetlist.pinNode.get(`${partId}:${pinId}`);
         return net === undefined ? 0 : sim.engine.voltageOfNet(net);
       },

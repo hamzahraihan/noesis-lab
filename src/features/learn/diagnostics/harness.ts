@@ -1,3 +1,9 @@
+// Helper to get valid pin IDs from a part's definition
+export function getPartDefinitionPins(sim: { bench: { parts: { id: string; definition: { pins?: { id: string }[] } }[] } }, partId: string): readonly string[] | undefined {
+  const part = sim.bench.parts.find((p) => p.id === partId);
+  return part?.definition.pins?.map((p) => p.id);
+}
+
 export type CheckStatus = 'pass' | 'fail' | 'skip' | 'timeout';
 
 export interface CheckResult {
