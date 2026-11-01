@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -103,7 +103,12 @@ function safeIdent(name: string): string {
 }
 
 function generateCircuitsRegistry(source: Source): string {
-  const circuits = [...new Set(source.projects.flatMap((project) => project.builds.map((build) => build.circuit.replace(/\.json$/, ''))))].sort();
+  const circuitsDir = join(ROOT, 'src', 'features', 'learn', 'circuits');
+  const onDisk = readdirSync(circuitsDir)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.slice(0, -'.json'.length));
+  const fromGallery = source.projects.flatMap((project) => project.builds.map((build) => build.circuit.replace(/\.json$/, '')));
+  const circuits = [...new Set([...onDisk, ...fromGallery])].sort();
   const imports = circuits
     .map((circuit) => {
       const ident = `circuit${safeIdent(circuit).charAt(0).toUpperCase()}${safeIdent(circuit).slice(1)}`;

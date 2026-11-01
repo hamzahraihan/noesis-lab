@@ -1,6 +1,17 @@
 import { parseCircuit } from '@/features/simulation';
 import type { CircuitDocument } from '@/features/simulation';
 
+import circuit_01 from '../circuits/0.1.json';
+import circuit_11 from '../circuits/1.1.json';
+import circuit_12 from '../circuits/1.2.json';
+import circuit_21 from '../circuits/2.1.json';
+import circuit_22 from '../circuits/2.2.json';
+import circuit_31 from '../circuits/3.1.json';
+import circuit_32 from '../circuits/3.2.json';
+import circuit_41 from '../circuits/4.1.json';
+import circuit_42 from '../circuits/4.2.json';
+import circuit_51 from '../circuits/5.1.json';
+import circuit_52 from '../circuits/5.2.json';
 import circuitA4988 from '../circuits/a4988.json';
 import circuitAlarmClock from '../circuits/alarm-clock.json';
 import circuitDashboard from '../circuits/dashboard.json';
@@ -27,6 +38,17 @@ import circuitTm1637 from '../circuits/tm1637.json';
 import circuitWeather from '../circuits/weather.json';
 
 export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
+  "0.1": parseCircuit(circuit_01, "0.1"),
+  "1.1": parseCircuit(circuit_11, "1.1"),
+  "1.2": parseCircuit(circuit_12, "1.2"),
+  "2.1": parseCircuit(circuit_21, "2.1"),
+  "2.2": parseCircuit(circuit_22, "2.2"),
+  "3.1": parseCircuit(circuit_31, "3.1"),
+  "3.2": parseCircuit(circuit_32, "3.2"),
+  "4.1": parseCircuit(circuit_41, "4.1"),
+  "4.2": parseCircuit(circuit_42, "4.2"),
+  "5.1": parseCircuit(circuit_51, "5.1"),
+  "5.2": parseCircuit(circuit_52, "5.2"),
   "a4988": parseCircuit(circuitA4988, "a4988"),
   "alarm-clock": parseCircuit(circuitAlarmClock, "alarm-clock"),
   "dashboard": parseCircuit(circuitDashboard, "dashboard"),
