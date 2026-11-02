@@ -33,13 +33,22 @@ export const ADS1115_CHANNEL_KNOBS: readonly KnobSpec[] = [
 ];
 
 /**
- * The chip's internal reference, in volts.
+ * The chip's full-scale ranges, in volts, indexed by PGA value (bits 11-9).
  *
- * Four point zero nine six is what the reference is, and the gain setting
- * divides it: the widest range is the whole reference either side of zero,
- * and the narrowest is a sixteenth of it.
+ * Per ADS1115 datasheet Table 1: the PGA setting divides the internal
+ * 6.144 V reference. The widest range is ±6.144 V (PGA=0), the narrowest
+ * is ±0.256 V (PGA=5). PGA values 6 and 7 also select ±0.256 V.
  */
-const REFERENCE_VOLTS = 4.096;
+const FSR_BY_PGA: readonly number[] = [
+  6.144, // PGA = 000: ±6.144 V
+  4.096, // PGA = 001: ±4.096 V
+  2.048, // PGA = 010: ±2.048 V
+  1.024, // PGA = 011: ±1.024 V
+  0.512, // PGA = 100: ±0.512 V
+  0.256, // PGA = 101: ±0.256 V
+  0.256, // PGA = 110: ±0.256 V
+  0.256, // PGA = 111: ±0.256 V
+];
 
 /** The registers, in the order the datasheet numbers them. */
 const CONVERSION = 0x00;
@@ -110,7 +119,7 @@ export class Ads1115 implements I2cDevice {
     const config = this.readWord(CONFIG);
     // PGA is in bits 11-9 of the config register (per ADS1115 datasheet)
     const pga = (config >> 9) & 0x07;
-    const range = REFERENCE_VOLTS / 2 ** pga;
+    const range = FSR_BY_PGA[pga];
     const volts = this.selectedVolts((config >> 12) & 0x07);
     const counts = Math.round((volts / range) * 32767);
     this.writeWord(CONVERSION, Math.max(-32768, Math.min(32767, counts)));

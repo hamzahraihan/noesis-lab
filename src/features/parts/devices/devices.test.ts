@@ -1024,15 +1024,14 @@ describe('a converter on the bench', () => {
     dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[0], 1);
     engine.step(0.05);
 
-    // Single-shot on channel zero, with the gain that gives a volt a
-    // thousand counts of headroom.
+    // Single-shot on channel zero (AIN0), PGA=3 (±1.024 V): 1 V is most of the scale.
     bus.beginTransmission(0x48);
-    bus.write(0x01);
-    bus.write(0xc2);
-    bus.write(0x02);
+    bus.write(0x01); // config register
+    bus.write(0xc7); // OS=1, MUX=4 (AIN0), PGA=3 (±1.024 V), MODE=1 (single-shot)
+    bus.write(0x02); // DR=8 SPS, default COMP
     bus.endTransmission();
 
-    // A volt against a range of 1.024 volts, which is most of the scale.
+    // A volt against a range of 1.024 volts.
     expect(readConversion(bus)).toBe(Math.round((1 / 1.024) * 32767));
   });
 
@@ -1042,11 +1041,11 @@ describe('a converter on the bench', () => {
     dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[1], 0.5);
     engine.step(0.05);
 
-    // The difference of the first two channels, on the widest range.
+    // Differential AIN0-AIN1, PGA=1 (±4.096 V).
     bus.beginTransmission(0x48);
-    bus.write(0x01);
-    bus.write(0x80);
-    bus.write(0x00);
+    bus.write(0x01); // config register
+    bus.write(0x83); // OS=1, MUX=0 (AIN0-AIN1), PGA=1 (±4.096 V), MODE=1
+    bus.write(0x02); // DR=8 SPS, default COMP
     bus.endTransmission();
 
     // 1.5 volts against a range of 4.096 volts.
@@ -1058,19 +1057,19 @@ describe('a converter on the bench', () => {
     dynamicState.setKnob(device.id, ADS1115_CHANNEL_KNOBS[0], 0.1);
     engine.step(0.05);
 
-    // The widest range first: a tenth of a volt out of four.
+    // Widest range used here: PGA=1 (±4.096 V), single-shot on AIN0.
     bus.beginTransmission(0x48);
     bus.write(0x01);
-    bus.write(0xc0);
-    bus.write(0x00);
+    bus.write(0xc3); // OS=1, MUX=4 (AIN0), PGA=1 (±4.096 V), MODE=1
+    bus.write(0x02);
     bus.endTransmission();
     const wide = readConversion(bus);
 
-    // Then the narrowest, where the same voltage is most of the range.
+    // Narrowest range: PGA=5 (±0.256 V), same channel.
     bus.beginTransmission(0x48);
     bus.write(0x01);
-    bus.write(0xc0);
-    bus.write(0x04);
+    bus.write(0xcb); // OS=1, MUX=4 (AIN0), PGA=5 (±0.256 V), MODE=1
+    bus.write(0x02);
     bus.endTransmission();
     const narrow = readConversion(bus);
 
