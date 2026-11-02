@@ -32,15 +32,18 @@ describe('the PCF8574', () => {
     expect(expander.read(4)).toEqual([0b1010_1010, 0b1010_1010, 0b1010_1010, 0b1010_1010]);
   });
 
-  it('refuses a write to the input register, the way the chip does', () => {
+  it('accepts every data byte, because the chip has no register pointer', () => {
     const expander = new Pcf8574();
     expander.receive(0x00, true);
     expander.receive(0b1111_0000, false);
     expander.receive(0x01, true);
-    expect(expander.receive(0b0000_1111, false)).toBe(false);
-    // The refused write left the ports where they were.
-    expect(expander.output(4)).toBe(true);
-    expect(expander.output(0)).toBe(false);
+    // The PCF8574 has no register pointer: every byte after the address
+    // is treated as output register data. There is no "input register"
+    // to write to, so the write is accepted and updates the latch.
+    expect(expander.receive(0b0000_1111, false)).toBe(true);
+    // The ports now reflect the last byte written.
+    expect(expander.output(4)).toBe(false);
+    expect(expander.output(0)).toBe(true);
   });
 
   it('answers on the address the module is strapped to', () => {
