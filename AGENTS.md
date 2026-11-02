@@ -3,21 +3,33 @@
 Working notes for this repo. Everything here is something the code does not tell
 you on its own, or costs an hour to rediscover.
 
-## A gallery project touches five places, not one
+## A gallery project starts in one file, not five
 
-Adding a `GalleryProject` is never a single-file change: a circuit document in
-`src/features/learn/circuits/` plus its registration in `circuits/index.ts`, the
-`GALLERY` entry with its sketch, a live bench leg in `gallery.test.ts`, and a
-checks function in `diagnostics/registry.ts` wired into `checksFor`.
+Add the project to `src/features/learn/gallery-projects.json` and run
+`npm run generate:gallery`. That writes `src/features/learn/generated/` —
+the `GALLERY` entries, the circuit registry, the checks map, and the test
+coverage list — so the five hand-synced files this used to need
+(`gallery.ts`, `circuits/index.ts`, `diagnostics/registry.ts`,
+`gallery.test.ts`, `diagnostics/registry.test.ts`) can no longer disagree.
 
-The diagnostics entry is not optional: `diagnostics/registry.test.ts` asserts
-every gallery build has at least one check, so a project without one fails the
-suite even though the project itself runs. That same file also has to list the
-project id before its checks are executed rather than merely counted.
+What the generator cannot invent is the content: the circuit document under
+`src/features/learn/circuits/`, the sketch, and a checks function. A build with
+no checks is still a failure — `diagnostics/registry.test.ts` asserts it.
 
-Counts are hand-maintained in `docs/parity-scorecard.md` (gallery projects,
-committed circuits) and the part paragraphs in `docs/PLAN.md`; a new project or
-part will leave them stale unless you update them.
+Counts in `docs/parity-scorecard.md`, `docs/PLAN.md`, and `PRODUCT.md` are
+`<!-- COUNT:... -->` placeholders. Run `npm run update:docs-counts` after a
+change that moves one; CI re-runs it and fails on any diff.
+
+## Rules and what enforces them
+
+| Rule | Enforcement |
+| --- | --- |
+| A new gallery project ships a circuit, a sketch, and at least one check | `npm run generate:gallery` builds the registries; `diagnostics/registry.test.ts` fails a build with no check |
+| Pin lookups use part-definition ids, never circuit wire aliases | `partVolts` throws on an unknown pin; `harness.test.ts` covers the `A` vs `anode` case |
+| Type lists have one source | Generated files and `keyof typeof` / `Record<...>`; `tsc -b` fails on a mismatch |
+| The Wasm ABI stays in step with TypeScript | `native/abi/part-state.schema.json` generates the C header and the TS types; `npm run generate:abi` runs in `prepare` |
+| Docs counts match the source | `<!-- COUNT:... -->` placeholders; CI runs `update:docs-counts` and fails on a diff |
+| Committed code is lint-clean | Husky `pre-commit` → `lint-staged` → `oxlint --fix`; CI runs `npm run lint` |
 
 ## The diagnostics harness reads pins by definition id
 
@@ -50,8 +62,12 @@ A real wasm build needs emsdk; `scripts/build-parts-wasm.mjs` embeds the wasm
 filename in the glue code, so the published `parts.js` only loads if the build
 rewrites it (it does).
 
-`npm run format:check` fails across the repo on CRLF line endings and is not
-part of `npm run check`. It is not a gate; do not reformat files to satisfy it.
+`npm run format:check` is not part of `npm run check` and is not a gate: the
+generated files (`src/features/learn/generated/`, `src/features/parts/wasm/generated/`)
+are not formatter-canonical, so the check can never pass repo-wide. Never run
+`npm run format` over the tree to "fix" it — that rewrites hundreds of unrelated
+files. `.gitattributes` pins `eol=lf`, so CRLF is no longer the reason it fails.
+The pre-commit hook runs `oxlint --fix` only, for the same reason.
 
 Routing is hash-based (`/#/boards`, `/#/diagnostics`). `src/main.tsx` folds the
 clean top-level paths into the hash before the router mounts, but a static host

@@ -1,8 +1,25 @@
+# Normalise line endings so Windows checkouts and CI agree.
+#
+# Without this, a file edited on Windows is committed with CRLF and CI (Linux)
+# sees a whole-file diff. That is the source of the "format:check fails on
+# CRLF" note this repo used to carry.
+* text=auto eol=lf
+
+# Bench presets are compared byte-for-byte with the parser's canonical text.
+src/features/learn/benches/*.json text eol=lf
+
+# Binary files: never text-normalise these.
 *.hex binary
 *.uf2 binary
 *.wasm binary
 *.elf binary
 *.bin binary
-
-# Bench presets are compared byte-for-byte with the parser's canonical text.
-src/features/learn/benches/*.json text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
