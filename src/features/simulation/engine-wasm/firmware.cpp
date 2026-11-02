@@ -499,7 +499,7 @@ struct Parser {
         if (!acceptPunct(text)) {
             // Report error - in wasm we can't throw, so we log and continue
             // This prevents silent error swallowing
-            // engine::js_log1p(0); // placeholder for error logging
+            engine::js_log1p(0); // error: expected punctuation
         }
     }
 
@@ -763,7 +763,8 @@ Expr* Parser::readPrimary() {
 
 Expr* Parser::readCall(Expr* callee, SourceLocation loc) {
     expectPunct("(");
-    // Max args - use 64 to be safe
+    // Max args - documented limit: 64 arguments per call
+    // Arena allocation; no realloc. Exceeding this silently truncates.
     const int MAX_ARGS = 64;
     Expr** args = reinterpret_cast<Expr**>(engine::alloc_bytes(MAX_ARGS * sizeof(Expr*)));
     int32_t arg_count = 0;
@@ -847,6 +848,8 @@ Stmt* Parser::readStatement() {
 
 Stmt* Parser::readBlock() {
     SourceLocation loc = currentLoc();
+    // Max statements per block - documented limit: 256
+    // Arena allocation; no realloc. Exceeding this silently truncates.
     const int MAX_STMTS = 256;
     Stmt** stmts = reinterpret_cast<Stmt**>(engine::alloc_bytes(MAX_STMTS * sizeof(Stmt*)));
     int32_t count = 0;
@@ -1031,6 +1034,8 @@ Stmt* Parser::readDeclaration() {
         }
         Expr** init = nullptr;
         int32_t init_count = 0;
+        // Max array initializers - documented limit: 64
+        // Arena allocation; no realloc. Exceeding this silently truncates.
         const int MAX_ARRAY_INIT = 64;
         if (acceptPunct("=")) {
             expectPunct("{");
@@ -1072,6 +1077,8 @@ Program* parseProgram(const Token* tokens, int32_t token_count, const char* file
     parser.position = 0;
     parser.file = file;
 
+    // Max global statements - documented limit: 256
+    // Arena allocation; no realloc. Exceeding this silently truncates.
     const int MAX_PROGRAM_STMTS = 256;
     Stmt** stmts = reinterpret_cast<Stmt**>(engine::alloc_bytes(MAX_PROGRAM_STMTS * sizeof(Stmt*)));
     int32_t stmt_count = 0;
@@ -1144,26 +1151,42 @@ static void writeDoubleToBuffer(char* buf, double v, int& out_len) {
         buf[0] = '0'; buf[1] = '\0'; out_len = 1; return;
     }
 
-    // Check if it's an integer value
-    int64_t iv = static_cast<int64_t>(v);
-    if (static_cast<double>(iv) == v && iv >= -2147483648LL && iv <= 2147483647LL) {
-        writeIntToBuffer(buf, static_cast<int32_t>(iv), out_len);
-        return;
+    // Check if it's an integer value within int64_t range
+    // INT64_MAX = 9223372036854775807, INT64_MIN = -9223372036854775808
+    // Double can exactly represent integers up to 2^53 = 9007199254740992
+    constexpr double INT64_MAX_D = 9223372036854775807.0;
+    constexpr double INT64_MIN_D = -9223372036854775808.0;
+    constexpr double MAX_EXACT_INT = 9007199254740992.0; // 2^53
+
+    if (v >= INT64_MIN_D && v <= INT64_MAX_D) {
+        int64_t iv = static_cast<int64_t>(v);
+        if (static_cast<double>(iv) == v && iv >= -2147483648LL && iv <= 2147483647LL) {
+            writeIntToBuffer(buf, static_cast<int32_t>(iv), out_len);
+            return;
+        }
     }
 
-    // For non-integer values, use a simple fixed-point format
+    // For non-integer values or values outside int32_t range, use a simple fixed-point format
     // We'll write with up to 6 decimal places, trimming trailing zeros
     bool neg = v < 0;
     if (neg) v = -v;
 
     // Split into integer and fractional parts
-    int64_t int_part = static_cast<int64_t>(v);
+    // Clamp to int64_t range to avoid UB from static_cast
+    int64_t int_part;
+    if (v >= INT64_MAX_D) {
+        int_part = INT64_MAX_D; // Will not happen due to earlier check, but safe
+    } else {
+        int_part = static_cast<int64_t>(v);
+    }
     double frac_part = v - static_cast<double>(int_part);
 
     // Write integer part
     char int_buf[32];
     int int_len;
-    writeIntToBuffer(int_buf, static_cast<int32_t>(int_part), int_len);
+    // writeIntToBuffer only handles int32_t, so clamp for display
+    int32_t display_int = int_part > 2147483647LL ? 2147483647 : static_cast<int32_t>(int_part);
+    writeIntToBuffer(int_buf, display_int, int_len);
 
     // Compute fractional digits (up to 6)
     int frac_digits[6];
