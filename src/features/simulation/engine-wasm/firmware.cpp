@@ -72,12 +72,7 @@ static const char* copyToHeap(const char* src, int32_t len) {
     return dst;
 }
 
-// Helper to copy string to wasm heap from C++ string
-static const char* copyToHeap(const char* src) {
-    int32_t len = 0;
-    while (src[len] != '\0') len++;
-    return copyToHeap(src, len);
-}
+
 
 static int32_t tokenizeImpl(
     const char* source,
@@ -96,11 +91,6 @@ static int32_t tokenizeImpl(
     int32_t line = 1;
     int32_t column = 1;
     int32_t token_count = 0;
-
-    auto here = [&]() -> const char* {
-        // Return file pointer; line/column stored directly in token
-        return file_ptr;
-    };
 
     auto advance = [&](int32_t count) {
         for (int32_t i = 0; i < count; i++) {
@@ -204,7 +194,7 @@ static int32_t tokenizeImpl(
             while (index < source_len && source[index] != '\n') advance(1);
             int32_t len = index - start;
             if (token_count >= out_capacity) return -1; // buffer full
-            out[token_count].kind = TOKEN_DIRECTIVE;
+            out[token_count].kind = static_cast<uint8_t>(TokenKind::TOKEN_DIRECTIVE);
             out[token_count].text = copyToHeap(source + start, len);
             out[token_count].value = 0;
             out[token_count].line = token_line;
@@ -218,7 +208,8 @@ static int32_t tokenizeImpl(
         if (ch == '"' || ch == '\'') {
             const char* text = readQuoted(ch);
             if (token_count >= out_capacity) return -1;
-            out[token_count].kind = (ch == '"') ? TOKEN_STRING : TOKEN_CHAR;
+            out[token_count].kind = (ch == '"') ? static_cast<uint8_t>(TokenKind::TOKEN_STRING)
+                                                  : static_cast<uint8_t>(TokenKind::TOKEN_CHAR);
             out[token_count].text = text;
             out[token_count].value = 0;
             out[token_count].line = token_line;
@@ -349,7 +340,7 @@ static int32_t tokenizeImpl(
             }
 
             if (token_count >= out_capacity) return -1;
-            out[token_count].kind = TOKEN_NUMBER;
+            out[token_count].kind = static_cast<uint8_t>(TokenKind::TOKEN_NUMBER);
             out[token_count].text = text;
             out[token_count].value = value;
             out[token_count].line = token_line;
@@ -374,7 +365,9 @@ static int32_t tokenizeImpl(
             // if (isKeyword(text)) engine::js_log1p(1); else engine::js_log1p(0);
 
             if (token_count >= out_capacity) return -1;
-            out[token_count].kind = isKeyword(text) ? TOKEN_KEYWORD : TOKEN_IDENTIFIER;
+            out[token_count].kind = isKeyword(text)
+                                        ? static_cast<uint8_t>(TokenKind::TOKEN_KEYWORD)
+                                        : static_cast<uint8_t>(TokenKind::TOKEN_IDENTIFIER);
             out[token_count].text = text;
             out[token_count].value = 0;
             out[token_count].line = token_line;
@@ -410,7 +403,7 @@ static int32_t tokenizeImpl(
         if (matched_punct) {
             advance(matched_len);
             if (token_count >= out_capacity) return -1;
-            out[token_count].kind = TOKEN_PUNCTUATION;
+            out[token_count].kind = static_cast<uint8_t>(TokenKind::TOKEN_PUNCTUATION);
             out[token_count].text = copyToHeap(matched_punct, matched_len);
             out[token_count].value = 0;
             out[token_count].line = token_line;
@@ -428,7 +421,7 @@ static int32_t tokenizeImpl(
 
     // EOF token
     if (token_count >= out_capacity) return -1;
-    out[token_count].kind = TOKEN_EOF;
+    out[token_count].kind = static_cast<uint8_t>(TokenKind::EOF_);
     out[token_count].text = copyToHeap("", 0);
     out[token_count].value = 0;
     out[token_count].line = line;

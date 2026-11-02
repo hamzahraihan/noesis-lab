@@ -98,8 +98,6 @@ class WasmFirmwareImpl implements WasmFirmware {
         file: number,
         file_len: number
       ): number;
-      vm_debug_source(source: number, source_len: number, n: number): number;
-      vm_debug_tokenize(source: number, source_len: number, file: number, file_len: number): number;
     }
   ) {}
 

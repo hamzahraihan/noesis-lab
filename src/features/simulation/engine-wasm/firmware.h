@@ -10,7 +10,7 @@ struct SourceLocation {
     const char* file;  // pointer into wasm linear memory
 };
 
-enum TokenKind : uint8_t {
+enum class TokenKind : uint8_t {
     TOKEN_NUMBER,
     TOKEN_STRING,
     TOKEN_CHAR,
@@ -18,7 +18,7 @@ enum TokenKind : uint8_t {
     TOKEN_PUNCTUATION,
     TOKEN_KEYWORD,
     TOKEN_DIRECTIVE,
-    TOKEN_EOF,
+    EOF_,
 };
 
 struct Token {
