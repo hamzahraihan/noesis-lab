@@ -2335,61 +2335,142 @@ ExecResult exec_if(VM* vm, const Stmt* s) {
 ExecResult exec_while(VM* vm, const Stmt* s) {
     Frame* frame = vm_current_frame(vm);
     int32_t stmt_index = frame->pc - 1; // Current statement index
-    vm_push_loop_frame(vm, frame, stmt_index);
-    
-    while (true) {
-        Value cond = eval_expr(vm, s->loop.cond);
-        if (!value_to_bool(cond)) break;
-        
-        Scope* old_scope = frame->locals;
-        Scope* new_scope = scope_create(vm, old_scope);
-        frame->locals = new_scope;
-        ExecResult r = exec_stmt(vm, s->loop.body);
-        frame->locals = old_scope;
-        
-        if (r == ExecResult::BREAK) break;
-        if (r == ExecResult::RETURN_VALUE) {
-            vm_pop_loop_frame(vm);
-            return r;
-        }
-        if (r == ExecResult::YIELD_MS) {
-            vm_pop_loop_frame(vm);
-            return r;
-        }
-        // CONTINUE just continues the loop
+
+    // Find an existing (kept) loop frame for resumption
+    LoopFrame* lf = nullptr;
+    for (LoopFrame* cur = vm->loop_frames; cur != nullptr; cur = cur->next) {
+        if (cur->frame == frame && cur->stmt_index == stmt_index) { lf = cur; break; }
     }
-    vm_pop_loop_frame(vm);
-    return ExecResult::OK;
+    bool resuming = (lf != nullptr);
+    if (!resuming) {
+        vm_push_loop_frame(vm, frame, stmt_index);
+        lf = vm->loop_frames;
+        lf->body_index = 0;
+        lf->saved_scope = nullptr;
+    }
+
+    const Stmt* body = s->loop.body;
+    bool body_is_block = body && body->kind == StmtKind::BLOCK;
+    int32_t body_count = body_is_block ? (body->block.count) : (body ? 1 : 0);
+
+    while (true) {
+        // Start of an iteration: evaluate condition only when body not partially done
+        if (lf->body_index == 0) {
+            Value cond = eval_expr(vm, s->loop.cond);
+            if (!value_to_bool(cond)) {
+                // exit loop
+                if (body_is_block && lf->saved_scope) {
+                    // ensure scope restored (should already be)
+                }
+                vm_pop_loop_frame(vm);
+                return ExecResult::OK;
+            }
+            if (body_is_block) {
+                lf->saved_scope = frame->locals;
+                Scope* new_scope = scope_create(vm, frame->locals);
+                frame->locals = new_scope;
+            }
+        }
+
+        // Execute body statements starting at body_index
+        for (int i = lf->body_index; i < body_count; i++) {
+            lf->body_index = i;
+            const Stmt* bs = body_is_block ? body->block.stmts[i] : body;
+            ExecResult r = exec_stmt(vm, bs);
+            if (r == ExecResult::YIELD_MS) {
+                lf->body_index = i + 1;
+                frame->pc = stmt_index;
+                // keep loop frame on stack for resumption
+                return r;
+            }
+            if (r == ExecResult::BREAK) {
+                if (body_is_block) frame->locals = lf->saved_scope;
+                vm_pop_loop_frame(vm);
+                return ExecResult::BREAK;
+            }
+            if (r == ExecResult::RETURN_VALUE) {
+                if (body_is_block) frame->locals = lf->saved_scope;
+                vm_pop_loop_frame(vm);
+                return r;
+            }
+            // CONTINUE falls through
+        }
+
+        // Body completed for this iteration
+        if (body_is_block) frame->locals = lf->saved_scope;
+        lf->body_index = 0;
+        // loop continues (while true)
+    }
 }
 
 ExecResult exec_do_while(VM* vm, const Stmt* s) {
     Frame* frame = vm_current_frame(vm);
     int32_t stmt_index = frame->pc - 1;
-    vm_push_loop_frame(vm, frame, stmt_index);
-    
-    while (true) {
-        Scope* old_scope = frame->locals;
-        Scope* new_scope = scope_create(vm, old_scope);
-        frame->locals = new_scope;
-        ExecResult r = exec_stmt(vm, s->loop.body);
-        frame->locals = old_scope;
-        
-        if (r == ExecResult::BREAK) break;
-        if (r == ExecResult::RETURN_VALUE) {
-            vm_pop_loop_frame(vm);
-            return r;
-        }
-        if (r == ExecResult::YIELD_MS) {
-            vm_pop_loop_frame(vm);
-            return r;
-        }
-        // CONTINUE falls through to condition check
-        
-        Value cond = eval_expr(vm, s->loop.cond);
-        if (!value_to_bool(cond)) break;
+
+    LoopFrame* lf = nullptr;
+    for (LoopFrame* cur = vm->loop_frames; cur != nullptr; cur = cur->next) {
+        if (cur->frame == frame && cur->stmt_index == stmt_index) { lf = cur; break; }
     }
-    vm_pop_loop_frame(vm);
-    return ExecResult::OK;
+    bool resuming = (lf != nullptr);
+    if (!resuming) {
+        vm_push_loop_frame(vm, frame, stmt_index);
+        lf = vm->loop_frames;
+        lf->body_index = 0;
+        lf->saved_scope = nullptr;
+    }
+
+    const Stmt* body = s->loop.body;
+    bool body_is_block = body && body->kind == StmtKind::BLOCK;
+    int32_t body_count = body_is_block ? (body->block.count) : (body ? 1 : 0);
+
+    while (true) {
+        // Start of iteration: create scope for block body
+        if (lf->body_index == 0) {
+            if (body_is_block) {
+                lf->saved_scope = frame->locals;
+                Scope* new_scope = scope_create(vm, frame->locals);
+                frame->locals = new_scope;
+            }
+        }
+
+        // Execute body statements from body_index
+        for (int i = lf->body_index; i < body_count; i++) {
+            lf->body_index = i;
+            const Stmt* bs = body_is_block ? body->block.stmts[i] : body;
+            ExecResult r = exec_stmt(vm, bs);
+            if (r == ExecResult::YIELD_MS) {
+                lf->body_index = i + 1;
+                frame->pc = stmt_index;
+                return r;
+            }
+            if (r == ExecResult::BREAK) {
+                if (body_is_block) frame->locals = lf->saved_scope;
+                vm_pop_loop_frame(vm);
+                return ExecResult::BREAK;
+            }
+            if (r == ExecResult::RETURN_VALUE) {
+                if (body_is_block) frame->locals = lf->saved_scope;
+                vm_pop_loop_frame(vm);
+                return r;
+            }
+        }
+
+        // Body completed
+        if (body_is_block) frame->locals = lf->saved_scope;
+        // Mark condition pending
+        if (lf->body_index < body_count) {
+            // last statement yielded? already returned. So here body done.
+        }
+        lf->body_index = body_count; // condition pending sentinel
+
+        Value cond = eval_expr(vm, s->loop.cond);
+        if (!value_to_bool(cond)) {
+            vm_pop_loop_frame(vm);
+            return ExecResult::OK;
+        }
+        // loop again
+        lf->body_index = 0;
+    }
 }
 
 ExecResult exec_block(VM* vm, const Stmt* s) {
@@ -2421,48 +2502,93 @@ ExecResult exec_return(VM* vm, const Stmt* s) {
 ExecResult exec_for(VM* vm, const Stmt* s) {
     Frame* frame = vm_current_frame(vm);
     int32_t stmt_index = frame->pc - 1;
-    vm_push_loop_frame(vm, frame, stmt_index);
-    
-    Scope* old_scope = frame->locals;
-    Scope* new_scope = scope_create(vm, old_scope);
-    frame->locals = new_scope;
-    
-    // Init
-    if (s->for_loop.init) {
-        exec_stmt(vm, s->for_loop.init);
+
+    LoopFrame* lf = nullptr;
+    for (LoopFrame* cur = vm->loop_frames; cur != nullptr; cur = cur->next) {
+        if (cur->frame == frame && cur->stmt_index == stmt_index) { lf = cur; break; }
     }
-    
+    bool resuming = (lf != nullptr);
+    if (!resuming) {
+        vm_push_loop_frame(vm, frame, stmt_index);
+        lf = vm->loop_frames;
+        lf->body_index = 0;
+        lf->saved_scope = nullptr;
+    }
+
+    const Stmt* body = s->for_loop.body;
+    bool body_is_block = body && body->kind == StmtKind::BLOCK;
+    int32_t body_count = body_is_block ? (body->block.count) : (body ? 1 : 0);
+
+    Scope* old_scope;
+    Scope* new_scope;
+    if (resuming) {
+        new_scope = frame->locals;
+        old_scope = new_scope ? new_scope->parent : frame->locals;
+    } else {
+        old_scope = frame->locals;
+        new_scope = scope_create(vm, old_scope);
+        frame->locals = new_scope;
+        // Init (only once)
+        if (s->for_loop.init) {
+            exec_stmt(vm, s->for_loop.init);
+        }
+    }
+
     while (true) {
-        // Condition
-        if (s->for_loop.cond) {
-            Value cond = eval_expr(vm, s->for_loop.cond);
-            if (!value_to_bool(cond)) break;
+        // Condition check at start of iteration
+        if (lf->body_index == 0) {
+            if (s->for_loop.cond) {
+                Value cond = eval_expr(vm, s->for_loop.cond);
+                if (!value_to_bool(cond)) {
+                    frame->locals = old_scope;
+                    vm_pop_loop_frame(vm);
+                    return ExecResult::OK;
+                }
+            }
+            if (body_is_block) {
+                // inner body scope child of loop scope
+                lf->saved_scope = frame->locals; // loop scope (new_scope)
+                Scope* inner = scope_create(vm, frame->locals);
+                frame->locals = inner;
+            }
         }
-        
-        // Body
-        ExecResult r = exec_stmt(vm, s->for_loop.body);
-        if (r == ExecResult::BREAK) break;
-        if (r == ExecResult::RETURN_VALUE) {
-            frame->locals = old_scope;
-            vm_pop_loop_frame(vm);
-            return r;
+
+        // Execute body statements
+        for (int i = lf->body_index; i < body_count; i++) {
+            lf->body_index = i;
+            const Stmt* bs = body_is_block ? body->block.stmts[i] : body;
+            ExecResult r = exec_stmt(vm, bs);
+            if (r == ExecResult::YIELD_MS) {
+                lf->body_index = i + 1;
+                frame->pc = stmt_index;
+                return r;
+            }
+            if (r == ExecResult::BREAK) {
+                if (body_is_block) frame->locals = lf->saved_scope;
+                frame->locals = old_scope;
+                vm_pop_loop_frame(vm);
+                return ExecResult::BREAK;
+            }
+            if (r == ExecResult::RETURN_VALUE) {
+                if (body_is_block) frame->locals = lf->saved_scope;
+                frame->locals = old_scope;
+                vm_pop_loop_frame(vm);
+                return r;
+            }
         }
-        if (r == ExecResult::YIELD_MS) {
-            frame->locals = old_scope;
-            vm_pop_loop_frame(vm);
-            return r;
-        }
-        // CONTINUE falls through to update
-        
+
+        // Body completed
+        if (body_is_block) frame->locals = lf->saved_scope; // back to loop scope
+        lf->body_index = body_count; // done sentinel
+
         // Update
         if (s->for_loop.update) {
             eval_expr(vm, s->for_loop.update);
         }
+
+        // reset for next iteration
+        lf->body_index = 0;
     }
-    
-    frame->locals = old_scope;
-    vm_pop_loop_frame(vm);
-    return ExecResult::OK;
 }
 
 ExecResult exec_break(VM* vm, const Stmt* s) {

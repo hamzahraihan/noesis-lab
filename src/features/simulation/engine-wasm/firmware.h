@@ -246,6 +246,8 @@ struct Scope {
 struct LoopFrame {
     Frame* frame;         // The frame containing the loop
     int32_t stmt_index;   // Statement index of the loop in the frame
+    int32_t body_index;   // Next body statement index to execute (for resumption)
+    Scope* saved_scope;    // Enclosing scope saved while body runs
     LoopFrame* next;      // Previous loop frame
 };
 
