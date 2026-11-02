@@ -68,20 +68,24 @@ describe('frame pacing', () => {
     expect(edges.length).toBe(1);
   });
 
-  it('advances simulated time at roughly the wall-clock rate', () => {
-    const { finalTime } = observe(1000, 0.016);
-    expect(finalTime).toBeGreaterThan(950);
-    expect(finalTime).toBeLessThan(1050);
+  it('skips a delay in one frame when the circuit has no dynamics', () => {
+    // The blink sketch has no PWM and no capacitors, so each 400 ms delay
+    // completes in a single frame regardless of the frame budget.
+    const { finalTime, frames } = observe(2000, 0.016);
+
+    // Five delays x 400 ms = 2000 ms in exactly 5 frames (allow 2 ms slop
+    // for any initial tick overhead).
+    expect(finalTime).toBeGreaterThanOrEqual(2000);
+    expect(finalTime).toBeLessThanOrEqual(2002);
+    expect(frames).toBe(5);
   });
 
-  it('buys twice the sketch time per frame when the time scale is two', () => {
-    // The Run row's 2× toggle: the same wall-clock frames, each worth twice
-    // the simulated time, so the run costs half as many frames to reach the
-    // same point in the sketch.
-    const at1 = observe(2000, 0.016);
+  it('keeps the same frame count at any time scale when delays are skipped', () => {
+    // With no dynamics, each delay takes one frame. Time scale changes the
+    // frame budget but not the number of frames per delay.
+    const at1 = observe(2000, 0.016, 1);
     const at2 = observe(2000, 0.016, 2);
-    expect(at2.frames).toBeGreaterThanOrEqual(at1.frames / 2 - 2);
-    expect(at2.frames).toBeLessThanOrEqual(at1.frames / 2 + 2);
+    expect(at2.frames).toBe(at1.frames);
   });
 
   it('keeps delays honest when running at 2×', () => {
