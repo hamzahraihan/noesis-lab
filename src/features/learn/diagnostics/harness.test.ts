@@ -188,7 +188,7 @@ describe('partVolts pin validation', () => {
     const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
     const sim = entry.makeSim();
     // Safe circuit has p10 (piezo-buzzer) with pins: positive, negative
-    const volts = sim.partVolts('p10', 'positive');
+    const volts = sim.partVolts!('p10', 'positive');
     expect(typeof volts).toBe('number');
   });
 
@@ -197,7 +197,7 @@ describe('partVolts pin validation', () => {
     const sim = entry.makeSim();
     // Circuit JSON uses wire aliases like "A", "K" for LED
     // But definition uses "anode", "cathode"
-    expect(() => sim.partVolts('p6', 'A')).toThrow(
+    expect(() => sim.partVolts!('p6', 'A')).toThrow(
       "Pin 'A' not found in part definition"
     );
   });
@@ -206,13 +206,13 @@ describe('partVolts pin validation', () => {
     const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
     const sim = entry.makeSim();
     // Pin exists in definition but may not be wired - use a valid definition pin
-    const volts = sim.partVolts('p10', 'positive');
+    const volts = sim.partVolts!('p10', 'positive');
     expect(typeof volts).toBe('number');
   });
 
   it('partVolts throws for non-existent part', () => {
     const entry = buildRegistry().find((e) => e.projectId === 'safe')!;
     const sim = entry.makeSim();
-    expect(() => sim.partVolts('nonexistent', 'anode')).toThrow("Part 'nonexistent' not found");
+    expect(() => sim.partVolts!('nonexistent', 'anode')).toThrow("Part 'nonexistent' not found");
   });
 });

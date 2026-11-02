@@ -1,5 +1,15 @@
 // Helper to get valid pin IDs from a part's definition
-export function getPartDefinitionPins(sim: { bench: { parts: { id: string; definition: { pins?: { id: string }[] } }[] } }, partId: string): readonly string[] | undefined {
+export function getPartDefinitionPins(
+  sim: {
+    bench: {
+      readonly parts: readonly {
+        readonly id: string;
+        readonly definition: { readonly pins?: readonly { readonly id: string }[] };
+      }[];
+    };
+  },
+  partId: string,
+): readonly string[] | undefined {
   const part = sim.bench.parts.find((p) => p.id === partId);
   return part?.definition.pins?.map((p) => p.id);
 }
@@ -34,8 +44,6 @@ export interface HarnessSim {
    * the board's pin namespace.
    */
   partVolts?(partId: string, pinId: string): number;
-  /** Overload for branded pin IDs — provides compile-time pin validation. */
-  partVolts?<PartDef extends string>(partId: string, pinId: PinId<PartDef>): number;
   /**
    * A knob's current value, for a part that reads one.
    *

@@ -255,8 +255,12 @@ function generateTestCoverage(source: Source): string {
   const networkIds = source.projects
     .filter((project) => project.builds.some((build) => build.board === 'esp32'))
     .map((project) => project.id);
-  const wireFloorsEntries = Object.entries(WIRE_FLOORS)
-    .map(([key, value]) => `  ${JSON.stringify(key)}: ${value},`)
+  // Every project needs an entry: the generated type is
+  // `Record<GalleryProjectId, number>`, so a hand-kept map that gains a
+  // project but not a floor would fail typecheck. Derive the full record from
+  // the project list and default the ones nobody set a floor for.
+  const wireFloorsEntries = ids
+    .map((id: string) => `  ${JSON.stringify(id)}: ${WIRE_FLOORS[id] ?? 1},`)
     .join('\n');
   return `export const GALLERY_PROJECT_IDS = ${JSON.stringify(ids)} as const;
 export type GalleryProjectId = typeof GALLERY_PROJECT_IDS[number];

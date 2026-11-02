@@ -13,14 +13,7 @@
  */
 
 import { Simulation } from '@/features/bench';
-import {
-  DS3231_TEMPERATURE_KNOB,
-  Max7219,
-  MFRC522_CARD_KNOB,
-  Pcd8544,
-  SEGMENT_MAP,
-  Tm1637,
-} from '@/features/parts';
+import { Max7219, MFRC522_CARD_KNOB, Pcd8544, Tm1637 } from '@/features/parts';
 // Boundary-explicit: learn → simulation value edges are outside the gate's forbidden set (bench|instruments → learn, parts → simulation, shared → features); verified by `node scripts/check-boundaries.mjs`.
 import {
   hexForSourcesHash,
@@ -29,17 +22,8 @@ import {
 } from '@/features/simulation';
 import { boardOption } from '../boardRegistry';
 import { firmwareForBuild, GALLERY, type GalleryBuild } from '../gallery';
-import {
-  convergeGlass,
-  FIVE_GLYPH,
-  F_GLYPH,
-  liveProbe,
-  N_GLYPH,
-  ONE_GLYPH,
-  ZERO_GLYPH,
-  type ProbeSim,
-} from './probes';
-import type { CheckDef, CheckResult, CheckStatus, CountingSim, HarnessSim } from './harness';
+import { liveProbe } from './probes';
+import type { CheckDef, CountingSim } from './harness';
 import { getPartDefinitionPins } from './harness';
 import { CHECKS_MAP } from '../generated/checks-map';
 import type { GalleryProjectId } from '../gallery';

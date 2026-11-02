@@ -6,6 +6,8 @@
  * it under the long-standing public API (`CIRCUITS`, `CircuitId`).
  */
 
-export { CIRCUITS } from '../generated/circuits-registry';
+import { CIRCUITS } from '../generated/circuits-registry';
+
+export { CIRCUITS };
 export type { CircuitDocument } from '@/features/simulation';
 export type CircuitId = keyof typeof CIRCUITS;

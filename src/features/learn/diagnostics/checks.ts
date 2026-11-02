@@ -5,14 +5,7 @@
  * a circular dependency (registry.ts consumes the generated CHECKS_MAP).
  */
 
-import {
-  DS3231_TEMPERATURE_KNOB,
-  Max7219,
-  MFRC522_CARD_KNOB,
-  Pcd8544,
-  SEGMENT_MAP,
-  Tm1637,
-} from '@/features/parts';
+import { DS3231_TEMPERATURE_KNOB, SEGMENT_MAP } from '@/features/parts';
 import {
   convergeGlass,
   FIVE_GLYPH,
