@@ -2393,7 +2393,9 @@ ExecResult exec_while(VM* vm, const Stmt* s) {
                 vm_pop_loop_frame(vm);
                 return r;
             }
-            // CONTINUE falls through
+            if (r == ExecResult::CONTINUE) {
+                break;
+            }
         }
 
         // Body completed for this iteration
@@ -2452,6 +2454,9 @@ ExecResult exec_do_while(VM* vm, const Stmt* s) {
                 if (body_is_block) frame->locals = lf->saved_scope;
                 vm_pop_loop_frame(vm);
                 return r;
+            }
+            if (r == ExecResult::CONTINUE) {
+                break;
             }
         }
 
@@ -2522,8 +2527,13 @@ ExecResult exec_for(VM* vm, const Stmt* s) {
     Scope* old_scope;
     Scope* new_scope;
     if (resuming) {
-        new_scope = frame->locals;
-        old_scope = new_scope ? new_scope->parent : frame->locals;
+        if (lf->saved_scope) {
+            new_scope = lf->saved_scope;
+            old_scope = lf->saved_scope->parent ? lf->saved_scope->parent : frame->locals;
+        } else {
+            new_scope = frame->locals;
+            old_scope = new_scope ? new_scope->parent : frame->locals;
+        }
     } else {
         old_scope = frame->locals;
         new_scope = scope_create(vm, old_scope);
@@ -2574,6 +2584,9 @@ ExecResult exec_for(VM* vm, const Stmt* s) {
                 frame->locals = old_scope;
                 vm_pop_loop_frame(vm);
                 return r;
+            }
+            if (r == ExecResult::CONTINUE) {
+                break;
             }
         }
 
