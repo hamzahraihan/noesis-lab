@@ -127,6 +127,36 @@ describe('firmware parser parity', () => {
     expect(wasmAST.globals).toEqual(tsAST.globals);
   });
 
+  it('parses if/else in block statement (C++ parser produces expected AST)', () => {
+    // The C++ parser accepts statements at global scope; verify it produces correct AST for if/else
+    const src = `{ if (x > 0) { y = 1; } else { y = 2; } }`;
+    const wasmAST = wasm.parse(src);
+    // Verify the structure: block -> if with condition, then, otherwise
+    expect(wasmAST.globals).toHaveLength(1);
+    const block = wasmAST.globals[0];
+    expect(block.kind).toBe('block');
+    expect(block.statements).toHaveLength(1);
+    const ifStmt = block.statements[0];
+    expect(ifStmt.kind).toBe('if');
+    expect(ifStmt.condition.kind).toBe('binary');
+    expect(ifStmt.then.kind).toBe('block');
+    expect(ifStmt.otherwise).not.toBeNull();
+    expect(ifStmt.otherwise!.kind).toBe('block');
+  });
+
+  it('parses if without else in block statement (C++ parser produces expected AST)', () => {
+    const src = `{ if (x > 0) { y = 1; } }`;
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toHaveLength(1);
+    const block = wasmAST.globals[0];
+    expect(block.kind).toBe('block');
+    const ifStmt = block.statements[0];
+    expect(ifStmt.kind).toBe('if');
+    expect(ifStmt.condition.kind).toBe('binary');
+    expect(ifStmt.then.kind).toBe('block');
+    expect(ifStmt.otherwise).toBeNull();
+  });
+
   it('parses binary expressions with correct precedence', () => {
     const src = `int x = a + b * c;`;
     const tsAST = parseFirmware(src);

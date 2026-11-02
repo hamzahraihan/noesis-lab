@@ -139,6 +139,7 @@ struct Stmt {
         struct { const char* class_name; const char* name; Expr** args; int32_t arg_count; } instance_decl;
         struct { Expr* cond; Stmt* then_; Stmt* else_; } ite;
         struct { Expr* cond; Stmt* body; } loop;
+        struct { Stmt* init; Expr* cond; Expr* update; Stmt* body; } for_loop;
         struct { Stmt** stmts; int32_t count; } block;
         struct { Expr* value; } ret;
         struct { const char* name; Expr* value; } raise;

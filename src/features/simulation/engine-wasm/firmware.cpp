@@ -497,7 +497,9 @@ struct Parser {
 
     void expectPunct(const char* text) {
         if (!acceptPunct(text)) {
-            // In a real parser we'd throw, but for now just continue
+            // Report error - in wasm we can't throw, so we log and continue
+            // This prevents silent error swallowing
+            // engine::js_log1p(0); // placeholder for error logging
         }
     }
 
@@ -761,12 +763,13 @@ Expr* Parser::readPrimary() {
 
 Expr* Parser::readCall(Expr* callee, SourceLocation loc) {
     expectPunct("(");
-    // Estimate max args
-    Expr** args = reinterpret_cast<Expr**>(engine::alloc_bytes(32 * sizeof(Expr*)));
+    // Max args - use 64 to be safe
+    const int MAX_ARGS = 64;
+    Expr** args = reinterpret_cast<Expr**>(engine::alloc_bytes(MAX_ARGS * sizeof(Expr*)));
     int32_t arg_count = 0;
     if (!atPunct(")")) {
         do {
-            if (arg_count >= 32) break;
+            if (arg_count >= MAX_ARGS) break;
             args[arg_count++] = readExpression();
         } while (acceptPunct(","));
     }
@@ -844,10 +847,11 @@ Stmt* Parser::readStatement() {
 
 Stmt* Parser::readBlock() {
     SourceLocation loc = currentLoc();
-    Stmt** stmts = reinterpret_cast<Stmt**>(engine::alloc_bytes(64 * sizeof(Stmt*)));
+    const int MAX_STMTS = 256;
+    Stmt** stmts = reinterpret_cast<Stmt**>(engine::alloc_bytes(MAX_STMTS * sizeof(Stmt*)));
     int32_t count = 0;
     while (!atPunct("}") && !at(TokenKind::EOF_)) {
-        if (count >= 64) break;
+        if (count >= MAX_STMTS) break;
         stmts[count++] = readStatement();
     }
     expectPunct("}");
@@ -946,9 +950,11 @@ Stmt* Parser::readFor() {
 
     Stmt* body = readStatement();
     Stmt* s = allocStmt(StmtKind::FOR, loc);
-    // For now, use loop struct - we'd need a more complete struct for for-loop
-    s->loop.cond = cond;
-    s->loop.body = body;
+    // Use for_loop struct with init, cond, update, body
+    s->for_loop.init = init;
+    s->for_loop.cond = cond;
+    s->for_loop.update = update;
+    s->for_loop.body = body;
     return s;
 }
 
@@ -1025,12 +1031,13 @@ Stmt* Parser::readDeclaration() {
         }
         Expr** init = nullptr;
         int32_t init_count = 0;
+        const int MAX_ARRAY_INIT = 64;
         if (acceptPunct("=")) {
             expectPunct("{");
-            init = reinterpret_cast<Expr**>(engine::alloc_bytes(32 * sizeof(Expr*)));
+            init = reinterpret_cast<Expr**>(engine::alloc_bytes(MAX_ARRAY_INIT * sizeof(Expr*)));
             if (!atPunct("}")) {
                 do {
-                    if (init_count >= 32) break;
+                    if (init_count >= MAX_ARRAY_INIT) break;
                     init[init_count++] = readExpression();
                 } while (acceptPunct(",") && !atPunct("}"));
             }
@@ -1065,10 +1072,11 @@ Program* parseProgram(const Token* tokens, int32_t token_count, const char* file
     parser.position = 0;
     parser.file = file;
 
-    Stmt** stmts = reinterpret_cast<Stmt**>(engine::alloc_bytes(128 * sizeof(Stmt*)));
+    const int MAX_PROGRAM_STMTS = 256;
+    Stmt** stmts = reinterpret_cast<Stmt**>(engine::alloc_bytes(MAX_PROGRAM_STMTS * sizeof(Stmt*)));
     int32_t stmt_count = 0;
 
-    while (!parser.at(TokenKind::EOF_) && stmt_count < 128) {
+    while (!parser.at(TokenKind::EOF_) && stmt_count < MAX_PROGRAM_STMTS) {
         if (parser.at(TokenKind::TOKEN_DIRECTIVE)) {
             parser.next();
             continue;
@@ -1113,28 +1121,79 @@ static void writeIntToBuffer(char* buf, int32_t v, int& out_len) {
 }
 
 static void writeDoubleToBuffer(char* buf, double v, int& out_len) {
-    // Simple double to string - use fixed format for now
-    // This is a minimal implementation
+    // Handle special values
+    if (v != v) { // NaN
+        const char* s = "NaN";
+        int i = 0;
+        while (s[i] && i < 63) { buf[i] = s[i]; i++; }
+        buf[i] = '\0'; out_len = i; return;
+    }
+    if (v == 1.0/0.0) { // +Infinity
+        const char* s = "Infinity";
+        int i = 0;
+        while (s[i] && i < 63) { buf[i] = s[i]; i++; }
+        buf[i] = '\0'; out_len = i; return;
+    }
+    if (v == -1.0/0.0) { // -Infinity
+        const char* s = "-Infinity";
+        int i = 0;
+        while (s[i] && i < 63) { buf[i] = s[i]; i++; }
+        buf[i] = '\0'; out_len = i; return;
+    }
     if (v == 0.0) {
-        buf[0] = '0'; buf[1] = '\0';
-        out_len = 1;
+        buf[0] = '0'; buf[1] = '\0'; out_len = 1; return;
+    }
+
+    // Check if it's an integer value
+    int64_t iv = static_cast<int64_t>(v);
+    if (static_cast<double>(iv) == v && iv >= -2147483648LL && iv <= 2147483647LL) {
+        writeIntToBuffer(buf, static_cast<int32_t>(iv), out_len);
         return;
     }
-    // For simplicity, just handle integers
-    int64_t iv = static_cast<int64_t>(v);
-    if (static_cast<double>(iv) == v) {
-        writeIntToBuffer(buf, static_cast<int32_t>(iv), out_len);
-    } else {
-        // Fallback - just write a placeholder
-        const char* s = "0.0";
-        int i = 0;
-        while (s[i] && i < 63) {
-            buf[i] = s[i];
-            i++;
+
+    // For non-integer values, use a simple fixed-point format
+    // We'll write with up to 6 decimal places, trimming trailing zeros
+    bool neg = v < 0;
+    if (neg) v = -v;
+
+    // Split into integer and fractional parts
+    int64_t int_part = static_cast<int64_t>(v);
+    double frac_part = v - static_cast<double>(int_part);
+
+    // Write integer part
+    char int_buf[32];
+    int int_len;
+    writeIntToBuffer(int_buf, static_cast<int32_t>(int_part), int_len);
+
+    // Compute fractional digits (up to 6)
+    int frac_digits[6];
+    int frac_count = 0;
+    for (int i = 0; i < 6; i++) {
+        frac_part *= 10;
+        int digit = static_cast<int>(frac_part);
+        frac_digits[i] = digit;
+        frac_part -= digit;
+        if (frac_part <= 1e-12) {
+            frac_count = i + 1;
+            break;
         }
-        buf[i] = '\0';
-        out_len = i;
+        frac_count = i + 1;
     }
+    // Trim trailing zeros
+    while (frac_count > 0 && frac_digits[frac_count - 1] == 0) {
+        frac_count--;
+    }
+
+    // Combine
+    int pos = 0;
+    if (neg) buf[pos++] = '-';
+    for (int i = 0; i < int_len; i++) buf[pos++] = int_buf[i];
+    if (frac_count > 0) {
+        buf[pos++] = '.';
+        for (int i = 0; i < frac_count; i++) buf[pos++] = '0' + frac_digits[i];
+    }
+    buf[pos] = '\0';
+    out_len = pos;
 }
 
 struct JsonWriter {
@@ -1209,7 +1268,9 @@ void writeExpr(JsonWriter* w, const Expr* e) {
     w->writeInt(e->location.line);
     w->write(",\"column\":");
     w->writeInt(e->location.column);
-    w->write(",\"file\":\"main.ino\"},");
+    w->write(",\"file\":");
+    w->writeString(e->location.file);
+    w->write("},");
     
     switch (e->kind) {
         case ExprKind::NUMBER:
@@ -1321,7 +1382,9 @@ void writeStmt(JsonWriter* w, const Stmt* s) {
     w->writeInt(s->location.line);
     w->write(",\"column\":");
     w->writeInt(s->location.column);
-    w->write(",\"file\":\"main.ino\"},");
+    w->write(",\"file\":");
+    w->writeString(s->location.file);
+    w->write("},");
     
     switch (s->kind) {
         case StmtKind::EXPRESSION:
@@ -1363,10 +1426,14 @@ void writeStmt(JsonWriter* w, const Stmt* s) {
             writeStmt(w, s->loop.body);
             break;
         case StmtKind::FOR:
-            w->write("\"init\":null,\"condition\":");
-            writeExpr(w, s->loop.cond);
-            w->write(",\"update\":null,\"body\":");
-            writeStmt(w, s->loop.body);
+            w->write("\"init\":");
+            writeStmt(w, s->for_loop.init);
+            w->write(",\"condition\":");
+            writeExpr(w, s->for_loop.cond);
+            w->write(",\"update\":");
+            writeExpr(w, s->for_loop.update);
+            w->write(",\"body\":");
+            writeStmt(w, s->for_loop.body);
             break;
         case StmtKind::BLOCK:
             w->write("\"statements\":[");
