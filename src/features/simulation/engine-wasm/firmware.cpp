@@ -1154,11 +1154,13 @@ static void writeDoubleToBuffer(char* buf, double v, int& out_len) {
     // Check if it's an integer value within int64_t range
     // INT64_MAX = 9223372036854775807, INT64_MIN = -9223372036854775808
     // Double can exactly represent integers up to 2^53 = 9007199254740992
-    constexpr double INT64_MAX_D = 9223372036854775807.0;
-    constexpr double INT64_MIN_D = -9223372036854775808.0;
+    // Use exact double boundaries: 2^63 = 9223372036854775808.0 (exactly representable)
+    // and -2^63 = -9223372036854775808.0 (exactly representable)
+    constexpr double INT64_MAX_EXCLUSIVE = 9223372036854775808.0;  // 2^63, exclusive upper bound
+    constexpr double INT64_MIN_INCLUSIVE = -9223372036854775808.0; // -2^63, inclusive lower bound
     constexpr double MAX_EXACT_INT = 9007199254740992.0; // 2^53
 
-    if (v >= INT64_MIN_D && v <= INT64_MAX_D) {
+    if (v >= INT64_MIN_INCLUSIVE && v < INT64_MAX_EXCLUSIVE) {
         int64_t iv = static_cast<int64_t>(v);
         if (static_cast<double>(iv) == v && iv >= -2147483648LL && iv <= 2147483647LL) {
             writeIntToBuffer(buf, static_cast<int32_t>(iv), out_len);
@@ -1174,8 +1176,8 @@ static void writeDoubleToBuffer(char* buf, double v, int& out_len) {
     // Split into integer and fractional parts
     // Clamp to int64_t range to avoid UB from static_cast
     int64_t int_part;
-    if (v >= INT64_MAX_D) {
-        int_part = INT64_MAX_D; // Will not happen due to earlier check, but safe
+    if (v >= INT64_MAX_EXCLUSIVE) {
+        int_part = static_cast<int64_t>(INT64_MAX_EXCLUSIVE - 1); // Max representable int64_t
     } else {
         int_part = static_cast<int64_t>(v);
     }
