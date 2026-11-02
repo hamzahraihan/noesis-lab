@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(ROOT, 'src', 'features', 'simulation', 'engine-wasm');
-const SOURCES = ['engine.cpp', 'solver.cpp', 'netlist.cpp', 'cpu.cpp'].map((file) =>
+const SOURCES = ['engine.cpp', 'solver.cpp', 'netlist.cpp', 'cpu.cpp', 'firmware.cpp'].map((file) =>
   join(DIR, file),
 );
 const OUTPUT = join(DIR, 'solver.wasm');
@@ -35,6 +35,7 @@ const MANIFEST = join(DIR, 'build-manifest.json');
 // the wasm path evaluates the same operations in the same order as the
 // TypeScript parity oracle. `--allow-undefined` is only for js_exp/js_log1p,
 // which the JS host supplies.
+// Note: `--strip-all` requires wasm-opt (binaryen) which is not available on Windows.
 const FLAGS = [
   '--target=wasm32',
   '-std=c++20',
@@ -49,7 +50,7 @@ const FLAGS = [
   '-Wl,--no-entry',
   '-Wl,--allow-undefined',
   '-Wl,--initial-memory=1048576',
-  '-Wl,--strip-all',
+  // '-Wl,--strip-all',  // requires wasm-opt (not available on Windows)
   '-Wl,--export=wasm_alloc',
   '-Wl,--export=set_profiles',
   '-Wl,--export=solve',
@@ -80,6 +81,23 @@ const FLAGS = [
   '-Wl,--export=netlist_labels',
   '-Wl,--export=cpu_flash_base',
   '-Wl,--export=cpu_get_instructions',
+  '-Wl,--export=vm_tokenize',
+  '-Wl,--export=vm_parse',
+  '-Wl,--export=vm_free_program',
+  '-Wl,--export=vm_ast_to_json',
+  '-Wl,--export=vm_create',
+  '-Wl,--export=vm_destroy',
+  '-Wl,--export=vm_load_sketch',
+  '-Wl,--export=vm_run',
+  '-Wl,--export=vm_step',
+  '-Wl,--export=vm_get_debug_state',
+  '-Wl,--export=vm_set_breakpoint',
+  '-Wl,--export=vm_clear_breakpoint',
+  '-Wl,--export=vm_set_step_over',
+  '-Wl,--export=vm_set_step_into',
+  '-Wl,--export=vm_pin_level',
+  '-Wl,--export=vm_set_pin_level',
+  '-Wl,--export=vm_serial_output',
 ];
 
 
