@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -40,22 +40,25 @@ export function getBoardCount(): number {
   return ids ? ids.length : 0;
 }
 
-// Returns exercise count by parsing exercise module files
+// Returns exercise count by walking the exercise declarations.
+//
+// The authoritative list is `EXERCISES` in `exercises.ts`, which spreads the
+// per-module arrays and adds the Module 0 opener. Counting declarations in the
+// module folder alone misses that opener, so this walks the folder plus
+// `exercises.ts` itself rather than checking in a hand-maintained module list.
 export function getExerciseCount(): number {
-  let total = 0;
-  const modules = [
-    'module-1-gpio.ts',
-    'module-2-analog.ts',
-    'module-3-bus-protocols.ts',
-    'module-4-interrupts.ts',
-    'module-5-maps.ts',
-    'module-5-single-board-computers.ts',
-    'module-5-networks.ts',
+  const exercisesDir = join(ROOT, 'src/features/learn/exercises');
+  const files = [
+    ...readdirSync(exercisesDir)
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => join(exercisesDir, name)),
+    join(ROOT, 'src/features/learn/exercises.ts'),
   ];
-  for (const mod of modules) {
-    const content = readFileSync(join(ROOT, 'src/features/learn/exercises', mod), 'utf-8');
+  let total = 0;
+  for (const file of files) {
+    const content = readFileSync(file, 'utf-8');
     // Count exercise objects: const NAME: Exercise = { id: '...', ...
-    const matches = content.match(/const\s+[A-Z_]+:\s*Exercise\s*=\s*\{/g);
+    const matches = content.match(/const\s+[A-Z0-9_]+:\s*Exercise\s*=\s*\{/g);
     if (matches) total += matches.length;
   }
   return total;

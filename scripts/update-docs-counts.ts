@@ -45,6 +45,12 @@ async function main() {
   plan = updatePlaceholders(plan, counts);
   writeFileSync(planPath, plan);
 
+  // PRODUCT.md carries the same placeholders, so it drifts the same way.
+  const productPath = join(ROOT, 'PRODUCT.md');
+  let product = readFileSync(productPath, 'utf-8');
+  product = updatePlaceholders(product, counts);
+  writeFileSync(productPath, product);
+
   console.log('Updated docs counts:', counts);
 }
 

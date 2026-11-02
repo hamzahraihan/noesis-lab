@@ -29,9 +29,9 @@ jobs:
         run: npm run update:docs-counts
       - name: Check for uncommitted docs changes
         run: |
-          if ! git diff --quiet docs/; then
-            echo "❌ docs/parity-scorecard.md or docs/PLAN.md out of sync with source counts"
+          if ! git diff --quiet docs/ PRODUCT.md; then
+            echo "❌ docs/ or PRODUCT.md out of sync with source counts"
             echo "Run 'npm run update:docs-counts' locally and commit the changes"
-            git diff docs/
+            git diff docs/ PRODUCT.md
             exit 1
           fi
