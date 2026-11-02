@@ -7,7 +7,6 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { tokenize as tokenizeTS, parseFirmware } from '@/features/simulation/firmware/parser';
-import { FirmwareRunner, type FirmwareServices } from '@/features/simulation/firmware/interpreter';
 import { loadWasmFirmware, type WasmFirmware } from './firmware-bridge';
 
 let wasm: WasmFirmware;
@@ -15,32 +14,6 @@ let wasm: WasmFirmware;
 beforeAll(async () => {
   wasm = await loadWasmFirmware();
 });
-
-/** Creates a TS FirmwareRunner for the blink sketch with stub services. */
-function createTSVM(source: string): FirmwareRunner {
-  const services: FirmwareServices = {
-    spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
-    nowMs: () => 0,
-    pinMode: () => {},
-    digitalWrite: () => {},
-    digitalRead: () => 0,
-    analogWrite: () => {},
-    analogRead: () => 0,
-    adcFullScale: 1023,
-    serialBegin: () => {},
-    serialWrite: () => {},
-    wire: {
-      begin: () => {},
-      beginTransmission: () => {},
-      write: () => 0,
-      endTransmission: () => 0,
-      requestFrom: () => 0,
-      read: () => -1,
-      available: () => 0,
-    },
-  };
-  return new FirmwareRunner(source, services);
-}
 
 describe('firmware lexer parity', () => {
   it('tokenizes a simple int declaration', () => {

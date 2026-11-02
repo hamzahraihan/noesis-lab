@@ -104,8 +104,8 @@ let firmwareExports: EngineExports & {
   vm_load_sketch(vm: number, program: number): number;
   vm_run(vm: number, milliseconds: number): number;
   vm_step(vm: number): number;
-  vm_get_debug_state(vm: number): number; // Returns pointer to VMDebugState struct
-  vm_set_breakpoint(vm: number, file: number, file_len: number, line: number): number;
+  vm_get_debug_state(vm: number, out: number, out_capacity: number): number;
+  vm_set_breakpoint(vm: number, file: number, line: number): number;
   vm_clear_breakpoint(vm: number, id: number): void;
   vm_pin_level(vm: number, pin: number): number;
   vm_set_pin_level(vm: number, pin: number, high: number): void;
@@ -123,9 +123,9 @@ export async function loadWasmFirmware(): Promise<WasmFirmware> {
     ) as ArrayBuffer;
     const exports = await instantiateEngine(async () => bytes);
     // vm_tokenize will be added to the wasm exports when firmware.cpp is compiled
-    firmwareExports = exports as typeof firmwareExports;
+    firmwareExports = exports as unknown as typeof firmwareExports;
   }
-  return new WasmFirmwareImpl(firmwareExports);
+  return new WasmFirmwareImpl(firmwareExports!);
 }
 
 class WasmFirmwareImpl implements WasmFirmware {
@@ -140,8 +140,10 @@ class WasmFirmwareImpl implements WasmFirmware {
   private debugStatePtr = 0;
   private debugStateCapacity = 0;
 
+  private exports: any;
+
   constructor(
-    private readonly exports: EngineExports & {
+    exports: EngineExports & {
       vm_tokenize(
         source: number,
         source_len: number,
@@ -167,50 +169,31 @@ class WasmFirmwareImpl implements WasmFirmware {
       vm_load_sketch(vm: number, program: number): number;
       vm_run(vm: number, milliseconds: number): number;
       vm_step(vm: number): number;
-      vm_get_debug_state(vm: number): number;
-      vm_set_breakpoint(vm: number, file: number, file_len: number, line: number): number;
+      vm_get_debug_state(vm: number, out: number, out_capacity: number): number;
+      vm_set_breakpoint(vm: number, file: number, line: number): number;
       vm_clear_breakpoint(vm: number, id: number): void;
       vm_pin_level(vm: number, pin: number): number;
       vm_set_pin_level(vm: number, pin: number, high: number): void;
       vm_serial_output(vm: number): number;
     }
-  ) {}
+  ) { this.exports = exports as any; }
 
   // Helper to allocate debug state struct buffer
   private allocateDebugState(bytes: number): { ptr: number; capacity: number } {
-    const allocation = this.allocate(this.debugStatePtr, this.debugStateCapacity, bytes);
-    this.debugStatePtr = allocation.ptr;
-    this.debugStateCapacity = allocation.capacity;
+    const _allocation = this.allocate(this.debugStatePtr, this.debugStateCapacity, bytes);
+    this.debugStatePtr = _allocation.ptr;
+    this.debugStateCapacity = _allocation.capacity;
     return { ptr: this.debugStatePtr, capacity: this.debugStateCapacity };
   }
-
-  // VMDebugState struct layout (matches C++):
-  // int32_t pc;                // 4 bytes
-  // int32_t frame_count;       // 4 bytes
-  // int32_t simulated_ms;      // 4 bytes
-  // int32_t yield_until_ms;    // 4 bytes
-  // bool halted;               // 1 byte
-  // bool hit_breakpoint;       // 1 byte
-  // int32_t current_line;      // 4 bytes
-  // uint32_t current_file;     // 4 bytes (pointer)
-  // Total: ~28 bytes, aligned to 32
-  private readonly DEBUG_STATE_SIZE = 32;
 
   vm_step(vm: number): number {
     return this.exports.vm_step(vm);
   }
 
   vm_get_debug_state(vm: number): VMDebugState {
-    const allocation = this.allocateDebugState(this.DEBUG_STATE_SIZE);
-    const ptr = this.exports.vm_get_debug_state(vm);
-    // The C++ function returns the struct by value, but we need to read it from wasm memory
-    // Actually, vm_get_debug_state returns VMDebugState by value in C++, which gets copied to wasm memory
-    // Let's read from the returned pointer
-    const view = new DataView(this.exports.memory.buffer);
-    // The function returns the struct by value, so we need to check the actual return convention
-    // For now, assume it returns a pointer to the struct in wasm memory
-    const statePtr = ptr;
-    if (statePtr === 0) {
+    const allocation = this.allocateDebugState(256);
+    const len = this.exports.vm_get_debug_state(vm, allocation.ptr, allocation.capacity);
+    if (len <= 0) {
       return {
         pc: 0,
         frame_count: 0,
@@ -222,22 +205,37 @@ class WasmFirmwareImpl implements WasmFirmware {
         current_file: ''
       };
     }
-    return {
-      pc: view.getInt32(statePtr, true),
-      frame_count: view.getInt32(statePtr + 4, true),
-      simulated_ms: view.getInt32(statePtr + 8, true),
-      yield_until_ms: view.getInt32(statePtr + 12, true),
-      halted: view.getUint8(statePtr + 16) !== 0,
-      hit_breakpoint: view.getUint8(statePtr + 17) !== 0,
-      current_line: view.getInt32(statePtr + 20, true),
-      current_file: this.readString(view.getUint32(statePtr + 24, true))
-    };
+    const jsonStr = this.readString(allocation.ptr);
+    try {
+      const obj = JSON.parse(jsonStr);
+      return {
+        pc: obj.pc ?? 0,
+        frame_count: obj.frame_count ?? 0,
+        simulated_ms: obj.simulated_ms ?? 0,
+        yield_until_ms: obj.yield_until_ms ?? -1,
+        halted: !!obj.halted,
+        hit_breakpoint: !!obj.hit_breakpoint,
+        current_line: obj.current_line ?? 0,
+        current_file: obj.current_file ?? ''
+      };
+    } catch {
+      return {
+        pc: 0,
+        frame_count: 0,
+        simulated_ms: 0,
+        yield_until_ms: -1,
+        halted: true,
+        hit_breakpoint: false,
+        current_line: 0,
+        current_file: ''
+      };
+    }
   }
 
   vm_set_breakpoint(vm: number, file: string, line: number): number {
     const fileBytes = new TextEncoder().encode(file);
     const fileAllocation = this.allocateFile(fileBytes);
-    return this.exports.vm_set_breakpoint(vm, fileAllocation.ptr, fileBytes.length, line);
+    return this.exports.vm_set_breakpoint(vm, fileAllocation.ptr, line);
   }
 
   vm_clear_breakpoint(vm: number, id: number): void {

@@ -1303,7 +1303,7 @@ static void writeDoubleToBuffer(char* buf, double v, int& out_len) {
         buf[pos++] = '.';
         for (int i = 0; i < frac_count; i++) buf[pos++] = '0' + frac_digits[i];
     }
-    buf[pos] = '\0';
+    buf[pos] = 0;
     out_len = pos;
 }
 
@@ -1999,46 +1999,59 @@ ExecResult exec_stmt(VM* vm, const Stmt* s);
 
 // Helper to find and execute a user-defined function
 static Value exec_user_function(VM* vm, const char* func_name, Value* args, int32_t arg_count) {
-    // Search for function declaration in global frame statements
-    if (vm->frame_count > 0) {
-        Frame* global_frame = &vm->frames[0];
-        for (int32_t i = 0; i < global_frame->stmt_count; i++) {
-            const Stmt* s = global_frame->stmts[i];
-            if (s->kind == StmtKind::FUNCTION_DECL && engine::streq(s->func_decl.name, func_name)) {
-                // Create new frame for function execution
-                Scope* func_scope = firmware::scope_create(vm, vm->global_scope);
-                
-                // Bind parameters
-                for (int32_t p = 0; p < s->func_decl.param_count && p < arg_count; p++) {
-                    scope_define_with_value(func_scope, vm, s->func_decl.params[p], args[p]);
-                }
-                
-                // Push function frame
-                const Stmt* body_stmts[1] = { s->func_decl.body };
-                vm_push_frame(vm, body_stmts, 1, func_scope);
-                
-                // Execute function body - we need to run until return
-                // This is a simplified approach: execute statements until RETURN or end
-                Frame* func_frame = &vm->frames[vm->frame_count - 1];
-                Value return_value = value_make_null();
-                
-                while (func_frame->pc < func_frame->stmt_count && !vm->halted) {
-                    const Stmt* stmt = func_frame->stmts[func_frame->pc++];
-                    ExecResult r = exec_stmt(vm, stmt);
-                    if (r == ExecResult::RETURN_VALUE) {
-                        return_value = func_frame->return_value;
-                        break;
-                    }
-                    if (r == ExecResult::BREAK || r == ExecResult::CONTINUE) {
-                        // Should not happen in function body without loops
-                    }
-                }
-                
-                // Pop function frame
-                vm->frame_count--;
-                return return_value;
-            }
+    const Stmt* decl = nullptr;
+    for (int32_t i = 0; i < vm->func_decl_count; i++) {
+        const Stmt* st = vm->func_decls[i];
+        if (st && st->kind == StmtKind::FUNCTION_DECL && st->func_decl.name && engine::streq(st->func_decl.name, func_name)) {
+            decl = st;
+            break;
         }
+    }
+    if (!decl) return value_make_null();
+
+    Scope* func_scope = firmware::scope_create(vm, vm->global_scope);
+
+    for (int32_t p = 0; p < decl->func_decl.param_count && p < arg_count; p++) {
+        scope_define_with_value(func_scope, vm, decl->func_decl.params[p], args[p]);
+    }
+
+    const Stmt* body = decl->func_decl.body;
+    const Stmt** stmts = nullptr;
+    int32_t count = 0;
+    if (body && body->kind == StmtKind::BLOCK) {
+        stmts = const_cast<const Stmt**>(body->block.stmts);
+        count = body->block.count;
+    } else if (body) {
+        stmts = reinterpret_cast<const Stmt**>(firmware::vm_alloc(sizeof(const Stmt*)));
+        stmts[0] = body;
+        count = 1;
+    }
+
+    if (count <= 0) return value_make_null();
+
+    firmware::vm_push_frame(vm, stmts, count, func_scope);
+
+    Value return_value = value_make_null();
+    bool yielded = false;
+
+    while (true) {
+        Frame* f = firmware::vm_current_frame(vm);
+        if (!f || f->pc >= f->stmt_count || vm->halted) break;
+        const Stmt* stmt = f->stmts[f->pc++];
+        ExecResult r = firmware::exec_stmt(vm, stmt);
+        if (r == ExecResult::RETURN_VALUE) {
+            return_value = f->return_value;
+            if (vm->frame_count > 0) vm->frame_count--;
+            return return_value;
+        }
+        if (r == ExecResult::YIELD_MS) {
+            yielded = true;
+            break;
+        }
+    }
+
+    if (!yielded) {
+        if (vm->frame_count > 0) vm->frame_count--;
     }
     return value_make_null();
 }
@@ -2339,6 +2352,10 @@ ExecResult exec_while(VM* vm, const Stmt* s) {
             vm_pop_loop_frame(vm);
             return r;
         }
+        if (r == ExecResult::YIELD_MS) {
+            vm_pop_loop_frame(vm);
+            return r;
+        }
         // CONTINUE just continues the loop
     }
     vm_pop_loop_frame(vm);
@@ -2359,6 +2376,10 @@ ExecResult exec_do_while(VM* vm, const Stmt* s) {
         
         if (r == ExecResult::BREAK) break;
         if (r == ExecResult::RETURN_VALUE) {
+            vm_pop_loop_frame(vm);
+            return r;
+        }
+        if (r == ExecResult::YIELD_MS) {
             vm_pop_loop_frame(vm);
             return r;
         }
@@ -2422,6 +2443,11 @@ ExecResult exec_for(VM* vm, const Stmt* s) {
         ExecResult r = exec_stmt(vm, s->for_loop.body);
         if (r == ExecResult::BREAK) break;
         if (r == ExecResult::RETURN_VALUE) {
+            frame->locals = old_scope;
+            vm_pop_loop_frame(vm);
+            return r;
+        }
+        if (r == ExecResult::YIELD_MS) {
             frame->locals = old_scope;
             vm_pop_loop_frame(vm);
             return r;
@@ -2552,11 +2578,35 @@ extern "C" void vm_destroy(VM* vm) {
 
 extern "C" int32_t vm_load_sketch(VM* vm, Program* program) {
     if (!vm || !program) return -1;
-    // Push global frame with program statements
     firmware::vm_push_frame(vm, const_cast<const Stmt**>(program->stmts), program->stmt_count, vm->global_scope);
     vm->halted = false;
     vm->simulated_ms = 0;
     vm->yield_until_ms = -1;
+    vm->lifecycle = 0;
+    vm->setup_started = false;
+    vm->setup_done = false;
+    vm->setup_decl = nullptr;
+    vm->loop_decl = nullptr;
+    vm->loop_pass_active = false;
+    vm->loop_pass_completed = false;
+    int32_t cap = program->stmt_count > 0 ? program->stmt_count : 4;
+    vm->func_decls = reinterpret_cast<const Stmt**>(firmware::vm_alloc(static_cast<uint32_t>(cap) * sizeof(const Stmt*)));
+    vm->func_decl_count = 0;
+    vm->func_decl_capacity = cap;
+    for (int32_t i = 0; i < program->stmt_count; i++) {
+        const Stmt* st = program->stmts[i];
+        if (st && st->kind == StmtKind::FUNCTION_DECL) {
+            if (vm->func_decl_count < vm->func_decl_capacity) {
+                vm->func_decls[vm->func_decl_count++] = st;
+            }
+            if (st->func_decl.name && engine::streq(st->func_decl.name, "setup")) {
+                vm->setup_decl = st;
+            }
+            if (st->func_decl.name && engine::streq(st->func_decl.name, "loop")) {
+                vm->loop_decl = st;
+            }
+        }
+    }
     return 0;
 }
 
@@ -2573,12 +2623,7 @@ static int32_t vm_execute_one(VM* vm) {
     
     // Check if frame is done
     if (frame->pc >= frame->stmt_count) {
-        // Frame done - return or pop
-        if (vm->frame_count == 1) {
-            vm->halted = true;
-            return 0;
-        }
-        vm->frame_count--;
+        if (vm->frame_count > 0) vm->frame_count--;
         return 0;
     }
     
@@ -2605,13 +2650,7 @@ static int32_t vm_execute_one(VM* vm) {
         return -(vm->yield_until_ms - vm->simulated_ms);
     }
     if (r == ExecResult::RETURN_VALUE) {
-        // Unwind frames until we find a function frame or hit bottom
-        while (vm->frame_count > 1) {
-            vm->frame_count--;
-        }
-        if (vm->frame_count == 1) {
-            vm->halted = true;
-        }
+        if (vm->frame_count > 0) vm->frame_count--;
     }
     if (r == ExecResult::BREAK || r == ExecResult::CONTINUE) {
         // Loop unwind handling is done in exec_break/exec_continue
@@ -2620,56 +2659,126 @@ static int32_t vm_execute_one(VM* vm) {
     return 1; // One statement executed, 1ms simulated (approximate)
 }
 
+
+static void vm_lifecycle_tick(VM* vm) {
+    if (vm->frame_count > 0) return;
+    if (vm->halted) return;
+    if (vm->lifecycle == 0) {
+        vm->lifecycle = 1;
+        return;
+    }
+    if (vm->lifecycle == 1) {
+        if (vm->setup_decl && !vm->setup_started) {
+            Scope* sc = firmware::scope_create(vm, vm->global_scope);
+            const Stmt* body = vm->setup_decl->func_decl.body;
+            const Stmt** stmts = nullptr;
+            int32_t count = 0;
+            if (body && body->kind == StmtKind::BLOCK) {
+                stmts = const_cast<const Stmt**>(body->block.stmts);
+                count = body->block.count;
+            } else if (body) {
+                stmts = reinterpret_cast<const Stmt**>(firmware::vm_alloc(sizeof(const Stmt*)));
+                stmts[0] = body;
+                count = 1;
+            }
+            if (count > 0) {
+                firmware::vm_push_frame(vm, stmts, count, sc);
+            }
+            vm->setup_started = true;
+            return;
+        }
+        vm->setup_done = true;
+        vm->lifecycle = 2;
+        return;
+    }
+    if (vm->lifecycle == 2) {
+        if (vm->loop_pass_completed) {
+            vm->loop_pass_completed = false;
+            vm->yield_until_ms = vm->simulated_ms + 1;
+            return;
+        }
+        if (vm->loop_decl) {
+            Scope* sc = firmware::scope_create(vm, vm->global_scope);
+            const Stmt* body = vm->loop_decl->func_decl.body;
+            const Stmt** stmts = nullptr;
+            int32_t count = 0;
+            if (body && body->kind == StmtKind::BLOCK) {
+                stmts = const_cast<const Stmt**>(body->block.stmts);
+                count = body->block.count;
+            } else if (body) {
+                stmts = reinterpret_cast<const Stmt**>(firmware::vm_alloc(sizeof(const Stmt*)));
+                stmts[0] = body;
+                count = 1;
+            }
+            if (count > 0) {
+                firmware::vm_push_frame(vm, stmts, count, sc);
+                vm->loop_pass_active = true;
+            }
+            return;
+        } else {
+            vm->lifecycle = 3;
+            return;
+        }
+    }
+    vm->halted = true;
+}
+
 extern "C" int32_t vm_run(VM* vm, int32_t milliseconds) {
     if (!vm) return -1;
     if (vm->halted) return 0;
-    
+
     int32_t start = vm->simulated_ms;
     int32_t end = start + milliseconds;
-    
+
     while (!vm->halted && !vm->hit_breakpoint) {
-        // Check if we're in a yield (delay) state
+        // Yield (delay) handling: time advances only here
         if (vm->yield_until_ms >= 0 && vm->simulated_ms < vm->yield_until_ms) {
-            // Advance time to yield point if we have enough time
             if (vm->yield_until_ms <= end) {
                 vm->simulated_ms = vm->yield_until_ms;
                 vm->yield_until_ms = -1;
                 continue;
             } else {
-                // Not enough time to complete delay - return negative ms until ready
                 return -(vm->yield_until_ms - vm->simulated_ms);
             }
         }
-        
-        // Check if we're past the requested time (only after yield is cleared)
+
         if (vm->simulated_ms > end) break;
-        
-        // Execute one statement
+
+        // Lifecycle: ensure a frame is available
+        if (vm->frame_count == 0) {
+            vm_lifecycle_tick(vm);
+            continue;
+        }
+
+        // Execute one statement from current top frame
         int32_t result = vm_execute_one(vm);
         if (result < 0) {
-            // Yield pending - return negative ms until ready
             return result;
         }
         if (result == 0) {
-            // No progress (halted, no frames, breakpoint)
-            break;
+            if (vm->frame_count == 0 && vm->loop_pass_active) {
+                vm->loop_pass_active = false;
+                vm->loop_pass_completed = true;
+            }
+            continue;
         }
-        // One statement executed, advance simulated time by 1ms
-        vm->simulated_ms++;
     }
-    
-    // If we stopped because of a yield that extends beyond requested time, return negative
+
     if (vm->yield_until_ms >= 0 && vm->simulated_ms < vm->yield_until_ms) {
         return -(vm->yield_until_ms - vm->simulated_ms);
     }
-    
+
     return vm->simulated_ms - start;
 }
 
 extern "C" int32_t vm_step(VM* vm) {
     if (!vm) return -1;
     if (vm->halted) return 0;
-    
+
+    if (vm->frame_count == 0) {
+        vm_lifecycle_tick(vm);
+    }
+
     int32_t result = vm_execute_one(vm);
     if (result < 0) {
         return result; // Yield pending
@@ -2678,27 +2787,52 @@ extern "C" int32_t vm_step(VM* vm) {
     return result; // 1 if statement executed, 0 if halted
 }
 
-extern "C" VMDebugState vm_get_debug_state(VM* vm) {
-    VMDebugState state = {};
-    if (!vm) return state;
-    
-    state.simulated_ms = vm->simulated_ms;
-    state.yield_until_ms = vm->yield_until_ms;
-    state.halted = vm->halted;
-    state.hit_breakpoint = vm->hit_breakpoint;
-    state.frame_count = vm->frame_count;
-    
+extern "C" int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity) {
+    if (!vm || !out || out_capacity <= 0) return -1;
+
+    int32_t pc = 0;
+    int32_t current_line = 0;
+    const char* current_file = "";
     if (vm->frame_count > 0) {
         Frame* frame = &vm->frames[vm->frame_count - 1];
-        state.pc = frame->pc;
+        pc = frame->pc;
         if (frame->pc < frame->stmt_count) {
-            const Stmt* s = frame->stmts[frame->pc];
-            state.current_line = s->location.line;
-            state.current_file = s->location.file;
+            const Stmt* st = frame->stmts[frame->pc];
+            current_line = st->location.line;
+            if (st->location.file) current_file = st->location.file;
         }
     }
-    
-    return state;
+
+    // Build JSON manually (no stdio in wasm)
+    char buf[512];
+    int pos = 0;
+    #define PUT(s) do { const char* _p = (s); while (*_p && pos < (int)sizeof(buf)-1) buf[pos++] = *_p++; } while(0)
+    #define PUTI(x) do { char _t[32]; int _i = 0, _v = (x); if (_v < 0) { buf[pos++] = '-'; _v = -_v; } do { _t[_i++] = '0' + (_v % 10); _v /= 10; } while (_v > 0); while (_i > 0 && pos < (int)sizeof(buf)-1) buf[pos++] = _t[--_i]; } while(0)
+    PUT("{\"pc\":");
+    PUTI(pc);
+    PUT(",\"frame_count\":");
+    PUTI(vm->frame_count);
+    PUT(",\"simulated_ms\":");
+    PUTI(vm->simulated_ms);
+    PUT(",\"yield_until_ms\":");
+    PUTI(vm->yield_until_ms);
+    PUT(",\"halted\":");
+    PUT(vm->halted ? "true" : "false");
+    PUT(",\"hit_breakpoint\":");
+    PUT(vm->hit_breakpoint ? "true" : "false");
+    PUT(",\"current_line\":");
+    PUTI(current_line);
+    PUT(",\"current_file\":\"");
+    PUT(current_file);
+    PUT("\"}");
+    buf[pos] = 0;
+    #undef PUT
+    #undef PUTI
+    int len = pos;
+    if (len > out_capacity - 1) len = out_capacity - 1;
+    for (int i = 0; i < len; i++) out[i] = buf[i];
+    out[len] = 0;
+    return len;
 }
 
 extern "C" BreakpointId vm_set_breakpoint(VM* vm, const char* file, int32_t line) {

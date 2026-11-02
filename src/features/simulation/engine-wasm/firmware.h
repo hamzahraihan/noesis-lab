@@ -278,6 +278,18 @@ struct VM {
     BreakpointId next_breakpoint_id = 1;
     // Loop frame stack for BREAK/CONTINUE
     LoopFrame* loop_frames = nullptr;
+    // Arduino lifecycle support
+    int32_t lifecycle = 0;          // 0=globals,1=setup,2=loop,3=done
+    bool setup_started = false;
+    bool setup_done = false;
+    const Stmt* setup_decl = nullptr;
+    const Stmt* loop_decl = nullptr;
+    bool loop_pass_active = false;
+    bool loop_pass_completed = false;
+    // Collected function declarations (top-level) for lookup after globals popped
+    const Stmt** func_decls = nullptr;
+    int32_t func_decl_count = 0;
+    int32_t func_decl_capacity = 0;
 };
 
 extern "C" {
@@ -320,7 +332,7 @@ int32_t vm_run(VM* vm, int32_t milliseconds);
 // or negative if a yield is pending, or 0 if halted.
 int32_t vm_step(VM* vm);
 // Get debug state for inspection
-VMDebugState vm_get_debug_state(VM* vm);
+int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity);
 // Breakpoint management
 BreakpointId vm_set_breakpoint(VM* vm, const char* file, int32_t line);
 void vm_clear_breakpoint(VM* vm, BreakpointId id);
