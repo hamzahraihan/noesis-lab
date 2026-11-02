@@ -240,7 +240,13 @@ describe('the examples', () => {
       // internal tie to GPIO12/13.
       expect(simulation.engine.i2cDevice(clock!.id)?.onBus, boardId).toBe(true);
 
-      run(simulation, 2);
+      // The sketch prints once per second via time.sleep(1). With no dynamics
+      // in the circuit, each sleep completes in one tick (delay-skip).
+      // Three ticks give three printed lines: 00:00:00, 00:00:01, 00:00:02.
+      simulation.start();
+      simulation.tick(0.05);
+      simulation.tick(0.05);
+      simulation.tick(0.05);
       const lines = simulation.serialLines().join('\n');
       expect(lines, boardId).toContain('clock online');
       /*
