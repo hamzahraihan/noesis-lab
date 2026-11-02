@@ -82,6 +82,9 @@ const FLAGS = [
   '-Wl,--export=cpu_flash_base',
   '-Wl,--export=cpu_get_instructions',
   '-Wl,--export=vm_tokenize',
+  '-Wl,--export=vm_parse',
+  '-Wl,--export=vm_free_program',
+  '-Wl,--export=vm_ast_to_json',
 ];
 
 

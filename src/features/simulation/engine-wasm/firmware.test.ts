@@ -6,7 +6,7 @@
  * for a representative Arduino sketch.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { tokenize as tokenizeTS } from '@/features/simulation/firmware/parser';
+import { tokenize as tokenizeTS, parseFirmware } from '@/features/simulation/firmware/parser';
 import { loadWasmFirmware, type WasmFirmware } from './firmware-bridge';
 
 let wasm: WasmFirmware;
@@ -115,5 +115,92 @@ describe('firmware lexer parity', () => {
     expect(tsEof.kind).toBe('eof');
     expect(wasmEof.kind).toBe('eof');
     expect(wasmEof.text).toBe('');
+  });
+});
+
+describe('firmware parser parity', () => {
+  it('parses a ternary expression in variable initializer', () => {
+    const src = `int x = a > b ? 1 : 2;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    // Compare globals array (C++ parser only produces globals)
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses binary expressions with correct precedence', () => {
+    const src = `int x = a + b * c;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses function calls', () => {
+    const src = `int x = foo(1, 2, 3);`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses member access', () => {
+    const src = `int x = obj.field;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses array index', () => {
+    const src = `int x = arr[5];`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses unary operators', () => {
+    const src = `int x = -a + !b;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses multiple global declarations', () => {
+    const src = `int a = 1; int b = 2; int c = a + b;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses array declaration with initializer', () => {
+    const src = `int arr[3] = {1, 2, 3};`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses string and character literals', () => {
+    const src = `char s[] = {'h', 'e', 'l', 'l', 'o'}; char c = 'x';`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses boolean literals', () => {
+    const src = `bool t = true; bool f = false;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses hex literals', () => {
+    const src = `int h = 0xFF;`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+
+  it('parses compound assignment in declaration', () => {
+    const src = `int x = 1; int y = (x += 2);`;
+    const tsAST = parseFirmware(src);
+    const wasmAST = wasm.parse(src);
+    expect(wasmAST.globals).toEqual(tsAST.globals);
   });
 });

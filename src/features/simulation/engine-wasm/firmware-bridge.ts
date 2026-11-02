@@ -51,6 +51,7 @@ export interface WasmToken {
 
 export interface WasmFirmware {
   tokenize(source: string): WasmToken[];
+  parse(source: string): any;
 }
 
 let firmwareExports: EngineExports & {
@@ -87,6 +88,8 @@ class WasmFirmwareImpl implements WasmFirmware {
   private sourceCapacity = 0;
   private filePtr = 0;
   private fileCapacity = 0;
+  private jsonPtr = 0;
+  private jsonCapacity = 0;
 
   constructor(
     private readonly exports: EngineExports & {
@@ -98,6 +101,18 @@ class WasmFirmwareImpl implements WasmFirmware {
         file: number,
         file_len: number
       ): number;
+      vm_parse(
+        source: number,
+        source_len: number,
+        file: number,
+        file_len: number
+      ): number;
+      vm_ast_to_json(
+        program: number,
+        out: number,
+        out_capacity: number
+      ): number;
+      vm_free_program(program: number): void;
     }
   ) {}
 
@@ -156,6 +171,46 @@ class WasmFirmwareImpl implements WasmFirmware {
     }
 
     return tokens;
+  }
+
+  parse(source: string): any {
+    const sourceBytes = new TextEncoder().encode(source);
+    const sourceAllocation = this.allocateSource(sourceBytes);
+    const fileName = 'main.ino';
+    const fileBytes = new TextEncoder().encode(fileName);
+    const fileAllocation = this.allocateFile(fileBytes);
+
+    const programPtr = this.exports.vm_parse(
+      sourceAllocation.ptr,
+      sourceBytes.length,
+      fileAllocation.ptr,
+      fileBytes.length
+    );
+
+    if (programPtr === 0) {
+      throw new Error('vm_parse returned null (parse error)');
+    }
+
+    // Allocate buffer for JSON output
+    const jsonAllocation = this.allocateJson(4096);
+    const jsonLen = this.exports.vm_ast_to_json(programPtr, jsonAllocation.ptr, jsonAllocation.capacity);
+
+    if (jsonLen < 0) {
+      this.exports.vm_free_program(programPtr);
+      throw new Error('vm_ast_to_json failed');
+    }
+
+    const jsonStr = this.readString(jsonAllocation.ptr);
+    this.exports.vm_free_program(programPtr);
+
+    return JSON.parse(jsonStr);
+  }
+
+  private allocateJson(bytes: number): { ptr: number; capacity: number } {
+    const allocation = this.allocate(this.jsonPtr, this.jsonCapacity, bytes);
+    this.jsonPtr = allocation.ptr;
+    this.jsonCapacity = allocation.capacity;
+    return { ptr: this.jsonPtr, capacity: this.jsonCapacity };
   }
 
   private allocateSource(bytes: Uint8Array): { ptr: number; capacity: number } {
