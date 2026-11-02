@@ -552,6 +552,7 @@ struct Parser {
     Stmt* readBreak();
     Stmt* readContinue();
     Stmt* readDeclaration();
+    Stmt* readFunctionDecl();
     Expr* readCall(Expr* callee, SourceLocation loc);
     Expr* readMember(Expr* target, SourceLocation loc);
     Expr* readIndex(Expr* target, SourceLocation loc);
@@ -823,7 +824,8 @@ Stmt* Parser::readStatement() {
         if (engine::streq(tok.text, "continue")) return readContinue();
     }
 
-    // Check for declaration (type keyword)
+    // Check for function declaration (return type + identifier + '(')
+    // We need to look ahead to distinguish from variable declaration
     if (tok.kind == static_cast<uint8_t>(TokenKind::TOKEN_KEYWORD)) {
         const char* kw = tok.text;
         if (engine::streq(kw, "int") || engine::streq(kw, "float") || engine::streq(kw, "double") ||
@@ -834,6 +836,29 @@ Stmt* Parser::readStatement() {
             engine::streq(kw, "uint8_t") || engine::streq(kw, "int8_t") ||
             engine::streq(kw, "uint16_t") || engine::streq(kw, "int16_t") ||
             engine::streq(kw, "uint32_t") || engine::streq(kw, "int32_t")) {
+            // Look ahead to see if this is a function declaration
+            int save_pos = position;
+            next(); // consume type
+            // Skip additional type qualifiers
+            while (peek().kind == static_cast<uint8_t>(TokenKind::TOKEN_KEYWORD)) {
+                const char* kw2 = peek().text;
+                if (engine::streq(kw2, "const") || engine::streq(kw2, "static") ||
+                    engine::streq(kw2, "volatile") || engine::streq(kw2, "unsigned") ||
+                    engine::streq(kw2, "signed")) {
+                    next();
+                } else {
+                    break;
+                }
+            }
+            if (peek().kind == static_cast<uint8_t>(TokenKind::TOKEN_IDENTIFIER)) {
+                next(); // consume identifier
+                if (atPunct("(")) {
+                    // It's a function declaration
+                    position = save_pos;
+                    return readFunctionDecl();
+                }
+            }
+            position = save_pos;
             return readDeclaration();
         }
     }
@@ -1066,6 +1091,67 @@ Stmt* Parser::readDeclaration() {
     Stmt* s = allocStmt(StmtKind::VAR_DECL, loc);
     s->decl.name = name;
     s->decl.init = init;
+    return s;
+}
+
+Stmt* Parser::readFunctionDecl() {
+    SourceLocation loc = currentLoc();
+    // Consume return type (we don't use it in VM, but parse it)
+    while (peek().kind == static_cast<uint8_t>(TokenKind::TOKEN_KEYWORD)) {
+        const char* kw = peek().text;
+        if (engine::streq(kw, "int") || engine::streq(kw, "float") || engine::streq(kw, "double") ||
+            engine::streq(kw, "bool") || engine::streq(kw, "char") || engine::streq(kw, "byte") ||
+            engine::streq(kw, "long") || engine::streq(kw, "short") || engine::streq(kw, "unsigned") ||
+            engine::streq(kw, "signed") || engine::streq(kw, "const") || engine::streq(kw, "static") ||
+            engine::streq(kw, "volatile") || engine::streq(kw, "void") ||
+            engine::streq(kw, "uint8_t") || engine::streq(kw, "int8_t") ||
+            engine::streq(kw, "uint16_t") || engine::streq(kw, "int16_t") ||
+            engine::streq(kw, "uint32_t") || engine::streq(kw, "int32_t")) {
+            next();
+        } else {
+            break;
+        }
+    }
+    
+    const Token& nameTok = peek();
+    if (nameTok.kind != static_cast<uint8_t>(TokenKind::TOKEN_IDENTIFIER)) {
+        // Error - expected function name
+        Stmt* s = allocStmt(StmtKind::EMPTY, loc);
+        return s;
+    }
+    const char* name = nameTok.text;
+    next();
+    
+    expectPunct("(");
+    
+    // Parse parameters
+    const int MAX_PARAMS = 16;
+    const char** params = reinterpret_cast<const char**>(engine::alloc_bytes(MAX_PARAMS * sizeof(const char*)));
+    int32_t param_count = 0;
+    
+    if (!atPunct(")")) {
+        do {
+            if (param_count >= MAX_PARAMS) break;
+            // Skip parameter type
+            if (peek().kind == static_cast<uint8_t>(TokenKind::TOKEN_KEYWORD)) {
+                next();
+            }
+            if (peek().kind == static_cast<uint8_t>(TokenKind::TOKEN_IDENTIFIER)) {
+                params[param_count++] = peek().text;
+                next();
+            }
+        } while (acceptPunct(","));
+    }
+    expectPunct(")");
+    
+    // Parse function body
+    Stmt* body = readStatement();
+    
+    Stmt* s = allocStmt(StmtKind::FUNCTION_DECL, loc);
+    s->func_decl.name = name;
+    s->func_decl.params = params;
+    s->func_decl.param_count = param_count;
+    s->func_decl.body = body;
     return s;
 }
 
@@ -1399,6 +1485,7 @@ void writeStmt(JsonWriter* w, const Stmt* s) {
         case StmtKind::BREAK: w->write("break"); break;
         case StmtKind::CONTINUE: w->write("continue"); break;
         case StmtKind::EMPTY: w->write("empty"); break;
+        case StmtKind::FUNCTION_DECL: w->write("functionDecl"); break;
         default: w->write("unknown"); break;
     }
     w->write("\",");
@@ -1472,6 +1559,19 @@ void writeStmt(JsonWriter* w, const Stmt* s) {
             w->write("\"value\":");
             writeExpr(w, s->ret.value);
             break;
+        case StmtKind::FUNCTION_DECL: {
+            w->write("\"name\":");
+            w->writeString(s->func_decl.name);
+            w->write(",\"params\":[");
+            for (int i = 0; i < s->func_decl.param_count; i++) {
+                if (i > 0) w->writeChar(',');
+                w->writeString(s->func_decl.params[i]);
+            }
+            w->writeChar(']');
+            w->write(",\"body\":");
+            writeStmt(w, s->func_decl.body);
+            break;
+        }
         case StmtKind::EMPTY:
             break;
         default:
@@ -1652,8 +1752,57 @@ double value_to_number(const Value& v) {
         case ValueType::NUMBER:
             return v.number;
         case ValueType::STRING:
-            // Try to parse as number
-            return 0; // Simplified - could add strtod
+            // Try to parse as number (like JavaScript's Number() or Python's float())
+            if (v.string) {
+                const char* s = v.string;
+                // Skip leading whitespace
+                while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r') s++;
+                if (*s == '\0') return 0;
+                // Simple strtod-like parsing
+                bool neg = false;
+                if (*s == '-') { neg = true; s++; }
+                else if (*s == '+') { s++; }
+                double val = 0;
+                bool has_digits = false;
+                while (*s >= '0' && *s <= '9') {
+                    val = val * 10 + (*s - '0');
+                    s++;
+                    has_digits = true;
+                }
+                if (*s == '.') {
+                    s++;
+                    double frac = 0;
+                    double div = 1;
+                    while (*s >= '0' && *s <= '9') {
+                        frac = frac * 10 + (*s - '0');
+                        div *= 10;
+                        s++;
+                        has_digits = true;
+                    }
+                    val += frac / div;
+                }
+                if ((*s == 'e' || *s == 'E') && has_digits) {
+                    s++;
+                    int exp_sign = 1;
+                    if (*s == '-') { exp_sign = -1; s++; }
+                    else if (*s == '+') { s++; }
+                    int exp_val = 0;
+                    bool has_exp_digits = false;
+                    while (*s >= '0' && *s <= '9') {
+                        exp_val = exp_val * 10 + (*s - '0');
+                        s++;
+                        has_exp_digits = true;
+                    }
+                    if (has_exp_digits) {
+                        double exp_mult = 1;
+                        for (int i = 0; i < exp_val; i++) exp_mult *= 10;
+                        if (exp_sign < 0) val /= exp_mult;
+                        else val *= exp_mult;
+                    }
+                }
+                return neg ? -val : val;
+            }
+            return 0;
         case ValueType::ARRAY:
             return static_cast<double>(v.array.count);
         case ValueType::DATETIME:
@@ -1768,16 +1917,16 @@ void scope_set(Scope* scope, VM* vm, const char* name, const Value& value) {
 }
 
 // Array operations
-Value* scope_array_lookup(Scope* scope, const char* name) {
+// Returns a Value* allocated from VM heap (caller must not rely on it across vm_run calls)
+Value* scope_array_lookup(VM* vm, Scope* scope, const char* name) {
     for (Scope* s = scope; s != nullptr; s = s->parent) {
         for (Scope::ArrayBinding* a = s->arrays; a != nullptr; a = a->next) {
             if (engine::streq(a->name, name)) {
-                // Return a special value representing the array
-                static Value array_value;
-                array_value.type = ValueType::ARRAY;
-                array_value.array.elements = a->elements;
-                array_value.array.count = a->count;
-                return &array_value;
+                Value* result = reinterpret_cast<Value*>(vm_alloc(sizeof(Value)));
+                result->type = ValueType::ARRAY;
+                result->array.elements = a->elements;
+                result->array.count = a->count;
+                return result;
             }
         }
     }
@@ -1822,9 +1971,77 @@ Frame* vm_current_frame(VM* vm) {
     return &vm->frames[vm->frame_count - 1];
 }
 
-// Forward declarations for statement executors
+// Loop frame management for BREAK/CONTINUE
+void vm_push_loop_frame(VM* vm, Frame* frame, int32_t stmt_index) {
+    LoopFrame* lf = reinterpret_cast<LoopFrame*>(vm_alloc(sizeof(LoopFrame)));
+    lf->frame = frame;
+    lf->stmt_index = stmt_index;
+    lf->next = vm->loop_frames;
+    vm->loop_frames = lf;
+}
+
+void vm_pop_loop_frame(VM* vm) {
+    if (vm->loop_frames) {
+        vm->loop_frames = vm->loop_frames->next;
+    }
+}
+
+// Find the innermost loop frame for a given frame
+LoopFrame* vm_find_loop_frame(VM* vm, Frame* frame) {
+    for (LoopFrame* lf = vm->loop_frames; lf != nullptr; lf = lf->next) {
+        if (lf->frame == frame) return lf;
+    }
+    return nullptr;
+}
+
+// Forward declarations for statement executors (needed by exec_user_function)
 ExecResult exec_stmt(VM* vm, const Stmt* s);
-Value eval_expr(VM* vm, const Expr* e);
+
+// Helper to find and execute a user-defined function
+static Value exec_user_function(VM* vm, const char* func_name, Value* args, int32_t arg_count) {
+    // Search for function declaration in global frame statements
+    if (vm->frame_count > 0) {
+        Frame* global_frame = &vm->frames[0];
+        for (int32_t i = 0; i < global_frame->stmt_count; i++) {
+            const Stmt* s = global_frame->stmts[i];
+            if (s->kind == StmtKind::FUNCTION_DECL && engine::streq(s->func_decl.name, func_name)) {
+                // Create new frame for function execution
+                Scope* func_scope = firmware::scope_create(vm, vm->global_scope);
+                
+                // Bind parameters
+                for (int32_t p = 0; p < s->func_decl.param_count && p < arg_count; p++) {
+                    scope_define_with_value(func_scope, vm, s->func_decl.params[p], args[p]);
+                }
+                
+                // Push function frame
+                const Stmt* body_stmts[1] = { s->func_decl.body };
+                vm_push_frame(vm, body_stmts, 1, func_scope);
+                
+                // Execute function body - we need to run until return
+                // This is a simplified approach: execute statements until RETURN or end
+                Frame* func_frame = &vm->frames[vm->frame_count - 1];
+                Value return_value = value_make_null();
+                
+                while (func_frame->pc < func_frame->stmt_count && !vm->halted) {
+                    const Stmt* stmt = func_frame->stmts[func_frame->pc++];
+                    ExecResult r = exec_stmt(vm, stmt);
+                    if (r == ExecResult::RETURN_VALUE) {
+                        return_value = func_frame->return_value;
+                        break;
+                    }
+                    if (r == ExecResult::BREAK || r == ExecResult::CONTINUE) {
+                        // Should not happen in function body without loops
+                    }
+                }
+                
+                // Pop function frame
+                vm->frame_count--;
+                return return_value;
+            }
+        }
+    }
+    return value_make_null();
+}
 
 // Expression evaluator
 Value eval_expr(VM* vm, const Expr* e) {
@@ -1871,8 +2088,7 @@ Value eval_expr(VM* vm, const Expr* e) {
         }
             
         case ExprKind::CALL: {
-            // Function call - evaluate callee and arguments
-            Value callee_val = eval_expr(vm, e->call.callee);
+            // Function call - evaluate arguments
             Value* args = nullptr;
             if (e->call.arg_count > 0) {
                 args = reinterpret_cast<Value*>(vm_alloc(static_cast<uint32_t>(e->call.arg_count) * sizeof(Value)));
@@ -1924,6 +2140,9 @@ Value eval_expr(VM* vm, const Expr* e) {
                 // PWM - no-op in VM
             } else if (func_name && engine::streq(func_name, "analogRead")) {
                 result = value_make_number(0);
+            } else if (func_name) {
+                // User-defined function call
+                result = exec_user_function(vm, func_name, args, e->call.arg_count);
             }
             
             return result;
@@ -2049,7 +2268,12 @@ Value eval_expr(VM* vm, const Expr* e) {
 
 // Statement executors
 ExecResult exec_expression_stmt(VM* vm, const Stmt* s) {
+    int32_t prev_yield = vm->yield_until_ms;
     eval_expr(vm, s->expr);
+    // If delay() was called during evaluation, yield
+    if (vm->yield_until_ms >= 0 && vm->yield_until_ms != prev_yield) {
+        return ExecResult::YIELD_MS;
+    }
     return ExecResult::OK;
 }
 
@@ -2096,23 +2320,54 @@ ExecResult exec_if(VM* vm, const Stmt* s) {
 }
 
 ExecResult exec_while(VM* vm, const Stmt* s) {
+    Frame* frame = vm_current_frame(vm);
+    int32_t stmt_index = frame->pc - 1; // Current statement index
+    vm_push_loop_frame(vm, frame, stmt_index);
+    
     while (true) {
         Value cond = eval_expr(vm, s->loop.cond);
         if (!value_to_bool(cond)) break;
         
-        Scope* old_scope = vm_current_frame(vm)->locals;
+        Scope* old_scope = frame->locals;
         Scope* new_scope = scope_create(vm, old_scope);
-        Frame* frame = vm_current_frame(vm);
         frame->locals = new_scope;
         ExecResult r = exec_stmt(vm, s->loop.body);
         frame->locals = old_scope;
         
         if (r == ExecResult::BREAK) break;
-        if (r == ExecResult::RETURN_VALUE || r == ExecResult::CONTINUE) {
-            // CONTINUE just continues the loop
-            if (r == ExecResult::RETURN_VALUE) return r;
+        if (r == ExecResult::RETURN_VALUE) {
+            vm_pop_loop_frame(vm);
+            return r;
         }
+        // CONTINUE just continues the loop
     }
+    vm_pop_loop_frame(vm);
+    return ExecResult::OK;
+}
+
+ExecResult exec_do_while(VM* vm, const Stmt* s) {
+    Frame* frame = vm_current_frame(vm);
+    int32_t stmt_index = frame->pc - 1;
+    vm_push_loop_frame(vm, frame, stmt_index);
+    
+    while (true) {
+        Scope* old_scope = frame->locals;
+        Scope* new_scope = scope_create(vm, old_scope);
+        frame->locals = new_scope;
+        ExecResult r = exec_stmt(vm, s->loop.body);
+        frame->locals = old_scope;
+        
+        if (r == ExecResult::BREAK) break;
+        if (r == ExecResult::RETURN_VALUE) {
+            vm_pop_loop_frame(vm);
+            return r;
+        }
+        // CONTINUE falls through to condition check
+        
+        Value cond = eval_expr(vm, s->loop.cond);
+        if (!value_to_bool(cond)) break;
+    }
+    vm_pop_loop_frame(vm);
     return ExecResult::OK;
 }
 
@@ -2142,18 +2397,13 @@ ExecResult exec_return(VM* vm, const Stmt* s) {
     return ExecResult::RETURN_VALUE;
 }
 
-ExecResult exec_break(VM* vm, const Stmt* s) {
-    return ExecResult::BREAK;
-}
-
-ExecResult exec_continue(VM* vm, const Stmt* s) {
-    return ExecResult::CONTINUE;
-}
-
 ExecResult exec_for(VM* vm, const Stmt* s) {
-    Scope* old_scope = vm_current_frame(vm)->locals;
-    Scope* new_scope = scope_create(vm, old_scope);
     Frame* frame = vm_current_frame(vm);
+    int32_t stmt_index = frame->pc - 1;
+    vm_push_loop_frame(vm, frame, stmt_index);
+    
+    Scope* old_scope = frame->locals;
+    Scope* new_scope = scope_create(vm, old_scope);
     frame->locals = new_scope;
     
     // Init
@@ -2173,6 +2423,7 @@ ExecResult exec_for(VM* vm, const Stmt* s) {
         if (r == ExecResult::BREAK) break;
         if (r == ExecResult::RETURN_VALUE) {
             frame->locals = old_scope;
+            vm_pop_loop_frame(vm);
             return r;
         }
         // CONTINUE falls through to update
@@ -2184,7 +2435,35 @@ ExecResult exec_for(VM* vm, const Stmt* s) {
     }
     
     frame->locals = old_scope;
+    vm_pop_loop_frame(vm);
     return ExecResult::OK;
+}
+
+ExecResult exec_break(VM* vm, const Stmt* s) {
+    // Find the innermost loop frame in the current frame
+    Frame* frame = vm_current_frame(vm);
+    LoopFrame* lf = vm_find_loop_frame(vm, frame);
+    if (lf) {
+        // Unwind all loop frames up to and including this one
+        while (vm->loop_frames && vm->loop_frames != lf) {
+            vm_pop_loop_frame(vm);
+        }
+        if (vm->loop_frames) vm_pop_loop_frame(vm);
+    }
+    return ExecResult::BREAK;
+}
+
+ExecResult exec_continue(VM* vm, const Stmt* s) {
+    // Find the innermost loop frame in the current frame
+    Frame* frame = vm_current_frame(vm);
+    LoopFrame* lf = vm_find_loop_frame(vm, frame);
+    if (lf) {
+        // Unwind all loop frames up to but not including this one
+        while (vm->loop_frames && vm->loop_frames != lf) {
+            vm_pop_loop_frame(vm);
+        }
+    }
+    return ExecResult::CONTINUE;
 }
 
 ExecResult exec_stmt(VM* vm, const Stmt* s) {
@@ -2210,6 +2489,8 @@ ExecResult exec_stmt(VM* vm, const Stmt* s) {
             return exec_continue(vm, s);
         case StmtKind::FOR:
             return exec_for(vm, s);
+        case StmtKind::DO_WHILE:
+            return exec_do_while(vm, s);
         case StmtKind::EMPTY:
             return ExecResult::OK;
         case StmtKind::ARRAY_DECL: {
@@ -2223,6 +2504,22 @@ ExecResult exec_stmt(VM* vm, const Stmt* s) {
                         arr->elements[i] = eval_expr(vm, s->array_decl.init[i]);
                     }
                 }
+            }
+            return ExecResult::OK;
+        }
+        case StmtKind::FUNCTION_DECL: {
+            // Function declarations are stored in global scope for later lookup
+            Frame* frame = vm_current_frame(vm);
+            Scope* scope = frame ? frame->locals : vm->global_scope;
+            if (scope) {
+                // Store function as a special value in scope
+                Value func_val = value_make_null();
+                func_val.type = ValueType::ARRAY; // Reuse ARRAY type to store function info
+                func_val.array.elements = nullptr;
+                func_val.array.count = 0;
+                // Store function metadata in opaque field (we'll use a special encoding)
+                // For now, just register the function name for lookup
+                scope_define_with_value(scope, vm, s->func_decl.name, func_val);
             }
             return ExecResult::OK;
         }
@@ -2263,6 +2560,66 @@ extern "C" int32_t vm_load_sketch(VM* vm, Program* program) {
     return 0;
 }
 
+// Internal: execute a single statement and return result
+// Returns: >0 = ms consumed (1 per statement), 0 = halted/no progress, <0 = yield pending (-ms until ready)
+static int32_t vm_execute_one(VM* vm) {
+    // Check if we have a current frame
+    if (vm->frame_count == 0) {
+        vm->halted = true;
+        return 0;
+    }
+    
+    Frame* frame = &vm->frames[vm->frame_count - 1];
+    
+    // Check if frame is done
+    if (frame->pc >= frame->stmt_count) {
+        // Frame done - return or pop
+        if (vm->frame_count == 1) {
+            vm->halted = true;
+            return 0;
+        }
+        vm->frame_count--;
+        return 0;
+    }
+    
+    // Check for breakpoint at current statement
+    const Stmt* s = frame->stmts[frame->pc];
+    if (vm->breakpoints) {
+        const char* file = s->location.file;
+        int32_t line = s->location.line;
+        for (VM::Breakpoint* bp = vm->breakpoints; bp != nullptr; bp = bp->next) {
+            if (engine::streq(bp->file, file) && bp->line == line) {
+                vm->hit_breakpoint = true;
+                break;
+            }
+        }
+    }
+    if (vm->hit_breakpoint) return 0;
+    
+    // Execute one statement
+    frame->pc++;
+    ExecResult r = firmware::exec_stmt(vm, s);
+    
+    if (r == ExecResult::YIELD_MS) {
+        // delay() was called - yield_until_ms is set, return negative ms until ready
+        return -(vm->yield_until_ms - vm->simulated_ms);
+    }
+    if (r == ExecResult::RETURN_VALUE) {
+        // Unwind frames until we find a function frame or hit bottom
+        while (vm->frame_count > 1) {
+            vm->frame_count--;
+        }
+        if (vm->frame_count == 1) {
+            vm->halted = true;
+        }
+    }
+    if (r == ExecResult::BREAK || r == ExecResult::CONTINUE) {
+        // Loop unwind handling is done in exec_break/exec_continue
+    }
+    
+    return 1; // One statement executed, 1ms simulated (approximate)
+}
+
 extern "C" int32_t vm_run(VM* vm, int32_t milliseconds) {
     if (!vm) return -1;
     if (vm->halted) return 0;
@@ -2270,60 +2627,104 @@ extern "C" int32_t vm_run(VM* vm, int32_t milliseconds) {
     int32_t start = vm->simulated_ms;
     int32_t end = start + milliseconds;
     
-    while (vm->simulated_ms < end && !vm->halted && !vm->hit_breakpoint) {
-        // Handle yield (delay)
+    while (!vm->halted && !vm->hit_breakpoint) {
+        // Check if we're in a yield (delay) state
         if (vm->yield_until_ms >= 0 && vm->simulated_ms < vm->yield_until_ms) {
-            // Advance time to yield point or end
-            vm->simulated_ms = vm->yield_until_ms < end ? vm->yield_until_ms : end;
-            if (vm->simulated_ms >= vm->yield_until_ms) vm->yield_until_ms = -1;
-            continue;
-        }
-        
-        // Check if we have a current frame
-        if (vm->frame_count == 0) {
-            vm->halted = true;
-            break;
-        }
-        
-        Frame* frame = &vm->frames[vm->frame_count - 1];
-        
-        // Check if frame is done
-        if (frame->pc >= frame->stmt_count) {
-            // Frame done - return or pop
-            if (vm->frame_count == 1) {
-                vm->halted = true;
-                break;
+            // Advance time to yield point if we have enough time
+            if (vm->yield_until_ms <= end) {
+                vm->simulated_ms = vm->yield_until_ms;
+                vm->yield_until_ms = -1;
+                continue;
+            } else {
+                // Not enough time to complete delay - return negative ms until ready
+                return -(vm->yield_until_ms - vm->simulated_ms);
             }
-            vm->frame_count--;
-            continue;
         }
+        
+        // Check if we're past the requested time (only after yield is cleared)
+        if (vm->simulated_ms > end) break;
         
         // Execute one statement
-        const Stmt* s = frame->stmts[frame->pc++];
-        ExecResult r = firmware::exec_stmt(vm, s);
-        
-        if (r == ExecResult::YIELD_MS) {
-            continue; // time advanced inside delay
+        int32_t result = vm_execute_one(vm);
+        if (result < 0) {
+            // Yield pending - return negative ms until ready
+            return result;
         }
-        if (r == ExecResult::RETURN_VALUE) {
-            // Unwind frames until we find a function frame or hit bottom
-            while (vm->frame_count > 1) {
-                vm->frame_count--;
-                // Check if this is a function frame (has return value handling)
-                Frame* f = &vm->frames[vm->frame_count - 1];
-                // For simplicity, just pop all frames on return
-            }
-            if (vm->frame_count == 1) {
-                vm->halted = true;
-            }
+        if (result == 0) {
+            // No progress (halted, no frames, breakpoint)
+            break;
         }
-        if (r == ExecResult::BREAK || r == ExecResult::CONTINUE) {
-            // Loop unwind handling - for now just continue
-            // In a full implementation, we'd track loop frames
-        }
+        // One statement executed, advance simulated time by 1ms
+        vm->simulated_ms++;
+    }
+    
+    // If we stopped because of a yield that extends beyond requested time, return negative
+    if (vm->yield_until_ms >= 0 && vm->simulated_ms < vm->yield_until_ms) {
+        return -(vm->yield_until_ms - vm->simulated_ms);
     }
     
     return vm->simulated_ms - start;
+}
+
+extern "C" int32_t vm_step(VM* vm) {
+    if (!vm) return -1;
+    if (vm->halted) return 0;
+    
+    int32_t result = vm_execute_one(vm);
+    if (result < 0) {
+        return result; // Yield pending
+    }
+    vm->simulated_ms++;
+    return result; // 1 if statement executed, 0 if halted
+}
+
+extern "C" VMDebugState vm_get_debug_state(VM* vm) {
+    VMDebugState state = {};
+    if (!vm) return state;
+    
+    state.simulated_ms = vm->simulated_ms;
+    state.yield_until_ms = vm->yield_until_ms;
+    state.halted = vm->halted;
+    state.hit_breakpoint = vm->hit_breakpoint;
+    state.frame_count = vm->frame_count;
+    
+    if (vm->frame_count > 0) {
+        Frame* frame = &vm->frames[vm->frame_count - 1];
+        state.pc = frame->pc;
+        if (frame->pc < frame->stmt_count) {
+            const Stmt* s = frame->stmts[frame->pc];
+            state.current_line = s->location.line;
+            state.current_file = s->location.file;
+        }
+    }
+    
+    return state;
+}
+
+extern "C" BreakpointId vm_set_breakpoint(VM* vm, const char* file, int32_t line) {
+    if (!vm || !file) return -1;
+    
+    VM::Breakpoint* bp = reinterpret_cast<VM::Breakpoint*>(engine::alloc_bytes(sizeof(VM::Breakpoint)));
+    bp->file = file;
+    bp->line = line;
+    bp->id = vm->next_breakpoint_id++;
+    bp->next = vm->breakpoints;
+    vm->breakpoints = bp;
+    
+    return bp->id;
+}
+
+extern "C" void vm_clear_breakpoint(VM* vm, BreakpointId id) {
+    if (!vm) return;
+    
+    VM::Breakpoint** prev = &vm->breakpoints;
+    for (VM::Breakpoint* bp = vm->breakpoints; bp != nullptr; bp = bp->next) {
+        if (bp->id == id) {
+            *prev = bp->next;
+            return;
+        }
+        prev = &bp->next;
+    }
 }
 
 extern "C" int32_t vm_pin_level(VM* vm, uint8_t pin) {

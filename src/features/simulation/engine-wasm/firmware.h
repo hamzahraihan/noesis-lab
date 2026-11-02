@@ -52,6 +52,7 @@ enum class StmtKind : uint8_t {
     TRY,
     RAISE,
     FOR_EACH,
+    FUNCTION_DECL,
 };
 
 enum class ExprKind : uint8_t {
@@ -143,6 +144,8 @@ struct Stmt {
         struct { Stmt** stmts; int32_t count; } block;
         struct { Expr* value; } ret;
         struct { const char* name; Expr* value; } raise;
+        // Function declaration
+        struct { const char* name; const char** params; int32_t param_count; Stmt* body; } func_decl;
         // switch, try, for_each can be added later
     };
 };
@@ -191,6 +194,21 @@ enum class ExecResult : uint8_t {
     YIELD_MS,
 };
 
+// Debug state for VM inspection
+struct VMDebugState {
+    int32_t pc;                // Current statement index in current frame
+    int32_t frame_count;       // Number of active frames
+    int32_t simulated_ms;      // Simulated time
+    int32_t yield_until_ms;    // When yield will complete (-1 = not yielding)
+    bool halted;               // Whether VM is halted
+    bool hit_breakpoint;       // Whether a breakpoint was hit
+    int32_t current_line;      // Current source line (if available)
+    const char* current_file;  // Current source file (if available)
+};
+
+// Breakpoint identifier
+typedef int32_t BreakpointId;
+
 // Forward declaration
 struct Scope;
 
@@ -224,6 +242,13 @@ struct Scope {
     ArrayBinding* arrays = nullptr;
 };
 
+// Loop frame for BREAK/CONTINUE unwinding
+struct LoopFrame {
+    Frame* frame;         // The frame containing the loop
+    int32_t stmt_index;   // Statement index of the loop in the frame
+    LoopFrame* next;      // Previous loop frame
+};
+
 // Virtual Machine
 struct VM {
     // Bump-allocator arena for this VM's heap
@@ -242,6 +267,17 @@ struct VM {
     int32_t serial_buf_cap = 0;
     // Pin levels (mirrors parts.wasm GPIO)
     bool pin_levels[64];
+    // Breakpoint support
+    struct Breakpoint {
+        const char* file;
+        int32_t line;
+        BreakpointId id;
+        Breakpoint* next;
+    };
+    Breakpoint* breakpoints = nullptr;
+    BreakpointId next_breakpoint_id = 1;
+    // Loop frame stack for BREAK/CONTINUE
+    LoopFrame* loop_frames = nullptr;
 };
 
 extern "C" {
@@ -278,8 +314,16 @@ VM* vm_create(void);
 void vm_destroy(VM* vm);
 int32_t vm_load_sketch(VM* vm, Program* program);
 // Run for up to `milliseconds`. Returns milliseconds actually consumed,
-// or negative if a yield (delay) is pending.
+// or negative if a yield (delay) is pending (return value = -ms_until_ready).
 int32_t vm_run(VM* vm, int32_t milliseconds);
+// Single-step: execute exactly one statement. Returns milliseconds consumed,
+// or negative if a yield is pending, or 0 if halted.
+int32_t vm_step(VM* vm);
+// Get debug state for inspection
+VMDebugState vm_get_debug_state(VM* vm);
+// Breakpoint management
+BreakpointId vm_set_breakpoint(VM* vm, const char* file, int32_t line);
+void vm_clear_breakpoint(VM* vm, BreakpointId id);
 int32_t vm_pin_level(VM* vm, uint8_t pin);
 void vm_set_pin_level(VM* vm, uint8_t pin, bool high);
 const char* vm_serial_output(VM* vm);  // pointer into wasm memory, valid until next vm_run

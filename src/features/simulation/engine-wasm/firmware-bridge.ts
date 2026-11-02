@@ -49,6 +49,17 @@ export interface WasmToken {
   column: number;
 }
 
+export interface VMDebugState {
+  pc: number;
+  frame_count: number;
+  simulated_ms: number;
+  yield_until_ms: number;
+  halted: boolean;
+  hit_breakpoint: boolean;
+  current_line: number;
+  current_file: string;
+}
+
 export interface WasmFirmware {
   tokenize(source: string): WasmToken[];
   parse(source: string): any;
@@ -57,6 +68,10 @@ export interface WasmFirmware {
   vm_destroy(vm: number): void;
   vm_load_sketch(vm: number, program: number): number;
   vm_run(vm: number, milliseconds: number): number;
+  vm_step(vm: number): number;
+  vm_get_debug_state(vm: number): VMDebugState;
+  vm_set_breakpoint(vm: number, file: string, line: number): number;
+  vm_clear_breakpoint(vm: number, id: number): void;
   vm_pin_level(vm: number, pin: number): number;
   vm_set_pin_level(vm: number, pin: number, high: boolean): void;
   vm_serial_output(vm: number): string;
@@ -88,6 +103,10 @@ let firmwareExports: EngineExports & {
   vm_destroy(vm: number): void;
   vm_load_sketch(vm: number, program: number): number;
   vm_run(vm: number, milliseconds: number): number;
+  vm_step(vm: number): number;
+  vm_get_debug_state(vm: number): number; // Returns pointer to VMDebugState struct
+  vm_set_breakpoint(vm: number, file: number, file_len: number, line: number): number;
+  vm_clear_breakpoint(vm: number, id: number): void;
   vm_pin_level(vm: number, pin: number): number;
   vm_set_pin_level(vm: number, pin: number, high: number): void;
   vm_serial_output(vm: number): number;
@@ -118,6 +137,8 @@ class WasmFirmwareImpl implements WasmFirmware {
   private fileCapacity = 0;
   private jsonPtr = 0;
   private jsonCapacity = 0;
+  private debugStatePtr = 0;
+  private debugStateCapacity = 0;
 
   constructor(
     private readonly exports: EngineExports & {
@@ -145,11 +166,83 @@ class WasmFirmwareImpl implements WasmFirmware {
       vm_destroy(vm: number): void;
       vm_load_sketch(vm: number, program: number): number;
       vm_run(vm: number, milliseconds: number): number;
+      vm_step(vm: number): number;
+      vm_get_debug_state(vm: number): number;
+      vm_set_breakpoint(vm: number, file: number, file_len: number, line: number): number;
+      vm_clear_breakpoint(vm: number, id: number): void;
       vm_pin_level(vm: number, pin: number): number;
       vm_set_pin_level(vm: number, pin: number, high: number): void;
       vm_serial_output(vm: number): number;
     }
   ) {}
+
+  // Helper to allocate debug state struct buffer
+  private allocateDebugState(bytes: number): { ptr: number; capacity: number } {
+    const allocation = this.allocate(this.debugStatePtr, this.debugStateCapacity, bytes);
+    this.debugStatePtr = allocation.ptr;
+    this.debugStateCapacity = allocation.capacity;
+    return { ptr: this.debugStatePtr, capacity: this.debugStateCapacity };
+  }
+
+  // VMDebugState struct layout (matches C++):
+  // int32_t pc;                // 4 bytes
+  // int32_t frame_count;       // 4 bytes
+  // int32_t simulated_ms;      // 4 bytes
+  // int32_t yield_until_ms;    // 4 bytes
+  // bool halted;               // 1 byte
+  // bool hit_breakpoint;       // 1 byte
+  // int32_t current_line;      // 4 bytes
+  // uint32_t current_file;     // 4 bytes (pointer)
+  // Total: ~28 bytes, aligned to 32
+  private readonly DEBUG_STATE_SIZE = 32;
+
+  vm_step(vm: number): number {
+    return this.exports.vm_step(vm);
+  }
+
+  vm_get_debug_state(vm: number): VMDebugState {
+    const allocation = this.allocateDebugState(this.DEBUG_STATE_SIZE);
+    const ptr = this.exports.vm_get_debug_state(vm);
+    // The C++ function returns the struct by value, but we need to read it from wasm memory
+    // Actually, vm_get_debug_state returns VMDebugState by value in C++, which gets copied to wasm memory
+    // Let's read from the returned pointer
+    const view = new DataView(this.exports.memory.buffer);
+    // The function returns the struct by value, so we need to check the actual return convention
+    // For now, assume it returns a pointer to the struct in wasm memory
+    const statePtr = ptr;
+    if (statePtr === 0) {
+      return {
+        pc: 0,
+        frame_count: 0,
+        simulated_ms: 0,
+        yield_until_ms: -1,
+        halted: true,
+        hit_breakpoint: false,
+        current_line: 0,
+        current_file: ''
+      };
+    }
+    return {
+      pc: view.getInt32(statePtr, true),
+      frame_count: view.getInt32(statePtr + 4, true),
+      simulated_ms: view.getInt32(statePtr + 8, true),
+      yield_until_ms: view.getInt32(statePtr + 12, true),
+      halted: view.getUint8(statePtr + 16) !== 0,
+      hit_breakpoint: view.getUint8(statePtr + 17) !== 0,
+      current_line: view.getInt32(statePtr + 20, true),
+      current_file: this.readString(view.getUint32(statePtr + 24, true))
+    };
+  }
+
+  vm_set_breakpoint(vm: number, file: string, line: number): number {
+    const fileBytes = new TextEncoder().encode(file);
+    const fileAllocation = this.allocateFile(fileBytes);
+    return this.exports.vm_set_breakpoint(vm, fileAllocation.ptr, fileBytes.length, line);
+  }
+
+  vm_clear_breakpoint(vm: number, id: number): void {
+    this.exports.vm_clear_breakpoint(vm, id);
+  }
 
   tokenize(source: string): WasmToken[] {
     // Upload source string
