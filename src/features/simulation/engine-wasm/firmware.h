@@ -152,6 +152,98 @@ struct Program {
     int32_t stmt_count;
 };
 
+/**
+ * A runtime value matching the TypeScript Value type from interpreter.ts:
+ *   number | string | number[] | Value[] | DictValue | DateTimeValue | TimeSpanValue | RtcHandle | null
+ * 
+ * Uses a tagged union with a type discriminator and a payload union.
+ * For complex types (STRING, ARRAY, DATETIME, TIMESPAN, RTC), the payload
+ * holds an opaque handle (offset into VM heap for strings/arrays, or
+ * special encoding for datetime/timespan/rtc).
+ */
+enum class ValueType : uint8_t {
+    NUMBER,
+    STRING,
+    ARRAY,
+    DATETIME,
+    TIMESPAN,
+    RTC,
+    NULL_,
+};
+
+struct Value {
+    ValueType type;
+    union {
+        double number;
+        const char* string;  // pointer into VM heap
+        struct { Value* elements; int32_t count; } array;
+        // datetime/timespan/rtc as opaque handles
+        int64_t opaque;
+    };
+};
+
+// Execution result for statement control flow
+enum class ExecResult : uint8_t {
+    OK,
+    RETURN_VALUE,
+    BREAK,
+    CONTINUE,
+    YIELD_MS,
+};
+
+// Forward declaration
+struct Scope;
+
+// VM call frame
+struct Frame {
+    const Stmt** stmts;
+    int32_t stmt_count;
+    int32_t pc;  // current statement index
+    Scope* locals;
+    Value return_value;
+};
+
+// Variable scope for variable lookup
+struct Scope {
+    // Variable bindings: name -> Value
+    struct Binding {
+        const char* name;
+        Value value;
+        Binding* next;
+    };
+    Binding* bindings = nullptr;
+    Scope* parent = nullptr;
+    
+    // Array bindings: name -> {elements, count}
+    struct ArrayBinding {
+        const char* name;
+        Value* elements;
+        int32_t count;
+        ArrayBinding* next;
+    };
+    ArrayBinding* arrays = nullptr;
+};
+
+// Virtual Machine
+struct VM {
+    // Bump-allocator arena for this VM's heap
+    uintptr_t heap_top = 0;
+    Frame* frames = nullptr;
+    int32_t frame_count = 0;
+    int32_t frame_capacity = 0;
+    Scope* global_scope = nullptr;
+    int32_t yield_until_ms = -1;  // -1 = not yielding
+    int32_t simulated_ms = 0;
+    bool halted = false;
+    bool hit_breakpoint = false;
+    // Serial output buffer
+    char* serial_buf = nullptr;
+    int32_t serial_buf_len = 0;
+    int32_t serial_buf_cap = 0;
+    // Pin levels (mirrors parts.wasm GPIO)
+    bool pin_levels[64];
+};
+
 extern "C" {
 
 // Tokenize a sketch source. Returns count; writes tokens into `out` (caller-allocated).
@@ -180,6 +272,17 @@ void vm_free_program(Program* program);
 // Serialize AST to JSON string in wasm memory. Returns length written, or negative on error.
 // `out` must have capacity `out_capacity`. The JSON is null-terminated.
 int32_t vm_ast_to_json(Program* program, char* out, int32_t out_capacity);
+
+// VM API
+VM* vm_create(void);
+void vm_destroy(VM* vm);
+int32_t vm_load_sketch(VM* vm, Program* program);
+// Run for up to `milliseconds`. Returns milliseconds actually consumed,
+// or negative if a yield (delay) is pending.
+int32_t vm_run(VM* vm, int32_t milliseconds);
+int32_t vm_pin_level(VM* vm, uint8_t pin);
+void vm_set_pin_level(VM* vm, uint8_t pin, bool high);
+const char* vm_serial_output(VM* vm);  // pointer into wasm memory, valid until next vm_run
 
 } // extern "C"
 #endif

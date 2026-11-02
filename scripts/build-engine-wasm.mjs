@@ -85,6 +85,13 @@ const FLAGS = [
   '-Wl,--export=vm_parse',
   '-Wl,--export=vm_free_program',
   '-Wl,--export=vm_ast_to_json',
+  '-Wl,--export=vm_create',
+  '-Wl,--export=vm_destroy',
+  '-Wl,--export=vm_load_sketch',
+  '-Wl,--export=vm_run',
+  '-Wl,--export=vm_pin_level',
+  '-Wl,--export=vm_set_pin_level',
+  '-Wl,--export=vm_serial_output',
 ];
 
 

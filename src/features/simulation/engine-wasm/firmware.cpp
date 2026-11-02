@@ -499,7 +499,7 @@ struct Parser {
         if (!acceptPunct(text)) {
             // Report error - in wasm we can't throw, so we log and continue
             // This prevents silent error swallowing
-            engine::js_log1p(0); // error: expected punctuation
+            js_log1p(0); // error: expected punctuation
         }
     }
 
@@ -1526,4 +1526,817 @@ extern "C" void vm_free_program(Program* program) {
 
 extern "C" int32_t vm_ast_to_json(Program* program, char* out, int32_t out_capacity) {
     return firmware::serializeProgram(program, out, out_capacity);
+}
+
+// ===== VM Implementation =====
+
+namespace firmware {
+    
+    // VM heap allocation - use engine::alloc_bytes
+    inline void* vm_alloc(uint32_t bytes) {
+        return reinterpret_cast<void*>(engine::alloc_bytes(bytes));
+    }
+    
+    // String interning/copying into VM heap
+    const char* vm_strdup(VM* vm, const char* src, int32_t len) {
+        if (len <= 0) return "";
+        void* ptr = vm_alloc(static_cast<uint32_t>(len) + 1);
+        if (ptr == nullptr) return "";
+        char* dst = reinterpret_cast<char*>(ptr);
+        for (int32_t i = 0; i < len; i++) dst[i] = src[i];
+        dst[len] = '\0';
+        return dst;
+    }
+    
+    // Serial buffer append
+    void serial_append(VM* vm, const char* text, int32_t len) {
+        if (len <= 0) return;
+        if (vm->serial_buf_len + len + 1 > vm->serial_buf_cap) {
+            int32_t new_cap = vm->serial_buf_cap == 0 ? 256 : vm->serial_buf_cap * 2;
+            while (vm->serial_buf_len + len + 1 > new_cap) new_cap *= 2;
+            void* ptr = vm_alloc(static_cast<uint32_t>(new_cap));
+            if (ptr == nullptr) return;
+            char* new_buf = reinterpret_cast<char*>(ptr);
+            for (int32_t i = 0; i < vm->serial_buf_len; i++) new_buf[i] = vm->serial_buf[i];
+            vm->serial_buf = new_buf;
+            vm->serial_buf_cap = new_cap;
+        }
+        for (int32_t i = 0; i < len; i++) vm->serial_buf[vm->serial_buf_len + i] = text[i];
+        vm->serial_buf_len += len;
+        vm->serial_buf[vm->serial_buf_len] = '\0';
+    }
+
+} // namespace firmware
+
+// ===== Value Helper Functions =====
+
+namespace firmware {
+
+// Create a number value
+Value value_make_number(double n) {
+    Value v;
+    v.type = ValueType::NUMBER;
+    v.number = n;
+    return v;
+}
+
+// Create a string value (copies into VM heap)
+Value value_make_string(VM* vm, const char* s, int32_t len) {
+    Value v;
+    v.type = ValueType::STRING;
+    v.string = vm_strdup(vm, s, len);
+    return v;
+}
+
+// Create a null value
+Value value_make_null() {
+    Value v;
+    v.type = ValueType::NULL_;
+    v.opaque = 0;
+    return v;
+}
+
+// Create an array value
+Value value_make_array(VM* vm, int32_t count) {
+    Value v;
+    v.type = ValueType::ARRAY;
+    v.array.elements = reinterpret_cast<Value*>(vm_alloc(static_cast<uint32_t>(count) * sizeof(Value)));
+    v.array.count = count;
+    return v;
+}
+
+// Copy a value (deep copy for arrays/strings)
+Value value_copy(VM* vm, const Value& src) {
+    Value dst;
+    dst.type = src.type;
+    switch (src.type) {
+        case ValueType::NUMBER:
+            dst.number = src.number;
+            break;
+        case ValueType::STRING:
+            // Copy string to VM heap
+            if (src.string) {
+                int32_t len = 0;
+                while (src.string[len] != '\0') len++;
+                dst.string = vm_strdup(vm, src.string, len);
+            } else {
+                dst.string = "";
+            }
+            break;
+        case ValueType::ARRAY:
+            dst.array.count = src.array.count;
+            if (src.array.count > 0 && src.array.elements) {
+                dst.array.elements = reinterpret_cast<Value*>(vm_alloc(static_cast<uint32_t>(src.array.count) * sizeof(Value)));
+                for (int32_t i = 0; i < src.array.count; i++) {
+                    dst.array.elements[i] = value_copy(vm, src.array.elements[i]);
+                }
+            } else {
+                dst.array.elements = nullptr;
+            }
+            break;
+        case ValueType::DATETIME:
+        case ValueType::TIMESPAN:
+        case ValueType::RTC:
+            dst.opaque = src.opaque;
+            break;
+        case ValueType::NULL_:
+            dst.opaque = 0;
+            break;
+    }
+    return dst;
+}
+
+// Convert value to number (for arithmetic, conditions)
+double value_to_number(const Value& v) {
+    switch (v.type) {
+        case ValueType::NUMBER:
+            return v.number;
+        case ValueType::STRING:
+            // Try to parse as number
+            return 0; // Simplified - could add strtod
+        case ValueType::ARRAY:
+            return static_cast<double>(v.array.count);
+        case ValueType::DATETIME:
+        case ValueType::TIMESPAN:
+        case ValueType::RTC:
+            return 0;
+        case ValueType::NULL_:
+            return 0;
+    }
+    return 0;
+}
+
+// Convert value to boolean (for conditions)
+bool value_to_bool(const Value& v) {
+    switch (v.type) {
+        case ValueType::NUMBER:
+            return v.number != 0;
+        case ValueType::STRING:
+            return v.string && v.string[0] != '\0';
+        case ValueType::ARRAY:
+            return v.array.count > 0;
+        case ValueType::DATETIME:
+        case ValueType::TIMESPAN:
+        case ValueType::RTC:
+            return true;
+        case ValueType::NULL_:
+            return false;
+    }
+    return false;
+}
+
+// Compare two values for equality
+bool value_equals(const Value& a, const Value& b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case ValueType::NUMBER:
+            return a.number == b.number;
+        case ValueType::STRING:
+            if (!a.string || !b.string) return a.string == b.string;
+            {
+                int32_t i = 0;
+                while (a.string[i] && b.string[i] && a.string[i] == b.string[i]) i++;
+                return a.string[i] == b.string[i];
+            }
+        case ValueType::ARRAY:
+            if (a.array.count != b.array.count) return false;
+            for (int32_t i = 0; i < a.array.count; i++) {
+                if (!value_equals(a.array.elements[i], b.array.elements[i])) return false;
+            }
+            return true;
+        case ValueType::DATETIME:
+        case ValueType::TIMESPAN:
+        case ValueType::RTC:
+            return a.opaque == b.opaque;
+        case ValueType::NULL_:
+            return true;
+    }
+    return false;
+}
+
+// Scope methods
+Scope* scope_create(VM* vm, Scope* parent = nullptr) {
+    Scope* scope = reinterpret_cast<Scope*>(vm_alloc(sizeof(Scope)));
+    scope->bindings = nullptr;
+    scope->arrays = nullptr;
+    scope->parent = parent;
+    return scope;
+}
+
+Value* scope_lookup(Scope* scope, const char* name) {
+    for (Scope* s = scope; s != nullptr; s = s->parent) {
+        for (Scope::Binding* b = s->bindings; b != nullptr; b = b->next) {
+            if (engine::streq(b->name, name)) return &b->value;
+        }
+    }
+    return nullptr;
+}
+
+Value* scope_define(Scope* scope, VM* vm, const char* name) {
+    Scope::Binding* b = reinterpret_cast<Scope::Binding*>(vm_alloc(sizeof(Scope::Binding)));
+    b->name = name; // Assumes name is already in VM heap or static
+    b->value = value_make_null();
+    b->next = scope->bindings;
+    scope->bindings = b;
+    return &b->value;
+}
+
+Value* scope_define_with_value(Scope* scope, VM* vm, const char* name, const Value& value) {
+    Value* slot = scope_define(scope, vm, name);
+    *slot = value_copy(vm, value);
+    return slot;
+}
+
+void scope_set(Scope* scope, VM* vm, const char* name, const Value& value) {
+    for (Scope* s = scope; s != nullptr; s = s->parent) {
+        for (Scope::Binding* b = s->bindings; b != nullptr; b = b->next) {
+            if (engine::streq(b->name, name)) {
+                // Deep copy for complex types
+                if (b->value.type == ValueType::STRING && b->value.string) {
+                    // Free old string? Arena-based, so just overwrite
+                }
+                if (b->value.type == ValueType::ARRAY && b->value.array.elements) {
+                    // Could free old array
+                }
+                b->value = value_copy(vm, value);
+                return;
+            }
+        }
+    }
+    // Not found, define in current scope
+    scope_define_with_value(scope, vm, name, value);
+}
+
+// Array operations
+Value* scope_array_lookup(Scope* scope, const char* name) {
+    for (Scope* s = scope; s != nullptr; s = s->parent) {
+        for (Scope::ArrayBinding* a = s->arrays; a != nullptr; a = a->next) {
+            if (engine::streq(a->name, name)) {
+                // Return a special value representing the array
+                static Value array_value;
+                array_value.type = ValueType::ARRAY;
+                array_value.array.elements = a->elements;
+                array_value.array.count = a->count;
+                return &array_value;
+            }
+        }
+    }
+    return nullptr;
+}
+
+Scope::ArrayBinding* scope_array_define(Scope* scope, VM* vm, const char* name, int32_t size) {
+    Scope::ArrayBinding* a = reinterpret_cast<Scope::ArrayBinding*>(vm_alloc(sizeof(Scope::ArrayBinding)));
+    a->name = name;
+    a->elements = reinterpret_cast<Value*>(vm_alloc(static_cast<uint32_t>(size) * sizeof(Value)));
+    a->count = size;
+    a->next = scope->arrays;
+    scope->arrays = a;
+    return a;
+}
+
+// VM frame management
+void vm_push_frame(VM* vm, const Stmt** stmts, int32_t count, Scope* locals) {
+    if (vm->frame_count >= vm->frame_capacity) {
+        int32_t new_cap = vm->frame_capacity == 0 ? 8 : vm->frame_capacity * 2;
+        Frame* new_frames = reinterpret_cast<Frame*>(vm_alloc(static_cast<uint32_t>(new_cap) * sizeof(Frame)));
+        if (vm->frames) {
+            for (int32_t i = 0; i < vm->frame_count; i++) new_frames[i] = vm->frames[i];
+        }
+        vm->frames = new_frames;
+        vm->frame_capacity = new_cap;
+    }
+    Frame& frame = vm->frames[vm->frame_count++];
+    frame.stmts = stmts;
+    frame.stmt_count = count;
+    frame.pc = 0;
+    frame.locals = locals;
+    frame.return_value = value_make_null();
+}
+
+void vm_pop_frame(VM* vm) {
+    if (vm->frame_count > 0) vm->frame_count--;
+}
+
+Frame* vm_current_frame(VM* vm) {
+    if (vm->frame_count == 0) return nullptr;
+    return &vm->frames[vm->frame_count - 1];
+}
+
+// Forward declarations for statement executors
+ExecResult exec_stmt(VM* vm, const Stmt* s);
+Value eval_expr(VM* vm, const Expr* e);
+
+// Expression evaluator
+Value eval_expr(VM* vm, const Expr* e) {
+    if (!e) return value_make_null();
+    
+    switch (e->kind) {
+        case ExprKind::NUMBER:
+            return value_make_number(e->number);
+            
+        case ExprKind::STRING:
+            if (e->string_val) {
+                int32_t len = 0;
+                while (e->string_val[len]) len++;
+                return value_make_string(vm, e->string_val, len);
+            }
+            return value_make_string(vm, "", 0);
+            
+        case ExprKind::BOOLEAN:
+            return value_make_number(e->boolean_val ? 1.0 : 0.0);
+            
+        case ExprKind::IDENTIFIER: {
+            // Look up variable in scope
+            Frame* frame = vm_current_frame(vm);
+            Scope* scope = frame ? frame->locals : vm->global_scope;
+            if (scope) {
+                Value* v = scope_lookup(scope, e->identifier);
+                if (v) return value_copy(vm, *v);
+            }
+            // Check for built-in constants
+            if (engine::streq(e->identifier, "HIGH") || engine::streq(e->identifier, "OUTPUT") || engine::streq(e->identifier, "INPUT_PULLUP")) {
+                return value_make_number(1);
+            }
+            if (engine::streq(e->identifier, "LOW") || engine::streq(e->identifier, "INPUT")) {
+                return value_make_number(0);
+            }
+            if (engine::streq(e->identifier, "true")) {
+                return value_make_number(1);
+            }
+            if (engine::streq(e->identifier, "false")) {
+                return value_make_number(0);
+            }
+            // Return 0 for undefined
+            return value_make_number(0);
+        }
+            
+        case ExprKind::CALL: {
+            // Function call - evaluate callee and arguments
+            Value callee_val = eval_expr(vm, e->call.callee);
+            Value* args = nullptr;
+            if (e->call.arg_count > 0) {
+                args = reinterpret_cast<Value*>(vm_alloc(static_cast<uint32_t>(e->call.arg_count) * sizeof(Value)));
+                for (int32_t i = 0; i < e->call.arg_count; i++) {
+                    args[i] = eval_expr(vm, e->call.args[i]);
+                }
+            }
+            
+            // Handle built-in functions
+            const char* func_name = nullptr;
+            if (e->call.callee->kind == ExprKind::IDENTIFIER) {
+                func_name = e->call.callee->identifier;
+            }
+            
+            Value result = value_make_null();
+            
+            if (func_name && engine::streq(func_name, "delay")) {
+                if (e->call.arg_count > 0) {
+                    int32_t ms = static_cast<int32_t>(value_to_number(args[0]));
+                    if (ms > 0) {
+                        vm->yield_until_ms = vm->simulated_ms + ms;
+                        return value_make_number(0); // YIELD_MS handled by vm_run
+                    }
+                }
+            } else if (func_name && engine::streq(func_name, "digitalWrite")) {
+                if (e->call.arg_count >= 2) {
+                    int pin = static_cast<int>(value_to_number(args[0]));
+                    int level = static_cast<int>(value_to_number(args[1]));
+                    if (pin >= 0 && pin < 64) {
+                        vm->pin_levels[pin] = (level != 0);
+                    }
+                }
+            } else if (func_name && engine::streq(func_name, "digitalRead")) {
+                if (e->call.arg_count > 0) {
+                    int pin = static_cast<int>(value_to_number(args[0]));
+                    if (pin >= 0 && pin < 64) {
+                        result = value_make_number(vm->pin_levels[pin] ? 1.0 : 0.0);
+                    }
+                }
+            } else if (func_name && engine::streq(func_name, "pinMode")) {
+                // pinMode is a no-op in VM (handled by hardware layer)
+            } else if (func_name && engine::streq(func_name, "Serial")) {
+                // Serial object - methods handled as member calls
+            } else if (func_name && engine::streq(func_name, "millis")) {
+                result = value_make_number(static_cast<double>(vm->simulated_ms));
+            } else if (func_name && engine::streq(func_name, "micros")) {
+                result = value_make_number(static_cast<double>(vm->simulated_ms) * 1000.0);
+            } else if (func_name && engine::streq(func_name, "analogWrite")) {
+                // PWM - no-op in VM
+            } else if (func_name && engine::streq(func_name, "analogRead")) {
+                result = value_make_number(0);
+            }
+            
+            return result;
+        }
+            
+        case ExprKind::MEMBER: {
+            Value target = eval_expr(vm, e->member.target);
+            // Handle Serial.print/println
+            if (target.type == ValueType::NULL_ && e->member.target->kind == ExprKind::IDENTIFIER) {
+                const char* obj_name = e->member.target->identifier;
+                if (engine::streq(obj_name, "Serial")) {
+                    if (engine::streq(e->member.member, "print") || engine::streq(e->member.member, "println") || engine::streq(e->member.member, "begin")) {
+                        // Return a callable that does serial output
+                        return value_make_null(); // Placeholder
+                    }
+                }
+            }
+            // For now, return 0 for member access
+            return value_make_null();
+        }
+            
+        case ExprKind::ASSIGN: {
+            Value value = eval_expr(vm, e->assign.value);
+            if (e->assign.target->kind == ExprKind::IDENTIFIER) {
+                Frame* frame = vm_current_frame(vm);
+                Scope* scope = frame ? frame->locals : vm->global_scope;
+                if (scope) {
+                    scope_set(scope, vm, e->assign.target->identifier, value);
+                }
+            }
+            return value;
+        }
+            
+        case ExprKind::BINARY: {
+            Value left = eval_expr(vm, e->binary.left);
+            Value right = eval_expr(vm, e->binary.right);
+            double l = value_to_number(left);
+            double r = value_to_number(right);
+            double result = 0;
+            
+            const char* op = e->binary.op;
+            if (engine::streq(op, "+")) result = l + r;
+            else if (engine::streq(op, "-")) result = l - r;
+            else if (engine::streq(op, "*")) result = l * r;
+            else if (engine::streq(op, "/")) result = r != 0 ? l / r : 0;
+            else if (engine::streq(op, "%")) result = r != 0 ? (l - r * static_cast<int>(l / r)) : 0;
+            else if (engine::streq(op, "==")) result = (l == r) ? 1 : 0;
+            else if (engine::streq(op, "!=")) result = (l != r) ? 1 : 0;
+            else if (engine::streq(op, "<")) result = (l < r) ? 1 : 0;
+            else if (engine::streq(op, ">")) result = (l > r) ? 1 : 0;
+            else if (engine::streq(op, "<=")) result = (l <= r) ? 1 : 0;
+            else if (engine::streq(op, ">=")) result = (l >= r) ? 1 : 0;
+            else if (engine::streq(op, "&&")) result = (l != 0 && r != 0) ? 1 : 0;
+            else if (engine::streq(op, "||")) result = (l != 0 || r != 0) ? 1 : 0;
+            else if (engine::streq(op, "&")) result = static_cast<int>(l) & static_cast<int>(r);
+            else if (engine::streq(op, "|")) result = static_cast<int>(l) | static_cast<int>(r);
+            else if (engine::streq(op, "^")) result = static_cast<int>(l) ^ static_cast<int>(r);
+            else if (engine::streq(op, "<<")) result = static_cast<int>(l) << static_cast<int>(r);
+            else if (engine::streq(op, ">>")) result = static_cast<int>(l) >> static_cast<int>(r);
+            
+            return value_make_number(result);
+        }
+            
+        case ExprKind::UNARY: {
+            Value operand = eval_expr(vm, e->unary.operand);
+            double v = value_to_number(operand);
+            double result = 0;
+            
+            const char* op = e->unary.op;
+            if (engine::streq(op, "-")) result = -v;
+            else if (engine::streq(op, "+")) result = v;
+            else if (engine::streq(op, "!")) result = (v == 0) ? 1 : 0;
+            else if (engine::streq(op, "~")) result = ~static_cast<int>(v);
+            else if (engine::streq(op, "++")) result = v + 1;
+            else if (engine::streq(op, "--")) result = v - 1;
+            
+            // If target is identifier, update it
+            if (e->unary.operand->kind == ExprKind::IDENTIFIER) {
+                Frame* frame = vm_current_frame(vm);
+                Scope* scope = frame ? frame->locals : vm->global_scope;
+                if (scope) {
+                    Value new_val = value_make_number(result);
+                    scope_set(scope, vm, e->unary.operand->identifier, new_val);
+                }
+            }
+            
+            return value_make_number(result);
+        }
+            
+        case ExprKind::TERNARY: {
+            Value cond = eval_expr(vm, e->ternary.cond);
+            if (value_to_bool(cond)) {
+                return eval_expr(vm, e->ternary.then_);
+            } else {
+                return eval_expr(vm, e->ternary.else_);
+            }
+        }
+            
+        case ExprKind::ARRAY: {
+            Value arr = value_make_array(vm, e->array.count);
+            for (int32_t i = 0; i < e->array.count; i++) {
+                arr.array.elements[i] = eval_expr(vm, e->array.elements[i]);
+            }
+            return arr;
+        }
+            
+        case ExprKind::INDEX: {
+            Value target = eval_expr(vm, e->index.target);
+            Value index = eval_expr(vm, e->index.index);
+            if (target.type == ValueType::ARRAY && target.array.elements) {
+                int32_t idx = static_cast<int32_t>(value_to_number(index));
+                if (idx >= 0 && idx < target.array.count) {
+                    return value_copy(vm, target.array.elements[idx]);
+                }
+            }
+            return value_make_null();
+        }
+            
+        default:
+            return value_make_null();
+    }
+}
+
+// Statement executors
+ExecResult exec_expression_stmt(VM* vm, const Stmt* s) {
+    eval_expr(vm, s->expr);
+    return ExecResult::OK;
+}
+
+ExecResult exec_decl(VM* vm, const Stmt* s) {
+    if (s->decl.init) {
+        Value val = eval_expr(vm, s->decl.init);
+        Frame* frame = vm_current_frame(vm);
+        Scope* scope = frame ? frame->locals : vm->global_scope;
+        if (scope) {
+            scope_define_with_value(scope, vm, s->decl.name, val);
+        }
+    } else {
+        Frame* frame = vm_current_frame(vm);
+        Scope* scope = frame ? frame->locals : vm->global_scope;
+        if (scope) {
+            scope_define(scope, vm, s->decl.name);
+        }
+    }
+    return ExecResult::OK;
+}
+
+ExecResult exec_if(VM* vm, const Stmt* s) {
+    Value cond = eval_expr(vm, s->ite.cond);
+    if (value_to_bool(cond)) {
+        // Execute then branch
+        Scope* old_scope = vm_current_frame(vm)->locals;
+        Scope* new_scope = scope_create(vm, old_scope);
+        Frame* frame = vm_current_frame(vm);
+        frame->locals = new_scope;
+        ExecResult r = exec_stmt(vm, s->ite.then_);
+        frame->locals = old_scope;
+        return r;
+    } else if (s->ite.else_) {
+        // Execute else branch
+        Scope* old_scope = vm_current_frame(vm)->locals;
+        Scope* new_scope = scope_create(vm, old_scope);
+        Frame* frame = vm_current_frame(vm);
+        frame->locals = new_scope;
+        ExecResult r = exec_stmt(vm, s->ite.else_);
+        frame->locals = old_scope;
+        return r;
+    }
+    return ExecResult::OK;
+}
+
+ExecResult exec_while(VM* vm, const Stmt* s) {
+    while (true) {
+        Value cond = eval_expr(vm, s->loop.cond);
+        if (!value_to_bool(cond)) break;
+        
+        Scope* old_scope = vm_current_frame(vm)->locals;
+        Scope* new_scope = scope_create(vm, old_scope);
+        Frame* frame = vm_current_frame(vm);
+        frame->locals = new_scope;
+        ExecResult r = exec_stmt(vm, s->loop.body);
+        frame->locals = old_scope;
+        
+        if (r == ExecResult::BREAK) break;
+        if (r == ExecResult::RETURN_VALUE || r == ExecResult::CONTINUE) {
+            // CONTINUE just continues the loop
+            if (r == ExecResult::RETURN_VALUE) return r;
+        }
+    }
+    return ExecResult::OK;
+}
+
+ExecResult exec_block(VM* vm, const Stmt* s) {
+    Scope* old_scope = vm_current_frame(vm)->locals;
+    Scope* new_scope = scope_create(vm, old_scope);
+    Frame* frame = vm_current_frame(vm);
+    frame->locals = new_scope;
+    
+    for (int32_t i = 0; i < s->block.count; i++) {
+        ExecResult r = exec_stmt(vm, s->block.stmts[i]);
+        if (r != ExecResult::OK) {
+            frame->locals = old_scope;
+            return r;
+        }
+    }
+    
+    frame->locals = old_scope;
+    return ExecResult::OK;
+}
+
+ExecResult exec_return(VM* vm, const Stmt* s) {
+    if (s->ret.value) {
+        Frame* frame = vm_current_frame(vm);
+        frame->return_value = eval_expr(vm, s->ret.value);
+    }
+    return ExecResult::RETURN_VALUE;
+}
+
+ExecResult exec_break(VM* vm, const Stmt* s) {
+    return ExecResult::BREAK;
+}
+
+ExecResult exec_continue(VM* vm, const Stmt* s) {
+    return ExecResult::CONTINUE;
+}
+
+ExecResult exec_for(VM* vm, const Stmt* s) {
+    Scope* old_scope = vm_current_frame(vm)->locals;
+    Scope* new_scope = scope_create(vm, old_scope);
+    Frame* frame = vm_current_frame(vm);
+    frame->locals = new_scope;
+    
+    // Init
+    if (s->for_loop.init) {
+        exec_stmt(vm, s->for_loop.init);
+    }
+    
+    while (true) {
+        // Condition
+        if (s->for_loop.cond) {
+            Value cond = eval_expr(vm, s->for_loop.cond);
+            if (!value_to_bool(cond)) break;
+        }
+        
+        // Body
+        ExecResult r = exec_stmt(vm, s->for_loop.body);
+        if (r == ExecResult::BREAK) break;
+        if (r == ExecResult::RETURN_VALUE) {
+            frame->locals = old_scope;
+            return r;
+        }
+        // CONTINUE falls through to update
+        
+        // Update
+        if (s->for_loop.update) {
+            eval_expr(vm, s->for_loop.update);
+        }
+    }
+    
+    frame->locals = old_scope;
+    return ExecResult::OK;
+}
+
+ExecResult exec_stmt(VM* vm, const Stmt* s) {
+    if (!s) return ExecResult::OK;
+    
+    switch (s->kind) {
+        case StmtKind::EXPRESSION:
+            return exec_expression_stmt(vm, s);
+        case StmtKind::VAR_DECL:
+            return exec_decl(vm, s);
+        case StmtKind::IF:
+        case StmtKind::IF_ELSE:
+            return exec_if(vm, s);
+        case StmtKind::WHILE:
+            return exec_while(vm, s);
+        case StmtKind::BLOCK:
+            return exec_block(vm, s);
+        case StmtKind::RETURN:
+            return exec_return(vm, s);
+        case StmtKind::BREAK:
+            return exec_break(vm, s);
+        case StmtKind::CONTINUE:
+            return exec_continue(vm, s);
+        case StmtKind::FOR:
+            return exec_for(vm, s);
+        case StmtKind::EMPTY:
+            return ExecResult::OK;
+        case StmtKind::ARRAY_DECL: {
+            // Array declaration
+            Frame* frame = vm_current_frame(vm);
+            Scope* scope = frame ? frame->locals : vm->global_scope;
+            if (scope) {
+                Scope::ArrayBinding* arr = scope_array_define(scope, vm, s->array_decl.name, s->array_decl.size);
+                if (s->array_decl.init && s->array_decl.init_count > 0) {
+                    for (int32_t i = 0; i < s->array_decl.init_count && i < s->array_decl.size; i++) {
+                        arr->elements[i] = eval_expr(vm, s->array_decl.init[i]);
+                    }
+                }
+            }
+            return ExecResult::OK;
+        }
+        default:
+            return ExecResult::OK;
+    }
+} // exec_stmt
+
+} // namespace firmware
+
+// ===== VM Run Loop =====
+
+extern "C" VM* vm_create(void) {
+    VM* vm = reinterpret_cast<VM*>(engine::alloc_bytes(sizeof(VM)));
+    // Zero-initialize
+    for (size_t i = 0; i < sizeof(VM); i++) {
+        reinterpret_cast<char*>(vm)[i] = 0;
+    }
+    // Initialize pin levels
+    for (int i = 0; i < 64; i++) vm->pin_levels[i] = false;
+    // Create global scope
+    vm->global_scope = firmware::scope_create(vm, nullptr);
+    return vm;
+}
+
+extern "C" void vm_destroy(VM* vm) {
+    // Arena-based: nothing to do, memory is reclaimed when wasm module resets
+    (void)vm;
+}
+
+extern "C" int32_t vm_load_sketch(VM* vm, Program* program) {
+    if (!vm || !program) return -1;
+    // Push global frame with program statements
+    firmware::vm_push_frame(vm, const_cast<const Stmt**>(program->stmts), program->stmt_count, vm->global_scope);
+    vm->halted = false;
+    vm->simulated_ms = 0;
+    vm->yield_until_ms = -1;
+    return 0;
+}
+
+extern "C" int32_t vm_run(VM* vm, int32_t milliseconds) {
+    if (!vm) return -1;
+    if (vm->halted) return 0;
+    
+    int32_t start = vm->simulated_ms;
+    int32_t end = start + milliseconds;
+    
+    while (vm->simulated_ms < end && !vm->halted && !vm->hit_breakpoint) {
+        // Handle yield (delay)
+        if (vm->yield_until_ms >= 0 && vm->simulated_ms < vm->yield_until_ms) {
+            // Advance time to yield point or end
+            vm->simulated_ms = vm->yield_until_ms < end ? vm->yield_until_ms : end;
+            if (vm->simulated_ms >= vm->yield_until_ms) vm->yield_until_ms = -1;
+            continue;
+        }
+        
+        // Check if we have a current frame
+        if (vm->frame_count == 0) {
+            vm->halted = true;
+            break;
+        }
+        
+        Frame* frame = &vm->frames[vm->frame_count - 1];
+        
+        // Check if frame is done
+        if (frame->pc >= frame->stmt_count) {
+            // Frame done - return or pop
+            if (vm->frame_count == 1) {
+                vm->halted = true;
+                break;
+            }
+            vm->frame_count--;
+            continue;
+        }
+        
+        // Execute one statement
+        const Stmt* s = frame->stmts[frame->pc++];
+        ExecResult r = firmware::exec_stmt(vm, s);
+        
+        if (r == ExecResult::YIELD_MS) {
+            continue; // time advanced inside delay
+        }
+        if (r == ExecResult::RETURN_VALUE) {
+            // Unwind frames until we find a function frame or hit bottom
+            while (vm->frame_count > 1) {
+                vm->frame_count--;
+                // Check if this is a function frame (has return value handling)
+                Frame* f = &vm->frames[vm->frame_count - 1];
+                // For simplicity, just pop all frames on return
+            }
+            if (vm->frame_count == 1) {
+                vm->halted = true;
+            }
+        }
+        if (r == ExecResult::BREAK || r == ExecResult::CONTINUE) {
+            // Loop unwind handling - for now just continue
+            // In a full implementation, we'd track loop frames
+        }
+    }
+    
+    return vm->simulated_ms - start;
+}
+
+extern "C" int32_t vm_pin_level(VM* vm, uint8_t pin) {
+    if (!vm || pin >= 64) return 0;
+    return vm->pin_levels[pin] ? 1 : 0;
+}
+
+extern "C" void vm_set_pin_level(VM* vm, uint8_t pin, bool high) {
+    if (!vm || pin >= 64) return;
+    vm->pin_levels[pin] = high;
+}
+
+extern "C" const char* vm_serial_output(VM* vm) {
+    if (!vm || !vm->serial_buf) return "";
+    return vm->serial_buf;
 }

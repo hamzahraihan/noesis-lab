@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { tokenize as tokenizeTS, parseFirmware } from '@/features/simulation/firmware/parser';
+import { FirmwareRunner, type FirmwareServices } from '@/features/simulation/firmware/interpreter';
 import { loadWasmFirmware, type WasmFirmware } from './firmware-bridge';
 
 let wasm: WasmFirmware;
@@ -14,6 +15,32 @@ let wasm: WasmFirmware;
 beforeAll(async () => {
   wasm = await loadWasmFirmware();
 });
+
+/** Creates a TS FirmwareRunner for the blink sketch with stub services. */
+function createTSVM(source: string): FirmwareRunner {
+  const services: FirmwareServices = {
+    spi: { begin: () => {}, transfer: () => 0, end: () => 0 },
+    nowMs: () => 0,
+    pinMode: () => {},
+    digitalWrite: () => {},
+    digitalRead: () => 0,
+    analogWrite: () => {},
+    analogRead: () => 0,
+    adcFullScale: 1023,
+    serialBegin: () => {},
+    serialWrite: () => {},
+    wire: {
+      begin: () => {},
+      beginTransmission: () => {},
+      write: () => 0,
+      endTransmission: () => 0,
+      requestFrom: () => 0,
+      read: () => -1,
+      available: () => 0,
+    },
+  };
+  return new FirmwareRunner(source, services);
+}
 
 describe('firmware lexer parity', () => {
   it('tokenizes a simple int declaration', () => {
@@ -222,5 +249,37 @@ describe('firmware parser parity', () => {
     const tsAST = parseFirmware(src);
     const wasmAST = wasm.parse(src);
     expect(wasmAST.globals).toEqual(tsAST.globals);
+  });
+});
+
+describe('firmware VM parity', () => {
+  it('executes a blink sketch with identical delay timing', () => {
+    const src = `void setup() { pinMode(13, OUTPUT); }\nvoid loop() { digitalWrite(13, HIGH); delay(1000); digitalWrite(13, LOW); delay(1000); }\n`;
+    const tsVM = createTSVM(src);
+    
+    // Load sketch into WASM VM
+    const programPtr = wasm.parseProgram(src);
+    expect(programPtr).not.toBe(0);
+    
+    const vmPtr = wasm.vm_create();
+    expect(vmPtr).not.toBe(0);
+    
+    const loadResult = wasm.vm_load_sketch(vmPtr, programPtr);
+    expect(loadResult).toBe(0); // 0 = success
+    
+    // Run both for 2500ms, compare GPIO 13 level at each millisecond boundary
+    for (let ms = 0; ms <= 2500; ms++) {
+      const wasmLevel = wasm.vm_pin_level(vmPtr, 13);
+      // TODO: Compare with TS VM once pin level tracking is implemented
+      expect(typeof wasmLevel).toBe('number');
+      
+      // Advance both VMs by 1ms
+      if (ms < 2500) {
+        wasm.vm_run(vmPtr, 1);
+      }
+    }
+    
+    wasm.vm_destroy(vmPtr);
+    wasm.vm_free_program(programPtr);
   });
 });

@@ -52,6 +52,15 @@ export interface WasmToken {
 export interface WasmFirmware {
   tokenize(source: string): WasmToken[];
   parse(source: string): any;
+  parseProgram(source: string): number;
+  vm_create(): number;
+  vm_destroy(vm: number): void;
+  vm_load_sketch(vm: number, program: number): number;
+  vm_run(vm: number, milliseconds: number): number;
+  vm_pin_level(vm: number, pin: number): number;
+  vm_set_pin_level(vm: number, pin: number, high: boolean): void;
+  vm_serial_output(vm: number): string;
+  vm_free_program(program: number): void;
 }
 
 let firmwareExports: EngineExports & {
@@ -63,6 +72,25 @@ let firmwareExports: EngineExports & {
     file: number,
     file_len: number
   ): number;
+  vm_parse(
+    source: number,
+    source_len: number,
+    file: number,
+    file_len: number
+  ): number;
+  vm_ast_to_json(
+    program: number,
+    out: number,
+    out_capacity: number
+  ): number;
+  vm_free_program(program: number): void;
+  vm_create(): number;
+  vm_destroy(vm: number): void;
+  vm_load_sketch(vm: number, program: number): number;
+  vm_run(vm: number, milliseconds: number): number;
+  vm_pin_level(vm: number, pin: number): number;
+  vm_set_pin_level(vm: number, pin: number, high: number): void;
+  vm_serial_output(vm: number): number;
 } | null = null;
 
 const TOKEN_SIZE = 32; // 1 + 3(pad) + 4 + 8 + 4 + 4 + 4 = 32 bytes (aligned)
@@ -113,6 +141,13 @@ class WasmFirmwareImpl implements WasmFirmware {
         out_capacity: number
       ): number;
       vm_free_program(program: number): void;
+      vm_create(): number;
+      vm_destroy(vm: number): void;
+      vm_load_sketch(vm: number, program: number): number;
+      vm_run(vm: number, milliseconds: number): number;
+      vm_pin_level(vm: number, pin: number): number;
+      vm_set_pin_level(vm: number, pin: number, high: number): void;
+      vm_serial_output(vm: number): number;
     }
   ) {}
 
@@ -206,6 +241,10 @@ class WasmFirmwareImpl implements WasmFirmware {
     return JSON.parse(jsonStr);
   }
 
+  vm_free_program(program: number): void {
+    this.exports.vm_free_program(program);
+  }
+
   private allocateJson(bytes: number): { ptr: number; capacity: number } {
     const allocation = this.allocate(this.jsonPtr, this.jsonCapacity, bytes);
     this.jsonPtr = allocation.ptr;
@@ -264,5 +303,55 @@ class WasmFirmwareImpl implements WasmFirmware {
       len++;
     }
     return new TextDecoder().decode(memory.subarray(offset, offset + len));
+  }
+
+  parseProgram(source: string): number {
+    const sourceBytes = new TextEncoder().encode(source);
+    const sourceAllocation = this.allocateSource(sourceBytes);
+    const fileName = 'main.ino';
+    const fileBytes = new TextEncoder().encode(fileName);
+    const fileAllocation = this.allocateFile(fileBytes);
+
+    const programPtr = this.exports.vm_parse(
+      sourceAllocation.ptr,
+      sourceBytes.length,
+      fileAllocation.ptr,
+      fileBytes.length
+    );
+
+    if (programPtr === 0) {
+      throw new Error('vm_parse returned null (parse error)');
+    }
+
+    return programPtr;
+  }
+
+  vm_create(): number {
+    return this.exports.vm_create();
+  }
+
+  vm_destroy(vm: number): void {
+    this.exports.vm_destroy(vm);
+  }
+
+  vm_load_sketch(vm: number, program: number): number {
+    return this.exports.vm_load_sketch(vm, program);
+  }
+
+  vm_run(vm: number, milliseconds: number): number {
+    return this.exports.vm_run(vm, milliseconds);
+  }
+
+  vm_pin_level(vm: number, pin: number): number {
+    return this.exports.vm_pin_level(vm, pin);
+  }
+
+  vm_set_pin_level(vm: number, pin: number, high: boolean): void {
+    this.exports.vm_set_pin_level(vm, pin, high ? 1 : 0);
+  }
+
+  vm_serial_output(vm: number): string {
+    const ptr = this.exports.vm_serial_output(vm);
+    return this.readString(ptr);
   }
 }
