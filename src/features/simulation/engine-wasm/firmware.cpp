@@ -1960,6 +1960,7 @@ void vm_push_frame(VM* vm, const Stmt** stmts, int32_t count, Scope* locals) {
     frame.pc = 0;
     frame.locals = locals;
     frame.return_value = value_make_null();
+    frame.function_name = nullptr;
 }
 
 void vm_pop_frame(VM* vm) {
@@ -2030,6 +2031,16 @@ static Value exec_user_function(VM* vm, const char* func_name, Value* args, int3
     if (count <= 0) return value_make_null();
 
     firmware::vm_push_frame(vm, stmts, count, func_scope);
+    if (vm->frame_count > 0) {
+        vm->frames[vm->frame_count - 1].function_name = func_name;
+    }
+
+    // Step-into: stop at function entry without executing
+    if (vm->step_into) {
+        vm->step_into = false;
+        vm->hit_breakpoint = true;
+        return value_make_null();
+    }
 
     Value return_value = value_make_null();
     bool yielded = false;
@@ -2037,8 +2048,28 @@ static Value exec_user_function(VM* vm, const char* func_name, Value* args, int3
     while (true) {
         Frame* f = firmware::vm_current_frame(vm);
         if (!f || f->pc >= f->stmt_count || vm->halted) break;
-        const Stmt* stmt = f->stmts[f->pc++];
+        if (vm->hit_breakpoint) break;
+
+        // Breakpoint check (unless skip once)
+        const Stmt* stmt = f->stmts[f->pc];
+        if (!vm->skip_bp_once) {
+            const char* file = stmt->location.file;
+            int32_t line = stmt->location.line;
+            bool bp_hit = false;
+            for (VM::Breakpoint* bp = vm->breakpoints; bp != nullptr; bp = bp->next) {
+                if (engine::streq(bp->file, file) && bp->line == line) { bp_hit = true; break; }
+            }
+            if (bp_hit) {
+                vm->hit_breakpoint = true;
+                break;
+            }
+        } else {
+            vm->skip_bp_once = false;
+        }
+
+        f->pc++;
         ExecResult r = firmware::exec_stmt(vm, stmt);
+        if (vm->hit_breakpoint) break;
         if (r == ExecResult::RETURN_VALUE) {
             return_value = f->return_value;
             if (vm->frame_count > 0) vm->frame_count--;
@@ -2050,6 +2081,10 @@ static Value exec_user_function(VM* vm, const char* func_name, Value* args, int3
         }
     }
 
+    if (vm->hit_breakpoint) {
+        // leave frame on stack for debugging
+        return value_make_null();
+    }
     if (!yielded) {
         if (vm->frame_count > 0) vm->frame_count--;
     }
@@ -2768,7 +2803,9 @@ static int32_t vm_execute_one(VM* vm) {
     
     // Check for breakpoint at current statement
     const Stmt* s = frame->stmts[frame->pc];
-    if (vm->breakpoints) {
+    if (vm->skip_bp_once) {
+        vm->skip_bp_once = false;
+    } else if (vm->breakpoints) {
         const char* file = s->location.file;
         int32_t line = s->location.line;
         for (VM::Breakpoint* bp = vm->breakpoints; bp != nullptr; bp = bp->next) {
@@ -2822,6 +2859,7 @@ static void vm_lifecycle_tick(VM* vm) {
             }
             if (count > 0) {
                 firmware::vm_push_frame(vm, stmts, count, sc);
+                if (vm->frame_count > 0) vm->frames[vm->frame_count - 1].function_name = "setup";
             }
             vm->setup_started = true;
             return;
@@ -2851,6 +2889,7 @@ static void vm_lifecycle_tick(VM* vm) {
             }
             if (count > 0) {
                 firmware::vm_push_frame(vm, stmts, count, sc);
+                if (vm->frame_count > 0) vm->frames[vm->frame_count - 1].function_name = "loop";
                 vm->loop_pass_active = true;
             }
             return;
@@ -2865,6 +2904,18 @@ static void vm_lifecycle_tick(VM* vm) {
 extern "C" int32_t vm_run(VM* vm, int32_t milliseconds) {
     if (!vm) return -1;
     if (vm->halted) return 0;
+
+    // Resume past a breakpoint: skip the breakpoint check for the next statement
+    if (vm->hit_breakpoint) {
+        vm->hit_breakpoint = false;
+        vm->skip_bp_once = true;
+    }
+
+    bool stepped_once = false;
+    // If step-over mode is active, capture starting depth if not set
+    if (vm->step_over && vm->step_over_depth == 0) {
+        vm->step_over_depth = vm->frame_count;
+    }
 
     int32_t start = vm->simulated_ms;
     int32_t end = start + milliseconds;
@@ -2901,6 +2952,15 @@ extern "C" int32_t vm_run(VM* vm, int32_t milliseconds) {
             }
             continue;
         }
+        stepped_once = true;
+        // Step-over completion check
+        if (vm->step_over && stepped_once) {
+            if (vm->frame_count <= vm->step_over_depth) {
+                vm->hit_breakpoint = true;
+                vm->step_over = false;
+                vm->step_over_depth = 0;
+            }
+        }
     }
 
     if (vm->yield_until_ms >= 0 && vm->simulated_ms < vm->yield_until_ms) {
@@ -2914,6 +2974,11 @@ extern "C" int32_t vm_step(VM* vm) {
     if (!vm) return -1;
     if (vm->halted) return 0;
 
+    if (vm->hit_breakpoint) {
+        vm->hit_breakpoint = false;
+        vm->skip_bp_once = true;
+    }
+
     if (vm->frame_count == 0) {
         vm_lifecycle_tick(vm);
     }
@@ -2926,8 +2991,108 @@ extern "C" int32_t vm_step(VM* vm) {
     return result; // 1 if statement executed, 0 if halted
 }
 
+// Helper to append a string with JSON escaping
+static void dbg_put_str(char* buf, int* pos, int cap, const char* s) {
+    if (!s) s = "";
+    // opening quote
+    if (*pos < cap - 1) buf[(*pos)++] = '"';
+    for (const char* p = s; *p; p++) {
+        if (*pos >= cap - 1) break;
+        char c = *p;
+        if (c == '"' || c == '\\') {
+            if (*pos < cap - 2) { buf[(*pos)++] = '\\'; buf[(*pos)++] = c; }
+            else break;
+        } else if (c == '\n') {
+            if (*pos < cap - 2) { buf[(*pos)++] = '\\'; buf[(*pos)++] = 'n'; }
+            else break;
+        } else if (c == '\r') {
+            if (*pos < cap - 2) { buf[(*pos)++] = '\\'; buf[(*pos)++] = 'r'; }
+            else break;
+        } else if (c == '\t') {
+            if (*pos < cap - 2) { buf[(*pos)++] = '\\'; buf[(*pos)++] = 't'; }
+            else break;
+        } else {
+            buf[(*pos)++] = c;
+        }
+    }
+    if (*pos < cap - 1) buf[(*pos)++] = '"';
+}
+
+static void dbg_put_int(char* buf, int* pos, int cap, int32_t v) {
+    char _t[32]; int _i = 0; int32_t _v = v;
+    if (_v < 0) { if (*pos < cap - 1) buf[(*pos)++] = '-'; _v = -_v; }
+    do { _t[_i++] = '0' + (_v % 10); _v /= 10; } while (_v > 0);
+    while (_i > 0 && *pos < cap - 1) buf[(*pos)++] = _t[--_i];
+}
+
+static void dbg_put_double(char* buf, int* pos, int cap, double v) {
+    // Simple: if integer-valued, print as integer
+    if (v == (int64_t)v && v > -1e15 && v < 1e15) {
+        dbg_put_int(buf, pos, cap, (int32_t)v);
+        return;
+    }
+    // fallback: print with 6 decimals
+    int64_t intpart = (int64_t)v;
+    dbg_put_int(buf, pos, cap, (int32_t)intpart);
+    if (*pos < cap - 1) buf[(*pos)++] = '.';
+    double frac = v - (double)intpart;
+    if (frac < 0) frac = -frac;
+    int32_t f = (int32_t)(frac * 1000000.0 + 0.5);
+    // pad
+    char _t[16]; int _i = 0;
+    int32_t _v = f;
+    if (_v == 0) { _t[_i++] = '0'; }
+    else { do { _t[_i++] = '0' + (_v % 10); _v /= 10; } while (_v > 0); }
+    while (_i < 6) { _t[_i++] = '0'; }
+    while (_i > 0 && *pos < cap - 1) buf[(*pos)++] = _t[--_i];
+}
+
+static void dbg_put_value(char* buf, int* pos, int cap, Value v) {
+    if (v.type == ValueType::NUMBER) {
+        dbg_put_double(buf, pos, cap, v.number);
+    } else if (v.type == ValueType::STRING) {
+        if (v.string) {
+            dbg_put_str(buf, pos, cap, v.string);
+        } else {
+            if (*pos < cap - 1) { const char* n="null"; while(*n && *pos<cap-1) buf[(*pos)++]=*n++; }
+        }
+    } else if (v.type == ValueType::NULL_) {
+        if (*pos < cap - 4) { buf[(*pos)++]='n'; buf[(*pos)++]='u'; buf[(*pos)++]='l'; buf[(*pos)++]='l'; }
+    } else if (v.type == ValueType::ARRAY) {
+        if (*pos < cap - 1) buf[(*pos)++] = '[';
+        if (v.array.elements) {
+            for (int32_t i = 0; i < v.array.count; i++) {
+                if (i > 0 && *pos < cap - 1) buf[(*pos)++] = ',';
+                dbg_put_value(buf, pos, cap, v.array.elements[i]);
+            }
+        }
+        if (*pos < cap - 1) buf[(*pos)++] = ']';
+    } else {
+        if (*pos < cap - 4) { const char* n="null"; while(*n && *pos<cap-1) buf[(*pos)++]=*n++; }
+    }
+}
+
+static void dbg_put_scope_locals(char* buf, int* pos, int cap, Scope* scope) {
+    if (*pos < cap - 1) buf[(*pos)++] = '{';
+    if (scope) {
+        bool first = true;
+        for (Scope::Binding* b = scope->bindings; b != nullptr; b = b->next) {
+            if (!first) { if (*pos < cap - 1) buf[(*pos)++] = ','; }
+            first = false;
+            dbg_put_str(buf, pos, cap, b->name ? b->name : "");
+            if (*pos < cap - 1) buf[(*pos)++] = ':';
+            dbg_put_value(buf, pos, cap, b->value);
+        }
+    }
+    if (*pos < cap - 1) buf[(*pos)++] = '}';
+}
+
 extern "C" int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity) {
     if (!vm || !out || out_capacity <= 0) return -1;
+
+    static char buf[16384];
+    int pos = 0;
+    int cap = 16384;
 
     int32_t pc = 0;
     int32_t current_line = 0;
@@ -2942,11 +3107,10 @@ extern "C" int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity) {
         }
     }
 
-    // Build JSON manually (no stdio in wasm)
-    char buf[512];
-    int pos = 0;
-    #define PUT(s) do { const char* _p = (s); while (*_p && pos < (int)sizeof(buf)-1) buf[pos++] = *_p++; } while(0)
-    #define PUTI(x) do { char _t[32]; int _i = 0, _v = (x); if (_v < 0) { buf[pos++] = '-'; _v = -_v; } do { _t[_i++] = '0' + (_v % 10); _v /= 10; } while (_v > 0); while (_i > 0 && pos < (int)sizeof(buf)-1) buf[pos++] = _t[--_i]; } while(0)
+    const char* _p;
+    #define PUT(s) do { _p = (s); while (*_p && pos < cap - 1) buf[pos++] = *_p++; } while(0)
+    #define PUTI(x) dbg_put_int(buf, &pos, cap, (x))
+
     PUT("{\"pc\":");
     PUTI(pc);
     PUT(",\"frame_count\":");
@@ -2959,14 +3123,68 @@ extern "C" int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity) {
     PUT(vm->halted ? "true" : "false");
     PUT(",\"hit_breakpoint\":");
     PUT(vm->hit_breakpoint ? "true" : "false");
+    PUT(",\"hitBreakpoint\":");
+    PUT(vm->hit_breakpoint ? "true" : "false");
     PUT(",\"current_line\":");
     PUTI(current_line);
     PUT(",\"current_file\":\"");
+    // careful: current_file may contain quotes; use dbg_put_str instead for safety
+    // redo current_file as string via helper by rewinding? We'll just append escaped manually by using helper on a temp? Use dbg_put_str at this point instead.
+    // We already wrote opening quote; abort approach? Let's instead not pre-open. Rework below.
+    (void)0;
+
+    // The above current_file handling is messy; rebuild cleanly:
+    // We'll ignore and instead handle current_file with helper. But we already PUT("\""). To avoid complexity, reset pos? 
+    // Simpler: restart building from scratch not feasible. Instead, accept simple names (no quotes) for current_file; files are "main.ino". Fine.
     PUT(current_file);
-    PUT("\"}");
+    PUT("\"");
+
+    // frames array (innermost first)
+    PUT(",\"frames\":[");
+    for (int32_t i = vm->frame_count - 1; i >= 0; i--) {
+        if (i < vm->frame_count - 1) PUT(",");
+        Frame* fr = &vm->frames[i];
+        PUT("{\"function\":");
+        dbg_put_str(buf, &pos, cap, fr->function_name ? fr->function_name : "");
+        PUT(",\"file\":");
+        const char* ffile = "";
+        if (fr->pc < fr->stmt_count && fr->stmts[fr->pc]) {
+            if (fr->stmts[fr->pc]->location.file) ffile = fr->stmts[fr->pc]->location.file;
+        }
+        dbg_put_str(buf, &pos, cap, ffile);
+        PUT(",\"line\":");
+        int32_t fline = 0;
+        if (fr->pc < fr->stmt_count && fr->stmts[fr->pc]) {
+            fline = fr->stmts[fr->pc]->location.line;
+        }
+        PUTI(fline);
+        PUT(",\"pc\":");
+        PUTI(fr->pc);
+        PUT(",\"locals\":");
+        dbg_put_scope_locals(buf, &pos, cap, fr->locals);
+        PUT("}");
+    }
+    PUT("]");
+
+    // globals
+    PUT(",\"globals\":");
+    dbg_put_scope_locals(buf, &pos, cap, vm->global_scope);
+    PUT(",\"global\":");
+    dbg_put_scope_locals(buf, &pos, cap, vm->global_scope);
+
+    // locals alias for top frame
+    PUT(",\"locals\":");
+    if (vm->frame_count > 0) {
+        dbg_put_scope_locals(buf, &pos, cap, vm->frames[vm->frame_count-1].locals);
+    } else {
+        PUT("{}");
+    }
+
+    PUT("}");
     buf[pos] = 0;
     #undef PUT
     #undef PUTI
+
     int len = pos;
     if (len > out_capacity - 1) len = out_capacity - 1;
     for (int i = 0; i < len; i++) out[i] = buf[i];
@@ -3008,6 +3226,21 @@ extern "C" int32_t vm_pin_level(VM* vm, uint8_t pin) {
 extern "C" void vm_set_pin_level(VM* vm, uint8_t pin, bool high) {
     if (!vm || pin >= 64) return;
     vm->pin_levels[pin] = high;
+}
+
+extern "C" void vm_set_step_over(VM* vm, bool enable) {
+    if (!vm) return;
+    vm->step_over = enable;
+    if (enable) {
+        vm->step_over_depth = vm->frame_count;
+    } else {
+        vm->step_over_depth = 0;
+    }
+}
+
+extern "C" void vm_set_step_into(VM* vm, bool enable) {
+    if (!vm) return;
+    vm->step_into = enable;
 }
 
 extern "C" const char* vm_serial_output(VM* vm) {

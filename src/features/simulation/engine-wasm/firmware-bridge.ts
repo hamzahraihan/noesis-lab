@@ -70,8 +70,11 @@ export interface WasmFirmware {
   vm_run(vm: number, milliseconds: number): number;
   vm_step(vm: number): number;
   vm_get_debug_state(vm: number): VMDebugState;
+  vm_get_debug_state_raw(vm: number): string;
   vm_set_breakpoint(vm: number, file: string, line: number): number;
   vm_clear_breakpoint(vm: number, id: number): void;
+  vm_set_step_over(vm: number, enabled: boolean): void;
+  vm_set_step_into(vm: number, enabled: boolean): void;
   vm_pin_level(vm: number, pin: number): number;
   vm_set_pin_level(vm: number, pin: number, high: boolean): void;
   vm_serial_output(vm: number): string;
@@ -106,6 +109,8 @@ let firmwareExports: EngineExports & {
   vm_step(vm: number): number;
   vm_get_debug_state(vm: number, out: number, out_capacity: number): number;
   vm_set_breakpoint(vm: number, file: number, line: number): number;
+  vm_set_step_over(vm: number, enabled: number): void;
+  vm_set_step_into(vm: number, enabled: number): void;
   vm_clear_breakpoint(vm: number, id: number): void;
   vm_pin_level(vm: number, pin: number): number;
   vm_set_pin_level(vm: number, pin: number, high: number): void;
@@ -172,6 +177,8 @@ class WasmFirmwareImpl implements WasmFirmware {
       vm_get_debug_state(vm: number, out: number, out_capacity: number): number;
       vm_set_breakpoint(vm: number, file: number, line: number): number;
       vm_clear_breakpoint(vm: number, id: number): void;
+      vm_set_step_over(vm: number, enabled: number): void;
+      vm_set_step_into(vm: number, enabled: number): void;
       vm_pin_level(vm: number, pin: number): number;
       vm_set_pin_level(vm: number, pin: number, high: number): void;
       vm_serial_output(vm: number): number;
@@ -240,6 +247,21 @@ class WasmFirmwareImpl implements WasmFirmware {
 
   vm_clear_breakpoint(vm: number, id: number): void {
     this.exports.vm_clear_breakpoint(vm, id);
+  }
+
+  vm_set_step_over(vm: number, enabled: boolean): void {
+    this.exports.vm_set_step_over(vm, enabled ? 1 : 0);
+  }
+
+  vm_set_step_into(vm: number, enabled: boolean): void {
+    this.exports.vm_set_step_into(vm, enabled ? 1 : 0);
+  }
+
+  vm_get_debug_state_raw(vm: number): string {
+    const allocation = this.allocateDebugState(16384);
+    const len = this.exports.vm_get_debug_state(vm, allocation.ptr, allocation.capacity);
+    if (len <= 0) return '{}';
+    return this.readString(allocation.ptr);
   }
 
   tokenize(source: string): WasmToken[] {
@@ -445,4 +467,90 @@ class WasmFirmwareImpl implements WasmFirmware {
     const ptr = this.exports.vm_serial_output(vm);
     return this.readString(ptr);
   }
+}
+
+export interface FirmwareInstance {
+  loadSketch(src: string): void;
+  setBreakpoint(file: string, line: number): number;
+  clearBreakpoint(id: number): void;
+  run(ms: number): number;
+  step(): number;
+  getDebugState(): string;
+  setStepOver(enabled?: boolean): void;
+  setStepInto(enabled?: boolean): void;
+  destroy(): void;
+}
+
+let cachedWasmPromise: Promise<WasmFirmware> | null = null;
+
+export async function instantiateFirmware(
+  loadBytes?: () => Promise<ArrayBuffer>,
+): Promise<FirmwareInstance> {
+  const wasm = loadBytes
+    ? await (async () => {
+        // fall back to default loader; loadBytes not wired for firmware
+        return loadWasmFirmware();
+      })()
+    : (cachedWasmPromise ??= loadWasmFirmware());
+  const w = await wasm;
+
+  let vmPtr = 0;
+  let programPtr = 0;
+
+  const instance: FirmwareInstance = {
+    loadSketch(src: string): void {
+      if (programPtr) {
+        w.vm_free_program(programPtr);
+        programPtr = 0;
+      }
+      if (vmPtr) {
+        w.vm_destroy(vmPtr);
+        vmPtr = 0;
+      }
+      // parse via bridge
+      programPtr = w.parseProgram(src);
+      vmPtr = w.vm_create();
+      w.vm_load_sketch(vmPtr, programPtr);
+    },
+    setBreakpoint(file: string, line: number): number {
+      if (!vmPtr) throw new Error('loadSketch not called');
+      return w.vm_set_breakpoint(vmPtr, file, line);
+    },
+    clearBreakpoint(id: number): void {
+      if (!vmPtr) return;
+      w.vm_clear_breakpoint(vmPtr, id);
+    },
+    run(ms: number): number {
+      if (!vmPtr) throw new Error('loadSketch not called');
+      return w.vm_run(vmPtr, ms);
+    },
+    step(): number {
+      if (!vmPtr) throw new Error('loadSketch not called');
+      return w.vm_step(vmPtr);
+    },
+    getDebugState(): string {
+      if (!vmPtr) return '{}';
+      return w.vm_get_debug_state_raw(vmPtr);
+    },
+    setStepOver(enabled: boolean = true): void {
+      if (!vmPtr) return;
+      w.vm_set_step_over(vmPtr, enabled);
+    },
+    setStepInto(enabled: boolean = true): void {
+      if (!vmPtr) return;
+      w.vm_set_step_into(vmPtr, enabled);
+    },
+    destroy(): void {
+      if (vmPtr) {
+        w.vm_destroy(vmPtr);
+        vmPtr = 0;
+      }
+      if (programPtr) {
+        w.vm_free_program(programPtr);
+        programPtr = 0;
+      }
+    },
+  };
+
+  return instance;
 }

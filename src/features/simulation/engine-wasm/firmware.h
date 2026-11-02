@@ -219,6 +219,7 @@ struct Frame {
     int32_t pc;  // current statement index
     Scope* locals;
     Value return_value;
+    const char* function_name;  // name of function this frame represents (or "" for top-level)
 };
 
 // Variable scope for variable lookup
@@ -263,6 +264,11 @@ struct VM {
     int32_t simulated_ms = 0;
     bool halted = false;
     bool hit_breakpoint = false;
+    bool skip_bp_once = false;   // skip breakpoint check for one statement (resume/step)
+    // Step-over support
+    bool step_over = false;
+    int32_t step_over_depth = 0;
+    bool step_into = false;
     // Serial output buffer
     char* serial_buf = nullptr;
     int32_t serial_buf_len = 0;
@@ -338,6 +344,9 @@ int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity);
 // Breakpoint management
 BreakpointId vm_set_breakpoint(VM* vm, const char* file, int32_t line);
 void vm_clear_breakpoint(VM* vm, BreakpointId id);
+// Step control
+void vm_set_step_over(VM* vm, bool enable);
+void vm_set_step_into(VM* vm, bool enable);
 int32_t vm_pin_level(VM* vm, uint8_t pin);
 void vm_set_pin_level(VM* vm, uint8_t pin, bool high);
 const char* vm_serial_output(VM* vm);  // pointer into wasm memory, valid until next vm_run
