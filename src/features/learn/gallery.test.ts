@@ -854,9 +854,14 @@ void loop() {
     simulation.setKnob(part('sht31-temp-humidity').id, SHT31_TEMPERATURE_KNOB, 30);
     simulation.setKnob(part('sht31-temp-humidity').id, SHT31_HUMIDITY_KNOB, 60);
 
-    const before = log().length;
+    // The serial buffer is a rolling window of 400 chunks. Once it is full its
+    // joined length stops growing, so a character offset taken before the
+    // ticks slices to the empty string. Read the window itself and compare it
+    // with what it held before the knobs turned.
+    const before = log();
     for (let i = 0; i < 60; i++) simulation.tick(0.05);
-    const tail = log().slice(before);
+    const tail = log();
+    expect(before).not.toContain('light 500 lx');
     expect(tail).toContain('light 500 lx');
     expect(tail).toContain('tmp102 30.00 C');
     expect(tail).toContain('sht31 30.00 C');
@@ -938,9 +943,11 @@ void loop() {
     expect(peak, 'the motor moved').toBeGreaterThan(0);
 
     // The shaft stands where the steps the sketch counted have taken it.
+    // The sketch ramps 1..20 and back down, so the report that describes where
+    // the shaft ended up is the last one, not the first.
     const log = simulation.serialLines().join('');
-    const reported = /step (-?\d+)/.exec(log);
-    expect(reported, 'the sketch reported a step').not.toBeNull();
+    const reported = [...log.matchAll(/step (-?\d+)/g)].at(-1);
+    expect(reported, 'the sketch reported a step').toBeDefined();
     const expected = Number(reported![1]) * 7.5;
     expect(
       Math.abs(simulation.engine.stepperAngle(motor.id) - expected),
