@@ -26,7 +26,7 @@ export const hd44780Adapter: PartAdapter = {
   apply(_instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
     if (module) {
       if (stimulus.kind === 'knob') {
-        module.part_set_knob(_instance, stimulus.name, stimulus.value);
+        module.part_set_knob(_instance as number, stimulus.name, stimulus.value);
       }
     } else {
       const dev = _instance as Lcd1602;

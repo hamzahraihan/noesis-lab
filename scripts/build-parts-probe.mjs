@@ -99,6 +99,7 @@ const EXPORTED_FUNCTIONS = [
   '_part_create_dac',
   '_part_create_adc',
   '_part_create_thermocouple',
+  '_part_create_eeprom',
   '_part_create_rfid',
   '_part_create_neopixel',
   '_part_create_sonar',

@@ -342,6 +342,7 @@ export interface PartsModule {
   part_create_dac(part_id: number, address: number, bits: number): number;
   part_create_adc(part_id: number, address: number, channels: number): number;
   part_create_thermocouple(part_id: number): number;
+  part_create_eeprom(part_id: number, address: number): number;
   part_create_rfid(part_id: number, address: number): number;
   part_create_neopixel(part_id: number, count: number): number;
   part_create_sonar(part_id: number): number;
@@ -370,6 +371,7 @@ export interface PartsModule {
 
   // Part runtime
   part_register(part_id: number, kind: number, definition_json: string): number;
+  part_create_eeprom(part_id: number, address: number): number;
   part_stamp(handle: number, solution: number, time_ms: number): void;
   part_get_state(handle: number): number; // Returns pointer to PartStateSnapshot in wasm memory
   part_set_knob(handle: number, knob_name: string, value: number): void;
@@ -441,6 +443,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_dac: exp.part_create_dac as (part_id: number, address: number, bits: number) => number,
     part_create_adc: exp.part_create_adc as (part_id: number, address: number, channels: number) => number,
     part_create_thermocouple: exp.part_create_thermocouple as (part_id: number) => number,
+  part_create_eeprom: exp.part_create_eeprom as (part_id: number, address: number) => number,
     part_create_rfid: exp.part_create_rfid as (part_id: number, address: number) => number,
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,

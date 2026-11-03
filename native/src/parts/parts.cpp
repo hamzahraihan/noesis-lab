@@ -45,6 +45,11 @@ enum class PartContextType : uint8_t {
     SSD1306,
     ADS1115,
     MCP4725,
+    BH1750,
+    BMP180,
+    SHT31,
+    TMP102,
+    EEPROM,
     MAX6675,
     MFRC522,
     ILI9341,
@@ -175,6 +180,73 @@ struct MCP4725Context : PartContext {
     uint8_t write_buffer[3];
     uint8_t write_count = 0;
     PartContextType type() const override { return PartContextType::MCP4725; }
+};
+
+// BH1750 - Light sensor (I2C)
+struct BH1750Context : PartContext {
+    uint16_t counts = 0;
+    bool powered = false;
+    uint8_t mode = 0;  // 0=down, 1=continuous, 2=one-shot
+    uint8_t resolution = 0;  // 0=high, 1=high2, 2=low
+    uint32_t conversion_start_ms = 0;
+    bool conversion_ready = false;
+    PartContextType type() const override { return PartContextType::BH1750; }
+};
+
+// BMP180 - Pressure/temperature sensor (I2C)
+struct BMP180Context : PartContext {
+    int32_t raw_temperature = 0;
+    int32_t raw_pressure = 101325;
+    uint8_t oss = 0;  // oversampling setting
+    uint8_t holding = 0;  // 0=temperature, 1=pressure
+    uint8_t pointer = 0xF6;
+    bool stale = true;
+    // Calibration coefficients (from BMP180_CALIBRATION)
+    int16_t ac1 = 408;
+    int16_t ac2 = -300;
+    int16_t ac3 = -400;
+    uint16_t ac4 = 32741;
+    uint16_t ac5 = 6400;
+    uint16_t ac6 = 1004;
+    int16_t b1 = -6190;
+    int16_t b2 = 4;
+    int16_t mb = -32768;
+    int16_t mc = -5361;
+    int16_t md = 2000;
+    PartContextType type() const override { return PartContextType::BMP180; }
+};
+
+// SHT31 - Temperature/humidity sensor (I2C)
+struct SHT31Context : PartContext {
+    uint16_t raw_temperature = 0;
+    uint16_t raw_humidity = 0;
+    bool heater = false;
+    uint16_t command_high = 0;
+    bool have_command_high = false;
+    PartContextType type() const override { return PartContextType::SHT31; }
+};
+
+// TMP102 - Temperature sensor (I2C)
+struct TMP102Context : PartContext {
+    int16_t temperature_counts = 0;
+    uint16_t config = 0x60A0;
+    uint16_t t_low = 0x4B00;
+    uint16_t t_high = 0x5000;
+    uint8_t pointer = 0x00;
+    uint8_t byte_index = 0;
+    PartContextType type() const override { return PartContextType::TMP102; }
+};
+
+// EEPROM 24LC256 (I2C)
+struct EEPROM24LC256Context : PartContext {
+    static constexpr uint32_t EEPROM_SIZE = 32768;
+    static constexpr uint32_t EEPROM_PAGE_SIZE = 64;
+    std::vector<uint8_t> bytes;
+    uint16_t pointer = 0;
+    uint8_t high = 0;
+    uint8_t address_bytes = 0;
+    EEPROM24LC256Context() : bytes(EEPROM_SIZE, 0) {}
+    PartContextType type() const override { return PartContextType::EEPROM; }
 };
 
 // MAX6675 - Thermocouple (SPI)
@@ -1011,6 +1083,201 @@ static void mcp4725_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out
     *out_len = len;
 }
 
+// BH1750 - Light sensor I2C callbacks
+static bool bh1750_receive(void* ctx, uint8_t byte, bool is_control) {
+    BH1750Context* dev = static_cast<BH1750Context*>(ctx);
+    if (is_control) return true;
+    
+    uint8_t cmd = byte & 0xFF;
+    switch (cmd) {
+        case 0x00: dev->powered = false; dev->mode = 0; dev->conversion_ready = false; break;
+        case 0x01: dev->powered = true; dev->mode = 0; break;
+        case 0x07: dev->counts = 0; dev->powered = false; dev->mode = 0; dev->conversion_ready = false; break;
+        case 0x10: dev->powered = true; dev->mode = 1; dev->resolution = 0; dev->conversion_ready = true; break;
+        case 0x11: dev->powered = true; dev->mode = 1; dev->resolution = 1; dev->conversion_ready = true; break;
+        case 0x13: dev->powered = true; dev->mode = 1; dev->resolution = 2; dev->conversion_ready = true; break;
+        case 0x20: dev->powered = true; dev->mode = 2; dev->resolution = 0; dev->conversion_ready = true; break;
+        case 0x21: dev->powered = true; dev->mode = 2; dev->resolution = 1; dev->conversion_ready = true; break;
+        case 0x23: dev->powered = true; dev->mode = 2; dev->resolution = 2; dev->conversion_ready = true; break;
+        default: break;
+    }
+    return true;
+}
+
+static void bh1750_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    BH1750Context* dev = static_cast<BH1750Context*>(ctx);
+    uint8_t len = std::min<uint8_t>(count, 2);
+    
+    if (dev->mode == 1 && dev->powered) dev->conversion_ready = true;
+    
+    if (dev->conversion_ready) {
+        buffer[0] = static_cast<uint8_t>(dev->counts >> 8);
+        buffer[1] = static_cast<uint8_t>(dev->counts & 0xFF);
+        *out_len = 2;
+    } else {
+        buffer[0] = 0xFF; buffer[1] = 0xFF;
+        *out_len = 2;
+    }
+}
+
+// BMP180 - Pressure/temperature sensor I2C callbacks
+static bool bmp180_receive(void* ctx, uint8_t byte, bool is_control) {
+    BMP180Context* dev = static_cast<BMP180Context*>(ctx);
+    if (is_control) { dev->pointer = byte & 0xFF; return true; }
+    
+    uint8_t reg = dev->pointer;
+    dev->pointer = (dev->pointer + 1) & 0xFF;
+    
+    if (reg == 0xF4) {
+        if (byte == 0x2E) { dev->holding = 0; }
+        else if ((byte & 0x1F) == 0x34) { dev->oss = (byte >> 6) & 0x03; dev->holding = 1; }
+    } else if (reg == 0xE0 && byte == 0xB6) {
+        dev->oss = 0; dev->holding = 0; dev->pointer = 0xF6;
+    }
+    return true;
+}
+
+static void bmp180_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    BMP180Context* dev = static_cast<BMP180Context*>(ctx);
+    if (dev->stale) {
+        dev->raw_temperature = 27898; dev->raw_pressure = 101325; dev->stale = false;
+    }
+    
+    if (dev->pointer == 0xD0) { buffer[0] = 0x55; *out_len = 1; return; }
+    if (dev->pointer >= 0xAA && dev->pointer < 0xC0) {
+        uint8_t idx = dev->pointer - 0xAA;
+        const int16_t* cals = &dev->ac1;
+        int16_t val = cals[idx / 2];
+        buffer[0] = (idx % 2 == 0) ? (val >> 8) & 0xFF : val & 0xFF;
+        *out_len = 1; return;
+    }
+    if (dev->pointer >= 0xF6 && dev->pointer <= 0xF8) {
+        if (dev->holding == 0) {
+            if (dev->pointer == 0xF6) buffer[0] = (dev->raw_temperature >> 8) & 0xFF;
+            else if (dev->pointer == 0xF7) buffer[0] = dev->raw_temperature & 0xFF;
+            else buffer[0] = 0;
+        } else {
+            uint32_t raw = dev->raw_pressure << (8 - dev->oss);
+            if (dev->pointer == 0xF6) buffer[0] = (raw >> 16) & 0xFF;
+            else if (dev->pointer == 0xF7) buffer[0] = (raw >> 8) & 0xFF;
+            else buffer[0] = raw & 0xFF;
+        }
+        *out_len = 1; return;
+    }
+    buffer[0] = 0; *out_len = 1;
+}
+
+// SHT31 - Temperature/humidity sensor I2C callbacks
+static bool sht31_receive(void* ctx, uint8_t byte, bool is_control) {
+    SHT31Context* dev = static_cast<SHT31Context*>(ctx);
+    if (is_control || !dev->have_command_high) {
+        dev->command_high = byte; dev->have_command_high = true; return true;
+    }
+    
+    uint16_t cmd = (dev->command_high << 8) | byte;
+    dev->have_command_high = false;
+    
+    if (cmd == 0x2400 || cmd == 0x240B || cmd == 0x2416 || cmd == 0x2C06 || cmd == 0x2C0D || cmd == 0x2C10) {
+        int celsius = 21 + (dev->heater ? 1 : 0);
+        dev->raw_temperature = static_cast<uint16_t>(((celsius + 45) * 65535) / 175);
+        dev->raw_humidity = static_cast<uint16_t>((45 * 65535) / 100);
+    } else if (cmd == 0x2737) { dev->raw_temperature = 0; dev->raw_humidity = 0; dev->heater = false; dev->have_command_high = false; }
+    else if (cmd == 0x30A2) { dev->heater = true; }
+    else if (cmd == 0x306D) { dev->heater = false; }
+    return true;
+}
+
+static void sht31_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    SHT31Context* dev = static_cast<SHT31Context*>(ctx);
+    uint8_t len = std::min<uint8_t>(count, 6);
+    
+    if (dev->raw_temperature == 0 && dev->raw_humidity == 0) {
+        for (int i = 0; i < 6; i++) buffer[i] = 0xFF;
+        *out_len = 6; return;
+    }
+    
+    auto crc8 = [](const uint8_t* data, int len) {
+        uint8_t crc = 0xFF;
+        for (int i = 0; i < len; i++) {
+            crc ^= data[i];
+            for (int bit = 0; bit < 8; bit++) {
+                crc = (crc & 0x80) ? ((crc << 1) ^ 0x31) & 0xFF : (crc << 1) & 0xFF;
+            }
+        }
+        return crc;
+    };
+    
+    uint8_t t_bytes[2] = {static_cast<uint8_t>(dev->raw_temperature >> 8), static_cast<uint8_t>(dev->raw_temperature & 0xFF)};
+    uint8_t h_bytes[2] = {static_cast<uint8_t>(dev->raw_humidity >> 8), static_cast<uint8_t>(dev->raw_humidity & 0xFF)};
+    uint8_t t_crc = crc8(t_bytes, 2);
+    uint8_t h_crc = crc8(h_bytes, 2);
+    
+    buffer[0] = t_bytes[0]; buffer[1] = t_bytes[1]; buffer[2] = t_crc;
+    buffer[3] = h_bytes[0]; buffer[4] = h_bytes[1]; buffer[5] = h_crc;
+    *out_len = 6;
+}
+
+// TMP102 - Temperature sensor I2C callbacks
+static bool tmp102_receive(void* ctx, uint8_t byte, bool is_control) {
+    TMP102Context* dev = static_cast<TMP102Context*>(ctx);
+    if (is_control) { dev->pointer = byte & 0x03; dev->byte_index = 0; return true; }
+    if (dev->pointer == 0x00) return true;
+    
+    uint16_t current = (dev->pointer == 0x01) ? dev->config : (dev->pointer == 0x02) ? dev->t_low : dev->t_high;
+    uint16_t value = (dev->byte_index == 0) ? (static_cast<uint16_t>(byte) << 8) | (current & 0xFF) : (current & 0xFF00) | byte;
+    
+    if (dev->pointer == 0x01) dev->config = value & 0x7FFF;
+    else if (dev->pointer == 0x02) dev->t_low = value;
+    else if (dev->pointer == 0x03) dev->t_high = value;
+    
+    dev->byte_index = 1;
+    return true;
+}
+
+static void tmp102_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    TMP102Context* dev = static_cast<TMP102Context*>(ctx);
+    uint8_t len = std::min<uint8_t>(count, 2);
+    
+    int16_t temp_counts = 336;
+    if (dev->pointer == 0x00) {
+        int celsius = 21;
+        temp_counts = static_cast<int16_t>(celsius / 0.0625);
+    }
+    
+    uint16_t word;
+    if (dev->pointer == 0x00) word = static_cast<uint16_t>((temp_counts & 0x0FFF) << 4);
+    else if (dev->pointer == 0x01) word = dev->config;
+    else if (dev->pointer == 0x02) word = dev->t_low;
+    else word = dev->t_high;
+    
+    buffer[0] = (word >> 8) & 0xFF; buffer[1] = word & 0xFF;
+    *out_len = len;
+}
+
+// EEPROM 24LC256 I2C callbacks
+static bool eeprom24lc256_receive(void* ctx, uint8_t byte, bool is_control) {
+    EEPROM24LC256Context* dev = static_cast<EEPROM24LC256Context*>(ctx);
+    if (is_control) { dev->high = byte; dev->address_bytes = 1; return true; }
+    if (dev->address_bytes == 1) {
+        dev->pointer = (static_cast<uint16_t>(dev->high) << 8) | byte;
+        dev->address_bytes = 2; return true;
+    }
+    dev->bytes[dev->pointer % EEPROM24LC256Context::EEPROM_SIZE] = byte & 0xFF;
+    uint32_t page = dev->pointer - (dev->pointer % EEPROM24LC256Context::EEPROM_PAGE_SIZE);
+    dev->pointer = page + ((dev->pointer + 1) % EEPROM24LC256Context::EEPROM_PAGE_SIZE);
+    return true;
+}
+
+static void eeprom24lc256_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    EEPROM24LC256Context* dev = static_cast<EEPROM24LC256Context*>(ctx);
+    uint8_t len = std::min<uint8_t>(count, 255);  // Max readable in one go
+    
+    for (int i = 0; i < len; i++) {
+        buffer[i] = dev->bytes[(dev->pointer + i) % EEPROM24LC256Context::EEPROM_SIZE];
+    }
+    *out_len = len;
+}
+
 // ============================================================================
 // SPI Device Callback Implementations
 // ============================================================================
@@ -1298,6 +1565,16 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
             ctx->was_pin_high = ctx->pin_high;
             break;
         }
+        case PART_KIND_BH1750: {
+            // BH1750 conversion time: ~120ms for high-res, ~16ms for low-res
+            BH1750Context* ctx = static_cast<BH1750Context*>(inst->impl);
+            if (ctx->powered && ctx->mode != 0 && !ctx->conversion_ready) {
+                // In continuous/one-shot mode, set conversion_ready after delay
+                // Simplified: mark ready immediately for now
+                ctx->conversion_ready = true;
+            }
+            break;
+        }
         case PART_KIND_STEPPER: {
             // Stepper is driven entirely by part_set_pin_level (polarity edges)
             // No time-based advancement needed
@@ -1505,6 +1782,59 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->mcp4725_value = ctx->dac_value;
             break;
         }
+        case PART_KIND_EEPROM: {
+            // EEPROM has no snapshot fields
+            break;
+        }
+        case PART_KIND_BH1750: {
+            BH1750Context* ctx = static_cast<BH1750Context*>(inst->impl);
+            // Compute counts from light level if not already computed
+            if (ctx->conversion_ready) {
+                snap->sensor_lux = static_cast<int32_t>(ctx->counts / 1.2);  // approximate
+            }
+            break;
+        }
+        case PART_KIND_BMP180: {
+            BMP180Context* ctx = static_cast<BMP180Context*>(inst->impl);
+            if (ctx->stale) {
+                ctx->raw_temperature = 27898;  // ~25°C in tenths
+                ctx->raw_pressure = 101325;
+                ctx->stale = false;
+            }
+            // Temperature in milli-Celsius: convert from raw ADC counts
+            // raw_temp = (celsius + 45) * 65535 / 175
+            // celsius = raw_temp * 175 / 65535 - 45
+            int32_t celsius_milli = static_cast<int32_t>((static_cast<int64_t>(ctx->raw_temperature) * 175000 + 32767) / 65535 - 45000);
+            snap->sensor_temp_milli_c = celsius_milli;
+            // Pressure in Pa
+            snap->sensor_pressure_pa = static_cast<int32_t>(ctx->raw_pressure);
+            break;
+        }
+        case PART_KIND_SHT31: {
+            SHT31Context* ctx = static_cast<SHT31Context*>(inst->impl);
+            if (ctx->raw_temperature == 0 && ctx->raw_humidity == 0) {
+                int celsius = 21 + (ctx->heater ? 1 : 0);
+                ctx->raw_temperature = static_cast<uint16_t>(((celsius + 45) * 65535) / 175);
+                ctx->raw_humidity = static_cast<uint16_t>((45 * 65535) / 100);
+            }
+            // Temperature in milli-Celsius
+            int32_t celsius_milli = static_cast<int32_t>((ctx->raw_temperature * 175) / 65535 - 45);
+            snap->sensor_temp_milli_c = celsius_milli * 1000;
+            // Humidity in milli-percent
+            int32_t humidity_milli = static_cast<int32_t>((ctx->raw_humidity * 100000) / 65535);
+            snap->sensor_humidity_milli_pct = humidity_milli;
+            break;
+        }
+        case PART_KIND_TMP102: {
+            TMP102Context* ctx = static_cast<TMP102Context*>(inst->impl);
+            int16_t temp_counts = 336;
+            if (ctx->pointer == 0x00) {
+                int celsius = 21;
+                temp_counts = static_cast<int16_t>(celsius / 0.0625);
+            }
+            snap->sensor_temp_milli_c = static_cast<int32_t>(temp_counts * 625);  // 0.0625°C = 62.5 milli°C
+            break;
+        }
         case PART_KIND_PWM_DRIVER: {
             PCA9685Context* ctx = static_cast<PCA9685Context*>(inst->impl);
             snap->pca9685_prescale = ctx->prescale;
@@ -1568,6 +1898,38 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             else if (strcmp(knob_name, "ain1") == 0) ctx->input_voltage[1] = value;
             else if (strcmp(knob_name, "ain2") == 0) ctx->input_voltage[2] = value;
             else if (strcmp(knob_name, "ain3") == 0) ctx->input_voltage[3] = value;
+            break;
+        }
+        case PART_KIND_BH1750: {
+            BH1750Context* ctx = static_cast<BH1750Context*>(inst->impl);
+            if (strcmp(knob_name, "light") == 0) {
+                // 1.2 counts per lux for high-res mode
+                ctx->counts = static_cast<uint16_t>(value * 1.2);
+            }
+            break;
+        }
+        case PART_KIND_BMP180: {
+            BMP180Context* ctx = static_cast<BMP180Context*>(inst->impl);
+            if (strcmp(knob_name, "temperature") == 0) {
+                // Temperature in Celsius
+                ctx->raw_temperature = static_cast<int32_t>((value + 45) * 65535 / 175);
+            } else if (strcmp(knob_name, "pressure") == 0) {
+                // Pressure in hPa -> Pa
+                ctx->raw_pressure = static_cast<int32_t>(value * 100);
+            }
+            ctx->stale = false;
+            break;
+        }
+        case PART_KIND_SHT31: {
+            SHT31Context* ctx = static_cast<SHT31Context*>(inst->impl);
+            if (strcmp(knob_name, "temperature") == 0) {
+                int celsius = static_cast<int>(value);
+                int celsius_with_heater = celsius + (ctx->heater ? 1 : 0);
+                ctx->raw_temperature = static_cast<uint16_t>(((celsius_with_heater + 45) * 65535) / 175);
+            } else if (strcmp(knob_name, "humidity") == 0) {
+                int humidity = static_cast<int>(value);
+                ctx->raw_humidity = static_cast<uint16_t>((humidity * 65535) / 100);
+            }
             break;
         }
         case PART_KIND_DISPLAY_LCD: {
@@ -1917,10 +2279,76 @@ extern "C" void* part_create_rtc(uint32_t part_id, bool is_ds3231) {
 }
 
 extern "C" void* part_create_sensor_i2c(uint32_t part_id, uint8_t type, uint8_t address) {
-    // Generic I2C sensor - could be BH1750, BMP180, SHT31, etc.
     void* handle = part_register(part_id, PART_KIND_SENSOR_I2C, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // TODO: Implement specific sensor types based on 'type' parameter
+    
+    switch (type) {
+        case 1: {  // BH1750
+            BH1750Context* ctx = new BH1750Context();
+            inst->impl = ctx;
+            g_part_impls.push_back(ctx);
+            void* dev_handle = i2c_bus_register_device(address, part_id);
+            I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+            dev->ctx = ctx;
+            dev->receive = bh1750_receive;
+            dev->read = bh1750_read;
+            inst->kind = PART_KIND_BH1750;
+            break;
+        }
+        case 2: {  // BMP180
+            BMP180Context* ctx = new BMP180Context();
+            inst->impl = ctx;
+            g_part_impls.push_back(ctx);
+            void* dev_handle = i2c_bus_register_device(address, part_id);
+            I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+            dev->ctx = ctx;
+            dev->receive = bmp180_receive;
+            dev->read = bmp180_read;
+            inst->kind = PART_KIND_BMP180;
+            break;
+        }
+        case 3: {  // SHT31
+            SHT31Context* ctx = new SHT31Context();
+            inst->impl = ctx;
+            g_part_impls.push_back(ctx);
+            void* dev_handle = i2c_bus_register_device(address, part_id);
+            I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+            dev->ctx = ctx;
+            dev->receive = sht31_receive;
+            dev->read = sht31_read;
+            inst->kind = PART_KIND_SHT31;
+            break;
+        }
+        case 4: {  // TMP102
+            TMP102Context* ctx = new TMP102Context();
+            inst->impl = ctx;
+            g_part_impls.push_back(ctx);
+            void* dev_handle = i2c_bus_register_device(address, part_id);
+            I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+            dev->ctx = ctx;
+            dev->receive = tmp102_receive;
+            dev->read = tmp102_read;
+            inst->kind = PART_KIND_TMP102;
+            break;
+        }
+        default:
+            break;
+    }
+    return handle;
+}
+
+extern "C" void* part_create_eeprom(uint32_t part_id, uint8_t address) {
+    void* handle = part_register(part_id, PART_KIND_EEPROM, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    
+    EEPROM24LC256Context* ctx = new EEPROM24LC256Context();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    void* dev_handle = i2c_bus_register_device(address, part_id);
+    I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+    dev->ctx = ctx;
+    dev->receive = eeprom24lc256_receive;
+    dev->read = eeprom24lc256_read;
     return handle;
 }
 

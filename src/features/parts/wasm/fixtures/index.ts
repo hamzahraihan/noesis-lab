@@ -16,6 +16,10 @@ import ssd1306 from './ssd1306.json';
 import ili9341 from './ili9341.json';
 import max7219 from './max7219.json';
 import hd44780 from './hd44780.json';
+import bh1750 from './bh1750.json';
+import bmp180 from './bmp180.json';
+import sht31 from './sht31.json';
+import eeprom24lc256 from './eeprom24lc256.json';
 import type { Stimulus } from '../probe';
 
 // The stimulus union has one source: probe.ts. Re-exported so fixtures stay a
@@ -43,6 +47,10 @@ export const FIXTURE_LIST = [
   ili9341,
   max7219,
   hd44780,
+  bh1750,
+  bmp180,
+  sht31,
+  eeprom24lc256,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs
