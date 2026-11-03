@@ -94,7 +94,7 @@ struct PartStateSnapshot {
     uint16_t mcp4725_value;
 
     // PCA9685 PWM driver state
-    uint8_t pca9685_channels[16];  // per-channel value (low byte of the 12-bit on value)
+    uint16_t pca9685_duty[16];  // 12-bit duty per channel: high counts (0-4095; 4096 = full-on)
     uint8_t pca9685_prescale;
 
     // RTC time

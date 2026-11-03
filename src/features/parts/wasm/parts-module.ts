@@ -169,7 +169,7 @@ export interface PartStateSnapshot {
   mcp4725_value: number;
 
   // PCA9685 PWM driver state
-  pca9685_channels: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+  pca9685_duty: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
   pca9685_prescale: number;
 
   // RTC time
@@ -212,6 +212,7 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
   const rI32 = () => { const v = view.getInt32(offset, true); offset += 4; return v; };
   const rF64 = () => { const v = view.getFloat64(offset, true); offset += 8; return v; };
   const rArr8 = (len: number) => { const arr = new Uint8Array(wasmMemory.memory.buffer, ptr + offset, len); offset += len; return Array.from(arr); };
+  const rArr16 = (len: number) => Array.from({ length: len }, () => rU16());
   /** Reads a null-terminated UTF-8 string of at most `maxLen` bytes at `offset`. */
   const rStr = (maxLen: number) => {
     const start = ptr + offset;
@@ -286,7 +287,7 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     mcp4725_value: rU16(),
 
     // PCA9685 PWM driver state
-    pca9685_channels: rArr8(16) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number],
+    pca9685_duty: rArr16(16) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number],
     pca9685_prescale: rU8(),
 
     // RTC time

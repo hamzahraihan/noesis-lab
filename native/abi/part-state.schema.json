@@ -66,7 +66,7 @@
         "pcd8544_inverse": { "type": "boolean" },
         "pcd8544_vop": { "type": "integer" },
         "mcp4725_value": { "type": "integer" },
-        "pca9685_channels": { "type": "array", "items": { "type": "integer" }, "minItems": 16, "maxItems": 16 },
+        "pca9685_duty": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 4096 }, "minItems": 16, "maxItems": 16 },
         "pca9685_prescale": { "type": "integer" },
         "rtc_seconds": { "type": "integer" },
         "rtc_minutes": { "type": "integer" },

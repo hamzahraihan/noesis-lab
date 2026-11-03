@@ -1441,7 +1441,17 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             PCA9685Context* ctx = static_cast<PCA9685Context*>(inst->impl);
             snap->pca9685_prescale = ctx->prescale;
             for (int i = 0; i < 16; i++) {
-                snap->pca9685_channels[i] = ctx->led_on_l[i];
+                // duty counts mirror TS `duty()`: OFF wins, ON wins, else (end-start) mod 4096 counts
+                if (ctx->mode1 & 0x10) { snap->pca9685_duty[i] = 0; continue; }  // oscillator sleep holds outputs low
+                uint16_t on = (ctx->led_on_l[i] | (ctx->led_on_h[i] << 8));
+                uint16_t off = (ctx->led_off_l[i] | (ctx->led_off_h[i] << 8));
+                if ((off & 0x1000) != 0) { snap->pca9685_duty[i] = 0; }
+                else if ((on & 0x1000) != 0) { snap->pca9685_duty[i] = 4096; }
+                else {
+                    uint16_t start = on & 0x0fff;
+                    uint16_t end = off & 0x0fff;
+                    snap->pca9685_duty[i] = (start == end) ? 0 : static_cast<uint16_t>((4096 + end - start) % 4096);
+                }
             }
             break;
         }

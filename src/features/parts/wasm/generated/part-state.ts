@@ -95,7 +95,7 @@ export interface PartStateSnapshot {
   mcp4725_value: number;
 
   // PCA9685 PWM driver state
-  pca9685_channels: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+  pca9685_duty: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
   pca9685_prescale: number;
 
   // RTC time
