@@ -111,6 +111,35 @@ struct PartStateSnapshot {
     bool pcd8544_blanked;
     bool pcd8544_inverse;
     uint8_t pcd8544_vop;
+
+    // MCP4725 DAC state
+    uint16_t mcp4725_value;
+
+    // PCA9685 PWM driver state
+    uint8_t pca9685_channels[16];  // per-channel value (low byte of the 12-bit on value)
+    uint8_t pca9685_prescale;
+
+    // RTC time
+    uint8_t rtc_seconds;
+    uint8_t rtc_minutes;
+    uint8_t rtc_hours;
+    uint8_t rtc_day;
+    uint8_t rtc_date;
+    uint8_t rtc_month;
+    uint8_t rtc_year;
+
+    // Generic I2C sensor state
+    int32_t sensor_temp_milli_c;
+    int32_t sensor_pressure_pa;
+    uint32_t sensor_lux;
+    uint32_t sensor_humidity_milli_pct;
+
+    // MAX7219 config
+    uint8_t max7219_decode_mode;
+    uint8_t max7219_intensity;
+    uint8_t max7219_scan_limit;
+    bool max7219_shutdown;
+    bool max7219_display_test;
 };
 
 #pragma pack(pop)
@@ -212,6 +241,35 @@ export interface PartStateSnapshot {
   pcd8544_blanked: boolean;
   pcd8544_inverse: boolean;
   pcd8544_vop: number;
+
+  // MCP4725 DAC state
+  mcp4725_value: number;
+
+  // PCA9685 PWM driver state
+  pca9685_channels: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+  pca9685_prescale: number;
+
+  // RTC time
+  rtc_seconds: number;
+  rtc_minutes: number;
+  rtc_hours: number;
+  rtc_day: number;
+  rtc_date: number;
+  rtc_month: number;
+  rtc_year: number;
+
+  // Generic I2C sensor state
+  sensor_temp_milli_c: number;
+  sensor_pressure_pa: number;
+  sensor_lux: number;
+  sensor_humidity_milli_pct: number;
+
+  // MAX7219 config
+  max7219_decode_mode: number;
+  max7219_intensity: number;
+  max7219_scan_limit: number;
+  max7219_shutdown: boolean;
+  max7219_display_test: boolean;
 }
 
 export interface PartStateSnapshotResponse {
