@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadPartsModule, type PartsModule } from './parts-module';
 import { WasmPartProbe, TsDeviceProbe, ADAPTERS, type Stimulus } from './probe';
-import { FIXTURES, type Fixture } from './fixtures';
+import { FIXTURES, FIXTURE_LIST, type Fixture } from './fixtures';
 
 let module: PartsModule;
 
@@ -95,10 +95,18 @@ describe('Parts differential harness', () => {
     expect(threw).toBe(true);
   });
 
-  // One test per fixture
-  it('pcf8574 matches TS oracle', () => runFixture(FIXTURES.pcf8574));
-  it('mcp23017 matches TS oracle', () => runFixture(FIXTURES.mcp23017));
-  it('ads1115 matches TS oracle', () => runFixture(FIXTURES.ads1115));
-  it('shift595 matches TS oracle', () => runFixture(FIXTURES.shift595));
-  it('pcd8544 matches TS oracle', () => runFixture(FIXTURES.pcd8544));
+  // One test per registered fixture: the list is the source, so a fixture that
+  // is registered but has no hardcoded `it()` still runs.
+  for (const fixture of FIXTURE_LIST) {
+    it(`${fixture.part} matches TS oracle`, () => runFixture(fixture));
+  }
+
+  it('every adapter has a fixture and every fixture has an adapter', () => {
+    const adapterKinds = Object.keys(ADAPTERS).sort();
+    const fixtureKinds = Object.keys(FIXTURES).sort();
+    expect(fixtureKinds).toEqual(adapterKinds);
+    expect(FIXTURES).toEqual(
+      Object.fromEntries(FIXTURE_LIST.map((f) => [f.part, f])),
+    );
+  });
 });

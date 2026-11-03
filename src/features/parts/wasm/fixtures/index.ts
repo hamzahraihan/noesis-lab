@@ -9,6 +9,11 @@ import mcp23017 from './mcp23017.json';
 import ads1115 from './ads1115.json';
 import shift595 from './shift595.json';
 import pcd8544 from './pcd8544.json';
+import type { Stimulus } from '../probe';
+
+// The stimulus union has one source: probe.ts. Re-exported so fixtures stay a
+// single import for callers.
+export type { Stimulus } from '../probe';
 
 export interface Fixture {
   part: string;
@@ -18,19 +23,10 @@ export interface Fixture {
   note: string;
 }
 
-export type Stimulus =
-  | { kind: 'i2c-write'; address: number; bytes: number[] }
-  | { kind: 'i2c-read'; address: number; count: number }
-  | { kind: 'spi-transfer'; byte: number; dc: boolean; cs: boolean }
-  | { kind: 'pin'; index: number; high: boolean }
-  | { kind: 'knob'; name: string; value: number };
-
-export const FIXTURES: Record<string, Fixture> = {
-  pcf8574: pcf8574 as Fixture,
-  mcp23017: mcp23017 as Fixture,
-  ads1115: ads1115 as Fixture,
-  shift595: shift595 as Fixture,
-  pcd8544: pcd8544 as Fixture,
-};
-
 export const FIXTURE_LIST = [pcf8574, mcp23017, ads1115, shift595, pcd8544] as Fixture[];
+
+// Derive the keyed view from the list so the two cannot drift: the harness runs
+// the list and asserts the map matches it.
+export const FIXTURES = Object.fromEntries(
+  FIXTURE_LIST.map((f) => [f.part, f as Fixture]),
+) as Record<string, Fixture>;
