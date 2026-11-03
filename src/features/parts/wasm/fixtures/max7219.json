@@ -1,0 +1,28 @@
+{
+  "part": "max7219",
+  "factoryArgs": [3, 8],
+  "stimuli": [
+    { "kind": "spi-transfer", "byte": 9, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 10, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 7, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 11, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 7, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 12, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 1, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 15, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 0, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 1, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 1, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 2, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 2, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 3, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 4, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 5, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 6, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 7, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 8, "dc": true, "cs": true }
+  ],
+  "labels": ["digit0", "digit1", "digit2", "digit3", "digit4", "digit5", "digit6", "digit7", "decode_mode", "intensity", "scan_limit", "shutdown", "display_test"],
+  "note": "MAX7219 init (decode all, intensity 7, scan 7, normal op) + write digits 1-8"
+}

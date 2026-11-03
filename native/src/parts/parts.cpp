@@ -252,6 +252,7 @@ struct HD44780Context : PartContext {
     uint8_t rows = 2;
     uint8_t cols = 16;
     uint8_t chars[80] = {0};  // Max 4x20 = 80 chars
+    uint8_t cursor = 0;       // Knob handler cursor position
     PartContextType type() const override { return PartContextType::HD44780; }
 };
 
@@ -1122,7 +1123,7 @@ static void spi_max7219_receive(void* ctx, uint8_t byte, bool data_select, bool 
             case 0x09: dev->decode_mode = byte; break;
             case 0x0A: dev->intensity = byte & 0x0F; break;
             case 0x0B: dev->scan_limit = byte & 0x07; break;
-            case 0x0C: dev->shutdown = byte & 0x01; break;
+            case 0x0C: dev->shutdown = (byte & 0x01) == 0; break;
             case 0x0F: dev->display_test = byte & 0x01; break;
         }
     } else {
@@ -1426,10 +1427,16 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             break;
         }
         case PART_KIND_DISPLAY_7SEG: {
-            // TM1637 — uses MAX7219Context or similar
+            // MAX7219 (and TM1637)
             MAX7219Context* ctx = static_cast<MAX7219Context*>(inst->impl);
             for (int i = 0; i < 8; i++) snap->seven_seg_digits[i] = ctx->digit_data[i];
             snap->seven_seg_colon = 0;
+            // Also populate MAX7219 config fields
+            snap->max7219_decode_mode = ctx->decode_mode;
+            snap->max7219_intensity = ctx->intensity;
+            snap->max7219_scan_limit = ctx->scan_limit;
+            snap->max7219_shutdown = ctx->shutdown != 0;
+            snap->max7219_display_test = ctx->display_test != 0;
             break;
         }
         case PART_KIND_DISPLAY_LCD: {
@@ -1561,6 +1568,14 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             else if (strcmp(knob_name, "ain1") == 0) ctx->input_voltage[1] = value;
             else if (strcmp(knob_name, "ain2") == 0) ctx->input_voltage[2] = value;
             else if (strcmp(knob_name, "ain3") == 0) ctx->input_voltage[3] = value;
+            break;
+        }
+        case PART_KIND_DISPLAY_LCD: {
+            HD44780Context* ctx = static_cast<HD44780Context*>(inst->impl);
+            if (strcmp(knob_name, "clear") == 0) {
+                ctx->cursor = 0;
+                for (int i = 0; i < 80; i++) ctx->chars[i] = 0x20;  // space
+            }
             break;
         }
         default:

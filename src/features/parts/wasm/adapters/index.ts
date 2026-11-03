@@ -11,6 +11,10 @@ import { pcd8544Adapter } from './pcd8544';
 import { servoAdapter } from './servo';
 import { stepperAdapter } from './stepper';
 import { a4988Adapter } from './a4988';
+import { ssd1306Adapter } from './ssd1306';
+import { ili9341Adapter } from './ili9341';
+import { max7219Adapter } from './max7219';
+import { hd44780Adapter } from './hd44780';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -22,6 +26,10 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   servo: servoAdapter,
   stepper: stepperAdapter,
   a4988: a4988Adapter,
+  ssd1306: ssd1306Adapter,
+  ili9341: ili9341Adapter,
+  max7219: max7219Adapter,
+  hd44780: hd44780Adapter,
 };
 
 export * from './pcf8574';
@@ -32,3 +40,7 @@ export * from './pcd8544';
 export * from './servo';
 export * from './stepper';
 export * from './a4988';
+export * from './ssd1306';
+export * from './ili9341';
+export * from './max7219';
+export * from './hd44780';

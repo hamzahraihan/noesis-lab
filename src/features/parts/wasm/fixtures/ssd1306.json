@@ -1,0 +1,28 @@
+{
+  "part": "ssd1306",
+  "factoryArgs": [1, 60, 128, 64],
+  "stimuli": [
+    { "kind": "i2c-write", "address": 60, "bytes": [174] },
+    { "kind": "i2c-write", "address": 60, "bytes": [213, 128] },
+    { "kind": "i2c-write", "address": 60, "bytes": [168, 63] },
+    { "kind": "i2c-write", "address": 60, "bytes": [211, 0] },
+    { "kind": "i2c-write", "address": 60, "bytes": [64] },
+    { "kind": "i2c-write", "address": 60, "bytes": [141, 20] },
+    { "kind": "i2c-write", "address": 60, "bytes": [32, 0] },
+    { "kind": "i2c-write", "address": 60, "bytes": [161] },
+    { "kind": "i2c-write", "address": 60, "bytes": [200] },
+    { "kind": "i2c-write", "address": 60, "bytes": [218, 18] },
+    { "kind": "i2c-write", "address": 60, "bytes": [129, 207] },
+    { "kind": "i2c-write", "address": 60, "bytes": [217, 241] },
+    { "kind": "i2c-write", "address": 60, "bytes": [219, 64] },
+    { "kind": "i2c-write", "address": 60, "bytes": [164] },
+    { "kind": "i2c-write", "address": 60, "bytes": [166] },
+    { "kind": "i2c-write", "address": 60, "bytes": [175] },
+    { "kind": "i2c-write", "address": 60, "bytes": [33, 0, 127] },
+    { "kind": "i2c-write", "address": 60, "bytes": [34, 0, 7] },
+    { "kind": "i2c-write", "address": 60, "bytes": [64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { "kind": "i2c-write", "address": 60, "bytes": [64, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255] }
+  ],
+  "labels": ["width", "height", "framebuffer_crc"],
+  "note": "SSD1306 128x64 init sequence + two pages of data (zeros then ones)"
+}

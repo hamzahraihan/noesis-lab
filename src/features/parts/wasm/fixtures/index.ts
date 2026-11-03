@@ -12,6 +12,10 @@ import pcd8544 from './pcd8544.json';
 import servo from './servo.json';
 import stepper from './stepper.json';
 import a4988 from './a4988.json';
+import ssd1306 from './ssd1306.json';
+import ili9341 from './ili9341.json';
+import max7219 from './max7219.json';
+import hd44780 from './hd44780.json';
 import type { Stimulus } from '../probe';
 
 // The stimulus union has one source: probe.ts. Re-exported so fixtures stay a
@@ -35,6 +39,10 @@ export const FIXTURE_LIST = [
   servo,
   stepper,
   a4988,
+  ssd1306,
+  ili9341,
+  max7219,
+  hd44780,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs
