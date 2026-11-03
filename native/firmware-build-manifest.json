@@ -1,0 +1,9 @@
+{
+  "file": "firmware.wasm",
+  "wasmSha256": "2081555515330b7a809f07692eb7193090516ffeb48992c13defe57aa9139aea",
+  "jsSha256": "6b656f936f701392a61746d3e6b51457287c69382dc011bbd50c845869be9d8d",
+  "sourcesHash": "306282aa8228a89e3b959876b5f87f15758c70b0a05c053b00626f0c19c222cf",
+  "toolchain": {
+    "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)\r"
+  }
+}

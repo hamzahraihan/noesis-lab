@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:wasm && npm run build:solver && npm run build:engine && npm run build:parts && tsc -b && vite build",
+    "build": "npm run build:wasm && npm run build:solver && npm run build:engine && npm run build:firmware && tsc -b && vite build",
     "build:wasm": "node scripts/build-avr-wasm.mjs",
     "build:solver": "node scripts/build-solver-wasm.mjs",
     "build:engine": "node scripts/build-engine-wasm.mjs",
+    "build:firmware": "node scripts/build-firmware-wasm.mjs",
     "build:parts": "node scripts/build-parts-probe.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
