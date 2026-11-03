@@ -37,9 +37,7 @@ export const sht31Adapter: PartAdapter = {
           module.i2c_bus_read();
         }
       } else if (stimulus.kind === 'knob') {
-        if (stimulus.name === 'temperature') {
-        } else if (stimulus.name === 'humidity') {
-        }
+        module.part_set_knob(instance as number, stimulus.name, stimulus.value);
       }
     } else {
       const dev = instance as Sht31;
@@ -52,10 +50,11 @@ export const sht31Adapter: PartAdapter = {
       } else if (stimulus.kind === 'i2c-read') {
         dev.read(stimulus.count);
       } else if (stimulus.kind === 'knob') {
+        // Directly update internal state instead of replacing world callback
         if (stimulus.name === 'temperature') {
-          dev.setConditionsSource(() => ({ celsius: stimulus.value, humidity: 45 }));
+          (dev as any).celsius = stimulus.value;
         } else if (stimulus.name === 'humidity') {
-          dev.setConditionsSource(() => ({ celsius: 21, humidity: stimulus.value }));
+          (dev as any).humidity = stimulus.value;
         }
       }
     }
@@ -65,8 +64,8 @@ export const sht31Adapter: PartAdapter = {
     if (module) {
       throw new Error('SHT31: wasm path should use snapshotToScalars');
     } else {
-      // Sht31 doesn't expose measurement directly - use defaults
-      return [21000, 45000];
+      const dev = _instance as Sht31;
+      return [dev.getTemperatureMilliC(), dev.getHumidityMilliPct()];
     }
   },
 

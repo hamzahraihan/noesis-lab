@@ -10,6 +10,8 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Bh1750 } from '@/features/parts/devices/bh1750';
 
+const BH1750_ADAPTER_VERSION = 'v2-with-debug';
+
 export const bh1750Adapter: PartAdapter = {
   kind: 'bh1750',
   labels: ['lux'],
@@ -24,6 +26,7 @@ export const bh1750Adapter: PartAdapter = {
   },
 
   apply(instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
+    console.error('BH1750 apply called with:', stimulus.kind, stimulus);
     if (module) {
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
@@ -37,6 +40,7 @@ export const bh1750Adapter: PartAdapter = {
           module.i2c_bus_read();
         }
       } else if (stimulus.kind === 'knob') {
+        console.error('BH1750 knob: calling part_set_knob with', instance, stimulus.name, stimulus.value);
         module.part_set_knob(instance as number, stimulus.name, stimulus.value);
       }
     } else {

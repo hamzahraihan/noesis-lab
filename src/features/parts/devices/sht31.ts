@@ -148,6 +148,24 @@ export class Sht31 implements I2cDevice {
     };
   }
 
+  /** Current temperature in milli-Celsius (for differential test parity). */
+  getTemperatureMilliC(): number {
+    if (this.measurement) {
+      // Convert raw temperature back to milli-Celsius
+      return Math.round((this.measurement.temperature * 175000) / 65535 - 45000);
+    }
+    return Math.round((this.celsius + (this.heater ? HEATER_DEGREES : 0)) * 1000);
+  }
+
+  /** Current humidity in milli-percent (for differential test parity). */
+  getHumidityMilliPct(): number {
+    if (this.measurement) {
+      // Match C++ integer arithmetic: (humidity * 100000 + 32767) / 65535 (rounding)
+      return Math.round((this.measurement.humidity * 100000) / 65535);
+    }
+    return Math.round(this.humidity * 1000);
+  }
+
   /** The six-byte frame a read returns, CRC bytes included. */
   private frame(temperature: number, humidity: number): readonly number[] {
     const temperatureBytes = [(temperature >> 8) & 0xff, temperature & 0xff];

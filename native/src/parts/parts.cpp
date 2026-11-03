@@ -223,6 +223,9 @@ struct SHT31Context : PartContext {
     bool heater = false;
     uint16_t command_high = 0;
     bool have_command_high = false;
+    // Knob-set values (in milli-Celsius and milli-percent)
+    int32_t knob_temp_milli_c = 21000;  // Default 21°C
+    int32_t knob_humidity_milli_pct = 45000;  // Default 45%
     PartContextType type() const override { return PartContextType::SHT31; }
 };
 
@@ -1178,9 +1181,10 @@ static bool sht31_receive(void* ctx, uint8_t byte, bool is_control) {
     dev->have_command_high = false;
     
     if (cmd == 0x2400 || cmd == 0x240B || cmd == 0x2416 || cmd == 0x2C06 || cmd == 0x2C0D || cmd == 0x2C10) {
-        int celsius = 21 + (dev->heater ? 1 : 0);
-        dev->raw_temperature = static_cast<uint16_t>(((celsius + 45) * 65535) / 175);
-        dev->raw_humidity = static_cast<uint16_t>((45 * 65535) / 100);
+        int celsius = (dev->knob_temp_milli_c + 500) / 1000 + (dev->heater ? 1 : 0);  // milli-Celsius to Celsius, rounded
+        dev->raw_temperature = static_cast<uint16_t>(((celsius + 45) * 65535 + 87) / 175);  // rounding to match TS Math.round
+        int humidity = (dev->knob_humidity_milli_pct + 500) / 1000;  // milli-percent to percent, rounded
+        dev->raw_humidity = static_cast<uint16_t>((humidity * 65535 + 50) / 100);  // rounding to match TS Math.round
     } else if (cmd == 0x2737) { dev->raw_temperature = 0; dev->raw_humidity = 0; dev->heater = false; dev->have_command_high = false; }
     else if (cmd == 0x30A2) { dev->heater = true; }
     else if (cmd == 0x306D) { dev->heater = false; }
@@ -1813,15 +1817,16 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         case PART_KIND_SHT31: {
             SHT31Context* ctx = static_cast<SHT31Context*>(inst->impl);
             if (ctx->raw_temperature == 0 && ctx->raw_humidity == 0) {
-                int celsius = 21 + (ctx->heater ? 1 : 0);
-                ctx->raw_temperature = static_cast<uint16_t>(((celsius + 45) * 65535) / 175);
-                ctx->raw_humidity = static_cast<uint16_t>((45 * 65535) / 100);
+                int celsius = (ctx->knob_temp_milli_c + 500) / 1000 + (ctx->heater ? 1 : 0);
+                ctx->raw_temperature = static_cast<uint16_t>(((celsius + 45) * 65535 + 87) / 175);
+                int humidity = (ctx->knob_humidity_milli_pct + 500) / 1000;
+                ctx->raw_humidity = static_cast<uint16_t>((humidity * 65535 + 50) / 100);
             }
             // Temperature in milli-Celsius
-            int32_t celsius_milli = static_cast<int32_t>((ctx->raw_temperature * 175) / 65535 - 45);
-            snap->sensor_temp_milli_c = celsius_milli * 1000;
+            int32_t celsius_milli = static_cast<int32_t>((static_cast<int64_t>(ctx->raw_temperature) * 175000 + 32767) / 65535 - 45000);
+            snap->sensor_temp_milli_c = celsius_milli;
             // Humidity in milli-percent
-            int32_t humidity_milli = static_cast<int32_t>((ctx->raw_humidity * 100000) / 65535);
+            int32_t humidity_milli = static_cast<int32_t>((static_cast<int64_t>(ctx->raw_humidity) * 100000 + 32767) / 65535);
             snap->sensor_humidity_milli_pct = humidity_milli;
             break;
         }
@@ -1902,9 +1907,10 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         }
         case PART_KIND_BH1750: {
             BH1750Context* ctx = static_cast<BH1750Context*>(inst->impl);
-            if (strcmp(knob_name, "light") == 0) {
+            if (knob_name && knob_name[0] == 'l' && knob_name[1] == 'i' && knob_name[2] == 'g' && knob_name[3] == 'h' && knob_name[4] == 't' && knob_name[5] == '\0') {
                 // 1.2 counts per lux for high-res mode
                 ctx->counts = static_cast<uint16_t>(value * 1.2);
+                ctx->conversion_ready = true;
             }
             break;
         }
@@ -1923,12 +1929,9 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_SHT31: {
             SHT31Context* ctx = static_cast<SHT31Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) {
-                int celsius = static_cast<int>(value);
-                int celsius_with_heater = celsius + (ctx->heater ? 1 : 0);
-                ctx->raw_temperature = static_cast<uint16_t>(((celsius_with_heater + 45) * 65535) / 175);
+                ctx->knob_temp_milli_c = static_cast<int32_t>(value * 1000.0);
             } else if (strcmp(knob_name, "humidity") == 0) {
-                int humidity = static_cast<int>(value);
-                ctx->raw_humidity = static_cast<uint16_t>((humidity * 65535) / 100);
+                ctx->knob_humidity_milli_pct = static_cast<int32_t>(value * 1000.0);
             }
             break;
         }
