@@ -90,12 +90,6 @@ export class Max7219 {
   receive(byte: number, _dataSelect: boolean, _chipSelected: boolean): void {
     this.shift = ((this.shift << 8) | (byte & 0xff)) & 0xffff;
     this.bits = Math.min(this.bits + 8, 16);
-    // Apply register write immediately when 16 bits are accumulated (matches C++ behavior)
-    if (this.bits >= 16) {
-      this.write(this.shift);
-      this.shift = 0;
-      this.bits = 0;
-    }
   }
 
   /**
