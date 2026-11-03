@@ -258,18 +258,37 @@ struct HD44780Context : PartContext {
 // Servo - RC servo motor
 struct ServoContext : PartContext {
     uint8_t current_angle = 90;  // 0-180 degrees
+    bool pin_high = false;
+    bool was_pin_high = false;
+    uint32_t pulse_start_ms = 0;
     PartContextType type() const override { return PartContextType::SERVO; }
 };
 
 // Stepper - Stepper motor
 struct StepperContext : PartContext {
     int16_t current_angle_deci_deg = 0;  // 0-3600 (0.1 degree steps)
+    int32_t angle_accumulator = 0;        // Signed accumulator in deci-degrees
+    // Pin state: 0=A+, 1=A-, 2=B+, 3=B-
+    bool pin_state[4] = {false, false, false, false};
+    int8_t prev_a = 0;
+    int8_t prev_b = 0;
+    double step_angle_deg = 7.5;
     PartContextType type() const override { return PartContextType::STEPPER; }
 };
 
 // StepperDriver - A4988/Driver
 struct StepperDriverContext : PartContext {
     uint8_t coil_outputs[4] = {0, 0, 0, 0};  // 1A, 1B, 2A, 2B
+    // TS state from a4988.ts
+    int8_t fine_position = 0;            // 0..63 (1/16-step units)
+    uint8_t active_microsteps = 1;
+    uint8_t pending_microsteps = 1;
+    bool previous_step = false;
+    bool enabled = false;  // ENABLE pin defaults high (active low -> disabled)
+    bool asleep = false;
+    bool in_reset = false;
+    // Pin state: 0=STEP, 1=DIR, 2=ENABLE, 3=RESET, 4=SLEEP, 5=MS1, 6=MS2, 7=MS3
+    bool pin_state[8] = {false, false, false, false, false, false, false, false};
     PartContextType type() const override { return PartContextType::STEPPER_DRIVER; }
 };
 
@@ -425,6 +444,10 @@ static bool g_spi_saw_byte = false;
 static SpiByte g_spi_payload[256];
 static uint16_t g_spi_payload_len = 0;
 static uint32_t g_spi_transfer_count = 0;
+
+// Track the last time part_stamp was called, for parts that need time
+// but only receive it in part_stamp (e.g., servo pulse width)
+static uint32_t g_last_stamp_time_ms = 0;
 
 struct SPIPartImpl {
     uint32_t part_id;
@@ -1188,9 +1211,12 @@ extern "C" void* part_register(uint32_t part_id, PartKind kind, const char* defi
 // read it to decide their next state. Passing it in keeps the module free of
 // process-wide state, so more than one engine can live in the same instance.
 extern "C" void part_stamp(void* handle, const SolverSolution* solution, double time_ms) {
-    (void)time_ms;
+    // Update the global time for parts that need it in part_set_pin_level
+    g_last_stamp_time_ms = static_cast<uint32_t>(time_ms);
+    
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    if (!inst || !inst->impl || !solution) return;
+    if (!inst || !inst->impl) return;
+    // solution may be nullptr (e.g., from harness time stimulus)
     const SolverSolution* sol = solution;
     
     switch (inst->kind) {
@@ -1206,7 +1232,7 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
         }
         case PART_KIND_RELAY: {
             RelayContext* ctx = static_cast<RelayContext*>(inst->impl);
-            if (ctx->coil_pos_net >= 0 && ctx->coil_neg_net >= 0) {
+            if (ctx->coil_pos_net >= 0 && ctx->coil_neg_net >= 0 && sol) {
                 double v_coil = voltageOfNet(sol, ctx->coil_pos_net)
                               - voltageOfNet(sol, ctx->coil_neg_net);
                 bool should_pull_in = v_coil >= ctx->pull_in_voltage;
@@ -1244,6 +1270,41 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
         case PART_KIND_RTC: {
             RTCContext* ctx = static_cast<RTCContext*>(inst->impl);
             // Update time based on elapsed ms
+            break;
+        }
+        case PART_KIND_SERVO: {
+            ServoContext* ctx = static_cast<ServoContext*>(inst->impl);
+            // Pulse width measurement using g_last_stamp_time_ms
+            // Track rising/falling edges of the PWM pin
+            static bool last_pin_high = false;  // Actually need per-instance state
+            // Use a flag in context instead
+            // On rising edge: record start time
+            // On falling edge: compute width from start time
+            if (ctx->pin_high && !ctx->was_pin_high) {
+                // Rising edge
+                ctx->pulse_start_ms = g_last_stamp_time_ms;
+            } else if (!ctx->pin_high && ctx->was_pin_high) {
+                // Falling edge: compute pulse width
+                uint32_t pulse_width_us = g_last_stamp_time_ms - ctx->pulse_start_ms;
+                if (pulse_width_us > 0) {
+                    // Map pulse width to angle: 1000us = 0°, 2000us = 180°
+                    int wanted = static_cast<int>((pulse_width_us - 1000.0) / 1000.0 * 180.0 + 0.5);
+                    if (wanted < 10) wanted = 10;
+                    if (wanted > 170) wanted = 170;
+                    ctx->current_angle = static_cast<uint8_t>(wanted);
+                }
+            }
+            ctx->was_pin_high = ctx->pin_high;
+            break;
+        }
+        case PART_KIND_STEPPER: {
+            // Stepper is driven entirely by part_set_pin_level (polarity edges)
+            // No time-based advancement needed
+            break;
+        }
+        case PART_KIND_STEPPER_DRIVER: {
+            // A4988 is driven entirely by part_set_pin_level (STEP/DIR edges)
+            // No time-based advancement needed
             break;
         }
         default:
@@ -1548,6 +1609,143 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
         }
         case PART_KIND_RTC: {
             // RTC pins handled via I2C
+            break;
+        }
+        case PART_KIND_SERVO: {
+            ServoContext* ctx = static_cast<ServoContext*>(inst->impl);
+            if (pin_index == 0) {
+                ctx->pin_high = high;
+            }
+            break;
+        }
+        case PART_KIND_STEPPER: {
+            StepperContext* ctx = static_cast<StepperContext*>(inst->impl);
+            if (pin_index >= 0 && pin_index <= 3) {
+                ctx->pin_state[pin_index] = high;
+                
+                // Compute polarities: A+ vs A-, B+ vs B-
+                // Pin mapping: 0=A+, 1=A-, 2=B+, 3=B-
+                int aPlus = ctx->pin_state[0] ? 1 : 0;
+                int aMinus = ctx->pin_state[1] ? 1 : 0;
+                int bPlus = ctx->pin_state[2] ? 1 : 0;
+                int bMinus = ctx->pin_state[3] ? 1 : 0;
+                
+                int8_t nextA = (aPlus && !aMinus) ? 1 : ((!aPlus && aMinus) ? -1 : 0);
+                int8_t nextB = (bPlus && !bMinus) ? 1 : ((!bPlus && bMinus) ? -1 : 0);
+                
+                // First sighting arms the tracker
+                if (ctx->prev_a == 0 && ctx->prev_b == 0 && nextA == 0 && nextB == 0) break;
+                if (ctx->prev_a == 0 && ctx->prev_b == 0) {
+                    ctx->prev_a = nextA;
+                    ctx->prev_b = nextB;
+                    break;
+                }
+                
+                // Step transition logic (matches TS stepTransition)
+                int8_t delta = 0;
+                if (ctx->prev_a == 1 && ctx->prev_b == 1 && nextA == -1 && nextB == 1) delta = 1;
+                else if (ctx->prev_a == -1 && ctx->prev_b == 1 && nextA == -1 && nextB == -1) delta = 1;
+                else if (ctx->prev_a == -1 && ctx->prev_b == -1 && nextA == 1 && nextB == -1) delta = 1;
+                else if (ctx->prev_a == 1 && ctx->prev_b == -1 && nextA == 1 && nextB == 1) delta = 1;
+                else if (ctx->prev_a == -1 && ctx->prev_b == 1 && nextA == 1 && nextB == 1) delta = -1;
+                else if (ctx->prev_a == -1 && ctx->prev_b == -1 && nextA == -1 && nextB == 1) delta = -1;
+                else if (ctx->prev_a == 1 && ctx->prev_b == -1 && nextA == -1 && nextB == -1) delta = -1;
+                else if (ctx->prev_a == 1 && ctx->prev_b == 1 && nextA == 1 && nextB == -1) delta = -1;
+                
+                if (delta != 0) {
+                    // STEP_DEGREES = 7.5, so 75 deci-degrees per step
+                    ctx->angle_accumulator += delta * 75;
+                }
+                
+                ctx->prev_a = nextA;
+                ctx->prev_b = nextB;
+                
+                // Update current angle for snapshot (mod 3600 deci-degrees)
+                ctx->current_angle_deci_deg = static_cast<int16_t>((ctx->angle_accumulator % 3600 + 3600) % 3600);
+            }
+            break;
+        }
+        case PART_KIND_STEPPER_DRIVER: {
+            StepperDriverContext* ctx = static_cast<StepperDriverContext*>(inst->impl);
+            // Pin mapping: 0=STEP, 1=DIR, 2=ENABLE, 3=RESET, 4=SLEEP, 5=MS1, 6=MS2, 7=MS3
+            if (pin_index == 0) {
+                // STEP pin: rising edge triggers movement
+                bool rising = high && !ctx->previous_step;
+                ctx->previous_step = high;
+                if (rising) {
+                    ctx->active_microsteps = ctx->pending_microsteps;
+                    if (!ctx->enabled || ctx->asleep || ctx->in_reset) break;
+                    
+                    int8_t stride = 16 / ctx->active_microsteps;
+                    int8_t step = ctx->pin_state[1] ? stride : -stride;  // DIR is pin 1
+                    ctx->fine_position = (ctx->fine_position + step + 64) % 64;
+                }
+            } else if (pin_index == 1) {
+                // DIR pin
+                ctx->pin_state[1] = high;
+            } else if (pin_index == 2) {
+                // ENABLE (active low)
+                ctx->enabled = !high;
+            } else if (pin_index == 3) {
+                // RESET (active low)
+                ctx->in_reset = !high;
+                if (ctx->in_reset) {
+                    ctx->fine_position = 0;
+                    ctx->active_microsteps = ctx->pending_microsteps;
+                }
+            } else if (pin_index == 4) {
+                // SLEEP (active low)
+                ctx->asleep = !high;
+                if (ctx->asleep) {
+                    ctx->fine_position = 0;
+                    ctx->active_microsteps = ctx->pending_microsteps;
+                }
+            } else if (pin_index >= 5 && pin_index <= 7) {
+                // MS1, MS2, MS3 pins
+                bool ms1 = ctx->pin_state[5];
+                bool ms2 = ctx->pin_state[6];
+                bool ms3 = ctx->pin_state[7];
+                
+                if (pin_index == 5) ctx->pin_state[5] = high;
+                else if (pin_index == 6) ctx->pin_state[6] = high;
+                else if (pin_index == 7) ctx->pin_state[7] = high;
+                
+                // microstepsFor: MS3 MS2 MS1 → 16/8/4/2/1
+                if (ms3) ctx->pending_microsteps = (ms1 && ms2) ? 16 : 1;
+                else if (ms2) ctx->pending_microsteps = ms1 ? 8 : 4;
+                else ctx->pending_microsteps = ms1 ? 2 : 1;
+            }
+            
+            // Update coil outputs based on current state
+            if (!ctx->enabled || ctx->asleep || ctx->in_reset) {
+                ctx->coil_outputs[0] = ctx->coil_outputs[1] = ctx->coil_outputs[2] = ctx->coil_outputs[3] = 0;
+            } else if (ctx->active_microsteps == 1) {
+                // Full step: use the FULL_STEP table from TS
+                const bool full_step[4][4] = {
+                    {1, 0, 0, 1},  // state 0
+                    {1, 0, 1, 0},  // state 1
+                    {0, 1, 1, 0},  // state 2
+                    {0, 1, 0, 1},  // state 3
+                };
+                int pos = ctx->fine_position / 16;  // 0..3
+                ctx->coil_outputs[0] = full_step[pos][0] ? 1 : 0;
+                ctx->coil_outputs[1] = full_step[pos][1] ? 1 : 0;
+                ctx->coil_outputs[2] = full_step[pos][2] ? 1 : 0;
+                ctx->coil_outputs[3] = full_step[pos][3] ? 1 : 0;
+            } else {
+                // Microstepping: sine/cosine table
+                // HOME_ANGLE_DEGREES = -45, ELECTRICAL_DEGREES_PER_STEP = 90
+                double degrees = -45.0 + ctx->fine_position * (90.0 / 16.0);
+                double radians = degrees * M_PI / 180.0;
+                double a = cos(radians);
+                double b = sin(radians);
+                
+                // duty: (1 + current) / 2 for positive end, (1 - current) / 2 for negative
+                ctx->coil_outputs[0] = ((1.0 + a) / 2.0 > 0.5) ? 1 : 0;  // 1A
+                ctx->coil_outputs[1] = ((1.0 - a) / 2.0 > 0.5) ? 1 : 0;  // 1B
+                ctx->coil_outputs[2] = ((1.0 + b) / 2.0 > 0.5) ? 1 : 0;  // 2A
+                ctx->coil_outputs[3] = ((1.0 - b) / 2.0 > 0.5) ? 1 : 0;  // 2B
+            }
             break;
         }
         default:

@@ -15,7 +15,8 @@ export type Stimulus =
   | { kind: 'i2c-read'; address: number; count: number }
   | { kind: 'spi-transfer'; byte: number; dc: boolean; cs: boolean }
   | { kind: 'pin'; index: number; high: boolean }
-  | { kind: 'knob'; name: string; value: number };
+  | { kind: 'knob'; name: string; value: number }
+  | { kind: 'time'; ms: number };
 
 /** An observation: labeled scalar values. */
 export type Observation = { labels: string[]; values: number[] };
@@ -53,6 +54,7 @@ export class WasmPartProbe implements PartProbe {
   private handle: number;
   private adapter: PartAdapter;
   private module: PartsModule;
+  private cumulativeTimeMs = 0;
 
   constructor(
     kind: string,
@@ -68,6 +70,11 @@ export class WasmPartProbe implements PartProbe {
   }
 
   apply(stimulus: Stimulus): void {
+    if (stimulus.kind === 'time') {
+      this.cumulativeTimeMs += stimulus.ms;
+      this.module.part_stamp(this.handle, 0, this.cumulativeTimeMs);
+      return;
+    }
     this.adapter.apply(this.handle, stimulus, this.module);
   }
 
@@ -79,6 +86,7 @@ export class WasmPartProbe implements PartProbe {
   }
 
   reset(): void {
+    this.cumulativeTimeMs = 0;
     this.module.bus_reset();
     this.adapter.reset?.(this.handle, this.module);
   }

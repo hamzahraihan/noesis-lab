@@ -1,0 +1,20 @@
+{
+  "part": "servo",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "pin", "index": 0, "high": true },
+    { "kind": "time", "ms": 1000 },
+    { "kind": "pin", "index": 0, "high": false },
+    { "kind": "time", "ms": 10 },
+    { "kind": "pin", "index": 0, "high": true },
+    { "kind": "time", "ms": 1500 },
+    { "kind": "pin", "index": 0, "high": false },
+    { "kind": "time", "ms": 10 },
+    { "kind": "pin", "index": 0, "high": true },
+    { "kind": "time", "ms": 2000 },
+    { "kind": "pin", "index": 0, "high": false },
+    { "kind": "time", "ms": 10 }
+  ],
+  "labels": ["angle"],
+  "note": "1ms pulse → 0° (clamped to 10°), 1.5ms → 90°, 2ms → 180° (clamped to 170°)"
+}
