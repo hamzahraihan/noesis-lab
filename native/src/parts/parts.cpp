@@ -442,6 +442,46 @@ static std::vector<SPIPartImpl> g_spi_parts;
 // Part implementations - every context here is owned and freed by bus_reset()
 static std::vector<PartContext*> g_part_impls;
 
+// Returns the enum constant name for a PartKind, used to stamp snapshot
+// identity. Covers every value declared in native/include/parts.h.
+static const char* part_kind_name(PartKind k) {
+    switch (k) {
+        case PART_KIND_PASSIVE: return "PART_KIND_PASSIVE";
+        case PART_KIND_MCU: return "PART_KIND_MCU";
+        case PART_KIND_POWER_SUPPLY: return "PART_KIND_POWER_SUPPLY";
+        case PART_KIND_RELAY: return "PART_KIND_RELAY";
+        case PART_KIND_SERVO: return "PART_KIND_SERVO";
+        case PART_KIND_STEPPER: return "PART_KIND_STEPPER";
+        case PART_KIND_STEPPER_DRIVER: return "PART_KIND_STEPPER_DRIVER";
+        case PART_KIND_SHIFT_REGISTER: return "PART_KIND_SHIFT_REGISTER";
+        case PART_KIND_DISPLAY_I2C: return "PART_KIND_DISPLAY_I2C";
+        case PART_KIND_DISPLAY_SPI: return "PART_KIND_DISPLAY_SPI";
+        case PART_KIND_DISPLAY_7SEG: return "PART_KIND_DISPLAY_7SEG";
+        case PART_KIND_DISPLAY_LCD: return "PART_KIND_DISPLAY_LCD";
+        case PART_KIND_I2C_EXPANDER: return "PART_KIND_I2C_EXPANDER";
+        case PART_KIND_PWM_DRIVER: return "PART_KIND_PWM_DRIVER";
+        case PART_KIND_RTC: return "PART_KIND_RTC";
+        case PART_KIND_SENSOR_I2C: return "PART_KIND_SENSOR_I2C";
+        case PART_KIND_DAC: return "PART_KIND_DAC";
+        case PART_KIND_ADC: return "PART_KIND_ADC";
+        case PART_KIND_THERMOCOUPLE: return "PART_KIND_THERMOCOUPLE";
+        case PART_KIND_RFID: return "PART_KIND_RFID";
+        case PART_KIND_NEOPIXEL: return "PART_KIND_NEOPIXEL";
+        case PART_KIND_SONAR: return "PART_KIND_SONAR";
+        case PART_KIND_DHT: return "PART_KIND_DHT";
+        case PART_KIND_DS18B20: return "PART_KIND_DS18B20";
+        case PART_KIND_ENCODER: return "PART_KIND_ENCODER";
+        case PART_KIND_BUTTON: return "PART_KIND_BUTTON";
+        case PART_KIND_POTENTIOMETER: return "PART_KIND_POTENTIOMETER";
+        case PART_KIND_REMOTE: return "PART_KIND_REMOTE";
+        case PART_KIND_DIALER: return "PART_KIND_DIALER";
+        case PART_KIND_SD_CARD: return "PART_KIND_SD_CARD";
+        case PART_KIND_SCRIPTED: return "PART_KIND_SCRIPTED";
+        case PART_KIND_UNKNOWN: return "PART_KIND_UNKNOWN";
+        default: return "PART_KIND_UNKNOWN";
+    }
+}
+
 // Explicitly construct global STL containers (needed when using -Wl,--no-entry
 // with emcc or when using clang++ -nostdlib without automatic constructor calls).
 extern "C" void init_globals() {
@@ -1221,6 +1261,16 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
     
     PartInstance* inst = static_cast<PartInstance*>(handle);
     if (!inst || !inst->impl) return snap;
+
+    // Write partId (truncated to 63 chars + NUL) and kind string
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%u", inst->part_id);
+    memcpy(snap->partId, buf, 64);
+
+    const char* kind_name = part_kind_name(inst->kind);
+    size_t kl = strlen(kind_name);
+    memcpy(snap->kind, kind_name, kl < 32 ? kl + 1 : 31);
+    snap->kind[31] = '\0';
     
     switch (inst->kind) {
         case PART_KIND_POWER_SUPPLY: {
@@ -1259,7 +1309,13 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_RTC: {
             RTCContext* ctx = static_cast<RTCContext*>(inst->impl);
-            // Could add RTC time fields to snapshot
+            snap->rtc_seconds = ctx->seconds;
+            snap->rtc_minutes = ctx->minutes;
+            snap->rtc_hours = ctx->hours;
+            snap->rtc_day = ctx->day;
+            snap->rtc_date = ctx->date;
+            snap->rtc_month = ctx->month;
+            snap->rtc_year = ctx->year;
             break;
         }
         case PART_KIND_DISPLAY_I2C: {
@@ -1300,6 +1356,11 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
                 for (int i = 0; i < 8; i++) snap->seven_seg_digits[i] = ctx->digit_data[i];
                 // MAX7219 doesn't have a colon field, but we can use shutdown or display_test as placeholder
                 snap->seven_seg_colon = 0;
+                snap->max7219_decode_mode = ctx->decode_mode;
+                snap->max7219_intensity = ctx->intensity;
+                snap->max7219_scan_limit = ctx->scan_limit;
+                snap->max7219_shutdown = ctx->shutdown != 0;
+                snap->max7219_display_test = ctx->display_test != 0;
             }
             break;
         }
@@ -1368,6 +1429,19 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
                 snap->ads1115_config = ctx->config;
                 snap->ads1115_conversion = ctx->conversion;
                 snap->ads1115_conversion_ready = ctx->conversion_ready;
+            }
+            break;
+        }
+        case PART_KIND_DAC: {
+            MCP4725Context* ctx = static_cast<MCP4725Context*>(inst->impl);
+            snap->mcp4725_value = ctx->dac_value;
+            break;
+        }
+        case PART_KIND_PWM_DRIVER: {
+            PCA9685Context* ctx = static_cast<PCA9685Context*>(inst->impl);
+            snap->pca9685_prescale = ctx->prescale;
+            for (int i = 0; i < 16; i++) {
+                snap->pca9685_channels[i] = ctx->led_on_l[i];
             }
             break;
         }
