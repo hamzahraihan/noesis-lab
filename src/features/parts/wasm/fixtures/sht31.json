@@ -1,0 +1,14 @@
+{
+  "part": "sht31",
+  "factoryArgs": [3, 3, 68],
+  "stimuli": [
+    { "kind": "i2c-write", "address": 68, "bytes": [36, 0] },
+    { "kind": "i2c-read", "address": 68, "count": 6 },
+    { "kind": "knob", "name": "temperature", "value": 25.0 },
+    { "kind": "knob", "name": "humidity", "value": 50 },
+    { "kind": "i2c-write", "address": 68, "bytes": [36, 0] },
+    { "kind": "i2c-read", "address": 68, "count": 6 }
+  ],
+  "labels": ["temp_milli_c", "humidity_milli_pct"],
+  "note": "SHT31 single-shot high repeatability, read temp/humidity"
+}

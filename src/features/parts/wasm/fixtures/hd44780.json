@@ -1,0 +1,17 @@
+{
+  "part": "hd44780",
+  "factoryArgs": [4, 16, 2],
+  "stimuli": [
+    { "kind": "knob", "name": "function_set", "value": 40 },
+    { "kind": "knob", "name": "display_on", "value": 12 },
+    { "kind": "knob", "name": "entry_mode", "value": 6 },
+    { "kind": "knob", "name": "clear", "value": 1 },
+    { "kind": "knob", "name": "write_char", "value": 72 },
+    { "kind": "knob", "name": "write_char", "value": 101 },
+    { "kind": "knob", "name": "write_char", "value": 108 },
+    { "kind": "knob", "name": "write_char", "value": 108 },
+    { "kind": "knob", "name": "write_char", "value": 111 }
+  ],
+  "labels": ["char0","char1","char2","char3","char4","rows","cols"],
+  "note": "HD44780 16x2 init + write 'Hello' (simplified knob-based)"
+}

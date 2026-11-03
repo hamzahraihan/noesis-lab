@@ -77,6 +77,7 @@ export class Max7219 {
   private intensity = 0;
   private scanLimit = MAX7219_COLUMNS - 1;
   private testMode = false;
+  private decode_mode = 0;
 
   /**
    * One byte from the SPI bus.
@@ -89,6 +90,12 @@ export class Max7219 {
   receive(byte: number, _dataSelect: boolean, _chipSelected: boolean): void {
     this.shift = ((this.shift << 8) | (byte & 0xff)) & 0xffff;
     this.bits = Math.min(this.bits + 8, 16);
+    // Apply register write immediately when 16 bits are accumulated (matches C++ behavior)
+    if (this.bits >= 16) {
+      this.write(this.shift);
+      this.shift = 0;
+      this.bits = 0;
+    }
   }
 
   /**
@@ -114,8 +121,7 @@ export class Max7219 {
     }
     switch (address) {
       case DECODE_MODE:
-        // Recorded, not applied: the font would only matter to a seven-segment
-        // glass, and this glass is a matrix.
+        this.decode_mode = data;
         break;
       case INTENSITY:
         this.intensity = data & 0x0f;
@@ -170,6 +176,31 @@ export class Max7219 {
   /** 0 at the chip's minimum current, 1 at its maximum. */
   get brightness(): number {
     return this.intensity / 0x0f;
+  }
+
+  /** Decode mode register value. */
+  get decodeMode(): number {
+    return this.decode_mode;
+  }
+
+  /** Intensity register value (0-15). */
+  get intensityValue(): number {
+    return this.intensity;
+  }
+
+  /** Scan limit register value (0-7). */
+  get scanLimitValue(): number {
+    return this.scanLimit;
+  }
+
+  /** Shutdown state (true = shutdown). */
+  get shutdownState(): boolean {
+    return this.shutdown;
+  }
+
+  /** Display test state. */
+  get displayTestState(): boolean {
+    return this.testMode;
   }
 }
 

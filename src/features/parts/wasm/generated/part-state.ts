@@ -90,6 +90,35 @@ export interface PartStateSnapshot {
   pcd8544_blanked: boolean;
   pcd8544_inverse: boolean;
   pcd8544_vop: number;
+
+  // MCP4725 DAC state
+  mcp4725_value: number;
+
+  // PCA9685 PWM driver state
+  pca9685_duty: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+  pca9685_prescale: number;
+
+  // RTC time
+  rtc_seconds: number;
+  rtc_minutes: number;
+  rtc_hours: number;
+  rtc_day: number;
+  rtc_date: number;
+  rtc_month: number;
+  rtc_year: number;
+
+  // Generic I2C sensor state
+  sensor_temp_milli_c: number;
+  sensor_pressure_pa: number;
+  sensor_lux: number;
+  sensor_humidity_milli_pct: number;
+
+  // MAX7219 config
+  max7219_decode_mode: number;
+  max7219_intensity: number;
+  max7219_scan_limit: number;
+  max7219_shutdown: boolean;
+  max7219_display_test: boolean;
 }
 
 export interface PartStateSnapshotResponse {

@@ -89,6 +89,35 @@ struct PartStateSnapshot {
     bool pcd8544_blanked;
     bool pcd8544_inverse;
     uint8_t pcd8544_vop;
+
+    // MCP4725 DAC state
+    uint16_t mcp4725_value;
+
+    // PCA9685 PWM driver state
+    uint16_t pca9685_duty[16];  // 12-bit duty per channel: high counts (0-4095; 4096 = full-on)
+    uint8_t pca9685_prescale;
+
+    // RTC time
+    uint8_t rtc_seconds;
+    uint8_t rtc_minutes;
+    uint8_t rtc_hours;
+    uint8_t rtc_day;
+    uint8_t rtc_date;
+    uint8_t rtc_month;
+    uint8_t rtc_year;
+
+    // Generic I2C sensor state
+    int32_t sensor_temp_milli_c;
+    int32_t sensor_pressure_pa;
+    uint32_t sensor_lux;
+    uint32_t sensor_humidity_milli_pct;
+
+    // MAX7219 config
+    uint8_t max7219_decode_mode;
+    uint8_t max7219_intensity;
+    uint8_t max7219_scan_limit;
+    bool max7219_shutdown;
+    bool max7219_display_test;
 };
 
 #pragma pack(pop)

@@ -80,25 +80,57 @@ class WasmMemory {
   private heapPtr = 1024 * 1024; // Start after 1MB (initial memory)
 }
 
-/** Part state snapshot matching the C++ PartStateSnapshot struct layout (packed, no padding). */
+/** Part state snapshot matching the C++ PartStateSnapshot struct layout (packed, no padding).
+ * Kept identical field-for-field to the generated interface in generated/part-state.ts. */
 export interface PartStateSnapshot {
+  partId: string;
+  kind: string;
+
+  // Display framebuffers
   framebuffer: number;
   framebuffer_size: number;
   width: number;
   height: number;
+
+  // Servo angle (0-180)
   servo_angle: number;
+
+  // Stepper angle (0-360 degrees * 10 for 0.1 deg precision)
   stepper_angle_deci_deg: number;
-  stepper_driver_outputs: number[];
-  seven_seg_digits: number[];
+
+  // Stepper driver output states
+  stepper_driver_outputs: [number, number, number, number];
+
+  // 7-segment display state
+  seven_seg_digits: [number, number, number, number, number, number, number, number];
   seven_seg_colon: number;
-  lcd_chars: number[];
+
+  // Character LCD state
+  lcd_chars: [number, number, number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number, number, number];
   lcd_rows: number;
   lcd_cols: number;
-  shift_register_outputs: number[];
+
+  // Shift register outputs
+  shift_register_outputs: [number, number, number, number, number, number, number, number];
+
+  // Relay contact state (true = contact closed)
   relay_contacts_closed: boolean;
+
+  // Button pressed state (true = pressed)
   button_pressed: boolean;
+
+  // Potentiometer wiper position, 0.0 - 1.0
   pot_wiper: number;
+
+  // RF ID card presence
   rfid_card_present: boolean;
+
+  // Thermocouple temperature (0.25 degree steps)
   thermocouple_temp_quarter_deg: number;
 
   // PCF8574 I2C expander state
@@ -133,6 +165,35 @@ export interface PartStateSnapshot {
   pcd8544_inverse: boolean;
   pcd8544_vop: number;
 
+  // MCP4725 DAC state
+  mcp4725_value: number;
+
+  // PCA9685 PWM driver state
+  pca9685_duty: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+  pca9685_prescale: number;
+
+  // RTC time
+  rtc_seconds: number;
+  rtc_minutes: number;
+  rtc_hours: number;
+  rtc_day: number;
+  rtc_date: number;
+  rtc_month: number;
+  rtc_year: number;
+
+  // Generic I2C sensor state
+  sensor_temp_milli_c: number;
+  sensor_pressure_pa: number;
+  sensor_lux: number;
+  sensor_humidity_milli_pct: number;
+
+  // MAX7219 config
+  max7219_decode_mode: number;
+  max7219_intensity: number;
+  max7219_scan_limit: number;
+  max7219_shutdown: boolean;
+  max7219_display_test: boolean;
+
   // Framebuffer data (populated by readPartStateSnapshot for displays)
   framebufferData?: Uint8Array;
 }
@@ -140,27 +201,50 @@ export interface PartStateSnapshot {
 /** Reads a PartStateSnapshot from wasm memory at the given pointer. */
 export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): PartStateSnapshot {
   const view = new DataView(wasmMemory.memory.buffer, ptr);
+  // The C ABI (native/abi/part-state.schema.json) begins with the packed
+  // identity prefix `char partId[64]` + `char kind[32]`, followed by every
+  // other field in schema order. Offsets below match the packed struct.
   let offset = 0;
   const rU32 = () => { const v = view.getUint32(offset, true); offset += 4; return v; };
   const rU16 = () => { const v = view.getUint16(offset, true); offset += 2; return v; };
   const rU8 = () => { const v = view.getUint8(offset); offset += 1; return v; };
   const rI16 = () => { const v = view.getInt16(offset, true); offset += 2; return v; };
+  const rI32 = () => { const v = view.getInt32(offset, true); offset += 4; return v; };
   const rF64 = () => { const v = view.getFloat64(offset, true); offset += 8; return v; };
   const rArr8 = (len: number) => { const arr = new Uint8Array(wasmMemory.memory.buffer, ptr + offset, len); offset += len; return Array.from(arr); };
+  const rArr16 = (len: number) => Array.from({ length: len }, () => rU16());
+  /** Reads a null-terminated UTF-8 string of at most `maxLen` bytes at `offset`. */
+  const rStr = (maxLen: number) => {
+    const start = ptr + offset;
+    const bytes = new Uint8Array(wasmMemory.memory.buffer, start, maxLen);
+    let len = 0;
+    while (len < maxLen && bytes[len] !== 0) len++;
+    const text = new TextDecoder().decode(bytes.subarray(0, len));
+    offset += maxLen;
+    return text;
+  };
   const snap = {
+    partId: rStr(64),
+    kind: rStr(32),
+
     framebuffer: rU32(),
     framebuffer_size: rU32(),
     width: rU16(),
     height: rU16(),
     servo_angle: rU8(),
     stepper_angle_deci_deg: rI16(),
-    stepper_driver_outputs: rArr8(4),
-    seven_seg_digits: rArr8(8),
+    stepper_driver_outputs: rArr8(4) as [number, number, number, number],
+    seven_seg_digits: rArr8(8) as [number, number, number, number, number, number, number, number],
     seven_seg_colon: rU8(),
-    lcd_chars: rArr8(80),
+    lcd_chars: rArr8(80) as [number, number, number, number, number, number, number, number, number, number,
+      number, number, number, number, number, number, number, number, number, number,
+      number, number, number, number, number, number, number, number, number, number,
+      number, number, number, number, number, number, number, number, number, number,
+      number, number, number, number, number, number, number, number, number, number,
+      number, number, number, number, number, number, number, number, number, number],
     lcd_rows: rU8(),
     lcd_cols: rU8(),
-    shift_register_outputs: rArr8(8),
+    shift_register_outputs: rArr8(8) as [number, number, number, number, number, number, number, number],
     relay_contacts_closed: rU8() !== 0,
     button_pressed: rU8() !== 0,
     pot_wiper: rF64(),
@@ -198,6 +282,35 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     pcd8544_blanked: rU8() !== 0,
     pcd8544_inverse: rU8() !== 0,
     pcd8544_vop: rU8(),
+
+    // MCP4725 DAC state
+    mcp4725_value: rU16(),
+
+    // PCA9685 PWM driver state
+    pca9685_duty: rArr16(16) as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number],
+    pca9685_prescale: rU8(),
+
+    // RTC time
+    rtc_seconds: rU8(),
+    rtc_minutes: rU8(),
+    rtc_hours: rU8(),
+    rtc_day: rU8(),
+    rtc_date: rU8(),
+    rtc_month: rU8(),
+    rtc_year: rU8(),
+
+    // Generic I2C sensor state
+    sensor_temp_milli_c: rI32(),
+    sensor_pressure_pa: rI32(),
+    sensor_lux: rU32(),
+    sensor_humidity_milli_pct: rU32(),
+
+    // MAX7219 config
+    max7219_decode_mode: rU8(),
+    max7219_intensity: rU8(),
+    max7219_scan_limit: rU8(),
+    max7219_shutdown: rU8() !== 0,
+    max7219_display_test: rU8() !== 0,
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
@@ -229,6 +342,7 @@ export interface PartsModule {
   part_create_dac(part_id: number, address: number, bits: number): number;
   part_create_adc(part_id: number, address: number, channels: number): number;
   part_create_thermocouple(part_id: number): number;
+  part_create_eeprom(part_id: number, address: number): number;
   part_create_rfid(part_id: number, address: number): number;
   part_create_neopixel(part_id: number, count: number): number;
   part_create_sonar(part_id: number): number;
@@ -257,6 +371,7 @@ export interface PartsModule {
 
   // Part runtime
   part_register(part_id: number, kind: number, definition_json: string): number;
+  part_create_eeprom(part_id: number, address: number): number;
   part_stamp(handle: number, solution: number, time_ms: number): void;
   part_get_state(handle: number): number; // Returns pointer to PartStateSnapshot in wasm memory
   part_set_knob(handle: number, knob_name: string, value: number): void;
@@ -328,6 +443,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_dac: exp.part_create_dac as (part_id: number, address: number, bits: number) => number,
     part_create_adc: exp.part_create_adc as (part_id: number, address: number, channels: number) => number,
     part_create_thermocouple: exp.part_create_thermocouple as (part_id: number) => number,
+  part_create_eeprom: exp.part_create_eeprom as (part_id: number, address: number) => number,
     part_create_rfid: exp.part_create_rfid as (part_id: number, address: number) => number,
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,

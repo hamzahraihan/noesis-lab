@@ -14,7 +14,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, sep, basename } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,11 +23,54 @@ const SRC_DIR = join(NATIVE_DIR, 'src', 'parts');
 const OUT_DIR = join(ROOT, 'src', 'features', 'parts', 'wasm');
 const OUTPUT = join(OUT_DIR, 'parts.wasm');
 const MANIFEST = join(NATIVE_DIR, 'parts-probe-manifest.json');
-const EMCC = join(ROOT, 'emsdk', 'upstream', 'emscripten', 'emcc');
+
+// emcc comes from an emsdk that may or may not live inside the repo, so resolve
+// it instead of hardcoding one layout. Order: $EMCC, the emsdk root ($EMSDK when
+// set, otherwise <ROOT>/emsdk), then plain 'emcc' from PATH. A missing
+// candidate falls through to the next one rather than failing here.
+const IN_REPO_EMSDK = join(ROOT, 'emsdk');
+
+function emsdkRoots() {
+  const roots = [];
+  if (process.env.EMSDK) roots.push(process.env.EMSDK);
+  roots.push(IN_REPO_EMSDK);
+  return roots;
+}
+
+// emsdk ships its own node; emcc needs it on PATH. The versioned directory name
+// changes with the sdk release, so look for any <root>/node/*/bin that exists.
+function emsdkNodeBin(root) {
+  const nodeRoot = join(root, 'node');
+  try {
+    for (const entry of readdirSync(nodeRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const bin = join(nodeRoot, entry.name, 'bin');
+      if (existsSync(bin)) return bin;
+    }
+  } catch {
+    // No node/ directory in this sdk: nothing to prepend.
+  }
+  return null;
+}
+
+function resolveEmcc() {
+  if (process.env.EMCC) return process.env.EMCC;
+  for (const root of emsdkRoots()) {
+    const candidate = join(root, 'upstream', 'emscripten', 'emcc');
+    if (existsSync(candidate)) return candidate;
+  }
+  return 'emcc';
+}
+
+const EMCC = resolveEmcc();
 
 // Ensure emsdk node is on PATH for the child process (use forward slashes for PATH)
-const EMSDK_NODE = join(ROOT, 'emsdk', 'node', '22.16.0_64bit', 'bin').replace(/\\/g, '/');
-const CHILD_ENV = { ...process.env, PATH: `${EMSDK_NODE}:${process.env.PATH}` };
+const EMSDK_NODE = emsdkRoots()
+  .map(emsdkNodeBin)
+  .find((bin) => bin !== null);
+const CHILD_ENV = EMSDK_NODE
+  ? { ...process.env, PATH: `${EMSDK_NODE.replace(/\\/g, '/')}:${process.env.PATH}` }
+  : { ...process.env };
 
 // The probe module is built with emcc which provides the C++ standard library.
 // `-O2` is load-bearing: -O3 minifies exports to e,f,g... which the hand-written loader cannot address.
@@ -56,6 +99,7 @@ const EXPORTED_FUNCTIONS = [
   '_part_create_dac',
   '_part_create_adc',
   '_part_create_thermocouple',
+  '_part_create_eeprom',
   '_part_create_rfid',
   '_part_create_neopixel',
   '_part_create_sonar',
@@ -131,8 +175,11 @@ function preflight() {
     execFileSync(EMCC, ['--version'], { stdio: 'ignore', timeout: 10000, env: CHILD_ENV });
   } catch {
     console.error(
-      `Emscripten (emcc) not found in PATH. ` +
-      `Install emsdk and run 'source emsdk_env.sh' or add to PATH.`
+      `Emscripten (emcc) not found: tried $EMCC, ${emsdkRoots()
+        .map((root) => join(root, 'upstream', 'emscripten', 'emcc'))
+        .join(', ')} and PATH. ` +
+      `Install emsdk (https://emscripten.org/docs/getting_started/downloads.html) ` +
+      `and run 'source emsdk_env.sh', or set EMSDK to the emsdk root.`
     );
     process.exit(1);
   }

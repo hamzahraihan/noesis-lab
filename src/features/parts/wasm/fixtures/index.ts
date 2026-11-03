@@ -9,6 +9,22 @@ import mcp23017 from './mcp23017.json';
 import ads1115 from './ads1115.json';
 import shift595 from './shift595.json';
 import pcd8544 from './pcd8544.json';
+import servo from './servo.json';
+import stepper from './stepper.json';
+import a4988 from './a4988.json';
+import ssd1306 from './ssd1306.json';
+import ili9341 from './ili9341.json';
+import max7219 from './max7219.json';
+import hd44780 from './hd44780.json';
+import bh1750 from './bh1750.json';
+import bmp180 from './bmp180.json';
+import sht31 from './sht31.json';
+import eeprom24lc256 from './eeprom24lc256.json';
+import type { Stimulus } from '../probe';
+
+// The stimulus union has one source: probe.ts. Re-exported so fixtures stay a
+// single import for callers.
+export type { Stimulus } from '../probe';
 
 export interface Fixture {
   part: string;
@@ -18,19 +34,27 @@ export interface Fixture {
   note: string;
 }
 
-export type Stimulus =
-  | { kind: 'i2c-write'; address: number; bytes: number[] }
-  | { kind: 'i2c-read'; address: number; count: number }
-  | { kind: 'spi-transfer'; byte: number; dc: boolean; cs: boolean }
-  | { kind: 'pin'; index: number; high: boolean }
-  | { kind: 'knob'; name: string; value: number };
+export const FIXTURE_LIST = [
+  pcf8574,
+  mcp23017,
+  ads1115,
+  shift595,
+  pcd8544,
+  servo,
+  stepper,
+  a4988,
+  ssd1306,
+  ili9341,
+  max7219,
+  hd44780,
+  bh1750,
+  bmp180,
+  sht31,
+  eeprom24lc256,
+] as Fixture[];
 
-export const FIXTURES: Record<string, Fixture> = {
-  pcf8574: pcf8574 as Fixture,
-  mcp23017: mcp23017 as Fixture,
-  ads1115: ads1115 as Fixture,
-  shift595: shift595 as Fixture,
-  pcd8544: pcd8544 as Fixture,
-};
-
-export const FIXTURE_LIST = [pcf8574, mcp23017, ads1115, shift595, pcd8544] as Fixture[];
+// Derive the keyed view from the list so the two cannot drift: the harness runs
+// the list and asserts the map matches it.
+export const FIXTURES = Object.fromEntries(
+  FIXTURE_LIST.map((f) => [f.part, f as Fixture]),
+) as Record<string, Fixture>;
