@@ -21,7 +21,7 @@
     { "kind": "spi-transfer", "byte": 5, "dc": true, "cs": true },
     { "kind": "spi-transfer", "byte": 6, "dc": true, "cs": true },
     { "kind": "spi-transfer", "byte": 7, "dc": true, "cs": true },
-    { "kind": "spi-transfer", "byte": 8, "dc": true, "cs": true }
+    { "kind": "spi-transfer", "byte": 8, "dc": true, "cs": false }
   ],
   "labels": ["digit0", "digit1", "digit2", "digit3", "digit4", "digit5", "digit6", "digit7", "decode_mode", "intensity", "scan_limit", "shutdown", "display_test"],
   "note": "MAX7219 init (decode all, intensity 7, scan 7, normal op) + write digits 1-8"

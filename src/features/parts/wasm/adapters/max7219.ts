@@ -35,12 +35,17 @@ export const max7219Adapter: PartAdapter = {
       if (stimulus.kind === 'spi-transfer') {
         module.spi_bus_begin();
         module.spi_bus_transfer(stimulus.byte, stimulus.dc ? 1 : 0, stimulus.cs ? 1 : 0);
-        module.spi_bus_end();
+        if (!stimulus.cs) {
+          module.spi_bus_end();
+        }
       }
     } else {
       const dev = _instance as Max7219;
       if (stimulus.kind === 'spi-transfer') {
         dev.receive(stimulus.byte, stimulus.dc, stimulus.cs);
+        if (!stimulus.cs) {
+          dev.latch();
+        }
       }
     }
   },
