@@ -9,6 +9,7 @@
 #include "solver.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <unordered_map>
 #include <vector>
