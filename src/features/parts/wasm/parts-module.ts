@@ -13,6 +13,14 @@ import { join } from 'node:path';
 
 const WASM_PATH = join(new URL('.', import.meta.url).pathname, 'parts.wasm');
 
+/**
+ * Size of the `partId` + `kind` prefix at the head of the C PartStateSnapshot
+ * (char[64] + char[32]). Not projected by this reader yet; see
+ * native/abi/part-state.schema.json for the authoritative field list.
+ */
+const IDENTITY_PREFIX_BYTES = 64 + 32;
+
+
 /** Memory view helpers for reading/writing wasm linear memory. */
 class WasmMemory {
   public readonly memory: WebAssembly.Memory;
@@ -140,7 +148,11 @@ export interface PartStateSnapshot {
 /** Reads a PartStateSnapshot from wasm memory at the given pointer. */
 export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): PartStateSnapshot {
   const view = new DataView(wasmMemory.memory.buffer, ptr);
-  let offset = 0;
+  // The C ABI (native/abi/part-state.schema.json) begins with the packed
+  // identity prefix `char partId[64]` + `char kind[32]`. This reader does not
+  // project those yet, but the 96 bytes have to be skipped or every offset
+  // below would read the wrong field.
+  let offset = IDENTITY_PREFIX_BYTES;
   const rU32 = () => { const v = view.getUint32(offset, true); offset += 4; return v; };
   const rU16 = () => { const v = view.getUint16(offset, true); offset += 2; return v; };
   const rU8 = () => { const v = view.getUint8(offset); offset += 1; return v; };
