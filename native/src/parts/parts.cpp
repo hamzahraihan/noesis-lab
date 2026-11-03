@@ -295,7 +295,8 @@ struct MAX7219Context : PartContext {
     uint8_t shutdown = 0x00;
     uint8_t display_test = 0x00;
     uint8_t digit_data[8] = {0};
-    uint8_t reg_ptr = 0x00;
+    uint16_t shift = 0;
+    uint8_t bits = 0;
     PartContextType type() const override { return PartContextType::MAX7219; }
 };
 
@@ -1386,19 +1387,27 @@ static void spi_max7219_receive(void* ctx, uint8_t byte, bool data_select, bool 
     MAX7219Context* dev = static_cast<MAX7219Context*>(ctx);
     if (!chip_selected) return;
     
-    if (data_select) {
-        switch (dev->reg_ptr) {
-            case 0x01: case 0x02: case 0x03: case 0x04:
-            case 0x05: case 0x06: case 0x07: case 0x08:
-                dev->digit_data[dev->reg_ptr - 1] = byte; break;
-            case 0x09: dev->decode_mode = byte; break;
-            case 0x0A: dev->intensity = byte & 0x0F; break;
-            case 0x0B: dev->scan_limit = byte & 0x07; break;
-            case 0x0C: dev->shutdown = (byte & 0x01) == 0; break;
-            case 0x0F: dev->display_test = byte & 0x01; break;
+    // Accumulate bits into shift register (like TS model)
+    dev->shift = ((dev->shift << 8) | (byte & 0xff)) & 0xffff;
+    dev->bits = std::min(dev->bits + 8, 16);
+    
+    // Apply when 16+ bits accumulated
+    if (dev->bits >= 16) {
+        uint16_t frame = dev->shift;
+        uint8_t address = (frame >> 8) & 0x0f;
+        uint8_t data = frame & 0xff;
+        if (address >= 1 && address <= 8) {
+            dev->digit_data[address - 1] = data;
         }
-    } else {
-        dev->reg_ptr = byte;
+        switch (address) {
+            case 9: dev->decode_mode = data; break;
+            case 10: dev->intensity = data & 0x0f; break;
+            case 11: dev->scan_limit = data & 0x07; break;
+            case 12: dev->shutdown = (data & 1) == 0; break;
+            case 15: dev->display_test = data & 0x01; break;
+        }
+        dev->shift = 0;
+        dev->bits = 0;
     }
 }
 

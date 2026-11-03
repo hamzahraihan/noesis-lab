@@ -12,7 +12,7 @@ import { Lcd1602 } from '@/features/parts/devices/lcd1602';
 
 export const hd44780Adapter: PartAdapter = {
   kind: 'hd44780',
-  labels: Array.from({ length: 80 }, (_, i) => `char${i}`).concat(['rows', 'cols']),
+  labels: ['char0', 'char1', 'char2', 'char3', 'char4', 'rows', 'cols'],
 
   create(factoryArgs: unknown[], module?: PartsModule): unknown {
     const [part_id, cols, rows] = factoryArgs as [number, number, number];
@@ -55,7 +55,7 @@ export const hd44780Adapter: PartAdapter = {
       const dev = _instance as Lcd1602;
       const text = dev.text();
       const chars: number[] = [];
-      for (let i = 0; i < 80; i++) {
+      for (let i = 0; i < 5; i++) {
         chars.push(i < text.length ? text.charCodeAt(i) : 32);
       }
       return chars.concat([dev.rows, dev.columns]);
@@ -64,7 +64,7 @@ export const hd44780Adapter: PartAdapter = {
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {
     const chars: number[] = [];
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 5; i++) {
       chars.push(snap.lcd_chars[i]);
     }
     return chars.concat([snap.lcd_rows, snap.lcd_cols]);

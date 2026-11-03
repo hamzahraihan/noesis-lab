@@ -10,7 +10,6 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Bh1750 } from '@/features/parts/devices/bh1750';
 
-const BH1750_ADAPTER_VERSION = 'v2-with-debug';
 
 export const bh1750Adapter: PartAdapter = {
   kind: 'bh1750',

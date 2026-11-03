@@ -11,22 +11,10 @@ import type { PartAdapter } from '../probe';
 import type { PartsModule } from '../parts-module';
 import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
-import { Max7219, MAX7219_COLUMNS } from '@/features/parts/display/max7219';
+import { Max7219 } from '@/features/parts/display/max7219';
 
 // Flag bits from max7219.ts (MAX7219_FLAG_LIT = 1, MAX7219_INTENSITY_SHIFT = 8)
-const MAX7219_FLAG_LIT = 1;
-const MAX7219_INTENSITY_SHIFT = 8;
 
-function decodeFlags(flags: number) {
-  return {
-    shutdown: (flags & MAX7219_FLAG_LIT) === 0,
-    intensity: (flags >> MAX7219_INTENSITY_SHIFT) & 0x0f,
-    // scan_limit, decode_mode, display_test are not in flags (power-up defaults)
-    scanLimit: MAX7219_COLUMNS - 1,
-    decodeMode: 0,
-    displayTest: false,
-  };
-}
 
 export const max7219Adapter: PartAdapter = {
   kind: 'max7219',
@@ -45,7 +33,9 @@ export const max7219Adapter: PartAdapter = {
   apply(_instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
     if (module) {
       if (stimulus.kind === 'spi-transfer') {
+        module.spi_bus_begin();
         module.spi_bus_transfer(stimulus.byte, stimulus.dc ? 1 : 0, stimulus.cs ? 1 : 0);
+        module.spi_bus_end();
       }
     } else {
       const dev = _instance as Max7219;
@@ -55,22 +45,18 @@ export const max7219Adapter: PartAdapter = {
     }
   },
 
-  readScalars(_instance: unknown, module?: PartsModule): number[] {
-    if (module) {
-      throw new Error('MAX7219: wasm path should use snapshotToScalars');
-    } else {
-      const dev = _instance as Max7219;
-      const cols = dev.frame();
-      const digits = Array.from({ length: 8 }, (_, i) => cols[i] ?? 0);
-      const flags = dev.lit ? MAX7219_FLAG_LIT : 0; // simplified
-      const config = decodeFlags(flags);
-      return [
-        digits[0], digits[1], digits[2], digits[3],
-        digits[4], digits[5], digits[6], digits[7],
-        config.decodeMode, config.intensity, config.scanLimit,
-        config.shutdown ? 1 : 0, config.displayTest ? 1 : 0,
-      ];
-    }
+  readScalars(_instance: unknown, _module?: PartsModule): number[] {
+    const dev = _instance as Max7219;
+    const cols = dev.frame();
+    const digits = Array.from({ length: 8 }, (_, i) => cols[i] ?? 0);
+    const result = [
+      digits[0], digits[1], digits[2], digits[3],
+      digits[4], digits[5], digits[6], digits[7],
+      dev.decodeMode, dev.intensityValue, dev.scanLimitValue,
+      dev.shutdownState ? 1 : 0, dev.displayTestState ? 1 : 0,
+    ];
+    console.error('MAX7219 readScalars result:', result);
+    return result;
   },
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {

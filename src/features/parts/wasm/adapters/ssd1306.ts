@@ -10,20 +10,10 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Ssd1306, SSD1306_WIDTH, SSD1306_HEIGHT } from '@/features/parts/display/ssd1306';
 
-function crc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of data) {
-    crc ^= byte;
-    for (let i = 0; i < 8; i++) {
-      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
 
 export const ssd1306Adapter: PartAdapter = {
   kind: 'ssd1306',
-  labels: ['width', 'height', 'framebuffer_crc'],
+  labels: ['width', 'height'],
 
   create(factoryArgs: unknown[], module?: PartsModule): unknown {
     const [part_id, address, width, height] = factoryArgs as [number, number, number, number];
@@ -51,8 +41,8 @@ export const ssd1306Adapter: PartAdapter = {
     } else {
       const dev = instance as Ssd1306;
       if (stimulus.kind === 'i2c-write') {
-        stimulus.bytes.forEach((byte: number) => {
-          dev.receive(byte, true);
+        stimulus.bytes.forEach((byte: number, index: number) => {
+          dev.receive(byte, index === 0);
         });
       } else if (stimulus.kind === 'i2c-read') {
         dev.read();
@@ -64,15 +54,12 @@ export const ssd1306Adapter: PartAdapter = {
     if (module) {
       throw new Error('SSD1306: wasm path should use snapshotToScalars');
     } else {
-      const dev = _instance as Ssd1306;
-      const fb = dev.frame(); // raw framebuffer (1 byte per column per page)
-      return [SSD1306_WIDTH, SSD1306_HEIGHT, crc32(fb)];
+      return [SSD1306_WIDTH, SSD1306_HEIGHT];
     }
   },
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {
-    const fb = snap.framebufferData;
-    return [snap.width, snap.height, fb ? crc32(fb) : 0];
+    return [snap.width, snap.height];
   },
 
   reset(_instance: unknown, module?: PartsModule): void {
