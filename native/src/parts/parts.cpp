@@ -1072,10 +1072,6 @@ extern "C" void spi_pcd8544_receive(void* ctx, uint8_t byte, bool data_select, b
     PCD8544Context* dev = static_cast<PCD8544Context*>(ctx);
     if (!chip_selected) return;
     
-    // Debug: count calls
-    static int call_count = 0; static int callback_count = 0; callback_count++;
-    call_count++;
-    
     if (data_select) {
         // Data byte - write to framebuffer at current (x, y) position
         size_t idx = dev->y * dev->width + dev->x;
@@ -1796,6 +1792,8 @@ extern "C" void* part_create_display_spi(uint32_t part_id, uint16_t width, uint1
     spi_part.dc_net = has_dc ? 1 : 0;
     spi_part.ctx = ctx;
     spi_part.receive = spi_ili9341_receive;
+    // ILI9341 is output-only, no MISO
+    spi_part.read = nullptr;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
@@ -1826,6 +1824,8 @@ extern "C" void* part_create_display_pcd8544(uint32_t part_id) {
     spi_part.dc_net = 1;  // PCD8544 has D/C pin
     spi_part.ctx = ctx;
     spi_part.receive = spi_pcd8544_receive;
+    // PCD8544 is output-only, no MISO
+    spi_part.read = nullptr;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
@@ -1845,6 +1845,8 @@ extern "C" void* part_create_7segment(uint32_t part_id, uint8_t digits) {
     spi_part.dc_net = 0;
     spi_part.ctx = ctx;
     spi_part.receive = spi_max7219_receive;
+    // MAX7219 is output-only, no MISO
+    spi_part.read = nullptr;
     g_spi_parts.push_back(spi_part);
     return handle;
 }

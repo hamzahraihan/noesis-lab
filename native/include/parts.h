@@ -160,6 +160,7 @@ extern "C" void spi_display_receive(SPIPartHandle handle, uint8_t byte, bool dat
 extern "C" void spi_shift_register_receive(SPIPartHandle handle, uint8_t byte, bool data_select, bool chip_selected);
 extern "C" void spi_card_reader_receive(SPIPartHandle handle, uint8_t byte);
 extern "C" int16_t spi_thermocouple_receive(SPIPartHandle handle);
+extern "C" void spi_pcd8544_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected);
 
 // ============================================================================
 // Part Stamping Interface
@@ -167,6 +168,15 @@ extern "C" int16_t spi_thermocouple_receive(SPIPartHandle handle);
 
 // Part handle for engine
 typedef void* PartHandle;
+
+// Explicitly construct the module's global STL containers. Needed with
+// -Wl,--no-entry, where emcc emits no automatic global constructors.
+extern "C" void init_globals(void);
+
+// Register a part instance and return its handle. part_stamp applies the
+// previous solve's solution to every registered part.
+extern "C" PartHandle part_register(uint32_t part_id, PartKind kind, const char* definition_json);
+extern "C" void part_stamp(PartHandle handle, const SolverSolution* solution, double time_ms);
 
 // Static buffer for part_get_state return value (thread-local for wasm single-threaded use)
 extern "C" PartStateSnapshot* part_get_state(PartHandle handle);
@@ -184,6 +194,7 @@ extern "C" PartHandle part_create_stepper_driver(uint32_t part_id, double output
 extern "C" PartHandle part_create_shift_register(uint32_t part_id);
 extern "C" PartHandle part_create_display_i2c(uint32_t part_id, uint8_t address, uint16_t width, uint16_t height);
 extern "C" PartHandle part_create_display_spi(uint32_t part_id, uint16_t width, uint16_t height, bool has_dc);
+extern "C" PartHandle part_create_display_pcd8544(uint32_t part_id);
 extern "C" PartHandle part_create_7segment(uint32_t part_id, uint8_t digits);
 extern "C" PartHandle part_create_lcd(uint32_t part_id, uint8_t cols, uint8_t rows);
 extern "C" PartHandle part_create_i2c_expander(uint32_t part_id, uint8_t ports, uint8_t address);
