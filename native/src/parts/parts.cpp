@@ -533,6 +533,7 @@ struct SPIPartImpl {
     uint32_t dc_net;  // For displays
     // Function pointers
     void (*receive)(void* ctx, uint8_t byte, bool data_select, bool chip_selected);
+    void (*latch)(void* ctx);  // Called when chip-select rises (end of transaction)
     // MISO read callback - returns byte to send back on MISO
     uint8_t (*read)(void* ctx, bool data_select, bool chip_selected);
     void* ctx;
@@ -724,6 +725,12 @@ extern "C" void spi_bus_begin(void) {
 }
 
 extern "C" void spi_bus_end(void) {
+    // Call latch on all SPI parts before clearing selection
+    for (auto& part : g_spi_parts) {
+        if (part.latch) {
+            part.latch(part.ctx);
+        }
+    }
     g_spi_selected = false;
     g_spi_saw_byte = false;
     g_spi_payload_len = 0;
@@ -1391,8 +1398,11 @@ static void spi_max7219_receive(void* ctx, uint8_t byte, bool data_select, bool 
     // Accumulate bits into shift register (like TS model)
     dev->shift = ((dev->shift << 8) | (byte & 0xff)) & 0xffff;
     dev->bits = std::min(dev->bits + 8, 16);
-    
-    // Apply when 16+ bits accumulated
+    // Do NOT apply frames here - wait for latch()
+}
+
+static void spi_max7219_latch(void* ctx) {
+    MAX7219Context* dev = static_cast<MAX7219Context*>(ctx);
     if (dev->bits >= 16) {
         uint16_t frame = dev->shift;
         uint8_t address = (frame >> 8) & 0x0f;
@@ -2583,6 +2593,7 @@ extern "C" void* part_create_7segment(uint32_t part_id, uint8_t digits) {
     spi_part.dc_net = 0;
     spi_part.ctx = ctx;
     spi_part.receive = spi_max7219_receive;
+    spi_part.latch = spi_max7219_latch;
     // MAX7219 is output-only, no MISO
     spi_part.read = nullptr;
     g_spi_parts.push_back(spi_part);
