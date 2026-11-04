@@ -17,7 +17,7 @@ struct PartStateSnapshot {
     char kind[32];
     
     // Display framebuffers
-    uint8_t* framebuffer;
+    uint32_t framebuffer_offset;
     uint32_t framebuffer_size;
     uint16_t width;
     uint16_t height;
@@ -122,11 +122,6 @@ struct PartStateSnapshot {
 
 #pragma pack(pop)
 
-// Static assertions for struct sizes
-#if __SIZEOF_POINTER__ == 4
+// Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
 static_assert(sizeof(PartStateSnapshot) == 314, "PartStateSnapshot packing failed");
-#else
-static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 318, "PartStateSnapshot packing failed");
-#endif

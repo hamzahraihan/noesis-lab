@@ -1777,7 +1777,7 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         case PART_KIND_DISPLAY_I2C: {
             // SSD1306Context
             SSD1306Context* ctx = static_cast<SSD1306Context*>(inst->impl);
-            snap->framebuffer = ctx->framebuffer.data();
+            snap->framebuffer_offset = reinterpret_cast<uint32_t>(ctx->framebuffer.data());
             snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
             snap->width = ctx->width;
             snap->height = ctx->height;
@@ -1789,13 +1789,13 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             PartContext* base = static_cast<PartContext*>(inst->impl);
             if (base->type() == PartContextType::ILI9341) {
                 ILI9341Context* ctx = static_cast<ILI9341Context*>(base);
-                snap->framebuffer = ctx->framebuffer.data();
+                snap->framebuffer_offset = reinterpret_cast<uint32_t>(ctx->framebuffer.data());
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
-} else if (base->type() == PartContextType::PCD8544) {
+            } else if (base->type() == PartContextType::PCD8544) {
                 PCD8544Context* ctx = static_cast<PCD8544Context*>(base);
-                snap->framebuffer = ctx->framebuffer.data();
+                snap->framebuffer_offset = reinterpret_cast<uint32_t>(ctx->framebuffer.data());
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
