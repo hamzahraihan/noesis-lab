@@ -35,8 +35,6 @@ export interface PartStateSnapshot {
     number, number, number, number, number, number, number, number, number, number,
     number, number, number, number, number, number, number, number, number, number,
     number, number, number, number, number, number, number, number, number, number,
-    number, number, number, number, number, number, number, number, number, number,
-    number, number, number, number, number, number, number, number, number, number,
     number, number, number, number, number, number, number, number, number, number];
   lcd_rows: number;
   lcd_cols: number;

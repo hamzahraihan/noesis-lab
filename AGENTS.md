@@ -1,8 +1,5 @@
 # AGENTS.md
 
-Working notes for this repo. Everything here is something the code does not tell
-you on its own, or costs an hour to rediscover.
-
 ## A gallery project starts in one file, not five
 
 Add the project to `src/features/learn/gallery-projects.json` and run

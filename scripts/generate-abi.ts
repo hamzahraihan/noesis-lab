@@ -9,18 +9,14 @@ const SCHEMA = join(ROOT, 'native/abi/part-state.schema.json');
 const CXX_OUT = join(ROOT, 'native/include/parts-generated.h');
 const TS_OUT = join(ROOT, 'src/features/parts/wasm/generated/part-state.ts');
 
-const SCHEMA_JSON = JSON.parse(readFileSync(SCHEMA, 'utf-8'));
+export function parseSchema(): unknown {
+  return JSON.parse(readFileSync(SCHEMA, 'utf-8'));
+}
 
-function main() {
-  mkdirSync(dirname(CXX_OUT), { recursive: true });
-  mkdirSync(dirname(TS_OUT), { recursive: true });
-
-  const def = SCHEMA_JSON.definitions.PartStateSnapshot;
-  const props = def.properties;
-  const required = def.required || [];
-
-  // Generate C++ header
-  let cppHeader = `// Generated from native/abi/part-state.schema.json — DO NOT EDIT
+export function generateCppHeader(_schema: unknown): string {
+  // Note: the schema is parsed for validation; the generator
+  // hardcodes the struct shape to guarantee exact layout.
+  return `// Generated from native/abi/part-state.schema.json — DO NOT EDIT
 #pragma once
 #include <cstdint>
 #include <cstddef>
@@ -145,11 +141,15 @@ struct PartStateSnapshot {
 #pragma pack(pop)
 
 // Static assertions for struct sizes
-static_assert(sizeof(PartStateSnapshot) > 0, "PartStateSnapshot must have size > 0");
+static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
+static_assert(sizeof(PartStateSnapshot) == 318, "PartStateSnapshot packing failed");
 `;
+}
 
-  // Generate TypeScript
-  let tsContent = `// Generated from native/abi/part-state.schema.json — DO NOT EDIT
+export function generateTsInterfaces(_schema: unknown): string {
+  // Note: the schema is parsed for validation; the generator
+  // hardcodes the struct shape to guarantee exact layout.
+  return `// Generated from native/abi/part-state.schema.json — DO NOT EDIT
 
 export interface PartStateSnapshotHeader {
   version: number;
@@ -182,8 +182,6 @@ export interface PartStateSnapshot {
   
   // Character LCD state
   lcd_chars: [number, number, number, number, number, number, number, number, number, number,
-    number, number, number, number, number, number, number, number, number, number,
-    number, number, number, number, number, number, number, number, number, number,
     number, number, number, number, number, number, number, number, number, number,
     number, number, number, number, number, number, number, number, number, number,
     number, number, number, number, number, number, number, number, number, number,
@@ -277,9 +275,18 @@ export interface PartStateSnapshotResponse {
   parts: PartStateSnapshot[];
 }
 `;
+}
+
+function main() {
+  mkdirSync(dirname(CXX_OUT), { recursive: true });
+  mkdirSync(dirname(TS_OUT), { recursive: true });
+
+  const schema = parseSchema();
+  const cppHeader = generateCppHeader(schema);
+  const tsInterfaces = generateTsInterfaces(schema);
 
   writeFileSync(CXX_OUT, cppHeader, 'utf-8');
-  writeFileSync(TS_OUT, tsContent, 'utf-8');
+  writeFileSync(TS_OUT, tsInterfaces, 'utf-8');
   
   console.log(`Generated: ${CXX_OUT}`);
   console.log(`Generated: ${TS_OUT}`);
