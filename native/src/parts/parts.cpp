@@ -139,6 +139,8 @@ struct SSD1306Context : PartContext {
     uint8_t column_end = 127;
     uint8_t page_start = 0;
     uint8_t page_end = 7;
+    uint8_t cursor_column = 0;  // Current write position (separate from window)
+    uint8_t cursor_page = 0;
     uint8_t display_on = 0;
     uint8_t contrast = 0x7F;
     uint8_t charge_pump = 0x10;
@@ -298,6 +300,7 @@ struct ILI9341Context : PartContext {
     uint16_t page_end = 0;
     uint16_t cursor_column = 0;
     uint16_t cursor_page = 0;
+    uint8_t madctl = 0;
     bool expect_high_byte = true;
     PartContextType type() const override { return PartContextType::ILI9341; }
 };
@@ -1025,16 +1028,20 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
     }
     
     if (dev->expecting_data) {
-        uint16_t page = dev->page_start;
-        uint16_t col = dev->column_start;
+        uint16_t page = dev->cursor_page;
+        uint16_t col = dev->cursor_column;
         size_t idx = page * dev->width + col;
         if (idx < dev->framebuffer.size()) {
             dev->framebuffer[idx] = byte;
         }
-        dev->column_start++;
-        if (dev->column_start > dev->column_end) {
-            dev->column_start = 0;
-            dev->page_start = (dev->page_start + 1) % dev->pages;
+        // Advance cursor per horizontal addressing mode (0x00)
+        dev->cursor_column++;
+        if (dev->cursor_column > dev->column_end) {
+            dev->cursor_column = dev->column_start;
+            dev->cursor_page++;
+            if (dev->cursor_page > dev->page_end) {
+                dev->cursor_page = dev->page_start;
+            }
         }
         return true;
     }
@@ -1047,8 +1054,8 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
         if (dev->expected_args == 0) {
             switch (dev->reg_ptr) {
                 case 0x20: if (dev->cmd_arg_count >= 1) dev->memory_mode = dev->cmd_args[0] & 0x03; break;
-                case 0x21: if (dev->cmd_arg_count >= 2) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; } break;
-                case 0x22: if (dev->cmd_arg_count >= 2) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; } break;
+                case 0x21: if (dev->cmd_arg_count >= 2) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; dev->cursor_column = dev->column_start; } break;
+                case 0x22: if (dev->cmd_arg_count >= 2) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; dev->cursor_page = dev->page_start; } break;
                 case 0xAD: if (dev->cmd_arg_count >= 1) dev->charge_pump = dev->cmd_args[0]; break;
                 case 0x81: if (dev->cmd_arg_count >= 1) dev->contrast = dev->cmd_args[0]; break;
                 case 0x8D: if (dev->cmd_arg_count >= 1) dev->charge_pump = dev->cmd_args[0]; break;
@@ -1060,19 +1067,21 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
                 case 0xD9: if (dev->cmd_arg_count >= 1) dev->precharge = dev->cmd_args[0]; break;
                 case 0xDA: if (dev->cmd_arg_count >= 1) dev->com_pins = dev->cmd_args[0]; break;
                 case 0xDB: if (dev->cmd_arg_count >= 1) dev->vcom_detect = dev->cmd_args[0]; break;
-                case 0x15: if (dev->cmd_arg_count >= 1) dev->column_start = dev->cmd_args[0]; break;
-                case 0x16: if (dev->cmd_arg_count >= 1) dev->page_start = dev->cmd_args[0]; break;
+                case 0x15: if (dev->cmd_arg_count >= 1) { dev->column_start = dev->cmd_args[0]; dev->cursor_column = dev->column_start; } break;
+                case 0x16: if (dev->cmd_arg_count >= 1) { dev->page_start = dev->cmd_args[0]; dev->cursor_page = dev->page_start; } break;
             }
         }
         return true;
     }
     
     switch (dev->reg_ptr) {
-        case 0x00: dev->column_start = (dev->column_start & 0xF0) | (byte & 0x0F); break;
-        case 0x10: dev->column_start = (dev->column_start & 0x0F) | ((byte & 0x0F) << 4); break;
+        case 0x00: dev->column_start = (dev->column_start & 0xF0) | (byte & 0x0F); dev->cursor_column = dev->column_start; break;
+        case 0x10: dev->column_start = (dev->column_start & 0x0F) | ((byte & 0x0F) << 4); dev->cursor_column = dev->column_start; break;
         case 0xB0: case 0xB1: case 0xB2: case 0xB3:
         case 0xB4: case 0xB5: case 0xB6: case 0xB7:
-            dev->page_start = dev->reg_ptr & 0x07; break;
+            dev->page_start = dev->reg_ptr & 0x07;
+            dev->cursor_page = dev->page_start;
+            break;
     }
     return true;
 }
@@ -1464,13 +1473,49 @@ static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool 
     if (!chip_selected) return;
     
     if (data_select) {
-        if (dev->expected_args > 0) {
+        if (dev->streaming) {
+            // Streaming pixel data: write to framebuffer at cursor position
+            if (dev->cursor_column < dev->width && dev->cursor_page < dev->height) {
+                uint32_t idx = (dev->cursor_page * dev->width + dev->cursor_column) * 2;
+                if (dev->expect_high_byte) {
+                    if (idx < dev->framebuffer.size()) dev->framebuffer[idx] = byte;
+                } else {
+                    if (idx + 1 < dev->framebuffer.size()) dev->framebuffer[idx + 1] = byte;
+                }
+            }
+            // Advance cursor per TS implementation
+            if (dev->expect_high_byte) {
+                dev->expect_high_byte = false;
+            } else {
+                dev->expect_high_byte = true;
+                dev->cursor_column++;
+                if (dev->cursor_column > dev->column_end) {
+                    dev->cursor_column = dev->column_start;
+                    dev->cursor_page++;
+                    if (dev->cursor_page > dev->page_end) {
+                        dev->cursor_page = dev->page_start;
+                    }
+                }
+            }
+        } else if (dev->expected_args > 0) {
             if (dev->cmd_arg_count < 16) {
                 dev->cmd_args[dev->cmd_arg_count++] = byte;
                 dev->expected_args--;
             }
         }
     } else {
+        // Command byte
+        dev->reg_ptr = byte;
+        dev->cmd_arg_count = 0;
+        // Process any pending command arguments before starting new command
+        if (dev->expected_args == 0 && dev->cmd_arg_count > 0) {
+            switch (dev->reg_ptr) {
+                case 0x2A: if (dev->cmd_arg_count >= 4) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; dev->cursor_column = dev->column_start; } break;
+                case 0x2B: if (dev->cmd_arg_count >= 4) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; dev->cursor_page = dev->page_start; } break;
+                case 0x36: if (dev->cmd_arg_count >= 1) dev->madctl = dev->cmd_args[0]; break;
+                case 0x3A: if (dev->cmd_arg_count >= 1) { /* pixel format - ignore */ } break;
+            }
+        }
         dev->reg_ptr = byte;
         dev->cmd_arg_count = 0;
         switch (byte) {
@@ -1480,6 +1525,15 @@ static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool 
             case 0x36: dev->expected_args = 1; break;
             case 0x3A: dev->expected_args = 1; break;
             default: dev->expected_args = 0;
+        }
+        // Handle streaming commands
+        if (byte == 0x2C || byte == 0x2D || byte == 0x3C || byte == 0x2E || byte == 0x3E) {
+            dev->streaming = true;
+            dev->cursor_column = dev->column_start;
+            dev->cursor_page = dev->page_start;
+            dev->expect_high_byte = true;
+        } else {
+            dev->streaming = false;
         }
     }
 }
@@ -1777,7 +1831,7 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         case PART_KIND_DISPLAY_I2C: {
             // SSD1306Context
             SSD1306Context* ctx = static_cast<SSD1306Context*>(inst->impl);
-            snap->framebuffer_offset = reinterpret_cast<uint32_t>(ctx->framebuffer.data());
+            snap->framebuffer_offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx->framebuffer.data()));
             snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
             snap->width = ctx->width;
             snap->height = ctx->height;
@@ -1789,13 +1843,13 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             PartContext* base = static_cast<PartContext*>(inst->impl);
             if (base->type() == PartContextType::ILI9341) {
                 ILI9341Context* ctx = static_cast<ILI9341Context*>(base);
-                snap->framebuffer_offset = reinterpret_cast<uint32_t>(ctx->framebuffer.data());
+                snap->framebuffer_offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx->framebuffer.data()));
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
             } else if (base->type() == PartContextType::PCD8544) {
                 PCD8544Context* ctx = static_cast<PCD8544Context*>(base);
-                snap->framebuffer_offset = reinterpret_cast<uint32_t>(ctx->framebuffer.data());
+                snap->framebuffer_offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx->framebuffer.data()));
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
