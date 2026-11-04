@@ -319,6 +319,79 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
   return { ...snap, framebufferData };
 }
 
+/** One buffered SPI byte, matching `SpiByte` in native/include/parts.h. */
+export interface SpiByte {
+  value: number;
+  data_select: boolean;
+}
+
+/** Bus state snapshot matching `BusStateSnapshot` in native/include/parts.h. */
+export interface BusStateSnapshot {
+  i2c_address: number;
+  i2c_payload: number[];
+  i2c_payload_len: number;
+  i2c_transmitting: boolean;
+  i2c_read_buffer: number[];
+  i2c_read_len: number;
+  i2c_transactions_count: number;
+
+  spi_selected: boolean;
+  spi_payload: SpiByte[];
+  spi_payload_len: number;
+  spi_saw_byte: boolean;
+  spi_transfers_count: number;
+}
+
+/** `sizeof(BusStateSnapshot)` on wasm32; the buffer `bus_get_state` needs. */
+export const BUS_STATE_SNAPSHOT_SIZE = 596;
+
+/**
+ * Reads a `BusStateSnapshot` from wasm memory at `ptr`.
+ *
+ * Field order mirrors native/include/parts.h. The struct is not packed, so each
+ * wider field is aligned to its own size, exactly as the compiler lays it out
+ * for wasm32. The final offset is checked against BUS_STATE_SNAPSHOT_SIZE so a
+ * field added on one side without the other fails loudly instead of silently
+ * misreading every field after it.
+ */
+export function readBusStateSnapshot(wasmMemory: WasmMemory, ptr: number): BusStateSnapshot {
+  const view = new DataView(wasmMemory.memory.buffer, ptr);
+  let offset = 0;
+  const align = (n: number) => { offset = (offset + n - 1) & ~(n - 1); };
+  const rU8 = () => view.getUint8(offset++);
+  const rBool = () => view.getUint8(offset++) !== 0;
+  const rU16 = () => { align(2); const v = view.getUint16(offset, true); offset += 2; return v; };
+  const rU32 = () => { align(4); const v = view.getUint32(offset, true); offset += 4; return v; };
+  const rBytes = (len: number) => {
+    const bytes = new Uint8Array(wasmMemory.memory.buffer, ptr + offset, len);
+    offset += len;
+    return Array.from(bytes);
+  };
+
+  const snapshot = {
+    i2c_address: rU8(),
+    i2c_payload: rBytes(32),
+    i2c_payload_len: rU8(),
+    i2c_transmitting: rBool(),
+    i2c_read_buffer: rBytes(32),
+    i2c_read_len: rU8(),
+    i2c_transactions_count: rU32(),
+
+    spi_selected: rBool(),
+    spi_payload: Array.from({ length: 256 }, () => ({ value: rU8(), data_select: rBool() })),
+    spi_payload_len: rU16(),
+    spi_saw_byte: rBool(),
+    spi_transfers_count: rU32(),
+  };
+
+  if (offset !== BUS_STATE_SNAPSHOT_SIZE) {
+    throw new Error(
+      `BusStateSnapshot layout drift: read ${offset} bytes, parts.h declares ${BUS_STATE_SNAPSHOT_SIZE}`,
+    );
+  }
+  return snapshot;
+}
+
 /** Typed wrapper around all exported C ABI functions. */
 export interface PartsModule {
   memory: WebAssembly.Memory;
