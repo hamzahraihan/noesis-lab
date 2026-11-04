@@ -32,6 +32,8 @@ import { dirname, join, relative, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { buildChildEnv } from '../child-env.mjs';
+
 // This file carries the flags, so its own hash is part of the cache key.
 const LIB_FILE = fileURLToPath(import.meta.url);
 
@@ -164,14 +166,17 @@ function emsdkRoots(root) {
 }
 
 // emsdk ships its own node; emcc needs it on PATH. The versioned directory name
-// changes with the sdk release, so look for any <root>/node/*/bin that exists.
+// changes with the sdk release, so look for any <root>/node/*/bin (Unix) or
+// <root>/node/* holding node.exe (Windows, where the sdk drops the bin/ layer).
 function emsdkNodeBin(root) {
   const nodeRoot = join(root, 'node');
   try {
     for (const entry of readdirSync(nodeRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const bin = join(nodeRoot, entry.name, 'bin');
+      const versioned = join(nodeRoot, entry.name);
+      const bin = join(versioned, 'bin');
       if (existsSync(bin)) return bin;
+      if (existsSync(join(versioned, 'node.exe'))) return versioned;
     }
   } catch {
     // No node/ directory in this sdk: nothing to prepend.
@@ -179,20 +184,26 @@ function emsdkNodeBin(root) {
   return null;
 }
 
+// The sdk's launcher is `emcc` on Unix and `emcc.exe` on Windows; execFileSync
+// resolves neither an extension nor a shebang by itself, so name both.
+const EMCC_NAMES = process.platform === 'win32' ? ['emcc.exe', 'emcc'] : ['emcc'];
+
 function resolveEmcc(root) {
   if (process.env.EMCC) return process.env.EMCC;
   for (const sdkRoot of emsdkRoots(root)) {
-    const candidate = join(sdkRoot, 'upstream', 'emscripten', 'emcc');
-    if (existsSync(candidate)) return candidate;
+    for (const name of EMCC_NAMES) {
+      const candidate = join(sdkRoot, 'upstream', 'emscripten', name);
+      if (existsSync(candidate)) return candidate;
+    }
   }
   return 'emcc';
 }
 
-// Ensure emsdk node is on PATH for the child process (use forward slashes for PATH)
+// buildChildEnv owns the platform PATH separator (';' on Windows, ':' elsewhere);
+// a hardcoded ':' there collapsed the whole PATH into one entry and emcc could
+// not find node.
 function childEnv(root) {
-  const nodeBin = emsdkRoots(root).map(emsdkNodeBin).find((bin) => bin !== null);
-  if (!nodeBin) return { ...process.env };
-  return { ...process.env, PATH: `${nodeBin.replace(/\\/g, '/')}:${process.env.PATH}` };
+  return buildChildEnv(emsdkRoots(root).map(emsdkNodeBin).find((bin) => bin !== null));
 }
 
 /** True when `moduleUrl` is the file node was started with, not an import. */
