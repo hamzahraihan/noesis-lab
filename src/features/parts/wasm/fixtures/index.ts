@@ -22,10 +22,6 @@ import sht31 from './sht31.json';
 import eeprom24lc256 from './eeprom24lc256.json';
 import type { Stimulus } from '../probe';
 
-// The stimulus union has one source: probe.ts. Re-exported so fixtures stay a
-// single import for callers.
-export type { Stimulus } from '../probe';
-
 export interface Fixture {
   part: string;
   factoryArgs: unknown[];

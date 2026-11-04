@@ -13,8 +13,7 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Max7219 } from '@/features/parts/display/max7219';
 
-// Flag bits from max7219.ts (MAX7219_FLAG_LIT = 1, MAX7219_INTENSITY_SHIFT = 8)
-
+let max7219WasmCsState = false;
 
 export const max7219Adapter: PartAdapter = {
   kind: 'max7219',
@@ -33,17 +32,23 @@ export const max7219Adapter: PartAdapter = {
   apply(_instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
     if (module) {
       if (stimulus.kind === 'spi-transfer') {
-        module.spi_bus_begin();
-        module.spi_bus_transfer(stimulus.byte, stimulus.dc ? 1 : 0, stimulus.cs ? 1 : 0);
-        if (!stimulus.cs) {
+        const cs = stimulus.cs;
+        if (cs && !max7219WasmCsState) {
+          module.spi_bus_begin();
+        }
+        if (cs) {
+          module.spi_bus_transfer(stimulus.byte, stimulus.dc ? 1 : 0, 1);
+        } else if (max7219WasmCsState) {
           module.spi_bus_end();
         }
+        max7219WasmCsState = cs;
       }
     } else {
       const dev = _instance as Max7219;
       if (stimulus.kind === 'spi-transfer') {
-        dev.receive(stimulus.byte, stimulus.dc, stimulus.cs);
-        if (!stimulus.cs) {
+        if (stimulus.cs) {
+          dev.receive(stimulus.byte, stimulus.dc, true);
+        } else {
           dev.latch();
         }
       }
@@ -60,7 +65,6 @@ export const max7219Adapter: PartAdapter = {
       dev.decodeMode, dev.intensityValue, dev.scanLimitValue,
       dev.shutdownState ? 1 : 0, dev.displayTestState ? 1 : 0,
     ];
-    console.error('MAX7219 readScalars result:', result);
     return result;
   },
 
@@ -74,6 +78,7 @@ export const max7219Adapter: PartAdapter = {
   },
 
   reset(_instance: unknown, module?: PartsModule): void {
+    max7219WasmCsState = false;
     if (module) {
       module.bus_reset();
       module.spi_bus_init(0, 0, 0, 0);

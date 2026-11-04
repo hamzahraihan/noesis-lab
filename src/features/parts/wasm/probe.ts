@@ -4,10 +4,21 @@
  * A probe wraps either the C++ wasm module (WasmPartProbe) or the TypeScript
  * oracle (TsDeviceProbe) and presents a uniform stimulus/observation API.
  */
-
 import type { PartsModule } from './parts-module';
 import { readPartStateSnapshot, type PartStateSnapshot } from './parts-module';
 import { ADAPTERS } from './adapters';
+
+/** CRC32 (IEEE 802.3 polynomial 0xEDB88320) for framebuffer comparison. */
+export function crc32(buf: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
 
 /** A single stimulus applied to a part. */
 export type Stimulus =
@@ -41,11 +52,11 @@ export interface PartAdapter {
 
 /** Uniform probe interface. */
 export interface PartProbe {
-  /** Applies a stimulus. */
+  /** Apply a stimulus to the wrapped oracle. */
   apply(stimulus: Stimulus): void;
-  /** Returns the current observation. */
+  /** Read the current observation from the oracle. */
   observe(): Observation;
-  /** Resets the probe to initial state. */
+  /** Reset the oracle to initial state. */
   reset(): void;
 }
 
@@ -94,8 +105,8 @@ export class WasmPartProbe implements PartProbe {
 
 /** Probe that drives a TypeScript oracle device. */
 export class TsDeviceProbe implements PartProbe {
-  private instance: unknown;
   private adapter: PartAdapter;
+  private instance: unknown;
 
   constructor(adapter: PartAdapter, factoryArgs: unknown[]) {
     this.adapter = adapter;

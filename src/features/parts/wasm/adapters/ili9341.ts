@@ -10,7 +10,6 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Ili9341 } from '@/features/parts/display/ili9341';
 
-
 export const ili9341Adapter: PartAdapter = {
   kind: 'ili9341',
   labels: ['width', 'height'],

@@ -33,5 +33,5 @@
     { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true }
   ],
   "labels": ["width", "height"],
-  "note": "ILI9341 320x240 init + memory write of 4 pixels (0x0000 then 0xFFFF)"
+  "note": "ILI9341 320x240 init + memory write of 4 pixels (0x0000 then 0xFFFF). Framebuffer CRC tracked as gap: C++/TS streaming pixel divergence (window bounds, byte pairing). See issue for details."
 }

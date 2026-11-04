@@ -495,11 +495,15 @@ export class Ili9341 {
     this.framebuffer[offset] = colour >> 8;
     this.framebuffer[offset + 1] = colour & 0xff;
   }
-
   /** Wipes the framebuffer, as the TFT_eSPI clear() does. */
   clear(): void {
     this.revision++;
     this.framebuffer.fill(0);
+  }
+
+  /** Returns a copy of the controller's framebuffer (RGB565, two bytes per pixel). */
+  frame(): Uint8Array {
+    return this.framebuffer.slice();
   }
 
   private executeCommand(command: number): void {
