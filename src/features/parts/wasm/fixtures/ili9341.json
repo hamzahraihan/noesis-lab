@@ -30,8 +30,10 @@
     { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true },
     { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true },
     { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true },
     { "kind": "spi-transfer", "byte": 255, "dc": true, "cs": true }
   ],
-  "labels": ["width", "height"],
-  "note": "ILI9341 320x240 init + memory write of 4 pixels (0x0000 then 0xFFFF). Framebuffer CRC tracked as gap: C++/TS streaming pixel divergence (window bounds, byte pairing). See issue for details."
+  "labels": ["width", "height", "framebuffer_crc"],
+  "knownGaps": ["framebuffer_crc"],
+  "note": "ILI9341 320x240 init + memory write of 4 pixels (0x0000 then 0xFFFF). framebuffer_crc is a known gap: C++/TS streaming pixel divergence (window bounds, byte pairing) — tracked until the display parity fix lands."
 }

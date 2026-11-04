@@ -9,10 +9,11 @@ import type { PartsModule } from '../parts-module';
 import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Ili9341 } from '@/features/parts/display/ili9341';
+import { crc32 } from '../probe';
 
 export const ili9341Adapter: PartAdapter = {
   kind: 'ili9341',
-  labels: ['width', 'height'],
+  labels: ['width', 'height', 'framebuffer_crc'],
 
   create(factoryArgs: unknown[], module?: PartsModule): unknown {
     const [part_id, width, height] = factoryArgs as [number, number, number];
@@ -43,12 +44,14 @@ export const ili9341Adapter: PartAdapter = {
       throw new Error('ILI9341: wasm path should use snapshotToScalars');
     } else {
       const dev = _instance as Ili9341;
-      return [dev.width, dev.height];
+      const fb = dev.frame();
+      return [dev.width, dev.height, crc32(fb)];
     }
   },
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {
-    return [snap.width, snap.height];
+    const fb = snap.framebufferData || new Uint8Array(0);
+    return [snap.width, snap.height, crc32(fb)];
   },
 
   reset(_instance: unknown, module?: PartsModule): void {

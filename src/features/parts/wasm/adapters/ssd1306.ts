@@ -9,10 +9,11 @@ import type { PartsModule } from '../parts-module';
 import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Ssd1306, SSD1306_WIDTH, SSD1306_HEIGHT } from '@/features/parts/display/ssd1306';
+import { crc32 } from '../probe';
 
 export const ssd1306Adapter: PartAdapter = {
   kind: 'ssd1306',
-  labels: ['width', 'height'],
+  labels: ['width', 'height', 'framebuffer_crc'],
 
   create(factoryArgs: unknown[], module?: PartsModule): unknown {
     const [part_id, address, width, height] = factoryArgs as [number, number, number, number];
@@ -53,12 +54,15 @@ export const ssd1306Adapter: PartAdapter = {
     if (module) {
       throw new Error('SSD1306: wasm path should use snapshotToScalars');
     } else {
-      return [SSD1306_WIDTH, SSD1306_HEIGHT];
+      const dev = _instance as Ssd1306;
+      const fb = dev.frame();
+      return [SSD1306_WIDTH, SSD1306_HEIGHT, crc32(fb)];
     }
   },
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {
-    return [snap.width, snap.height];
+    const fb = snap.framebufferData || new Uint8Array(0);
+    return [snap.width, snap.height, crc32(fb)];
   },
 
   reset(_instance: unknown, module?: PartsModule): void {
