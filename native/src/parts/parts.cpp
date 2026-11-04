@@ -151,6 +151,10 @@ struct SSD1306Context : PartContext {
     uint8_t vcom_detect = 0x40;
     uint8_t reg_ptr = 0x00;
     bool expecting_data = false;  // After 0x40 (data) vs 0x00 (command)
+    // Command state machine
+    uint8_t cmd_args[16];
+    uint8_t cmd_arg_count = 0;
+    uint8_t expected_args = 0;
     PartContextType type() const override { return PartContextType::SSD1306; }
 };
 
@@ -278,13 +282,22 @@ struct MFRC522Context : PartContext {
 struct ILI9341Context : PartContext {
     uint16_t width;
     uint16_t height;
-    std::vector<uint16_t> framebuffer;  // RGB565
+    std::vector<uint8_t> framebuffer;  // RGB565 as byte stream (2 bytes per pixel, high byte first) - matches TS Uint8Array
     uint8_t reg_ptr = 0x00;
     bool data_mode = false;  // DC pin state
     // Command state machine
     uint8_t cmd_args[16];
     uint8_t cmd_arg_count = 0;
     uint8_t expected_args = 0;
+    // Streaming pixel state
+    bool streaming = false;
+    uint16_t column_start = 0;
+    uint16_t column_end = 0;
+    uint16_t page_start = 0;
+    uint16_t page_end = 0;
+    uint16_t cursor_column = 0;
+    uint16_t cursor_page = 0;
+    bool expect_high_byte = true;
     PartContextType type() const override { return PartContextType::ILI9341; }
 };
 
@@ -293,7 +306,7 @@ struct MAX7219Context : PartContext {
     uint8_t decode_mode = 0x00;
     uint8_t intensity = 0x00;
     uint8_t scan_limit = 0x07;
-    uint8_t shutdown = 0x00;
+    uint8_t shutdown = 0x01; // power-up: shut down (matches TS oracle / datasheet)
     uint8_t display_test = 0x00;
     uint8_t digit_data[8] = {0};
     uint16_t shift = 0;
@@ -941,6 +954,51 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
     if (is_control) {
         dev->reg_ptr = byte;
         dev->expecting_data = (byte == 0x40);
+        dev->cmd_arg_count = 0;
+        switch (byte) {
+            case 0xAE: case 0xAF:
+                dev->display_on = (byte == 0xAF) ? 1 : 0;
+                dev->expected_args = 0;
+                break;
+            case 0xA0: case 0xA1:
+                dev->expected_args = 0;
+                break;
+            case 0xA4: case 0xA6:
+                dev->expected_args = 0;
+                break;
+            case 0xC8:
+                dev->com_scan_dir = 0xC8;
+                dev->expected_args = 0;
+                break;
+            case 0x40:
+                dev->expected_args = 0;
+                break;
+            case 0x20: dev->expected_args = 1; break;
+            case 0x21: dev->expected_args = 2; break;
+            case 0x22: dev->expected_args = 2; break;
+            case 0xAD: dev->expected_args = 1; break;
+            case 0x81: dev->expected_args = 1; break;
+            case 0x8D: dev->expected_args = 1; break;
+            case 0xA8: dev->expected_args = 1; break;
+            case 0xD3: dev->expected_args = 1; break;
+            case 0xD5: dev->expected_args = 1; break;
+            case 0xD8: dev->expected_args = 1; break;
+            case 0xD9: dev->expected_args = 1; break;
+            case 0xDA: dev->expected_args = 1; break;
+            case 0xDB: dev->expected_args = 1; break;
+            case 0x00: case 0x10:
+                dev->expected_args = 0;
+                break;
+            case 0xB0: case 0xB1: case 0xB2: case 0xB3:
+            case 0xB4: case 0xB5: case 0xB6: case 0xB7:
+                dev->expected_args = 0;
+                break;
+            case 0x15: case 0x16:
+                dev->expected_args = 1;
+                break;
+            default:
+                dev->expected_args = 0;
+        }
         return true;
     }
     
@@ -959,25 +1017,40 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
         return true;
     }
     
+    if (dev->expected_args > 0) {
+        if (dev->cmd_arg_count < 16) {
+            dev->cmd_args[dev->cmd_arg_count++] = byte;
+            dev->expected_args--;
+        }
+        if (dev->expected_args == 0) {
+            switch (dev->reg_ptr) {
+                case 0x20: if (dev->cmd_arg_count >= 1) dev->memory_mode = dev->cmd_args[0] & 0x03; break;
+                case 0x21: if (dev->cmd_arg_count >= 2) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; } break;
+                case 0x22: if (dev->cmd_arg_count >= 2) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; } break;
+                case 0xAD: if (dev->cmd_arg_count >= 1) dev->charge_pump = dev->cmd_args[0]; break;
+                case 0x81: if (dev->cmd_arg_count >= 1) dev->contrast = dev->cmd_args[0]; break;
+                case 0x8D: if (dev->cmd_arg_count >= 1) dev->charge_pump = dev->cmd_args[0]; break;
+                case 0xA8: if (dev->cmd_arg_count >= 1) dev->pages = dev->cmd_args[0]; break;
+                case 0xC8: if (dev->cmd_arg_count >= 1) dev->com_scan_dir = dev->cmd_args[0]; break;
+                case 0xD3: if (dev->cmd_arg_count >= 1) dev->display_offset = dev->cmd_args[0]; break;
+                case 0xD5: if (dev->cmd_arg_count >= 1) dev->display_clock_div = dev->cmd_args[0]; break;
+                case 0xD8: if (dev->cmd_arg_count >= 1) dev->com_pins = dev->cmd_args[0]; break;
+                case 0xD9: if (dev->cmd_arg_count >= 1) dev->precharge = dev->cmd_args[0]; break;
+                case 0xDA: if (dev->cmd_arg_count >= 1) dev->com_pins = dev->cmd_args[0]; break;
+                case 0xDB: if (dev->cmd_arg_count >= 1) dev->vcom_detect = dev->cmd_args[0]; break;
+                case 0x15: if (dev->cmd_arg_count >= 1) dev->column_start = dev->cmd_args[0]; break;
+                case 0x16: if (dev->cmd_arg_count >= 1) dev->page_start = dev->cmd_args[0]; break;
+            }
+        }
+        return true;
+    }
+    
     switch (dev->reg_ptr) {
         case 0x00: dev->column_start = (dev->column_start & 0xF0) | (byte & 0x0F); break;
         case 0x10: dev->column_start = (dev->column_start & 0x0F) | ((byte & 0x0F) << 4); break;
         case 0xB0: case 0xB1: case 0xB2: case 0xB3:
         case 0xB4: case 0xB5: case 0xB6: case 0xB7:
             dev->page_start = dev->reg_ptr & 0x07; break;
-        case 0x81: dev->contrast = byte; break;
-        case 0x8D: dev->charge_pump = byte; break;
-        case 0xAE: case 0xAF:
-            dev->display_on = (dev->reg_ptr == 0xAF) ? 1 : 0; break;
-        case 0xC0: case 0xC8: dev->com_scan_dir = dev->reg_ptr; break;
-        case 0xD3: dev->display_offset = byte; break;
-        case 0xD5: dev->display_clock_div = byte; break;
-        case 0xD9: dev->precharge = byte; break;
-        case 0xDA: dev->com_pins = byte; break;
-        case 0xDB: dev->vcom_detect = byte; break;
-        case 0x20: dev->memory_mode = byte; break;
-        case 0x21: dev->column_start = byte; break;
-        case 0x22: dev->page_start = byte; break;
     }
     return true;
 }
@@ -1696,8 +1769,8 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             PartContext* base = static_cast<PartContext*>(inst->impl);
             if (base->type() == PartContextType::ILI9341) {
                 ILI9341Context* ctx = static_cast<ILI9341Context*>(base);
-                snap->framebuffer = reinterpret_cast<uint8_t*>(ctx->framebuffer.data());
-                snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size() * sizeof(uint16_t));
+                snap->framebuffer = ctx->framebuffer.data();
+                snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
 } else if (base->type() == PartContextType::PCD8544) {
@@ -2530,10 +2603,18 @@ extern "C" void* part_create_display_spi(uint32_t part_id, uint16_t width, uint1
     ILI9341Context* ctx = new ILI9341Context();
     ctx->width = width;
     ctx->height = height;
-    ctx->framebuffer.resize(width * height, 0x0000);
+    ctx->framebuffer.resize(width * height * 2, 0x00);
+    ctx->column_start = 0;
+    ctx->column_end = width - 1;
+    ctx->page_start = 0;
+    ctx->page_end = height - 1;
+    ctx->cursor_column = 0;
+    ctx->cursor_page = 0;
+    ctx->expect_high_byte = true;
+    ctx->streaming = false;
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
-    
+
     SPIPartImpl spi_part;
     spi_part.part_id = part_id;
     spi_part.cs_net = 0;

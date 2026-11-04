@@ -10,7 +10,6 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Ssd1306, SSD1306_WIDTH, SSD1306_HEIGHT } from '@/features/parts/display/ssd1306';
 
-
 export const ssd1306Adapter: PartAdapter = {
   kind: 'ssd1306',
   labels: ['width', 'height'],
