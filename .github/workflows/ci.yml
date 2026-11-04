@@ -35,3 +35,23 @@ jobs:
             git diff docs/ PRODUCT.md
             exit 1
           fi
+
+  # The build scripts hand emcc a child environment whose PATH leads with
+  # emsdk's node directory. PATH entries are separated by ';' on Windows and ':'
+  # elsewhere, and the code used to hardcode ':': on Windows that merges every
+  # entry into one unusable string, so emcc could not find node and the wasm
+  # rebuild failed. The unit test below fails on that hardcoded separator when
+  # it runs on a real Windows runner; no emsdk install is needed for it.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: PATH separator regression
+        run: npx vitest run scripts/child-env.test.ts
+
