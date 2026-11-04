@@ -147,6 +147,7 @@ struct SSD1306Context : PartContext {
     uint8_t memory_mode = 0x00;  // Horizontal addressing
     uint8_t com_pins = 0x02;
     uint8_t com_scan_dir = 0xC0;
+    bool segmentRemap = false;
     uint8_t display_offset = 0x00;
     uint8_t display_clock_div = 0x80;
     uint8_t precharge = 0xF1;
@@ -977,53 +978,10 @@ static void pca9685_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out
 static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
     SSD1306Context* dev = static_cast<SSD1306Context*>(ctx);
     if (is_control) {
-        dev->reg_ptr = byte;
-        dev->expecting_data = (byte == 0x40);
-        dev->cmd_arg_count = 0;
-        switch (byte) {
-            case 0xAE: case 0xAF:
-                dev->display_on = (byte == 0xAF) ? 1 : 0;
-                dev->expected_args = 0;
-                break;
-            case 0xA0: case 0xA1:
-                dev->expected_args = 0;
-                break;
-            case 0xA4: case 0xA6:
-                dev->expected_args = 0;
-                break;
-            case 0xC8:
-                dev->com_scan_dir = 0xC8;
-                dev->expected_args = 0;
-                break;
-            case 0x40:
-                dev->expected_args = 0;
-                break;
-            case 0x20: dev->expected_args = 1; break;
-            case 0x21: dev->expected_args = 2; break;
-            case 0x22: dev->expected_args = 2; break;
-            case 0xAD: dev->expected_args = 1; break;
-            case 0x81: dev->expected_args = 1; break;
-            case 0x8D: dev->expected_args = 1; break;
-            case 0xA8: dev->expected_args = 1; break;
-            case 0xD3: dev->expected_args = 1; break;
-            case 0xD5: dev->expected_args = 1; break;
-            case 0xD8: dev->expected_args = 1; break;
-            case 0xD9: dev->expected_args = 1; break;
-            case 0xDA: dev->expected_args = 1; break;
-            case 0xDB: dev->expected_args = 1; break;
-            case 0x00: case 0x10:
-                dev->expected_args = 0;
-                break;
-            case 0xB0: case 0xB1: case 0xB2: case 0xB3:
-            case 0xB4: case 0xB5: case 0xB6: case 0xB7:
-                dev->expected_args = 0;
-                break;
-            case 0x15: case 0x16:
-                dev->expected_args = 1;
-                break;
-            default:
-                dev->expected_args = 0;
-        }
+        // Control byte: ONLY determines data stream mode (TS parity).
+        // Bit 6 set = data stream, clear = command stream.
+        // Do NOT process as command here — TS receive() returns immediately.
+        dev->expecting_data = (byte & 0x40) != 0;
         return true;
     }
     
@@ -1046,6 +1004,43 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
         return true;
     }
     
+    // Command processing (when not in data stream and no pending args)
+    if (dev->expected_args == 0) {
+        dev->reg_ptr = byte;
+        dev->cmd_arg_count = 0;
+        // Single-byte commands
+        if (byte == 0xAE) { dev->display_on = 0; return true; }
+        if (byte == 0xAF) { dev->display_on = 1; return true; }
+        if (byte == 0xA0) { dev->segmentRemap = false; return true; }
+        if (byte == 0xA1) { dev->segmentRemap = true; return true; }
+        if (byte == 0xA4 || byte == 0xA6) { return true; }
+        if (byte == 0xC8) { dev->com_scan_dir = 0xC8; return true; }
+        if (byte == 0x40) { return true; }  // display start line (ignored)
+        if (byte >= 0xB0 && byte <= 0xB7) {
+            dev->cursor_page = byte & 0x07;
+            return true;
+        }
+        if (byte <= 0x0F) {
+            dev->cursor_column = (dev->cursor_column & 0xF0) | (byte & 0x0F);
+            return true;
+        }
+        if (byte >= 0x10 && byte <= 0x1F) {
+            dev->cursor_column = (dev->cursor_column & 0x0F) | ((byte & 0x0F) << 4);
+            return true;
+        }
+        // Multi-argument commands
+        if (byte == 0x20) { dev->expected_args = 1; return true; }
+        if (byte == 0x21) { dev->expected_args = 2; return true; }
+        if (byte == 0x22) { dev->expected_args = 2; return true; }
+        if (byte == 0xAD || byte == 0x81 || byte == 0x8D || byte == 0xA8 || byte == 0xD3 || byte == 0xD5 || byte == 0xD8 || byte == 0xD9 || byte == 0xDA || byte == 0xDB) {
+            dev->expected_args = 1;
+            return true;
+        }
+        if (byte == 0x15 || byte == 0x16) { dev->expected_args = 1; return true; }
+        // Unknown command: ignore
+        return true;
+    }
+    
     if (dev->expected_args > 0) {
         if (dev->cmd_arg_count < 16) {
             dev->cmd_args[dev->cmd_arg_count++] = byte;
@@ -1054,8 +1049,8 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
         if (dev->expected_args == 0) {
             switch (dev->reg_ptr) {
                 case 0x20: if (dev->cmd_arg_count >= 1) dev->memory_mode = dev->cmd_args[0] & 0x03; break;
-                case 0x21: if (dev->cmd_arg_count >= 2) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; dev->cursor_column = dev->column_start; } break;
-                case 0x22: if (dev->cmd_arg_count >= 2) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; dev->cursor_page = dev->page_start; } break;
+                case 0x21: if (dev->cmd_arg_count >= 2) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; } break;
+                case 0x22: if (dev->cmd_arg_count >= 2) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; } break;
                 case 0xAD: if (dev->cmd_arg_count >= 1) dev->charge_pump = dev->cmd_args[0]; break;
                 case 0x81: if (dev->cmd_arg_count >= 1) dev->contrast = dev->cmd_args[0]; break;
                 case 0x8D: if (dev->cmd_arg_count >= 1) dev->charge_pump = dev->cmd_args[0]; break;
