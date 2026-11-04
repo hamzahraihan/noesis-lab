@@ -1,0 +1,12 @@
+{
+  "part": "pca9685",
+  "factoryArgs": [20, 16],
+  "stimuli": [
+    { "kind": "i2c-write", "address": 64, "bytes": [0, 32] },
+    { "kind": "i2c-write", "address": 64, "bytes": [6, 0, 0, 0, 8] },
+    { "kind": "i2c-write", "address": 64, "bytes": [10, 0, 0, 0, 16] },
+    { "kind": "i2c-write", "address": 64, "bytes": [14, 0, 16, 0, 0] }
+  ],
+  "labels": ["duty0", "duty1", "duty2", "duty3"],
+  "note": "Wake (MODE1 0x20), ch0 ON=0 OFF=2048 (2048 counts), ch1 OFF=0x1000 full-off (0), ch2 0x1000 full-on (4096), ch3 untouched (0)"
+}

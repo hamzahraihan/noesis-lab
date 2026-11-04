@@ -141,8 +141,13 @@ struct PartStateSnapshot {
 #pragma pack(pop)
 
 // Static assertions for struct sizes
+#if __SIZEOF_POINTER__ == 4
+static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
+static_assert(sizeof(PartStateSnapshot) == 314, "PartStateSnapshot packing failed");
+#else
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
 static_assert(sizeof(PartStateSnapshot) == 318, "PartStateSnapshot packing failed");
+#endif
 `;
 }
 

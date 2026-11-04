@@ -20,6 +20,9 @@ import bh1750 from './bh1750.json';
 import bmp180 from './bmp180.json';
 import sht31 from './sht31.json';
 import eeprom24lc256 from './eeprom24lc256.json';
+import pca9685 from './pca9685.json';
+import mcp4725 from './mcp4725.json';
+import max6675 from './max6675.json';
 import type { Stimulus } from '../probe';
 
 export interface Fixture {
@@ -49,6 +52,9 @@ export const FIXTURE_LIST = [
   bmp180,
   sht31,
   eeprom24lc256,
+  pca9685,
+  mcp4725,
+  max6675,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs
