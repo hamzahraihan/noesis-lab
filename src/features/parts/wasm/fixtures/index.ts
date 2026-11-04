@@ -28,6 +28,8 @@ export interface Fixture {
   stimuli: Stimulus[];
   labels: string[];
   note: string;
+  /** Labels whose wasm-vs-TS divergence is tracked as a known gap, not a pass. */
+  knownGaps?: string[];
 }
 
 export const FIXTURE_LIST = [
