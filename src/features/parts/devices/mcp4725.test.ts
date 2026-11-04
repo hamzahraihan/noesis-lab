@@ -33,6 +33,15 @@ describe('the MCP4725', () => {
   it('answers on the address the module is strapped to', () => {
     expect(new Mcp4725().address).toBe(0x60);
   });
+
+  it('reads back the datasheet 3-byte DAC frame (status + 2 data bytes)', () => {
+    const converter = new Mcp4725();
+    converter.receive(0x40, true);
+    converter.receive(0xa0, false);
+    converter.receive(0x00, false);
+    // Code 0xA00: frame = [code>>4 = 0xA0, (code<<4 | 0x01) = 0x01, 0x00]
+    expect(converter.read(3)).toEqual([0xa0, 0x01, 0x00]);
+  });
 });
 
 describe('the MCP4725 module', () => {

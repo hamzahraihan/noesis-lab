@@ -48,10 +48,10 @@ export const mcp4725Adapter: PartAdapter = {
       throw new Error('MCP4725: wasm path should use snapshotToScalars');
     } else {
       const dev = _instance as Mcp4725;
-      // Mcp4725 has no public code accessor; the read output is [high_nibble, low_byte]
-      // Reconstruct the 12-bit code from the read frame.
-      const bytes = dev.read(2);
-      return [((bytes[0] & 0x0f) << 8) | bytes[1]];
+      // Datashet frame: [status, data_high, data_low]. Reconstruct the 12-bit
+      // code from the high byte and low nibble of the second byte.
+      const frame = dev.read(3);
+      return [((frame[0] & 0xff) << 4) | (frame[1] >> 4)];
     }
   },
 

@@ -55,6 +55,8 @@ export class Mcp4725 implements I2cDevice {
 
   /** The code the chip is holding. */
   private code = 0;
+  /** Power-down bits (normally 0 = active). */
+  private powerDown = 0;
   /** The bytes of the write in flight. */
   private bytes: number[] = [];
   /** Whether the write in flight began with a command byte. */
@@ -92,15 +94,21 @@ export class Mcp4725 implements I2cDevice {
   }
 
   /**
-   * A read, of the code the chip is holding.
+   * A read, in the datasheet's Read-command frame.
    *
-   * The chip's own read returns the register the write would have changed,
-   * which is the code itself.
+   * Figure 6-3 of the datasheet: the device streams the DAC register and
+   * EEPROM contents. The first three bytes modelled here are the status byte
+   * (RDY/BSY = 1, POR = 0, power-down bits) and the two DAC data bytes. The
+   * chip repeats the frame if asked for more, so any count beyond three
+   * repeats from the start.
    */
   read(count: number): readonly number[] {
-    const high = (this.code >> 8) & 0x0f;
-    const low = this.code & 0xff;
-    return Array.from({ length: Math.max(0, count) }, (_, index) => (index % 2 === 0 ? high : low));
+    const frame = [
+      (this.code >> 4) & 0xff,
+      ((this.code << 4) & 0xff) | ((this.powerDown & 0x03) << 1) | 0x01,
+      0x00,
+    ];
+    return Array.from({ length: Math.max(0, count) }, (_, index) => frame[index % 3]);
   }
 
   /**
