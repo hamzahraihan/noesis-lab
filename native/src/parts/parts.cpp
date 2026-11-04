@@ -750,9 +750,13 @@ extern "C" void spi_bus_end(void) {
 }
 
 extern "C" uint8_t spi_bus_transfer(uint8_t byte, bool data_select, bool chip_selected) {
-    static int transfer_count = 0; transfer_count++;
+    // Nothing is clocked onto the bus while no transaction is open, so a call
+    // here is not a transfer. g_spi_transfer_count is the same counter
+    // bus_get_state() reports and bus_reset() clears.
     if (!g_spi_selected) return 0;
-    
+
+    g_spi_transfer_count++;
+
     if (g_spi_payload_len < 256) {
         g_spi_payload[g_spi_payload_len++] = {byte, data_select};
     }
@@ -2722,6 +2726,11 @@ extern "C" void bus_reset(void) {
         delete ctx;
     }
     g_part_impls.clear();
+    // The order vector holds raw pointers into g_parts. g_parts outlives the
+    // reset (handles stay valid), so the pointers are not dangling, but keeping
+    // them would let one entry appear twice once the next cycle registers the
+    // same part ids again. A reset means an empty bus, so empty this too.
+    g_part_order.clear();
     for (auto& entry : g_parts) {
         entry.second.impl = nullptr;
     }
