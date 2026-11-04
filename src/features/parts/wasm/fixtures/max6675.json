@@ -1,0 +1,12 @@
+{
+  "part": "max6675",
+  "factoryArgs": [22],
+  "stimuli": [
+    { "kind": "knob", "name": "probe", "value": 100 },
+    { "kind": "spi-transfer", "byte": 0, "dc": false, "cs": true },
+    { "kind": "spi-transfer", "byte": 0, "dc": false, "cs": true },
+    { "kind": "spi-transfer", "byte": 0, "dc": false, "cs": false }
+  ],
+  "labels": ["temp_quarter_deg"],
+  "note": "Probe knob 100C → 400 quarter-degrees; read two SPI bytes then CS rise resets the shift register"
+}

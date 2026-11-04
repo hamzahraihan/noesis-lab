@@ -19,6 +19,9 @@ import { bh1750Adapter } from './bh1750';
 import { bmp180Adapter } from './bmp180';
 import { sht31Adapter } from './sht31';
 import { eeprom24lc256Adapter } from './eeprom24lc256';
+import { pca9685Adapter } from './pca9685';
+import { mcp4725Adapter } from './mcp4725';
+import { max6675Adapter } from './max6675';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -38,6 +41,9 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   bmp180: bmp180Adapter,
   sht31: sht31Adapter,
   eeprom24lc256: eeprom24lc256Adapter,
+  pca9685: pca9685Adapter,
+  mcp4725: mcp4725Adapter,
+  max6675: max6675Adapter,
 };
 
 export * from './pcf8574';
@@ -52,3 +58,6 @@ export * from './ssd1306';
 export * from './ili9341';
 export * from './max7219';
 export * from './hd44780';
+export * from './pca9685';
+export * from './mcp4725';
+export * from './max6675';

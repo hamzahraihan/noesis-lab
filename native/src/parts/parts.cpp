@@ -113,7 +113,7 @@ struct MCP23017Context : PartContext {
 
 // PCA9685 - 16-channel 12-bit PWM driver
 struct PCA9685Context : PartContext {
-    uint8_t mode1 = 0x00;
+    uint8_t mode1 = 0x11;  // SLEEP | ALLCALL (TS parity)
     uint8_t mode2 = 0x04;  // Totem-pole outputs
     uint8_t prescale = 0x1E;  // Default ~200Hz
     uint8_t led_on_l[16] = {0};
@@ -125,7 +125,7 @@ struct PCA9685Context : PartContext {
     uint8_t all_led_off_l = 0;
     uint8_t all_led_off_h = 0;
     uint8_t reg_ptr = 0x00;
-    bool auto_increment = true;
+    bool auto_increment = false;
     PartContextType type() const override { return PartContextType::PCA9685; }
 };
 
@@ -261,6 +261,7 @@ struct EEPROM24LC256Context : PartContext {
 struct MAX6675Context : PartContext {
     int16_t temp_quarter_deg = 0;  // Temperature in 0.25°C steps
     bool fault = false;  // Open thermocouple detection
+    uint8_t sent = 0;      // Bytes handed out in current transaction
     PartContextType type() const override { return PartContextType::MAX6675; }
 };
 
@@ -885,15 +886,19 @@ static bool pca9685_receive(void* ctx, uint8_t byte, bool is_control) {
     PCA9685Context* dev = static_cast<PCA9685Context*>(ctx);
     if (is_control) {
         dev->reg_ptr = byte;
-        dev->auto_increment = (dev->mode1 & 0x20) != 0;
+        dev->auto_increment = (dev->mode1 & 0x20) != 0;  // RE-derive per transaction, per TS
         return true;
     }
     
     uint8_t reg = dev->reg_ptr;
     switch (reg) {
-        case 0x00: dev->mode1 = byte; dev->auto_increment = (byte & 0x20) != 0; break;
+        case 0x00: dev->mode1 = byte; break;  // auto_increment only set on control byte, per TS
         case 0x01: dev->mode2 = byte; break;
-        case 0xFE: dev->prescale = byte; break;
+        case 0xFE: {
+            // Datasheet: prescaler only writable while oscillator asleep (MODE1 SLEEP bit)
+            if (dev->mode1 & 0x10) dev->prescale = byte;
+            break;
+        }
         default:
             if (reg >= 0x06 && reg <= 0x45) {
                 uint8_t idx = (reg - 0x06) / 4;
@@ -911,7 +916,20 @@ static bool pca9685_receive(void* ctx, uint8_t byte, bool is_control) {
             else if (reg == 0xFC) { dev->all_led_off_l = byte; }
             else if (reg == 0xFD) { dev->all_led_off_h = byte; }
     }
-    
+
+    // ALL_LED fan-out: datasheet says writing ALL_LED* mirrors into all 16 channels
+    if (reg >= 0xFA && reg <= 0xFD) {
+        uint8_t offset = reg - 0xFA;
+        for (int ch = 0; ch < 16; ch++) {
+            switch (offset) {
+                case 0: dev->led_on_l[ch] = byte; break;
+                case 1: dev->led_on_h[ch] = byte; break;
+                case 2: dev->led_off_l[ch] = byte; break;
+                case 3: dev->led_off_h[ch] = byte; break;
+            }
+        }
+    }
+
     if (dev->auto_increment) {
         dev->reg_ptr++;
     }
@@ -1147,7 +1165,7 @@ static bool mcp4725_receive(void* ctx, uint8_t byte, bool is_control) {
         dev->write_count = 0;
         return true;
     }
-    
+
     if (dev->reg_ptr == 0x40 || dev->reg_ptr == 0x60) {
         if (dev->write_count < 3) {
             dev->write_buffer[dev->write_count++] = byte;
@@ -1387,6 +1405,8 @@ static void spi_shift_register_receive(void* ctx, uint8_t byte, bool data_select
 }
 
 static void spi_max6675_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
+    // MAX6675 is read-only over SPI; MOSI bytes are ignored.
+    // CS deassertion is modelled by bus_reset (resets ctx via part_reset).
     (void)ctx; (void)byte; (void)data_select; (void)chip_selected;
 }
 
@@ -1394,18 +1414,14 @@ static uint8_t spi_max6675_read(void* ctx, bool data_select, bool chip_selected)
     (void)data_select; (void)chip_selected;
     MAX6675Context* dev = static_cast<MAX6675Context*>(ctx);
     // MAX6675 returns 16-bit value over two SPI transfers
-    // First transfer: upper 8 bits of temperature
-    // Second transfer: lower 5 bits of temp + 3 bits fault/status
-    static bool first_byte = true;
-    if (first_byte) {
-        first_byte = false;
-        return static_cast<uint8_t>(dev->temp_quarter_deg >> 5);  // Upper 8 bits of 13-bit temp
-    } else {
-        first_byte = true;
-        uint8_t lower = static_cast<uint8_t>((dev->temp_quarter_deg & 0x1F) << 3);
-        if (dev->fault) lower |= 0x01;
-        return lower;
-    }
+    // First transfer: upper 8 bits of temperature (raw >> 5)
+    // Second transfer: lower 5 bits of temp + 3 bits fault/status ((raw & 0x1F) << 3)
+    uint8_t byte = (dev->sent == 0)
+        ? static_cast<uint8_t>(dev->temp_quarter_deg >> 5)
+        : static_cast<uint8_t>((dev->temp_quarter_deg & 0x1F) << 3);
+    if (dev->sent > 0 && dev->fault) byte |= 0x01;
+    dev->sent += 1;
+    return byte;
 }
 
 static void spi_mfrc522_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
@@ -2037,6 +2053,17 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             if (strcmp(knob_name, "clear") == 0) {
                 ctx->cursor = 0;
                 for (int i = 0; i < 80; i++) ctx->chars[i] = 0x20;  // space
+            }
+            break;
+        }
+        case PART_KIND_THERMOCOUPLE: {
+            MAX6675Context* ctx = static_cast<MAX6675Context*>(inst->impl);
+            if (strcmp(knob_name, "probe") == 0) {
+                // Probe temperature in Celsius, 0.25 C steps, matching TS Max6675
+                int steps = static_cast<int>(value / 0.25 + 0.5);
+                if (steps < 0) steps = 0;
+                if (steps > 0xFFF) steps = 0xFFF;
+                ctx->temp_quarter_deg = static_cast<int16_t>(steps);
             }
             break;
         }
