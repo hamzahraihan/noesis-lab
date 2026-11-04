@@ -56,7 +56,7 @@ const ARGUMENT_COUNTS: Readonly<Record<number, number>> = {
   0x81: 1, // contrast
   0x8d: 1, // charge pump setting
   0xa8: 1, // multiplex ratio
-  0xc8: 1, // COM output scan direction
+  0xc8: 0, // COM output scan direction (no arguments)
   0xd3: 1, // display offset
   0xd5: 1, // display clock divide
   0xd8: 1, // common pads
@@ -126,11 +126,17 @@ export class Ssd1306 {
   receive(byte: number, isControlPosition = false): boolean {
     if (isControlPosition) {
       this.dataStream = (byte & 0x40) !== 0;
+      console.error(`[SSD1306 TS] control byte 0x${byte.toString(16).padStart(2,'0')} dataStream=${this.dataStream}->${(byte & 0x40) !== 0} col=${this.column} page=${this.page}`);
       return true;
     }
 
-    if (this.dataStream) this.writeData(byte);
-    else this.executeCommand(byte);
+    if (this.dataStream) {
+      console.error(`[SSD1306 TS] writeData(0x${byte.toString(16).padStart(2,'0')}) col=${this.column} page=${this.page} index=${this.page * SSD1306_WIDTH + this.column}`);
+      this.writeData(byte);
+    } else {
+      console.error(`[SSD1306 TS] execCmd(0x${byte.toString(16).padStart(2,'0')}) col=${this.column} page=${this.page} exp=${this.expecting} cmd=${this.commandInFlight}`);
+      this.executeCommand(byte);
+    }
     return true;
   }
 
@@ -242,10 +248,13 @@ export class Ssd1306 {
   }
 
   private executeCommand(byte: number): void {
+    console.error(`[SSD1306 TS] execCmd(0x${byte.toString(16).padStart(2,'0')}) col=${this.column} page=${this.page} exp=${this.expecting} cmdInFlight=0x${this.commandInFlight.toString(16).padStart(2,'0')}`);
     if (this.expecting > 0) {
+      console.error(`[SSD1306 TS]   applying arg 0x${byte.toString(16).padStart(2,'0')} for cmd 0x${this.commandInFlight.toString(16).padStart(2,'0')} argIdx=${this.argumentIndex}`);
       this.applyArgument(byte);
       this.argumentIndex++;
       this.expecting--;
+      console.error(`[SSD1306 TS]   after apply: col=${this.column} page=${this.page} exp=${this.expecting}`);
       return;
     }
 
@@ -303,6 +312,7 @@ export class Ssd1306 {
   }
 
   private applyArgument(value: number): void {
+    console.error(`[SSD1306 TS] applyArgument(0x${value.toString(16).padStart(2,'0')}) cmdInFlight=0x${this.commandInFlight.toString(16).padStart(2,'0')} argIdx=${this.argumentIndex} col=${this.column} page=${this.page}`);
     switch (this.commandInFlight) {
       case 0x20:
         this.addressingMode = value & 0x03;
