@@ -139,12 +139,15 @@ struct SSD1306Context : PartContext {
     uint8_t column_end = 127;
     uint8_t page_start = 0;
     uint8_t page_end = 7;
+    uint8_t cursor_column = 0;  // Current write position (separate from window)
+    uint8_t cursor_page = 0;
     uint8_t display_on = 0;
     uint8_t contrast = 0x7F;
     uint8_t charge_pump = 0x10;
     uint8_t memory_mode = 0x00;  // Horizontal addressing
     uint8_t com_pins = 0x02;
     uint8_t com_scan_dir = 0xC0;
+    bool segmentRemap = false;
     uint8_t display_offset = 0x00;
     uint8_t display_clock_div = 0x80;
     uint8_t precharge = 0xF1;
@@ -298,6 +301,7 @@ struct ILI9341Context : PartContext {
     uint16_t page_end = 0;
     uint16_t cursor_column = 0;
     uint16_t cursor_page = 0;
+    uint8_t madctl = 0;
     bool expect_high_byte = true;
     PartContextType type() const override { return PartContextType::ILI9341; }
 };
@@ -974,68 +978,66 @@ static void pca9685_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out
 static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
     SSD1306Context* dev = static_cast<SSD1306Context*>(ctx);
     if (is_control) {
-        dev->reg_ptr = byte;
-        dev->expecting_data = (byte == 0x40);
-        dev->cmd_arg_count = 0;
-        switch (byte) {
-            case 0xAE: case 0xAF:
-                dev->display_on = (byte == 0xAF) ? 1 : 0;
-                dev->expected_args = 0;
-                break;
-            case 0xA0: case 0xA1:
-                dev->expected_args = 0;
-                break;
-            case 0xA4: case 0xA6:
-                dev->expected_args = 0;
-                break;
-            case 0xC8:
-                dev->com_scan_dir = 0xC8;
-                dev->expected_args = 0;
-                break;
-            case 0x40:
-                dev->expected_args = 0;
-                break;
-            case 0x20: dev->expected_args = 1; break;
-            case 0x21: dev->expected_args = 2; break;
-            case 0x22: dev->expected_args = 2; break;
-            case 0xAD: dev->expected_args = 1; break;
-            case 0x81: dev->expected_args = 1; break;
-            case 0x8D: dev->expected_args = 1; break;
-            case 0xA8: dev->expected_args = 1; break;
-            case 0xD3: dev->expected_args = 1; break;
-            case 0xD5: dev->expected_args = 1; break;
-            case 0xD8: dev->expected_args = 1; break;
-            case 0xD9: dev->expected_args = 1; break;
-            case 0xDA: dev->expected_args = 1; break;
-            case 0xDB: dev->expected_args = 1; break;
-            case 0x00: case 0x10:
-                dev->expected_args = 0;
-                break;
-            case 0xB0: case 0xB1: case 0xB2: case 0xB3:
-            case 0xB4: case 0xB5: case 0xB6: case 0xB7:
-                dev->expected_args = 0;
-                break;
-            case 0x15: case 0x16:
-                dev->expected_args = 1;
-                break;
-            default:
-                dev->expected_args = 0;
-        }
+        // Control byte: ONLY determines data stream mode (TS parity).
+        // Bit 6 set = data stream, clear = command stream.
+        // Do NOT process as command here — TS receive() returns immediately.
+        dev->expecting_data = (byte & 0x40) != 0;
         return true;
     }
     
     if (dev->expecting_data) {
-        uint16_t page = dev->page_start;
-        uint16_t col = dev->column_start;
+        uint16_t page = dev->cursor_page;
+        uint16_t col = dev->cursor_column;
         size_t idx = page * dev->width + col;
         if (idx < dev->framebuffer.size()) {
             dev->framebuffer[idx] = byte;
         }
-        dev->column_start++;
-        if (dev->column_start > dev->column_end) {
-            dev->column_start = 0;
-            dev->page_start = (dev->page_start + 1) % dev->pages;
+        // Advance cursor per horizontal addressing mode (0x00)
+        dev->cursor_column++;
+        if (dev->cursor_column > dev->column_end) {
+            dev->cursor_column = dev->column_start;
+            dev->cursor_page++;
+            if (dev->cursor_page > dev->page_end) {
+                dev->cursor_page = dev->page_start;
+            }
         }
+        return true;
+    }
+    
+    // Command processing (when not in data stream and no pending args)
+    if (dev->expected_args == 0) {
+        dev->reg_ptr = byte;
+        dev->cmd_arg_count = 0;
+        // Single-byte commands
+        if (byte == 0xAE) { dev->display_on = 0; return true; }
+        if (byte == 0xAF) { dev->display_on = 1; return true; }
+        if (byte == 0xA0) { dev->segmentRemap = false; return true; }
+        if (byte == 0xA1) { dev->segmentRemap = true; return true; }
+        if (byte == 0xA4 || byte == 0xA6) { return true; }
+        if (byte == 0xC8) { dev->com_scan_dir = 0xC8; return true; }
+        if (byte == 0x40) { return true; }  // display start line (ignored)
+        if (byte >= 0xB0 && byte <= 0xB7) {
+            dev->cursor_page = byte & 0x07;
+            return true;
+        }
+        if (byte <= 0x0F) {
+            dev->cursor_column = (dev->cursor_column & 0xF0) | (byte & 0x0F);
+            return true;
+        }
+        if (byte >= 0x10 && byte <= 0x1F) {
+            dev->cursor_column = (dev->cursor_column & 0x0F) | ((byte & 0x0F) << 4);
+            return true;
+        }
+        // Multi-argument commands
+        if (byte == 0x20) { dev->expected_args = 1; return true; }
+        if (byte == 0x21) { dev->expected_args = 2; return true; }
+        if (byte == 0x22) { dev->expected_args = 2; return true; }
+        if (byte == 0xAD || byte == 0x81 || byte == 0x8D || byte == 0xA8 || byte == 0xD3 || byte == 0xD5 || byte == 0xD8 || byte == 0xD9 || byte == 0xDA || byte == 0xDB) {
+            dev->expected_args = 1;
+            return true;
+        }
+        if (byte == 0x15 || byte == 0x16) { dev->expected_args = 1; return true; }
+        // Unknown command: ignore
         return true;
     }
     
@@ -1060,19 +1062,21 @@ static bool ssd1306_receive(void* ctx, uint8_t byte, bool is_control) {
                 case 0xD9: if (dev->cmd_arg_count >= 1) dev->precharge = dev->cmd_args[0]; break;
                 case 0xDA: if (dev->cmd_arg_count >= 1) dev->com_pins = dev->cmd_args[0]; break;
                 case 0xDB: if (dev->cmd_arg_count >= 1) dev->vcom_detect = dev->cmd_args[0]; break;
-                case 0x15: if (dev->cmd_arg_count >= 1) dev->column_start = dev->cmd_args[0]; break;
-                case 0x16: if (dev->cmd_arg_count >= 1) dev->page_start = dev->cmd_args[0]; break;
+                case 0x15: if (dev->cmd_arg_count >= 1) { dev->column_start = dev->cmd_args[0]; dev->cursor_column = dev->column_start; } break;
+                case 0x16: if (dev->cmd_arg_count >= 1) { dev->page_start = dev->cmd_args[0]; dev->cursor_page = dev->page_start; } break;
             }
         }
         return true;
     }
     
     switch (dev->reg_ptr) {
-        case 0x00: dev->column_start = (dev->column_start & 0xF0) | (byte & 0x0F); break;
-        case 0x10: dev->column_start = (dev->column_start & 0x0F) | ((byte & 0x0F) << 4); break;
+        case 0x00: dev->column_start = (dev->column_start & 0xF0) | (byte & 0x0F); dev->cursor_column = dev->column_start; break;
+        case 0x10: dev->column_start = (dev->column_start & 0x0F) | ((byte & 0x0F) << 4); dev->cursor_column = dev->column_start; break;
         case 0xB0: case 0xB1: case 0xB2: case 0xB3:
         case 0xB4: case 0xB5: case 0xB6: case 0xB7:
-            dev->page_start = dev->reg_ptr & 0x07; break;
+            dev->page_start = dev->reg_ptr & 0x07;
+            dev->cursor_page = dev->page_start;
+            break;
     }
     return true;
 }
@@ -1464,13 +1468,49 @@ static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool 
     if (!chip_selected) return;
     
     if (data_select) {
-        if (dev->expected_args > 0) {
+        if (dev->streaming) {
+            // Streaming pixel data: write to framebuffer at cursor position
+            if (dev->cursor_column < dev->width && dev->cursor_page < dev->height) {
+                uint32_t idx = (dev->cursor_page * dev->width + dev->cursor_column) * 2;
+                if (dev->expect_high_byte) {
+                    if (idx < dev->framebuffer.size()) dev->framebuffer[idx] = byte;
+                } else {
+                    if (idx + 1 < dev->framebuffer.size()) dev->framebuffer[idx + 1] = byte;
+                }
+            }
+            // Advance cursor per TS implementation
+            if (dev->expect_high_byte) {
+                dev->expect_high_byte = false;
+            } else {
+                dev->expect_high_byte = true;
+                dev->cursor_column++;
+                if (dev->cursor_column > dev->column_end) {
+                    dev->cursor_column = dev->column_start;
+                    dev->cursor_page++;
+                    if (dev->cursor_page > dev->page_end) {
+                        dev->cursor_page = dev->page_start;
+                    }
+                }
+            }
+        } else if (dev->expected_args > 0) {
             if (dev->cmd_arg_count < 16) {
                 dev->cmd_args[dev->cmd_arg_count++] = byte;
                 dev->expected_args--;
             }
         }
     } else {
+        // Command byte
+        dev->reg_ptr = byte;
+        dev->cmd_arg_count = 0;
+        // Process any pending command arguments before starting new command
+        if (dev->expected_args == 0 && dev->cmd_arg_count > 0) {
+            switch (dev->reg_ptr) {
+                case 0x2A: if (dev->cmd_arg_count >= 4) { dev->column_start = dev->cmd_args[0]; dev->column_end = dev->cmd_args[1]; dev->cursor_column = dev->column_start; } break;
+                case 0x2B: if (dev->cmd_arg_count >= 4) { dev->page_start = dev->cmd_args[0]; dev->page_end = dev->cmd_args[1]; dev->cursor_page = dev->page_start; } break;
+                case 0x36: if (dev->cmd_arg_count >= 1) dev->madctl = dev->cmd_args[0]; break;
+                case 0x3A: if (dev->cmd_arg_count >= 1) { /* pixel format - ignore */ } break;
+            }
+        }
         dev->reg_ptr = byte;
         dev->cmd_arg_count = 0;
         switch (byte) {
@@ -1480,6 +1520,15 @@ static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool 
             case 0x36: dev->expected_args = 1; break;
             case 0x3A: dev->expected_args = 1; break;
             default: dev->expected_args = 0;
+        }
+        // Handle streaming commands
+        if (byte == 0x2C || byte == 0x2D || byte == 0x3C || byte == 0x2E || byte == 0x3E) {
+            dev->streaming = true;
+            dev->cursor_column = dev->column_start;
+            dev->cursor_page = dev->page_start;
+            dev->expect_high_byte = true;
+        } else {
+            dev->streaming = false;
         }
     }
 }
@@ -1777,7 +1826,7 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         case PART_KIND_DISPLAY_I2C: {
             // SSD1306Context
             SSD1306Context* ctx = static_cast<SSD1306Context*>(inst->impl);
-            snap->framebuffer = ctx->framebuffer.data();
+            snap->framebuffer_offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx->framebuffer.data()));
             snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
             snap->width = ctx->width;
             snap->height = ctx->height;
@@ -1789,13 +1838,13 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             PartContext* base = static_cast<PartContext*>(inst->impl);
             if (base->type() == PartContextType::ILI9341) {
                 ILI9341Context* ctx = static_cast<ILI9341Context*>(base);
-                snap->framebuffer = ctx->framebuffer.data();
+                snap->framebuffer_offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx->framebuffer.data()));
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
-} else if (base->type() == PartContextType::PCD8544) {
+            } else if (base->type() == PartContextType::PCD8544) {
                 PCD8544Context* ctx = static_cast<PCD8544Context*>(base);
-                snap->framebuffer = ctx->framebuffer.data();
+                snap->framebuffer_offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ctx->framebuffer.data()));
                 snap->framebuffer_size = static_cast<uint32_t>(ctx->framebuffer.size());
                 snap->width = ctx->width;
                 snap->height = ctx->height;
