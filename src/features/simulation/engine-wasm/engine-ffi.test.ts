@@ -14,6 +14,8 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ENGINE_EXPORTS } from '../../../../scripts/lib/engine-exports.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..', '..', '..', '..');
 const WASM_PATH = join(ROOT, 'public', 'assets', 'engine.wasm');
@@ -22,46 +24,7 @@ const MANIFEST_PATH = join(ROOT, 'native', 'engine-ffi-manifest.json');
 const SCHEMA_PATH = join(ROOT, 'native', 'abi', 'engine-ffi.schema.json');
 
 /** The engine surface that predates the FFI entry points (phase 1-3). */
-const CORE_EXPORTS = [
-  'wasm_alloc',
-  'set_profiles',
-  'solve',
-  'result_voltages',
-  'result_source_currents',
-  'result_iterations',
-  'element_current',
-  'build_netlist',
-  'netlist_node_of_terminal',
-  'netlist_node_count',
-  'netlist_elements',
-  'netlist_element_count',
-  'netlist_labels',
-  'build_elements',
-  'cpu_step',
-  'cpu_get_pc',
-  'cpu_set_pc',
-  'cpu_get_reg',
-  'cpu_set_reg',
-  'cpu_get_sreg',
-  'cpu_set_sreg',
-  'cpu_get_sp',
-  'cpu_set_sp',
-  'cpu_get_cycles',
-  'cpu_set_cycles',
-  'cpu_get_flash_capacity',
-  'cpu_reset',
-  'cpu_flash_base',
-  'cpu_get_instructions',
-  'cpu_write_pin',
-  'cpu_pin_level',
-  'vm_create',
-  'vm_destroy',
-  'vm_load_sketch',
-  'vm_run',
-  'vm_step',
-  'vm_get_debug_state',
-  'vm_serial_output',
-];
+const CORE_EXPORTS = ENGINE_EXPORTS;
 
 interface EngineExports extends WebAssembly.Exports {
   memory: WebAssembly.Memory;
@@ -77,10 +40,16 @@ interface EngineExports extends WebAssembly.Exports {
   engine_destroy(handle: number): void;
 }
 
-async function instantiate(): Promise<EngineExports> {
+async function instantiate(onMemoryGrowth: () => void = () => {}): Promise<EngineExports> {
   const module = await WebAssembly.compile(readFileSync(WASM_PATH));
   const instance = await WebAssembly.instantiate(module, {
-    env: { js_exp: Math.exp, js_log1p: Math.log1p, js_pow: Math.pow },
+    env: {
+      js_exp: Math.exp,
+      js_log1p: Math.log1p,
+      js_pow: Math.pow,
+      // Emscripten's hook refreshes Module.HEAPU8/HEAPF64/HEAP32 after a raw grow.
+      emscripten_notify_memory_growth: onMemoryGrowth,
+    },
   });
   return instance.exports as unknown as EngineExports;
 }
@@ -123,13 +92,18 @@ describe('Emscripten engine module', () => {
     }
   });
 
-  it('imports only the three host math functions', async () => {
+  it('imports only the host math functions and the growth hook', async () => {
     const module = await WebAssembly.compile(readFileSync(WASM_PATH));
     const imports = WebAssembly.Module.imports(module).map(
       (entry) => `${entry.module}.${entry.name}`,
     );
 
-    expect(imports.sort()).toEqual(['env.js_exp', 'env.js_log1p', 'env.js_pow']);
+    expect(imports.sort()).toEqual([
+      'env.emscripten_notify_memory_growth',
+      'env.js_exp',
+      'env.js_log1p',
+      'env.js_pow',
+    ]);
   });
 
   it('reports the entry-point stub honestly', () => {
@@ -154,7 +128,10 @@ describe('Emscripten engine module', () => {
 
   it('grows linear memory past INITIAL_MEMORY for large workloads', async () => {
     // A fresh instance so the growth check does not depend on test order.
-    const fresh = await instantiate();
+    let growthNotifications = 0;
+    const fresh = await instantiate(() => {
+      growthNotifications += 1;
+    });
     const initial = fresh.memory.buffer.byteLength;
     expect(initial).toBe(32 * 1024 * 1024);
 
@@ -166,6 +143,9 @@ describe('Emscripten engine module', () => {
     expect(pointer).not.toBe(0);
     expect(fresh.memory.buffer.byteLength).toBeGreaterThan(initial);
     expect(fresh.memory.buffer.byteLength).toBeGreaterThanOrEqual(initial + 8 * 1024 * 1024);
+    // The hook is what refreshes the glue's HEAP views; without it the host
+    // reads a detached buffer after the first growth.
+    expect(growthNotifications).toBe(1);
   });
 
   it('emits an ES module glue that loads engine.wasm beside it', () => {

@@ -12,6 +12,12 @@
 
 extern "C" {
 extern unsigned char __heap_base;
+#ifdef __EMSCRIPTEN__
+// Emscripten runtime hook: refreshes Module.HEAPU8/HEAPF64/HEAP32 after a raw
+// memory.grow. Without it the exported views keep pointing at the old buffer,
+// so the host would read zeros after `wasm_alloc` crossed INITIAL_MEMORY.
+void emscripten_notify_memory_growth(size_t memory_index);
+#endif
 }
 
 namespace engine {
@@ -65,6 +71,9 @@ uint32_t alloc_bytes(uint32_t bytes) {
   if (end > memory_bytes) {
     const uintptr_t pages = (end - memory_bytes + 65535u) / 65536u;
     if (__builtin_wasm_memory_grow(0, pages) == static_cast<size_t>(-1)) return 0;
+#ifdef __EMSCRIPTEN__
+    emscripten_notify_memory_growth(0);
+#endif
   }
   const uint32_t result = static_cast<uint32_t>(heap_top);
   heap_top = end;

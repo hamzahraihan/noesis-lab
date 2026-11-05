@@ -79,10 +79,16 @@ describe('FFI Schema Round-trip', () => {
 
   it('PartStateSnapshot fields match between schema and generated TS', () => {
     const tsText = readFileSync(FFI_TYPES, 'utf-8');
+    const start = tsText.indexOf('export interface FFIPartStateSnapshot {');
+    const end = tsText.indexOf('\n}', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const snapshot = tsText.slice(start, end);
     const partStateProps = schema.definitions.PartStateSnapshot.properties;
     for (const prop of Object.keys(partStateProps)) {
-      // Generated TS uses snake_case to match the C++ struct layout.
-      expect(tsText).toContain(prop);
+      // Anchored to a property line: `toContain('framebuffer')` also matches
+      // `framebuffer_size`, so a removed field could slip through.
+      expect(snapshot).toMatch(new RegExp(`^\\s*${prop}\\s*:`, 'm'));
     }
   });
 

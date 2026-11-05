@@ -51,15 +51,16 @@ compile legs. Verify with `npx vitest run <changed paths>` instead; `npm run
 check` is the full gate when there is no cap.
 
 `native/` is invisible to `tsc` and `npm test`. `npm run check:native`
-syntax-checks the two wasm entry points (`native/src/solver.cpp`,
-`native/src/parts/parts.cpp`) and is part of `npm run check`, so run it before
-claiming a C++ change works. The other `.cpp` files are `#include`d by one of
-those two — compiling `elements.cpp` or `units.cpp` on its own fails on purpose.
-A real wasm build needs emsdk; `scripts/lib/parts-build.mjs` (shared by
-`build:parts` and `build:parts:probe`) resolves `emcc` from `$EMCC`, then
-`$EMSDK` (or the in-repo `emsdk/`), then PATH, and writes the artifact the
-differential tests load (`src/features/parts/wasm/parts.wasm`). The two entry
-points differ only in the manifest they record
+syntax-checks the wasm entry points (`native/src/solver.cpp`,
+`native/src/parts/parts.cpp`, and whichever of `native/src/engine_main.cpp` /
+`native/src/engine_ffi_stub.cpp` exists) and is part of `npm run check`, so run
+it before claiming a C++ change works. The other `.cpp` files are `#include`d by
+one of those entry points — compiling `elements.cpp` or `units.cpp` on its own
+fails on purpose. A real wasm build needs emsdk; `scripts/lib/parts-build.mjs`
+(shared by `build:parts` and `build:parts:probe`) resolves `emcc` from `$EMCC`,
+then `$EMSDK` (or the in-repo `emsdk/`), then PATH, and writes the artifact the
+differential tests load (`src/features/parts/wasm/parts.wasm`). The two parts
+entry points differ only in the manifest they record
 (`native/parts-wasm-manifest.json` vs `native/parts-probe-manifest.json`).
 
 `npm run format:check` is not part of `npm run check` and is not a gate: the

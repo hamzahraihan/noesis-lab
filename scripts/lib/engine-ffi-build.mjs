@@ -129,8 +129,10 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function buildFilesFor(target, buildFiles) {
   // The flags live in these scripts, not in the C++ sources, so editing one
-  // must invalidate the cache too.
-  return buildFiles ?? [LIB_FILE, JS_LIBRARY_FILE, EXPORTS_FILE, target.jsLibrary];
+  // must invalidate the cache too. De-duplicated: `target.jsLibrary` and
+  // `JS_LIBRARY_FILE` are the same path, and hashing it twice would make the
+  // key depend on list construction rather than content.
+  return [...new Set(buildFiles ?? [LIB_FILE, JS_LIBRARY_FILE, EXPORTS_FILE, target.jsLibrary])];
 }
 
 export function createEngineFfiBuild(
@@ -143,7 +145,9 @@ export function createEngineFfiBuild(
   const toolVersion = () => {
     try {
       const out = execFileSync(emcc, ['--version'], { encoding: 'utf8', timeout: 10000, env });
-      return out.trim().split('\n')[0];
+      // Trim each line: Windows emcc ends lines with CRLF and the cache key
+      // must not depend on the host's line endings.
+      return out.trim().split('\n')[0].trim();
     } catch {
       return 'unknown';
     }

@@ -1,9 +1,9 @@
 {
   "file": "solver.wasm",
   "wasmSha256": "453731b71c1c5d30f032952147d8ec1e8817b4b43b94bd05607599691e2efcae",
-  "jsSha256": "21f21d71a3d2a0187f9e47c50dac1ea98483d81e37e94d88f0a5e9dd52d19bd7",
-  "sourcesHash": "f77af06212515de50eae1368a99eefd44c44b328773d6a52088c68395e734bc2",
+  "jsSha256": "0b01346530a846caf037ede92581750b7cfce930ff411fe9df22e4db7998757f",
+  "sourcesHash": "c715a200461888b2360f4a22527f6e0b30cc58fd694630ac233bf52e4d83bd92",
   "toolchain": {
-    "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)\r"
+    "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)"
   }
 }

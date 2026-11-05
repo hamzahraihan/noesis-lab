@@ -51,7 +51,8 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 function toolVersion() {
   try {
     const out = execFileSync(EMCC, ['--version'], { encoding: 'utf8', timeout: 10000, env: CHILD_ENV });
-    return out.trim().split('\n')[0];
+    // Trim each line so a Windows CRLF does not change the cache key.
+    return out.trim().split('\n')[0].trim();
   } catch {
     return 'unknown';
   }
@@ -82,6 +83,9 @@ function computeSourcesHash() {
     }
   };
   walk(NATIVE_DIR);
+  // The compiler flags live in this script, so editing it must invalidate the
+  // cache; hashing only the C++ sources would serve a stale artifact.
+  files.push(fileURLToPath(import.meta.url));
   const lines = files
     .sort()
     .map((file) => `${relative(ROOT, file).split(sep).join('/')}\t${sha256(readFileSync(file))}`);
@@ -134,12 +138,16 @@ async function acquireLock() {
 
 function buildOnce() {
   const tag = `${process.pid}-${Date.now()}`;
-  const tmpWasm = join(DIST_DIR, `.build-tmp-solver-${tag}.wasm`);
-  const tmpJs = join(DIST_DIR, `.build-tmp-solver-${tag}.js`);
+  // Compile into a temp directory that still ends in the final basename:
+  // Emscripten bakes the output `.wasm` name into the glue, so compiling to
+  // `.build-tmp-solver-<tag>.js` would leave solver.js fetching a temp name
+  // that the rename removes.
+  const tmpDir = join(DIST_DIR, `.build-tmp-solver-${tag}`);
+  const tmpJs = join(tmpDir, 'solver.js');
+  const tmpWasm = join(tmpDir, 'solver.wasm');
 
   try {
-    // Ensure dist/assets exists
-    mkdirSync(DIST_DIR, { recursive: true });
+    mkdirSync(tmpDir, { recursive: true });
 
     const cppFiles = [
       join(NATIVE_DIR, 'src', 'solver.cpp'),
@@ -182,9 +190,7 @@ function buildOnce() {
 
     // Replace committed artifacts only after compile succeeded
     renameSync(tmpJs, JS_FILE);
-    // The .wasm file is created alongside .js by emcc
-    const generatedWasm = tmpJs.replace('.js', '.wasm');
-    renameSync(generatedWasm, WASM_FILE);
+    renameSync(tmpWasm, WASM_FILE);
 
     const manifest = {
       file: 'solver.wasm',
@@ -202,11 +208,7 @@ function buildOnce() {
       `(${statSync(JS_FILE).size} bytes); sourcesHash ${manifest.sourcesHash}`,
     );
   } finally {
-    rmSync(tmpWasm, { force: true });
-    rmSync(tmpJs, { force: true });
-    // Also clean up any .wasm temp file
-    const tmpWasmFile = join(DIST_DIR, `.build-tmp-solver-${tag}.wasm`);
-    rmSync(tmpWasmFile, { force: true });
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
