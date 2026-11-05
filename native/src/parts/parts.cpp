@@ -67,6 +67,8 @@ enum class PartContextType : uint8_t {
     SHIFT_REGISTER,
     RTC,
     SONAR,
+    DHT,
+    DS18B20,
 };
 
 struct PartContext {
@@ -503,6 +505,19 @@ struct SonarContext : PartContext {
     double distance_cm = 100.0;        // knob-driven target distance (2..400 cm)
     uint16_t echo_us = 5800;           // echo pulse width; echo_us = round(distance_cm * 58)
     PartContextType type() const override { return PartContextType::SONAR; }
+};
+
+// DHT22 temperature/humidity sensor (knob-driven; one-wire timing not modelled)
+struct DHTContext : PartContext {
+    int32_t temp_milli_c = 25000;
+    int32_t humidity_milli_pct = 50000;
+    PartContextType type() const override { return PartContextType::DHT; }
+};
+
+// DS18B20 temperature sensor (knob-driven; one-wire timing not modelled)
+struct DS18B20Context : PartContext {
+    int32_t temp_milli_c = 22000;
+    PartContextType type() const override { return PartContextType::DS18B20; }
 };
 
 // ============================================================================
@@ -2033,6 +2048,17 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->sonar_echo_us = ctx->echo_us;
             break;
         }
+        case PART_KIND_DHT: {
+            DHTContext* ctx = static_cast<DHTContext*>(inst->impl);
+            snap->sensor_temp_milli_c = ctx->temp_milli_c;
+            snap->sensor_humidity_milli_pct = ctx->humidity_milli_pct;
+            break;
+        }
+        case PART_KIND_DS18B20: {
+            DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
+            snap->sensor_temp_milli_c = ctx->temp_milli_c;
+            break;
+        }
         default:
             break;
     }
@@ -2135,6 +2161,17 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
                 ctx->distance_cm = std::clamp(value, 2.0, 400.0);
                 ctx->echo_us = static_cast<uint16_t>(std::lround(ctx->distance_cm * 58.0));
             }
+            break;
+        }
+        case PART_KIND_DHT: {
+            DHTContext* ctx = static_cast<DHTContext*>(inst->impl);
+            if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
+            else if (strcmp(knob_name, "humidity") == 0) ctx->humidity_milli_pct = static_cast<int32_t>(value * 1000.0);
+            break;
+        }
+        case PART_KIND_DS18B20: {
+            DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
+            if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
             break;
         }
         default:
@@ -2625,6 +2662,27 @@ extern "C" void* part_create_neopixel(uint32_t part_id, uint16_t count) {
     PartInstance* inst = static_cast<PartInstance*>(handle);
     // NeoPixel uses 1-wire protocol on a GPIO pin, not SPI/I2C
     // Implementation would be in part_stamp
+    return handle;
+}
+
+extern "C" void* part_create_dht(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_DHT, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    DHTContext* ctx = new DHTContext();
+    ctx->temp_milli_c = 25000;
+    ctx->humidity_milli_pct = 50000;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_ds18b20(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_DS18B20, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    DS18B20Context* ctx = new DS18B20Context();
+    ctx->temp_milli_c = 22000;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 
