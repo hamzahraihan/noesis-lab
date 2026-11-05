@@ -1,0 +1,9 @@
+{
+  "part": "ds18b20",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "temperature", "value": 24.5 }
+  ],
+  "labels": ["temp_milli_c"],
+  "note": "DS18B20 knob-driven: 24.5C -> 24500 milliC"
+}

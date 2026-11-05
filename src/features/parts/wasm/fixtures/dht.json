@@ -1,0 +1,10 @@
+{
+  "part": "dht",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "temperature", "value": 24 },
+    { "kind": "knob", "name": "humidity", "value": 60 }
+  ],
+  "labels": ["temp_milli_c", "humidity_milli_pct"],
+  "note": "DHT22 knob-driven: 24C/60% -> 24000/60000"
+}
