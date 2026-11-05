@@ -106,24 +106,27 @@ describe('Emscripten engine module', () => {
     ]);
   });
 
-  it('reports the entry-point stub honestly', () => {
+  it('runs the firmware VM end to end', () => {
     const countPtr = exportsTable.wasm_alloc(4);
     expect(countPtr).not.toBe(0);
     new Int32Array(exportsTable.memory.buffer, countPtr, 1)[0] = 99;
 
-    expect(exportsTable.engine_create(0, 0)).toBe(0);
-    // #56 replaces the stub; until then every operation must say so.
-    expect(exportsTable.engine_step(1, 1)).toBe(2);
-    expect(exportsTable.engine_set_pin(1, 0, 0, 1)).toBe(2);
-    expect(exportsTable.engine_set_knob(1, 0, 0, 0.5)).toBe(2);
-    expect(exportsTable.engine_get_state(1, countPtr)).toBe(0);
+    // A handle is allocated for a (possibly empty) sketch.
+    const handle = exportsTable.engine_create(0, 0);
+    expect(handle).toBeGreaterThan(0);
+
+    // The VM step loop runs without claiming to have solved anything yet.
+    expect(exportsTable.engine_step(handle, 1)).toBe(0);
+    expect(exportsTable.engine_set_pin(handle, 0, 0, 1)).toBe(2);
+    expect(exportsTable.engine_set_knob(handle, 0, 0, 0.5)).toBe(2);
+    expect(exportsTable.engine_get_state(handle, countPtr)).toBe(0);
     expect(new Int32Array(exportsTable.memory.buffer, countPtr, 1)[0]).toBe(0);
-    expect(exportsTable.engine_get_voltages(1, countPtr)).toBe(0);
+    expect(exportsTable.engine_get_voltages(handle, countPtr)).toBe(0);
     expect(new Int32Array(exportsTable.memory.buffer, countPtr, 1)[0]).toBe(0);
-    const serialPtr = exportsTable.engine_get_serial(1);
+    const serialPtr = exportsTable.engine_get_serial(handle);
     expect(serialPtr).toBeGreaterThan(0);
     expect(new Uint8Array(exportsTable.memory.buffer)[serialPtr]).toBe(0);
-    expect(() => exportsTable.engine_destroy(1)).not.toThrow();
+    expect(() => exportsTable.engine_destroy(handle)).not.toThrow();
   });
 
   it('grows linear memory past INITIAL_MEMORY for large workloads', async () => {

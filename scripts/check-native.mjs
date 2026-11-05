@@ -40,6 +40,7 @@ for (const file of entryPoints) {
       '-D_USE_MATH_DEFINES',
       '-fsyntax-only',
       '-I', include,
+      '-I', join(root, 'src', 'features', 'simulation', 'engine-wasm'),
       file,
     ],
     { encoding: 'utf8' },
