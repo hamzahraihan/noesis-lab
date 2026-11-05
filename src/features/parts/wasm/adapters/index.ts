@@ -23,6 +23,8 @@ import { pca9685Adapter } from './pca9685';
 import { mcp4725Adapter } from './mcp4725';
 import { max6675Adapter } from './max6675';
 import { sonarAdapter } from './sonar';
+import { dhtAdapter } from './dht';
+import { ds18b20Adapter } from './ds18b20';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -46,6 +48,8 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   mcp4725: mcp4725Adapter,
   max6675: max6675Adapter,
   sonar: sonarAdapter,
+  dht: dhtAdapter,
+  ds18b20: ds18b20Adapter,
 };
 
 export * from './pcf8574';
@@ -64,3 +68,5 @@ export * from './pca9685';
 export * from './mcp4725';
 export * from './max6675';
 export * from './sonar';
+export * from './dht';
+export * from './ds18b20';

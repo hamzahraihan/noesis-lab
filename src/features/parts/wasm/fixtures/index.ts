@@ -24,6 +24,8 @@ import pca9685 from './pca9685.json';
 import mcp4725 from './mcp4725.json';
 import max6675 from './max6675.json';
 import sonar from './sonar.json';
+import dht from './dht.json';
+import ds18b20 from './ds18b20.json';
 import type { Stimulus } from '../probe';
 
 export interface Fixture {
@@ -57,6 +59,8 @@ export const FIXTURE_LIST = [
   mcp4725,
   max6675,
   sonar,
+  dht,
+  ds18b20,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs

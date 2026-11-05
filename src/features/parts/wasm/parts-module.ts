@@ -320,6 +320,8 @@ export interface PartsModule {
   part_create_rfid(part_id: number, address: number): number;
   part_create_neopixel(part_id: number, count: number): number;
   part_create_sonar(part_id: number): number;
+  part_create_dht(part_id: number): number;
+  part_create_ds18b20(part_id: number): number;
   part_create_button(part_id: number): number;
   part_create_potentiometer(part_id: number, max_ohms: number): number;
   part_create_power_supply(part_id: number, initial_volts: number): number;
@@ -421,6 +423,8 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_rfid: exp.part_create_rfid as (part_id: number, address: number) => number,
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,
+    part_create_dht: exp.part_create_dht as (part_id: number) => number,
+    part_create_ds18b20: exp.part_create_ds18b20 as (part_id: number) => number,
     part_create_button: exp.part_create_button as (part_id: number) => number,
     part_create_potentiometer: exp.part_create_potentiometer as (part_id: number, max_ohms: number) => number,
     part_create_power_supply: exp.part_create_power_supply as (part_id: number, initial_volts: number) => number,
