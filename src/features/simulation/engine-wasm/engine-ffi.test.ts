@@ -118,7 +118,7 @@ describe('Emscripten engine module', () => {
     // The VM step loop runs without claiming to have solved anything yet.
     expect(exportsTable.engine_step(handle, 1)).toBe(0);
     expect(exportsTable.engine_set_pin(handle, 0, 0, 1)).toBe(1);  // null part_id/pin
-    expect(exportsTable.engine_set_knob(handle, 0, 0, 0.5)).toBe(2);
+    expect(exportsTable.engine_set_knob(handle, 0, 0, 0.5)).toBe(1);  // null part_id/knob
     expect(exportsTable.engine_get_state(handle, countPtr)).toBe(0);
     expect(new Int32Array(exportsTable.memory.buffer, countPtr, 1)[0]).toBe(0);
     expect(exportsTable.engine_get_voltages(handle, countPtr)).toBe(0);
