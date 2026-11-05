@@ -1,0 +1,11 @@
+{
+  "part": "sonar",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "distance", "value": 100 },
+    { "kind": "knob", "name": "distance", "value": 2 },
+    { "kind": "knob", "name": "distance", "value": 400 }
+  ],
+  "labels": ["echo_us"],
+  "note": "HC-SR04 echo width, echo_us = round(distance_cm * 58): 100 -> 5800, 2 -> 116, 400 -> 23200"
+}
