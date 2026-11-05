@@ -50,6 +50,12 @@ void vm_destroy(VM* vm);
 int32_t vm_load_sketch(VM* vm, Program* program);
 int32_t vm_run(VM* vm, int32_t milliseconds);
 const char* vm_serial_output(VM* vm);
+int32_t vm_get_debug_state(VM* vm, char* out, int32_t out_capacity);
+typedef int32_t BreakpointId;
+BreakpointId vm_set_breakpoint(VM* vm, const char* file, int32_t line);
+void vm_clear_breakpoint(VM* vm, BreakpointId id);
+void vm_set_step_over(VM* vm, bool enable);
+void vm_set_step_into(VM* vm, bool enable);
 Program* vm_parse(const char* source, int32_t source_len, const char* file, int32_t file_len);
 void vm_free_program(Program* program);
 int32_t solve(const ElementIn* elements, int32_t element_count, int32_t node_count,
@@ -428,6 +434,8 @@ struct Engine {
   int32_t element_count;
   ElementIn* solve_elements;
   int32_t solve_element_count;
+  char* debug_state;
+  int32_t debug_state_cap;
   bool alive;
 };
 
@@ -467,6 +475,8 @@ void ensure_init() {
     engines[i].element_count = 0;
     engines[i].solve_elements = nullptr;
     engines[i].solve_element_count = 0;
+    engines[i].debug_state = nullptr;
+    engines[i].debug_state_cap = 0;
     engines[i].alive = false;
   }
   engines_inited = true;
@@ -563,6 +573,8 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
   e.previous = nullptr;
   e.previous_count = 0;
   e.alive = true;
+  e.debug_state = nullptr;
+  e.debug_state_cap = 0;
 
   // Sketch.
   if (sketch_json != nullptr) {
@@ -897,6 +909,51 @@ extern "C" const char* engine_get_serial(int32_t handle) {
   Engine* e = lookup(handle);
   if (e == nullptr) return "";
   return (e->serial != nullptr) ? e->serial : "";
+}
+
+extern "C" int32_t engine_set_breakpoint(int32_t handle, int32_t pc) {
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->vm == nullptr) return FFI_ERR_INVALID_HANDLE;
+  vm_set_breakpoint(e->vm, "sketch.cpp", pc);
+  return FFI_OK;
+}
+
+extern "C" void engine_clear_breakpoint(int32_t handle, int32_t id) {
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->vm == nullptr) return;
+  vm_clear_breakpoint(e->vm, id);
+}
+
+extern "C" void engine_set_step_over(int32_t handle, int32_t enable) {
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->vm == nullptr) return;
+  vm_set_step_over(e->vm, enable != 0);
+}
+
+extern "C" void engine_set_step_into(int32_t handle, int32_t enable) {
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->vm == nullptr) return;
+  vm_set_step_into(e->vm, enable != 0);
+}
+
+extern "C" const char* engine_get_debug_state(int32_t handle) {
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->vm == nullptr) return "";
+  if (e->debug_state == nullptr) {
+    e->debug_state_cap = 4096;
+    e->debug_state = reinterpret_cast<char*>(wasm_alloc(static_cast<uint32_t>(e->debug_state_cap)));
+    if (e->debug_state == nullptr) return "";
+  }
+  int32_t n = vm_get_debug_state(e->vm, e->debug_state, e->debug_state_cap);
+  if (n < 0) return "";
+  if (n >= e->debug_state_cap - 1) {
+    // Truncated; grow buffer and retry.
+    e->debug_state_cap *= 2;
+    e->debug_state = reinterpret_cast<char*>(wasm_alloc(static_cast<uint32_t>(e->debug_state_cap)));
+    if (e->debug_state == nullptr) return "";
+    vm_get_debug_state(e->vm, e->debug_state, e->debug_state_cap);
+  }
+  return e->debug_state;
 }
 
 extern "C" void engine_destroy(int32_t handle) {

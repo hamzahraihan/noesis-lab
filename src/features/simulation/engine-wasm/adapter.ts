@@ -31,6 +31,11 @@ interface FfiExports {
   engine_get_state(handle: number, outCount: number): number;
   engine_get_voltages(handle: number, outCount: number): number;
   engine_get_serial(handle: number): number;
+  engine_set_breakpoint(handle: number, pc: number): number;
+  engine_clear_breakpoint(handle: number, id: number): void;
+  engine_set_step_over(handle: number, enable: number): void;
+  engine_set_step_into(handle: number, enable: number): void;
+  engine_get_debug_state(handle: number): number;
   engine_destroy(handle: number): void;
 }
 
@@ -143,12 +148,37 @@ export class WasmEngine {
     return new Map();
   }
 
-  setBreakpoint(_pc: number): void {}
-  continue(): void {}
-  stepOver(): void {}
-  stepInto(): void {}
+  setBreakpoint(pc: number): void {
+    if (!this.module || this.handle === 0) return;
+    this.module.engine_set_breakpoint(this.handle, pc);
+  }
+
+  continue(): void {
+    if (!this.module || this.handle === 0) return;
+    this.module.engine_set_step_over(this.handle, 0);
+    this.module.engine_set_step_into(this.handle, 0);
+  }
+
+  stepOver(): void {
+    if (!this.module || this.handle === 0) return;
+    this.module.engine_set_step_over(this.handle, 1);
+  }
+
+  stepInto(): void {
+    if (!this.module || this.handle === 0) return;
+    this.module.engine_set_step_into(this.handle, 1);
+  }
+
   getDebugState(): unknown {
-    return null;
+    if (!this.module || this.handle === 0) return null;
+    const ptr = this.module.engine_get_debug_state(this.handle);
+    if (ptr === 0) return null;
+    const s = readCString(this.module, ptr);
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s;
+    }
   }
 
   destroy(): void {

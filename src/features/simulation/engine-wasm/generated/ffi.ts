@@ -19,7 +19,7 @@ export type FFIStatus = (typeof FFIStatus)[keyof typeof FFIStatus];
 export const FFI_HANDLE_NONE = 0;
 
 // C entry points the Wasm module exports (see ffi.exports in the schema).
-export const FFI_EXPORTED_FUNCTIONS = ["engine_create","engine_step","engine_set_pin","engine_set_knob","engine_get_state","engine_get_voltages","engine_get_serial","engine_destroy"] as const;
+export const FFI_EXPORTED_FUNCTIONS = ["engine_create","engine_step","engine_set_pin","engine_set_knob","engine_get_state","engine_get_voltages","engine_get_serial","engine_set_breakpoint","engine_clear_breakpoint","engine_set_step_over","engine_set_step_into","engine_get_debug_state","engine_destroy"] as const;
 
 // ============================================================================
 // Commands (UI → Engine)

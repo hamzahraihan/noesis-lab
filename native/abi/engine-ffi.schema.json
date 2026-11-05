@@ -41,6 +41,31 @@
         "parameters": ["int32_t handle"]
       },
       {
+        "name": "engine_set_breakpoint",
+        "returns": "int32_t",
+        "parameters": ["int32_t handle", "int32_t pc"]
+      },
+      {
+        "name": "engine_clear_breakpoint",
+        "returns": "void",
+        "parameters": ["int32_t handle", "int32_t id"]
+      },
+      {
+        "name": "engine_set_step_over",
+        "returns": "void",
+        "parameters": ["int32_t handle", "int32_t enable"]
+      },
+      {
+        "name": "engine_set_step_into",
+        "returns": "void",
+        "parameters": ["int32_t handle", "int32_t enable"]
+      },
+      {
+        "name": "engine_get_debug_state",
+        "returns": "const char*",
+        "parameters": ["int32_t handle"]
+      },
+      {
         "name": "engine_destroy",
         "returns": "void",
         "parameters": ["int32_t handle"]

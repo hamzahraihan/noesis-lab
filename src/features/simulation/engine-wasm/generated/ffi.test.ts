@@ -34,6 +34,11 @@ describe('FFI Schema Round-trip', () => {
       'engine_get_state',
       'engine_get_voltages',
       'engine_get_serial',
+      'engine_set_breakpoint',
+      'engine_clear_breakpoint',
+      'engine_set_step_over',
+      'engine_set_step_into',
+      'engine_get_debug_state',
       'engine_destroy',
     ]);
     for (const entry of schema.ffi.exports) {
