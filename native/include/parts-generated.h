@@ -121,10 +121,16 @@ struct PartStateSnapshot {
 
     // HC-SR04 ultrasonic ranger
     uint16_t sonar_echo_us;
+
+    // INA219 current/power monitor state
+    int32_t ina219_bus_milli_v;
+    int32_t ina219_shunt_micro_v;
+    int32_t ina219_current_milli_a;
+    int32_t ina219_power_milli_w;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 332, "PartStateSnapshot packing failed");

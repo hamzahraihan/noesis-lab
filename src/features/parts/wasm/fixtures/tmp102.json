@@ -1,0 +1,11 @@
+{
+  "part": "tmp102",
+  "factoryArgs": [1, 4, 72],
+  "stimuli": [
+    { "kind": "knob", "name": "temperature", "value": 24.5 },
+    { "kind": "i2c-write", "address": 72, "bytes": [0] },
+    { "kind": "i2c-read", "address": 72, "count": 2 }
+  ],
+  "labels": ["temp_milli_c"],
+  "note": "TMP102 knob-driven: 24.5C -> 24500 milli_c (counts 392 * 62.5)"
+}

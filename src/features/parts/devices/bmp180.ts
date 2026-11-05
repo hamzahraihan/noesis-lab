@@ -223,6 +223,16 @@ export class Bmp180 implements I2cDevice {
     this.stale = true;
   }
 
+  /** Current temperature in milli-Celsius (for differential harness). */
+  getTemperatureMilliC(): number {
+    return Math.round(this.celsius * 1000);
+  }
+
+  /** Current pressure in Pascals (for differential harness). */
+  getPressurePa(): number {
+    return Math.round(this.pascals);
+  }
+
   /**
    * Recomputes the counts the converter holds.
    *

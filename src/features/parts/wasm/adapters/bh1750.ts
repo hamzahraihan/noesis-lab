@@ -10,7 +10,6 @@ import type { Stimulus } from '../probe';
 import type { PartStateSnapshot } from '../parts-module';
 import { Bh1750 } from '@/features/parts/devices/bh1750';
 
-
 export const bh1750Adapter: PartAdapter = {
   kind: 'bh1750',
   labels: ['lux'],
@@ -25,7 +24,6 @@ export const bh1750Adapter: PartAdapter = {
   },
 
   apply(instance: unknown, stimulus: Stimulus, module?: PartsModule): void {
-    console.error('BH1750 apply called with:', stimulus.kind, stimulus);
     if (module) {
       if (stimulus.kind === 'i2c-write') {
         module.i2c_bus_begin_transmission(stimulus.address);
@@ -39,7 +37,6 @@ export const bh1750Adapter: PartAdapter = {
           module.i2c_bus_read();
         }
       } else if (stimulus.kind === 'knob') {
-        console.error('BH1750 knob: calling part_set_knob with', instance, stimulus.name, stimulus.value);
         module.part_set_knob(instance as number, stimulus.name, stimulus.value);
       }
     } else {
@@ -56,13 +53,11 @@ export const bh1750Adapter: PartAdapter = {
     }
   },
 
-  readScalars(_instance: unknown, module?: PartsModule): number[] {
-    if (module) {
-      throw new Error('BH1750: wasm path should use snapshotToScalars');
-    } else {
-      // Bh1750 doesn't expose counts directly - use default
-      return [500];
-    }
+  readScalars(instance: unknown): number[] {
+    const dev = instance as Bh1750;
+    // Trigger a measurement for continuous mode, then read counts
+    dev.read(2);
+    return [dev.getLux()];
   },
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {

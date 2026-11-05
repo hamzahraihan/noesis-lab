@@ -50,6 +50,7 @@ enum class PartContextType : uint8_t {
     BMP180,
     SHT31,
     TMP102,
+    INA219,
     EEPROM,
     MAX6675,
     MFRC522,
@@ -196,6 +197,7 @@ struct MCP4725Context : PartContext {
 // BH1750 - Light sensor (I2C)
 struct BH1750Context : PartContext {
     uint16_t counts = 0;
+    float knob_lux = 250.0f;  // Knob-set light level (default 250 lux)
     bool powered = false;
     uint8_t mode = 0;  // 0=down, 1=continuous, 2=one-shot
     uint8_t resolution = 0;  // 0=high, 1=high2, 2=low
@@ -208,6 +210,8 @@ struct BH1750Context : PartContext {
 struct BMP180Context : PartContext {
     int32_t raw_temperature = 0;
     int32_t raw_pressure = 101325;
+    int32_t knob_temp_milli_c = 25000;  // Knob-set temperature (default 25°C)
+    int32_t knob_pressure_pa = 101325;  // Knob-set pressure (default 1013.25 hPa)
     uint8_t oss = 0;  // oversampling setting
     uint8_t holding = 0;  // 0=temperature, 1=pressure
     uint8_t pointer = 0xF6;
@@ -248,7 +252,26 @@ struct TMP102Context : PartContext {
     uint16_t t_high = 0x5000;
     uint8_t pointer = 0x00;
     uint8_t byte_index = 0;
+    int32_t temp_milli_c = 21000;  // Knob-set (default 21°C)
     PartContextType type() const override { return PartContextType::TMP102; }
+};
+
+// INA219 - Current/power monitor (I2C)
+struct INA219Context : PartContext {
+    // Registers (6 x 16-bit, big-endian)
+    uint16_t config = 0x399F;  // Continuous shunt+bus, gain /8 (40mV), 12-bit
+    uint16_t calibration = 0;
+    uint16_t shunt_voltage = 0;
+    uint16_t bus_voltage = 0;
+    uint16_t current = 0;
+    uint16_t power = 0;
+    // Knob-set conditions
+    double bus_volts = 5.0;
+    double amps = 0.1;
+    uint8_t pointer = 0x00;
+    uint8_t byte_index = 0;
+    bool overflowed = false;
+    PartContextType type() const override { return PartContextType::INA219; }
 };
 
 // EEPROM 24LC256 (I2C)
@@ -1218,6 +1241,18 @@ static void mcp4725_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out
 }
 
 // BH1750 - Light sensor I2C callbacks
+static void bh1750_measure(BH1750Context* dev) {
+    // Scale factors: high=1.2, high2=2.4, low=1.2 (with 4-lux quantization)
+    float scale = (dev->resolution == 1) ? 2.4f : 1.2f;
+    float lux = dev->knob_lux;
+    if (dev->resolution == 2) {
+        // Low-res: quantize to nearest 4 lux before counting
+        lux = std::round(lux / 4.0f) * 4.0f;
+    }
+    dev->counts = static_cast<uint16_t>(std::round(lux * scale));
+    if (dev->counts > 0xFFFF) dev->counts = 0xFFFF;
+}
+
 static bool bh1750_receive(void* ctx, uint8_t byte, bool is_control) {
     BH1750Context* dev = static_cast<BH1750Context*>(ctx);
     if (is_control) return true;
@@ -1227,12 +1262,12 @@ static bool bh1750_receive(void* ctx, uint8_t byte, bool is_control) {
         case 0x00: dev->powered = false; dev->mode = 0; dev->conversion_ready = false; break;
         case 0x01: dev->powered = true; dev->mode = 0; break;
         case 0x07: dev->counts = 0; dev->powered = false; dev->mode = 0; dev->conversion_ready = false; break;
-        case 0x10: dev->powered = true; dev->mode = 1; dev->resolution = 0; dev->conversion_ready = true; break;
-        case 0x11: dev->powered = true; dev->mode = 1; dev->resolution = 1; dev->conversion_ready = true; break;
-        case 0x13: dev->powered = true; dev->mode = 1; dev->resolution = 2; dev->conversion_ready = true; break;
-        case 0x20: dev->powered = true; dev->mode = 2; dev->resolution = 0; dev->conversion_ready = true; break;
-        case 0x21: dev->powered = true; dev->mode = 2; dev->resolution = 1; dev->conversion_ready = true; break;
-        case 0x23: dev->powered = true; dev->mode = 2; dev->resolution = 2; dev->conversion_ready = true; break;
+        case 0x10: dev->powered = true; dev->mode = 1; dev->resolution = 0; bh1750_measure(dev); dev->conversion_ready = true; break;
+        case 0x11: dev->powered = true; dev->mode = 1; dev->resolution = 1; bh1750_measure(dev); dev->conversion_ready = true; break;
+        case 0x13: dev->powered = true; dev->mode = 1; dev->resolution = 2; bh1750_measure(dev); dev->conversion_ready = true; break;
+        case 0x20: dev->powered = true; dev->mode = 2; dev->resolution = 0; bh1750_measure(dev); dev->powered = false; dev->conversion_ready = true; break;
+        case 0x21: dev->powered = true; dev->mode = 2; dev->resolution = 1; bh1750_measure(dev); dev->powered = false; dev->conversion_ready = true; break;
+        case 0x23: dev->powered = true; dev->mode = 2; dev->resolution = 2; bh1750_measure(dev); dev->powered = false; dev->conversion_ready = true; break;
         default: break;
     }
     return true;
@@ -1242,7 +1277,11 @@ static void bh1750_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_
     BH1750Context* dev = static_cast<BH1750Context*>(ctx);
     uint8_t len = std::min<uint8_t>(count, 2);
     
-    if (dev->mode == 1 && dev->powered) dev->conversion_ready = true;
+    if (dev->mode == 1 && dev->powered) {
+        // Continuous mode: measure on read
+        bh1750_measure(dev);
+        dev->conversion_ready = true;
+    }
     
     if (dev->conversion_ready) {
         buffer[0] = static_cast<uint8_t>(dev->counts >> 8);
@@ -1372,19 +1411,106 @@ static bool tmp102_receive(void* ctx, uint8_t byte, bool is_control) {
 static void tmp102_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
     TMP102Context* dev = static_cast<TMP102Context*>(ctx);
     uint8_t len = std::min<uint8_t>(count, 2);
-    
-    int16_t temp_counts = 336;
-    if (dev->pointer == 0x00) {
-        int celsius = 21;
-        temp_counts = static_cast<int16_t>(celsius / 0.0625);
-    }
-    
+
+    // TMP102: 12-bit signed count, left-justified; 1 count = 1/16 C = 62.5 milli-C
+    // temp_milli_c = counts * 62.5 = (counts * 625) / 10
+    // counts = (temp_milli_c * 10) / 625
+    int32_t counts = static_cast<int32_t>((static_cast<int64_t>(dev->temp_milli_c) * 10 + 312) / 625);
+    if (counts > 2047) counts = 2047;
+    if (counts < -2048) counts = -2048;
+    int16_t temp_counts = static_cast<int16_t>(counts);
+
     uint16_t word;
     if (dev->pointer == 0x00) word = static_cast<uint16_t>((temp_counts & 0x0FFF) << 4);
     else if (dev->pointer == 0x01) word = dev->config;
     else if (dev->pointer == 0x02) word = dev->t_low;
     else word = dev->t_high;
-    
+
+    buffer[0] = (word >> 8) & 0xFF; buffer[1] = word & 0xFF;
+    *out_len = len;
+}
+
+// INA219 - Current/power monitor I2C callbacks
+static bool ina219_receive(void* ctx, uint8_t byte, bool is_control) {
+    INA219Context* dev = static_cast<INA219Context*>(ctx);
+    if (is_control) { dev->pointer = byte & 0x07; dev->byte_index = 0; return true; }
+
+    // Write two bytes per register (big-endian), pointer auto-increments after low byte
+    uint16_t current = 0;
+    switch (dev->pointer) {
+        case 0x00: current = dev->config; break;
+        case 0x01: current = dev->shunt_voltage; break;
+        case 0x02: current = dev->bus_voltage; break;
+        case 0x03: current = dev->power; break;
+        case 0x04: current = dev->current; break;
+        case 0x05: current = dev->calibration; break;
+        default: break;
+    }
+
+    uint16_t value = (dev->byte_index == 0)
+        ? (static_cast<uint16_t>(byte) << 8) | (current & 0xFF)
+        : (current & 0xFF00) | byte;
+
+    if (dev->pointer == 0x00) dev->config = value & 0x7FFF;
+    else if (dev->pointer == 0x05) dev->calibration = value & 0xFFFF;
+    // Measurement registers are read-only on the chip; writes change nothing
+
+    dev->byte_index = 1;
+    return true;
+}
+
+static void ina219_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    INA219Context* dev = static_cast<INA219Context*>(ctx);
+    uint8_t len = std::min<uint8_t>(count, 2);
+
+    // Recompute registers from knob conditions
+    const double SHUNT_OHMS = 0.1;
+    const double SHUNT_LSB = 10e-6;   // 10 microvolts
+    const double BUS_LSB = 4e-3;      // 4 millivolts
+
+    double shuntVolts = dev->amps * SHUNT_OHMS;
+    // Gain from config bits 11-12: ranges 40/80/160/320 mV
+    double rangeMV = 40.0;
+    uint8_t gain = (dev->config >> 11) & 0x03;
+    if (gain == 1) rangeMV = 80.0;
+    else if (gain == 2) rangeMV = 160.0;
+    else if (gain == 3) rangeMV = 320.0;
+    double rangeV = rangeMV / 1000.0;
+
+    dev->overflowed = std::abs(shuntVolts) > rangeV;
+    double clamped = std::max(-rangeV, std::min(rangeV, shuntVolts));
+    dev->shunt_voltage = static_cast<uint16_t>(std::round(clamped / SHUNT_LSB));
+
+    uint32_t busRaw = static_cast<uint32_t>(std::round(dev->bus_volts / BUS_LSB));
+    uint16_t flags = 0x0002; // CONVERSION_READY
+    if (dev->overflowed) flags |= 0x0001; // OVERFLOW
+    dev->bus_voltage = static_cast<uint16_t>((busRaw << 3) | flags);
+
+    // Current LSB = 0.04096 / (calibration * shunt_ohms)
+    double currentLsb = 0.0;
+    if (dev->calibration != 0) {
+        currentLsb = 0.04096 / (dev->calibration * SHUNT_OHMS);
+    }
+
+    if (currentLsb == 0.0) {
+        dev->current = 0;
+        dev->power = 0;
+    } else {
+        dev->current = static_cast<uint16_t>(std::round(dev->amps / currentLsb));
+        dev->power = static_cast<uint16_t>(std::round((dev->bus_volts * dev->amps) / (20.0 * currentLsb)));
+    }
+
+    uint16_t word = 0;
+    switch (dev->pointer) {
+        case 0x00: word = dev->config; break;
+        case 0x01: word = dev->shunt_voltage; break;
+        case 0x02: word = dev->bus_voltage; break;
+        case 0x03: word = dev->power; break;
+        case 0x04: word = dev->current; break;
+        case 0x05: word = dev->calibration; break;
+        default: word = 0; break;
+    }
+
     buffer[0] = (word >> 8) & 0xFF; buffer[1] = word & 0xFF;
     *out_len = len;
 }
@@ -1977,26 +2103,18 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_BH1750: {
             BH1750Context* ctx = static_cast<BH1750Context*>(inst->impl);
-            // Compute counts from light level if not already computed
+            // Compute lux from counts using the correct scale for current resolution
             if (ctx->conversion_ready) {
-                snap->sensor_lux = static_cast<int32_t>(ctx->counts / 1.2);  // approximate
+                float scale = (ctx->resolution == 1) ? 2.4f : 1.2f;
+                snap->sensor_lux = static_cast<int32_t>(std::round(ctx->counts / scale));
             }
             break;
         }
         case PART_KIND_BMP180: {
             BMP180Context* ctx = static_cast<BMP180Context*>(inst->impl);
-            if (ctx->stale) {
-                ctx->raw_temperature = 27898;  // ~25°C in tenths
-                ctx->raw_pressure = 101325;
-                ctx->stale = false;
-            }
-            // Temperature in milli-Celsius: convert from raw ADC counts
-            // raw_temp = (celsius + 45) * 65535 / 175
-            // celsius = raw_temp * 175 / 65535 - 45
-            int32_t celsius_milli = static_cast<int32_t>((static_cast<int64_t>(ctx->raw_temperature) * 175000 + 32767) / 65535 - 45000);
-            snap->sensor_temp_milli_c = celsius_milli;
-            // Pressure in Pa
-            snap->sensor_pressure_pa = static_cast<int32_t>(ctx->raw_pressure);
+            // Return knob-driven values directly for accurate snapshot
+            snap->sensor_temp_milli_c = ctx->knob_temp_milli_c;
+            snap->sensor_pressure_pa = ctx->knob_pressure_pa;
             break;
         }
         case PART_KIND_SHT31: {
@@ -2017,12 +2135,15 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_TMP102: {
             TMP102Context* ctx = static_cast<TMP102Context*>(inst->impl);
-            int16_t temp_counts = 336;
-            if (ctx->pointer == 0x00) {
-                int celsius = 21;
-                temp_counts = static_cast<int16_t>(celsius / 0.0625);
-            }
-            snap->sensor_temp_milli_c = static_cast<int32_t>(temp_counts * 625);  // 0.0625°C = 62.5 milli°C
+            snap->sensor_temp_milli_c = ctx->temp_milli_c;
+            break;
+        }
+        case PART_KIND_INA219: {
+            INA219Context* ctx = static_cast<INA219Context*>(inst->impl);
+            snap->ina219_bus_milli_v = static_cast<int32_t>(std::round(ctx->bus_volts * 1000.0));
+            snap->ina219_shunt_micro_v = static_cast<int32_t>(std::round((ctx->amps * 0.1) * 1e6));
+            snap->ina219_current_milli_a = static_cast<int32_t>(std::round(ctx->amps * 1000.0));
+            snap->ina219_power_milli_w = static_cast<int32_t>(std::round(ctx->bus_volts * ctx->amps * 1000.0));
             break;
         }
         case PART_KIND_PWM_DRIVER: {
@@ -2109,8 +2230,15 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_BH1750: {
             BH1750Context* ctx = static_cast<BH1750Context*>(inst->impl);
             if (knob_name && knob_name[0] == 'l' && knob_name[1] == 'i' && knob_name[2] == 'g' && knob_name[3] == 'h' && knob_name[4] == 't' && knob_name[5] == '\0') {
-                // 1.2 counts per lux for high-res mode
-                ctx->counts = static_cast<uint16_t>(value * 1.2);
+                ctx->knob_lux = static_cast<float>(value);
+                // Re-measure with current resolution
+                float scale = (ctx->resolution == 1) ? 2.4f : 1.2f;
+                float lux = ctx->knob_lux;
+                if (ctx->resolution == 2) {
+                    lux = std::round(lux / 4.0f) * 4.0f;
+                }
+                ctx->counts = static_cast<uint16_t>(std::round(lux * scale));
+                if (ctx->counts > 0xFFFF) ctx->counts = 0xFFFF;
                 ctx->conversion_ready = true;
             }
             break;
@@ -2118,11 +2246,12 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_BMP180: {
             BMP180Context* ctx = static_cast<BMP180Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) {
-                // Temperature in Celsius
-                ctx->raw_temperature = static_cast<int32_t>((value + 45) * 65535 / 175);
+                ctx->knob_temp_milli_c = static_cast<int32_t>(std::round(value * 1000.0));
+                // Also update raw_temperature for I2C reads (linear approx inverse)
+                ctx->raw_temperature = static_cast<int32_t>((value + 45.0) * 65535.0 / 175.0);
             } else if (strcmp(knob_name, "pressure") == 0) {
-                // Pressure in hPa -> Pa
-                ctx->raw_pressure = static_cast<int32_t>(value * 100);
+                ctx->knob_pressure_pa = static_cast<int32_t>(std::round(value * 100.0));
+                ctx->raw_pressure = ctx->knob_pressure_pa;
             }
             ctx->stale = false;
             break;
@@ -2141,6 +2270,25 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             if (strcmp(knob_name, "clear") == 0) {
                 ctx->cursor = 0;
                 for (int i = 0; i < 80; i++) ctx->chars[i] = 0x20;  // space
+            }
+            break;
+        }
+        case PART_KIND_TMP102: {
+            TMP102Context* ctx = static_cast<TMP102Context*>(inst->impl);
+            if (strcmp(knob_name, "temperature") == 0) {
+                int32_t counts = static_cast<int32_t>((value / 0.0625) + 0.5);
+                if (counts > 2047) counts = 2047;
+                if (counts < -2048) counts = -2048;
+                ctx->temp_milli_c = (counts * 625) / 10;  // 1 count = 1/16 C = 62.5 milli-C
+            }
+            break;
+        }
+        case PART_KIND_INA219: {
+            INA219Context* ctx = static_cast<INA219Context*>(inst->impl);
+            if (strcmp(knob_name, "bus") == 0) {
+                ctx->bus_volts = std::clamp(value, 0.0, 36.0);
+            } else if (strcmp(knob_name, "current") == 0) {
+                ctx->amps = std::clamp(value / 1000.0, 0.0, 3.2);
             }
             break;
         }
@@ -2563,6 +2711,18 @@ extern "C" void* part_create_sensor_i2c(uint32_t part_id, uint8_t type, uint8_t 
             dev->receive = tmp102_receive;
             dev->read = tmp102_read;
             inst->kind = PART_KIND_TMP102;
+            break;
+        }
+        case 5: {  // INA219
+            INA219Context* ctx = new INA219Context();
+            inst->impl = ctx;
+            g_part_impls.push_back(ctx);
+            void* dev_handle = i2c_bus_register_device(address, part_id);
+            I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+            dev->ctx = ctx;
+            dev->receive = ina219_receive;
+            dev->read = ina219_read;
+            inst->kind = PART_KIND_INA219;
             break;
         }
         default:
