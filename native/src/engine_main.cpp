@@ -413,6 +413,13 @@ struct Engine {
   int32_t* pin_term_vals;
   int32_t pin_term_count;
   int32_t pin_term_cap;
+  // Knobs.
+  double* knob_values;
+  int32_t knob_count;
+  char** knob_keys;
+  int32_t* knob_vals;
+  int32_t knob_map_count;
+  int32_t knob_map_cap;
   // Solve state.
   double* voltages;
   double* previous;
@@ -447,6 +454,12 @@ void ensure_init() {
     engines[i].pin_term_vals = nullptr;
     engines[i].pin_term_count = 0;
     engines[i].pin_term_cap = 0;
+    engines[i].knob_values = nullptr;
+    engines[i].knob_count = 0;
+    engines[i].knob_keys = nullptr;
+    engines[i].knob_vals = nullptr;
+    engines[i].knob_map_count = 0;
+    engines[i].knob_map_cap = 0;
     engines[i].voltages = nullptr;
     engines[i].previous = nullptr;
     engines[i].previous_count = 0;
@@ -750,8 +763,8 @@ extern "C" int32_t engine_step(int32_t handle, double dt_ms) {
     in.terminal_count = e->terminal_count;
     in.pin_node = e->pin_node;
     in.time_ms = static_cast<double>(/*ms*/ 0);
-    in.knob_values = nullptr;
-    in.knob_count = 0;
+    in.knob_values = e->knob_values;
+    in.knob_count = e->knob_count;
     in.pin_levels = e->pin_levels;
     in.pin_level_count = e->pin_level_count;
     in.supply_net = -1;
@@ -825,8 +838,35 @@ extern "C" int32_t engine_set_pin(int32_t handle, const char* part_id, const cha
 }
 
 extern "C" int32_t engine_set_knob(int32_t handle, const char* part_id, const char* knob, double value) {
-  (void)handle; (void)part_id; (void)knob; (void)value;
-  return FFI_ERR_NOT_IMPLEMENTED;
+  Engine* e = lookup(handle);
+  if (e == nullptr) return FFI_ERR_INVALID_HANDLE;
+  if (part_id == nullptr || knob == nullptr) return FFI_ERR_INVALID_HANDLE;
+  int32_t a = strlen_(part_id);
+  int32_t b = strlen_(knob);
+  int32_t keylen = a + 1 + b;
+  char* key = reinterpret_cast<char*>(wasm_alloc(static_cast<uint32_t>(keylen + 1)));
+  if (key == nullptr) return FFI_ERR_INVALID_HANDLE;
+  for (int32_t i = 0; i < a; i++) key[i] = part_id[i];
+  key[a] = ':';
+  for (int32_t i = 0; i < b; i++) key[a + 1 + i] = knob[i];
+  key[keylen] = ' ';
+  for (int32_t i = 0; i < e->knob_map_count; i++) {
+    const char* k = e->knob_keys[i];
+    bool same = true;
+    int32_t j = 0;
+    while (k[j] != ' ' || key[j] != ' ') {
+      if (k[j] != key[j]) { same = false; break; }
+      j++;
+    }
+    if (same) {
+      int32_t idx = e->knob_vals[i];
+      if (idx >= 0 && idx < e->knob_count && e->knob_values != nullptr) {
+        e->knob_values[idx] = value;
+      }
+      return FFI_OK;
+    }
+  }
+  return FFI_ERR_INVALID_HANDLE;
 }
 
 extern "C" const FFIPartStateSnapshot* engine_get_state(int32_t handle, int32_t* out_count) {
