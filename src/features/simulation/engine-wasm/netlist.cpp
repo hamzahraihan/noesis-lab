@@ -1306,21 +1306,45 @@ extern "C" int32_t build_elements(
   if (!input->node_of_terminal && input->terminal_count > 0) return -2;
   if (!input->pin_node && input->terminal_count > 0) return -2;
 
-  // Reconstruct netlist elements from input
-  // Note: We'll just copy existing elements for now; dynamic parts are added below
-  // For Phase 2 MVP, we just copy the netlist elements and add dynamic parts
-  // based on the dynamic state (time_ms, pin levels, knob values, etc.)
-
-  // For now, just copy existing elements
-  // Full implementation would replicate engine.ts buildElements() logic
-  if (input->netlist_element_count > 0) {
-    output->elements = reinterpret_cast<ElementOut*>(
-        alloc_bytes(static_cast<uint32_t>(input->netlist_element_count) * sizeof(ElementOut)));
-    if (!output->elements) return -2;
-    for (int32_t i = 0; i < input->netlist_element_count; ++i) {
-      output->elements[i] = input->netlist_elements[i];
+  // Count driven pins (those with a valid node and an explicit level).
+  int32_t extra = 0;
+  if (input->pin_levels != nullptr && input->pin_node != nullptr) {
+    for (int32_t t = 0; t < input->terminal_count; t++) {
+      if (input->pin_node[t] == 0xFFFFFFFFu) continue;
+      if (t >= input->pin_level_count) continue;
+      uint32_t lvl = input->pin_levels[t];
+      if (lvl == 0 || lvl == 1) extra++;
     }
   }
-  output->element_count = input->netlist_element_count;
+
+  const int32_t total = input->netlist_element_count + extra;
+  if (total > 0) {
+    output->elements = reinterpret_cast<ElementOut*>(
+        alloc_bytes(static_cast<uint32_t>(total) * sizeof(ElementOut)));
+    if (!output->elements) return -2;
+  } else {
+    output->elements = nullptr;
+  }
+  for (int32_t i = 0; i < input->netlist_element_count; i++) {
+    output->elements[i] = input->netlist_elements[i];
+  }
+  int32_t idx = input->netlist_element_count;
+  if (input->pin_levels != nullptr && input->pin_node != nullptr) {
+    for (int32_t t = 0; t < input->terminal_count; t++) {
+      if (input->pin_node[t] == 0xFFFFFFFFu) continue;
+      if (t >= input->pin_level_count) continue;
+      uint32_t lvl = input->pin_levels[t];
+      if (lvl != 0 && lvl != 1) continue;
+      ElementOut& el = output->elements[idx++];
+      el.kind = KIND_VOLTAGE_SOURCE;
+      el.a = static_cast<int32_t>(input->pin_node[t]);
+      el.b = -1;  // reference node handled by solver's ground convention
+      el.profile = -1;
+      el.label_offset = 0;
+      el.pad = 0;
+      el.value = (lvl == 1) ? 5.0 : 0.0;
+    }
+  }
+  output->element_count = idx;
   return 0;
 }
