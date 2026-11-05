@@ -127,6 +127,10 @@ export class Mcp23017 implements I2cDevice {
   /** False until the first sample, so power-up is not an interrupt. */
   private sampledOnce = false;
 
+  /** Interrupt flag and capture registers (set on input change). */
+  private readonly intf = new Uint8Array(2);
+  private readonly intcap = new Uint8Array(2);
+
   constructor() {
     this.registers[IODIR_A] = 0xff;
     this.registers[IODIR_B] = 0xff;
@@ -246,8 +250,8 @@ export class Mcp23017 implements I2cDevice {
           if (matches) hit |= mask;
         }
         if (hit !== 0) {
-          this.registers[INTF_A + port] = this.registers[INTF_A + port]! | hit;
-          this.registers[INTCAP_A + port] = current;
+          this.intf[port] = this.intf[port]! | hit;
+          this.intcap[port] = current;
         }
       }
       this.sampled[port] = current;
@@ -270,8 +274,8 @@ export class Mcp23017 implements I2cDevice {
     const iocon = this.registers[IOCON_A]!;
     const mirrored = (iocon & IOCON_MIRROR) !== 0;
     const asserted = mirrored
-      ? (this.registers[INTF_A]! | this.registers[INTF_B]!) !== 0
-      : this.registers[port === 0 ? INTF_A : INTF_B]! !== 0;
+      ? (this.intf[0]! | this.intf[1]!) !== 0
+      : this.intf[port]! !== 0;
     if ((iocon & IOCON_ODR) !== 0) return asserted ? false : null;
     const activeHigh = (iocon & IOCON_INTPOL) !== 0;
     return asserted ? activeHigh : !activeHigh;
@@ -296,13 +300,46 @@ export class Mcp23017 implements I2cDevice {
     }
     if (register === GPIO_A || register === OLAT_A) {
       this.registers[OLAT_A] = value;
+      this.handleInterrupts(0, value);
       return;
     }
     if (register === GPIO_B || register === OLAT_B) {
       this.registers[OLAT_B] = value;
+      this.handleInterrupts(1, value);
       return;
     }
     this.registers[register] = value;
+  }
+
+  /** Detect input change on a port and set INTF/INTCAP per the datasheet. */
+  private handleInterrupts(port: 0 | 1, newValue: number): void {
+    const base = port === 0 ? 0 : 1;
+    const iodir = this.registers[IODIR_A + base]!;
+    const gpint = this.registers[GPINTEN_A + base]!;
+    const intcon = this.registers[INTCON_A + base]!;
+    const defval = this.registers[DEFVAL_A + base]!;
+
+    const enabled = gpint & iodir; // only input pins with GPINTEN can interrupt
+    const changed =
+      this.sampledOnce ? (this.sampled[port]! ^ newValue) & enabled : 0;
+
+    let hit = 0;
+    for (let bit = 0; bit < 8; bit++) {
+      const mask = 1 << bit;
+      if ((changed & mask) === 0) continue;
+      const matches =
+        (intcon & mask) !== 0
+          ? ((newValue ^ defval) & mask) !== 0
+          : (changed & mask) !== 0;
+      if (matches) hit |= mask;
+    }
+
+    if (hit !== 0) {
+      this.intf[port] |= hit;
+      this.intcap[port] = newValue;
+    }
+    this.sampled[port] = newValue;
+    this.sampledOnce = true;
   }
 
   private readRegister(register: number): number {
@@ -316,18 +353,19 @@ export class Mcp23017 implements I2cDevice {
      */
     if (register === GPIO_A) {
       const value = this.gpio(0, this.registers[IPOL_A]!);
-      this.registers[INTF_A] = 0;
+      this.intf[0] = 0;
       return value;
     }
     if (register === GPIO_B) {
       const value = this.gpio(8, this.registers[IPOL_B]!);
-      this.registers[INTF_B] = 0;
+      this.intf[1] = 0;
       return value;
     }
-    if (register === INTF_A || register === INTF_B) return this.registers[register]!;
+    if (register === INTF_A || register === INTF_B)
+      return this.intf[register === INTF_A ? 0 : 1]!;
     if (register === INTCAP_A || register === INTCAP_B) {
-      const value = this.registers[register]!;
-      this.registers[register === INTCAP_A ? INTF_A : INTF_B] = 0;
+      const value = this.intcap[register === INTCAP_A ? 0 : 1]!;
+      this.intf[register === INTCAP_A ? 0 : 1] = 0;
       return value;
     }
     if (register === OLAT_A) return this.latch(0);

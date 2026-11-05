@@ -32,6 +32,8 @@ export const pca9685Adapter: PartAdapter = {
       } else if (stimulus.kind === 'i2c-read') {
         module.i2c_bus_request_from(stimulus.address, stimulus.count);
         for (let i = 0; i < stimulus.count; i++) module.i2c_bus_read();
+      } else if (stimulus.kind === 'knob' && stimulus.name === 'oe') {
+        module.part_set_knob(instance as number, stimulus.name, stimulus.value);
       }
     } else {
       const dev = instance as Pca9685;
@@ -39,6 +41,8 @@ export const pca9685Adapter: PartAdapter = {
         stimulus.bytes.forEach((byte: number, idx: number) => dev.receive(byte, idx === 0));
       } else if (stimulus.kind === 'i2c-read') {
         dev.read(stimulus.count);
+      } else if (stimulus.kind === 'knob' && stimulus.name === 'oe') {
+        dev.setOE(stimulus.value !== 0);
       }
     }
   },

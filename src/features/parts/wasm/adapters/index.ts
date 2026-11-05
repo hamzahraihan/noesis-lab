@@ -42,6 +42,8 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   hd44780: hd44780Adapter,
   bh1750: bh1750Adapter,
   bmp180: bmp180Adapter,
+  'mcp23017-int': mcp23017Adapter,
+  'pca9685-oe': pca9685Adapter,
   sht31: sht31Adapter,
   eeprom24lc256: eeprom24lc256Adapter,
   pca9685: pca9685Adapter,

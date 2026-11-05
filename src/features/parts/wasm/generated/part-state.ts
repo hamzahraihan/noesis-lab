@@ -68,6 +68,10 @@ export interface PartStateSnapshot {
   mcp23017_gpiob: number;
   mcp23017_olata: number;
   mcp23017_olatb: number;
+  mcp23017_intfa: number;
+  mcp23017_intfb: number;
+  mcp23017_intcapa: number;
+  mcp23017_intcapb: number;
 
   // ADS1115 ADC state
   ads1115_config: number;

@@ -6,6 +6,7 @@
  */
 import pcf8574 from './pcf8574.json';
 import mcp23017 from './mcp23017.json';
+import mcp23017Int from './mcp23017-int.json';
 import ads1115 from './ads1115.json';
 import shift595 from './shift595.json';
 import pcd8544 from './pcd8544.json';
@@ -21,6 +22,7 @@ import bmp180 from './bmp180.json';
 import sht31 from './sht31.json';
 import eeprom24lc256 from './eeprom24lc256.json';
 import pca9685 from './pca9685.json';
+import pca9685Oe from './pca9685-oe.json';
 import mcp4725 from './mcp4725.json';
 import max6675 from './max6675.json';
 import sonar from './sonar.json';
@@ -53,6 +55,9 @@ export const FIXTURE_LIST = [
   hd44780,
   bh1750,
   bmp180,
+  mcp23017Int,
+  pca9685,
+  pca9685Oe,
   sht31,
   eeprom24lc256,
   pca9685,

@@ -69,6 +69,10 @@ struct PartStateSnapshot {
     uint8_t mcp23017_gpiob;
     uint8_t mcp23017_olata;
     uint8_t mcp23017_olatb;
+    uint8_t mcp23017_intfa;
+    uint8_t mcp23017_intfb;
+    uint8_t mcp23017_intcapa;
+    uint8_t mcp23017_intcapb;
 
     // ADS1115 ADC state
     uint16_t ads1115_config;
@@ -127,4 +131,4 @@ struct PartStateSnapshot {
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 320, "PartStateSnapshot packing failed");

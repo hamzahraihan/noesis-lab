@@ -160,6 +160,10 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     mcp23017_gpiob: rU8(),
     mcp23017_olata: rU8(),
     mcp23017_olatb: rU8(),
+    mcp23017_intfa: rU8(),
+    mcp23017_intfb: rU8(),
+    mcp23017_intcapa: rU8(),
+    mcp23017_intcapb: rU8(),
 
     // ADS1115 ADC state
     ads1115_config: rU16(),

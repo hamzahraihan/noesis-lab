@@ -111,6 +111,7 @@ struct MCP23017Context : PartContext {
     
     uint8_t reg_ptr = 0x00;  // Current register pointer
     bool seqop = false;      // Sequential operation mode
+    bool sampled_once = false;  // First sample is baseline only, no interrupt
     PartContextType type() const override { return PartContextType::MCP23017; }
 };
 
@@ -129,6 +130,7 @@ struct PCA9685Context : PartContext {
     uint8_t all_led_off_h = 0;
     uint8_t reg_ptr = 0x00;
     bool auto_increment = false;
+    bool oe = false;  // Output Enable asserted (active low): holds all outputs low
     PartContextType type() const override { return PartContextType::PCA9685; }
 };
 
@@ -856,8 +858,64 @@ static bool mcp23017_receive(void* ctx, uint8_t byte, bool is_control) {
         case 0x0F: break;  // Read-only
         case 0x10: break;  // Read-only
         case 0x11: break;  // Read-only
-        case 0x12: dev->gpioa = byte; dev->olata = byte; break;
-        case 0x13: dev->gpiob = byte; dev->olatb = byte; break;
+        case 0x12: {
+            uint8_t new_val = byte;
+            uint8_t changed = new_val ^ dev->gpioa;
+            uint8_t enabled = dev->gpinta & dev->iodira;  // input pins with GPINTEN
+            uint8_t input_changed = changed & enabled;
+            if (dev->sampled_once && input_changed != 0) {
+                uint8_t compares = dev->intcona;
+                uint8_t defval = dev->defvala;
+                uint8_t hit = 0;
+                for (int bit = 0; bit < 8; bit++) {
+                    uint8_t mask = 1 << bit;
+                    if ((input_changed & mask) == 0) continue;
+                    if ((compares & mask) != 0) {
+                        // INTCON=1: level compare against DEFVAL
+                        if ((new_val ^ defval) & mask) hit |= mask;
+                    } else {
+                        // INTCON=0: edge compare (change from sampled baseline)
+                        hit |= mask;
+                    }
+                }
+                if (hit != 0) {
+                    dev->intfa |= hit;
+                    dev->intcapa = new_val;
+                }
+            }
+            dev->gpioa = new_val;
+            dev->olata = new_val;
+            dev->sampled_once = true;
+            break;
+        }
+        case 0x13: {
+            uint8_t new_val = byte;
+            uint8_t changed = new_val ^ dev->gpiob;
+            uint8_t enabled = dev->gpintb & dev->iodirb;
+            uint8_t input_changed = changed & enabled;
+            if (dev->sampled_once && input_changed != 0) {
+                uint8_t compares = dev->intconb;
+                uint8_t defval = dev->defvalb;
+                uint8_t hit = 0;
+                for (int bit = 0; bit < 8; bit++) {
+                    uint8_t mask = 1 << bit;
+                    if ((input_changed & mask) == 0) continue;
+                    if ((compares & mask) != 0) {
+                        if ((new_val ^ defval) & mask) hit |= mask;
+                    } else {
+                        hit |= mask;
+                    }
+                }
+                if (hit != 0) {
+                    dev->intfb |= hit;
+                    dev->intcapb = new_val;
+                }
+            }
+            dev->gpiob = new_val;
+            dev->olatb = new_val;
+            dev->sampled_once = true;
+            break;
+        }
         case 0x14: dev->olata = byte; break;
         case 0x15: dev->olatb = byte; break;
     }
@@ -893,10 +951,10 @@ static void mcp23017_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* ou
             case 0x0D: buffer[i] = dev->gppub; break;
             case 0x0E: buffer[i] = dev->intfa; break;
             case 0x0F: buffer[i] = dev->intfb; break;
-            case 0x10: buffer[i] = dev->intcapa; break;
-            case 0x11: buffer[i] = dev->intcapb; break;
-            case 0x12: buffer[i] = dev->gpioa; break;
-            case 0x13: buffer[i] = dev->gpiob; break;
+            case 0x10: buffer[i] = dev->intcapa; dev->intfa = 0; break;
+            case 0x11: buffer[i] = dev->intcapb; dev->intfb = 0; break;
+            case 0x12: buffer[i] = dev->gpioa; dev->intfa = 0; break;
+            case 0x13: buffer[i] = dev->gpiob; dev->intfb = 0; break;
             case 0x14: buffer[i] = dev->olata; break;
             case 0x15: buffer[i] = dev->olatb; break;
             default: buffer[i] = 0x00;
@@ -1953,6 +2011,10 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
                 snap->mcp23017_gpiob = ctx->gpiob;
                 snap->mcp23017_olata = ctx->olata;
                 snap->mcp23017_olatb = ctx->olatb;
+                snap->mcp23017_intfa = ctx->intfa;
+                snap->mcp23017_intfb = ctx->intfb;
+                snap->mcp23017_intcapa = ctx->intcapa;
+                snap->mcp23017_intcapb = ctx->intcapb;
             }
             break;
         }
@@ -2029,8 +2091,10 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             PCA9685Context* ctx = static_cast<PCA9685Context*>(inst->impl);
             snap->pca9685_prescale = ctx->prescale;
             for (int i = 0; i < 16; i++) {
-                // duty counts mirror TS `duty()`: OFF wins, ON wins, else (end-start) mod 4096 counts
-                if (ctx->mode1 & 0x10) { snap->pca9685_duty[i] = 0; continue; }  // oscillator sleep holds outputs low
+                // OE asserted holds all outputs low
+                if (ctx->oe) { snap->pca9685_duty[i] = 0; continue; }
+                // oscillator sleep holds outputs low
+                if (ctx->mode1 & 0x10) { snap->pca9685_duty[i] = 0; continue; }
                 uint16_t on = (ctx->led_on_l[i] | (ctx->led_on_h[i] << 8));
                 uint16_t off = (ctx->led_off_l[i] | (ctx->led_off_h[i] << 8));
                 if ((off & 0x1000) != 0) { snap->pca9685_duty[i] = 0; }
@@ -2172,6 +2236,11 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_DS18B20: {
             DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
+            break;
+        }
+        case PART_KIND_PWM_DRIVER: {
+            PCA9685Context* ctx = static_cast<PCA9685Context*>(inst->impl);
+            if (strcmp(knob_name, "oe") == 0) ctx->oe = (value != 0.0);
             break;
         }
         default:

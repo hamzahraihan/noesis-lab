@@ -1,0 +1,13 @@
+{
+  "part": "mcp23017-int",
+  "factoryArgs": [3, 32],
+  "stimuli": [
+    { "kind": "i2c-write", "address": 32, "bytes": [0, 255] },
+    { "kind": "i2c-write", "address": 32, "bytes": [4, 255] },
+    { "kind": "i2c-write", "address": 32, "bytes": [12, 1] },
+    { "kind": "i2c-write", "address": 32, "bytes": [14] },
+    { "kind": "i2c-read", "address": 32, "count": 1 }
+  ],
+  "labels": ["iodira", "iodirb", "gpioa", "gpiob", "olata", "olatb", "intfa", "intfb", "intcapa", "intcapb"],
+  "note": "MCP23017 interrupt-on-change: iodira=all inputs, gpinta=all, gpioa=0x01 -> intfa=1, intcapa=0x01"
+}

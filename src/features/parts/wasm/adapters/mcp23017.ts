@@ -18,6 +18,10 @@ declare module '@/features/parts/devices/mcp23017' {
     readonly gpiob: number;
     readonly olata: number;
     readonly olatb: number;
+    readonly intfa: number;
+    readonly intfb: number;
+    readonly intcapa: number;
+    readonly intcapb: number;
   }
 }
 
@@ -27,10 +31,17 @@ Object.defineProperty(Mcp23017.prototype, 'gpioa', { get() { return (this as any
 Object.defineProperty(Mcp23017.prototype, 'gpiob', { get() { return (this as any).registers[0x13]; } });
 Object.defineProperty(Mcp23017.prototype, 'olata', { get() { return (this as any).registers[0x14]; } });
 Object.defineProperty(Mcp23017.prototype, 'olatb', { get() { return (this as any).registers[0x15]; } });
+Object.defineProperty(Mcp23017.prototype, 'intfa', { get() { return (this as any).intf[0]; } });
+Object.defineProperty(Mcp23017.prototype, 'intfb', { get() { return (this as any).intf[1]; } });
+Object.defineProperty(Mcp23017.prototype, 'intcapa', { get() { return (this as any).intcap[0]; } });
+Object.defineProperty(Mcp23017.prototype, 'intcapb', { get() { return (this as any).intcap[1]; } });
 
 export const mcp23017Adapter: PartAdapter = {
   kind: 'mcp23017',
-  labels: ['iodira', 'iodirb', 'gpioa', 'gpiob', 'olata', 'olatb'],
+  labels: [
+    'iodira', 'iodirb', 'gpioa', 'gpiob', 'olata', 'olatb',
+    'intfa', 'intfb', 'intcapa', 'intcapb',
+  ],
 
   create(factoryArgs: unknown[], module?: PartsModule): unknown {
     const [part_id, address] = factoryArgs as [number, number];
@@ -68,12 +79,15 @@ export const mcp23017Adapter: PartAdapter = {
       throw new Error('MCP23017: wasm path should use snapshotToScalars');
     } else {
       const dev = _instance as Mcp23017;
-      return [dev.iodira, dev.iodirb, dev.gpioa, dev.gpiob, dev.olata, dev.olatb];
+      return [
+        dev.iodira, dev.iodirb, dev.gpioa, dev.gpiob, dev.olata, dev.olatb,
+        dev.intfa, dev.intfb, dev.intcapa, dev.intcapb,
+      ];
     }
   },
 
   snapshotToScalars(snap: PartStateSnapshot): number[] {
-    // MCP23017: iodira, iodirb, gpioa, gpiob, olata, olatb
+    // MCP23017: iodira, iodirb, gpioa, gpiob, olata, olatb, intfa, intfb, intcapa, intcapb
     return [
       snap.mcp23017_iodira,
       snap.mcp23017_iodirb,
@@ -81,6 +95,10 @@ export const mcp23017Adapter: PartAdapter = {
       snap.mcp23017_gpiob,
       snap.mcp23017_olata,
       snap.mcp23017_olatb,
+      snap.mcp23017_intfa,
+      snap.mcp23017_intfb,
+      snap.mcp23017_intcapa,
+      snap.mcp23017_intcapb,
     ];
   },
 

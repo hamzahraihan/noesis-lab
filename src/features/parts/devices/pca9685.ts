@@ -102,6 +102,8 @@ export class Pca9685 implements I2cDevice {
   private readonly registers = new Uint8Array(REGISTER_COUNT);
   /** Which register the next byte goes to or comes from. */
   private pointer = MODE1;
+  /** Output Enable asserted (active low): holds all outputs low. */
+  private oe = false;
 
   constructor() {
     // MODE1 powers up asleep, with all-call enabled; MODE2 powers up with a
@@ -109,6 +111,11 @@ export class Pca9685 implements I2cDevice {
     this.registers[MODE1] = SLEEP | ALLCALL;
     this.registers[MODE2] = 0x04;
     this.registers[PRESCALE] = 0x1e;
+  }
+
+  /** Set Output Enable (asserted = all outputs held low). */
+  setOE(asserted: boolean): void {
+    this.oe = asserted;
   }
 
   /** True while the oscillator is stopped, which holds every output low. */
@@ -167,6 +174,8 @@ export class Pca9685 implements I2cDevice {
    * sits. The level is what the solver stamps.
    */
   duty(channel: number): number {
+    // Output Enable asserted holds all outputs low.
+    if (this.oe) return 0;
     if (this.isSleeping) return 0;
     const { on, off } = this.channel(channel);
     // The datasheet gives the full-off bit precedence when both are set.
