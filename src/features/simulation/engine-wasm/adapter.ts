@@ -11,6 +11,7 @@ import type { McuRuntime } from '../mcu';
 import type { DynamicState } from '@/features/parts';
 import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from '../netlist';
+import type { Netlist } from '../netlist';
 import { ProbeDeck } from '../probe';
 import { COMPONENT_KIND, paramsFor } from './netlist';
 import { KEYPAD_KEYS, createController, type DisplayController } from '@/features/parts';
@@ -66,6 +67,7 @@ export class WasmEngine {
   private dynamicState: DynamicState;
   private module: FfiExports | null = null;
   private handle = 0;
+  private netlist: Netlist | null = null;
   private voltages: Float64Array = new Float64Array(0);
   private serialOutput = '';
   private pressed = new Set<string>();
@@ -91,6 +93,7 @@ export class WasmEngine {
 
   async loadCircuit(_json: unknown): Promise<void> {
     if (!this.module) throw new Error('WasmEngine: module not loaded');
+    this.netlist = buildNetlist(this.bench, this.dynamicState);
     const expanded = expandBench(this.bench, this.dynamicState);
     const mod = this.module;
     const circuitPtr = allocString(mod, JSON.stringify(expanded));
@@ -130,6 +133,92 @@ export class WasmEngine {
     } else {
       this.voltages = new Float64Array(0);
     }
+    this.pumpDisplays();
+  }
+
+  private voltageOfNet(net: number): number {
+    if (net === -1 || net < 0 || net >= this.voltages.length) return 0;
+    return this.voltages[net];
+  }
+
+  private pumpDisplays(): void {
+    const high = this.mcu.board.logicVolts / 2;
+    const netlist = this.netlist;
+    if (!netlist) return;
+    for (const [partId, controller] of this.displays) {
+      if (controller instanceof SevenSegment) {
+        // Simplified: pump using solved volts (no mcuOutputLevel fallback).
+        const nets = this.sevenSegmentNets(partId, controller.digitCount);
+        if (!nets) continue;
+        const segmentLevel = (n: number) => this.voltageOfNet(n) >= high ? 1 : 0;
+        const digitLevel = (n: number) => this.voltageOfNet(n) >= high ? 1 : 0;
+        const com = nets.colon
+          ? (this.voltageOfNet(nets.colon.com) >= high ? 1 : 0)
+          : undefined;
+        const cln = nets.colon
+          ? (this.voltageOfNet(nets.colon.cln) >= high ? 1 : 0)
+          : undefined;
+        controller.update(
+          nets.digits.map((n) => digitLevel(n)),
+          nets.segments.map((n) => segmentLevel(n)),
+          com,
+          cln,
+          this.timeMs,
+        );
+      } else {
+        // LCD (HD44780) handling via createController controllers is I2C/SPI;
+        // the HD44780 receive path needs rising-edge detection on enable.
+        const nets = this.lcdNets(partId);
+        if (!nets) continue;
+        const strobe = this.voltageOfNet(nets.enable) >= high;
+        if (!strobe) {
+          this.lcdStrobe.set(partId, true);
+          continue;
+        }
+        if (!this.lcdStrobe.get(partId)) continue;
+        this.lcdStrobe.set(partId, false);
+        const value =
+          (this.voltageOfNet(nets.d4) >= high ? 0b10000 : 0) |
+          (this.voltageOfNet(nets.d5) >= high ? 0b01000 : 0) |
+          (this.voltageOfNet(nets.d6) >= high ? 0b00100 : 0) |
+          (this.voltageOfNet(nets.d7) >= high ? 0b00010 : 0) |
+          (this.voltageOfNet(nets.d0) >= high ? 0b00001 : 0);
+        (controller as { receive?: (rs: boolean, value: number) => void }).receive?.(
+          this.voltageOfNet(nets.rs) >= high,
+          value,
+        );
+      }
+    }
+  }
+
+  private lcdStrobe = new Map<string, boolean>();
+
+  private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
+    const netlist = this.netlist;
+    if (!netlist) return null;
+    const net = (pin: string): number => netlist.pinNode.get(`${partId}:${pin}`) ?? -1;
+    const data = [net('D0'), net('D4'), net('D5'), net('D6'), net('D7')];
+    if (data.some((n) => n === -1)) return null;
+    return { rs: net('RS'), enable: net('E'), d0: data[0], d4: data[1], d5: data[2], d6: data[3], d7: data[4] };
+  }
+
+  private sevenSegmentNets(partId: string, digitCount: number): { segments: number[]; digits: number[]; colon: { com: number; cln: number } | null } | null {
+    const netlist = this.netlist;
+    if (!netlist) return null;
+    const net = (pin: string): number => netlist.pinNode.get(`${partId}:${pin}`) ?? -1;
+    const hasPin = (pin: string): boolean => netlist.pinNode.has(`${partId}:${pin}`);
+    const segments = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP'].map(net);
+    const digitPins = digitCount > 1
+      ? Array.from({ length: digitCount }, (_, i) => `DIG${i + 1}`)
+      : ['COM.1'];
+    const digits = digitPins.map(net);
+    const hasSeg = segments.some((n) => n !== -1);
+    const hasDig = digits.some((n) => n !== -1);
+    if (!hasSeg || !hasDig) return null;
+    const colon = digitCount === 4 && hasPin('COM') && hasPin('CLN')
+      ? { com: net('COM'), cln: net('CLN') }
+      : null;
+    return { segments, digits, colon };
   }
 
   async settle(): Promise<void> {
