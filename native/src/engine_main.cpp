@@ -19,7 +19,7 @@
  *     "wires": [{"from":..,"to":..,"id_offset":..,"gauge_awg":..,"length_mm":..}, ...],
  *     "groundTerminals": [..],
  *     "keyLabels": [..],
- *     "strings": ["", "net_a", ...],   // string pool; offset 0 is ""
+ *     "strings": "<string pool with embedded NULs>",  // offset 0 is ""
  *     "irTransmitting": 0/1,
  *     "redProfile": 0, "greenProfile": 0, "blueProfile": 0
  *   }
@@ -688,7 +688,15 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
       }
 
       int32_t strings_bytes = 0;
-      char* pool = build_string_pool(strings, &strings_bytes);
+      char* pool = nullptr;
+      const JsonValue* stringsVal = json_get(root, "strings");
+      if (stringsVal != nullptr && stringsVal->type == J_STR) {
+        pool = stringsVal->str;
+        strings_bytes = stringsVal->str_len;
+      } else if (stringsVal != nullptr && stringsVal->type == J_ARR) {
+        // Backwards compat: array of strings -> concatenate.
+        pool = build_string_pool(stringsVal, &strings_bytes);
+      }
 
       int32_t ir = json_int(json_get(root, "irTransmitting"), 0);
       int32_t rp = json_int(json_get(root, "redProfile"), 0);

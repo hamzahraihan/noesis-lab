@@ -29,7 +29,7 @@ const ELEMENT_BYTES = 32;
 const PROFILE_DOUBLES = 7;
 
 /** Component kinds, in the order engine.h lists them. */
-const COMPONENT_KIND: Record<ComponentSpec['kind'], number> = {
+export const COMPONENT_KIND: Record<ComponentSpec['kind'], number> = {
   resistor: 0,
   led: 1,
   capacitor: 2,
@@ -92,9 +92,9 @@ const SENSOR_VARIANT: Record<SensorVariant, number> = {
   flame: 5,
 };
 
-const PART_PRESSED = 1;
-const PART_RELAY_ENERGIZED = 2;
-const PART_SONAR_MEASURING = 4;
+export const PART_PRESSED = 1;
+export const PART_RELAY_ENERGIZED = 2;
+export const PART_SONAR_MEASURING = 4;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -574,7 +574,7 @@ class WasmNetlistImpl implements WasmNetlist {
   }
 }
 
-function paramsFor(
+export function paramsFor(
   component: ComponentSpec,
   profileFor: (profile: DiodeProfile) => number,
 ): [number, number, number, number] {
