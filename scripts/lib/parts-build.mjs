@@ -188,7 +188,7 @@ function emsdkNodeBin(root) {
 // resolves neither an extension nor a shebang by itself, so name both.
 const EMCC_NAMES = process.platform === 'win32' ? ['emcc.exe', 'emcc'] : ['emcc'];
 
-function resolveEmcc(root) {
+export function resolveEmcc(root) {
   if (process.env.EMCC) return process.env.EMCC;
   for (const sdkRoot of emsdkRoots(root)) {
     for (const name of EMCC_NAMES) {
@@ -205,6 +205,10 @@ function resolveEmcc(root) {
 function childEnv(root) {
   return buildChildEnv(emsdkRoots(root).map(emsdkNodeBin).find((bin) => bin !== null));
 }
+
+// The engine FFI build resolves emcc the same way; exporting these keeps the
+// emsdk discovery rules in one place.
+export { childEnv as emccChildEnv };
 
 /** True when `moduleUrl` is the file node was started with, not an import. */
 export function isEntryPoint(moduleUrl) {

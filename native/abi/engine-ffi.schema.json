@@ -1,0 +1,367 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Engine FFI Protocol",
+  "description": "Single source of truth for Engine ↔ UI FFI boundary. Generates TypeScript types and C++ structs.",
+  "version": 1,
+  "ffi": {
+    "exports": [
+      {
+        "name": "engine_create",
+        "returns": "int32_t",
+        "parameters": ["const char* circuit_json", "const char* sketch_json"]
+      },
+      {
+        "name": "engine_step",
+        "returns": "int32_t",
+        "parameters": ["int32_t handle", "double dt_ms"]
+      },
+      {
+        "name": "engine_set_pin",
+        "returns": "int32_t",
+        "parameters": ["int32_t handle", "const char* part_id", "const char* pin", "int32_t level"]
+      },
+      {
+        "name": "engine_set_knob",
+        "returns": "int32_t",
+        "parameters": ["int32_t handle", "const char* part_id", "const char* knob", "double value"]
+      },
+      {
+        "name": "engine_get_state",
+        "returns": "const FFIPartStateSnapshot*",
+        "parameters": ["int32_t handle", "int32_t* out_count"]
+      },
+      {
+        "name": "engine_get_voltages",
+        "returns": "const double*",
+        "parameters": ["int32_t handle", "int32_t* out_count"]
+      },
+      {
+        "name": "engine_get_serial",
+        "returns": "const char*",
+        "parameters": ["int32_t handle"]
+      },
+      {
+        "name": "engine_destroy",
+        "returns": "void",
+        "parameters": ["int32_t handle"]
+      }
+    ]
+  },
+  "definitions": {
+    "EngineCommand": {
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/definitions/LoadCircuit" },
+        { "$ref": "#/definitions/LoadSketch" },
+        { "$ref": "#/definitions/Step" },
+        { "$ref": "#/definitions/SetPin" },
+        { "$ref": "#/definitions/SetKnob" },
+        { "$ref": "#/definitions/SetMeterMode" },
+        { "$ref": "#/definitions/SetBreakpoint" },
+        { "$ref": "#/definitions/Continue" },
+        { "$ref": "#/definitions/StepOver" },
+        { "$ref": "#/definitions/StepInto" }
+      ],
+      "discriminator": { "propertyName": "type", "mapping": {
+        "LoadCircuit": "#/definitions/LoadCircuit",
+        "LoadSketch": "#/definitions/LoadSketch",
+        "Step": "#/definitions/Step",
+        "SetPin": "#/definitions/SetPin",
+        "SetKnob": "#/definitions/SetKnob",
+        "SetMeterMode": "#/definitions/SetMeterMode",
+        "SetBreakpoint": "#/definitions/SetBreakpoint",
+        "Continue": "#/definitions/Continue",
+        "StepOver": "#/definitions/StepOver",
+        "StepInto": "#/definitions/StepInto"
+      }}
+    },
+    "LoadCircuit": {
+      "type": "object",
+      "required": ["type", "circuit"],
+      "properties": {
+        "type": { "const": "LoadCircuit" },
+        "circuit": { "$ref": "#/definitions/CircuitSnapshot" }
+      }
+    },
+    "LoadSketch": {
+      "type": "object",
+      "required": ["type", "source", "language"],
+      "properties": {
+        "type": { "const": "LoadSketch" },
+        "source": { "type": "string" },
+        "language": { "type": "string", "enum": ["cpp", "py"] }
+      }
+    },
+    "Step": {
+      "type": "object",
+      "required": ["type", "dtMs"],
+      "properties": {
+        "type": { "const": "Step" },
+        "dtMs": { "type": "number", "minimum": 0 }
+      }
+    },
+    "SetPin": {
+      "type": "object",
+      "required": ["type", "partId", "pin", "level"],
+      "properties": {
+        "type": { "const": "SetPin" },
+        "partId": { "type": "string" },
+        "pin": { "type": "string" },
+        "level": { "type": "boolean" }
+      }
+    },
+    "SetKnob": {
+      "type": "object",
+      "required": ["type", "partId", "knob", "value"],
+      "properties": {
+        "type": { "const": "SetKnob" },
+        "partId": { "type": "string" },
+        "knob": { "type": "string" },
+        "value": { "type": "number" }
+      }
+    },
+    "SetMeterMode": {
+      "type": "object",
+      "required": ["type", "mode"],
+      "properties": {
+        "type": { "const": "SetMeterMode" },
+        "mode": { "type": "string", "enum": ["off", "volts", "amps", "ohms"] }
+      }
+    },
+    "SetBreakpoint": {
+      "type": "object",
+      "required": ["type", "pc", "enabled"],
+      "properties": {
+        "type": { "const": "SetBreakpoint" },
+        "pc": { "type": "integer", "minimum": 0 },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "Continue": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "Continue" }
+      }
+    },
+    "StepOver": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "StepOver" }
+      }
+    },
+    "StepInto": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "StepInto" }
+      }
+    },
+    "EngineEvent": {
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/definitions/Solved" },
+        { "$ref": "#/definitions/DigitalLevels" },
+        { "$ref": "#/definitions/AnalogReadings" },
+        { "$ref": "#/definitions/SerialOutput" },
+        { "$ref": "#/definitions/DisplayFramebuffers" },
+        { "$ref": "#/definitions/ProbeSamples" },
+        { "$ref": "#/definitions/DebuggerState" },
+        { "$ref": "#/definitions/Faults" }
+      ],
+      "discriminator": { "propertyName": "type", "mapping": {
+        "Solved": "#/definitions/Solved",
+        "DigitalLevels": "#/definitions/DigitalLevels",
+        "AnalogReadings": "#/definitions/AnalogReadings",
+        "SerialOutput": "#/definitions/SerialOutput",
+        "DisplayFramebuffers": "#/definitions/DisplayFramebuffers",
+        "ProbeSamples": "#/definitions/ProbeSamples",
+        "DebuggerState": "#/definitions/DebuggerState",
+        "Faults": "#/definitions/Faults"
+      }}
+    },
+    "Solved": {
+      "type": "object",
+      "required": ["type", "timeMs", "voltages", "sourceCurrents"],
+      "properties": {
+        "type": { "const": "Solved" },
+        "timeMs": { "type": "number" },
+        "voltages": { "type": "array", "items": { "type": "number" } },
+        "sourceCurrents": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+    "DigitalLevels": {
+      "type": "object",
+      "required": ["type", "levels"],
+      "properties": {
+        "type": { "const": "DigitalLevels" },
+        "levels": { "type": "array", "items": { "type": "boolean" } }
+      }
+    },
+    "AnalogReadings": {
+      "type": "object",
+      "required": ["type", "readings"],
+      "properties": {
+        "type": { "const": "AnalogReadings" },
+        "readings": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+    "SerialOutput": {
+      "type": "object",
+      "required": ["type", "output"],
+      "properties": {
+        "type": { "const": "SerialOutput" },
+        "output": { "type": "string" }
+      }
+    },
+    "DisplayFramebuffers": {
+      "type": "object",
+      "required": ["type", "framebuffers"],
+      "properties": {
+        "type": { "const": "DisplayFramebuffers" },
+        "framebuffers": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Framebuffer" }
+        }
+      }
+    },
+    "Framebuffer": {
+      "type": "object",
+      "required": ["partId", "kind", "width", "height", "data", "format"],
+      "properties": {
+        "partId": { "type": "string" },
+        "kind": { "type": "string", "enum": ["monochrome", "rgb565", "seven-seg", "lcd"] },
+        "width": { "type": "integer", "minimum": 0 },
+        "height": { "type": "integer", "minimum": 0 },
+        "data": { "type": "array", "items": { "type": "integer" } },
+        "format": { "type": "string", "enum": ["1bpp", "rgb565", "7seg", "lcd"] }
+      }
+    },
+    "ProbeSamples": {
+      "type": "object",
+      "required": ["type", "samples"],
+      "properties": {
+        "type": { "const": "ProbeSamples" },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["netIndex", "voltage"],
+            "properties": {
+              "netIndex": { "type": "integer", "minimum": 0 },
+              "voltage": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "DebuggerState": {
+      "type": "object",
+      "required": ["type", "pc", "sp", "cycles", "registers", "sreg", "stack", "locals"],
+      "properties": {
+        "type": { "const": "DebuggerState" },
+        "pc": { "type": "integer", "minimum": 0 },
+        "sp": { "type": "integer", "minimum": 0 },
+        "cycles": { "type": "integer", "minimum": 0 },
+        "registers": { "type": "array", "items": { "type": "integer" }, "minItems": 32, "maxItems": 32 },
+        "sreg": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "stack": { "type": "array", "items": { "type": "integer" } },
+        "locals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "address"],
+            "properties": {
+              "name": { "type": "string" },
+              "address": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "Faults": {
+      "type": "object",
+      "required": ["type", "faults"],
+      "properties": {
+        "type": { "const": "Faults" },
+        "faults": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "CircuitSnapshot": {
+      "type": "object",
+      "required": ["bench", "dynamicState"],
+      "properties": {
+        "bench": { "type": "object" },
+        "dynamicState": { "type": "object" }
+      }
+    },
+    "PartStateSnapshot": {
+      "type": "object",
+      "required": ["partId", "kind"],
+      "properties": {
+        "partId": { "type": "string" },
+        "kind": { "type": "string" },
+        "framebuffer": { "type": "integer" },
+        "framebuffer_size": { "type": "integer" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "servo_angle": { "type": "integer" },
+        "stepper_angle_deci_deg": { "type": "integer" },
+        "stepper_driver_outputs": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "maxItems": 4 },
+        "seven_seg_digits": { "type": "array", "items": { "type": "integer" }, "minItems": 8, "maxItems": 8 },
+        "seven_seg_colon": { "type": "integer" },
+        "lcd_chars": { "type": "array", "items": { "type": "integer" }, "minItems": 80, "maxItems": 80 },
+        "lcd_rows": { "type": "integer" },
+        "lcd_cols": { "type": "integer" },
+        "shift_register_outputs": { "type": "array", "items": { "type": "integer" }, "minItems": 8, "maxItems": 8 },
+        "relay_contacts_closed": { "type": "boolean" },
+        "button_pressed": { "type": "boolean" },
+        "pot_wiper": { "type": "number" },
+        "rfid_card_present": { "type": "boolean" },
+        "thermocouple_temp_quarter_deg": { "type": "integer" },
+        "pcf8574_output_reg": { "type": "integer" },
+        "pcf8574_input_reg": { "type": "integer" },
+        "mcp23017_iodira": { "type": "integer" },
+        "mcp23017_iodirb": { "type": "integer" },
+        "mcp23017_gpioa": { "type": "integer" },
+        "mcp23017_gpiob": { "type": "integer" },
+        "mcp23017_olata": { "type": "integer" },
+        "mcp23017_olatb": { "type": "integer" },
+        "ads1115_config": { "type": "integer" },
+        "ads1115_conversion": { "type": "integer" },
+        "ads1115_conversion_ready": { "type": "boolean" },
+        "shift595_shift_reg": { "type": "integer" },
+        "shift595_storage_reg": { "type": "integer" },
+        "shift595_outputs_enabled": { "type": "boolean" },
+        "pcd8544_x": { "type": "integer" },
+        "pcd8544_y": { "type": "integer" },
+        "pcd8544_vertical": { "type": "boolean" },
+        "pcd8544_extended": { "type": "boolean" },
+        "pcd8544_powerDown": { "type": "boolean" },
+        "pcd8544_blanked": { "type": "boolean" },
+        "pcd8544_inverse": { "type": "boolean" },
+        "pcd8544_vop": { "type": "integer" },
+        "mcp4725_value": { "type": "integer" },
+        "pca9685_duty": { "type": "array", "items": { "type": "integer" }, "minItems": 16, "maxItems": 16 },
+        "pca9685_prescale": { "type": "integer" },
+        "rtc_seconds": { "type": "integer" },
+        "rtc_minutes": { "type": "integer" },
+        "rtc_hours": { "type": "integer" },
+        "rtc_day": { "type": "integer" },
+        "rtc_date": { "type": "integer" },
+        "rtc_month": { "type": "integer" },
+        "rtc_year": { "type": "integer" },
+        "sensor_temp_milli_c": { "type": "integer" },
+        "sensor_pressure_pa": { "type": "integer" },
+        "sensor_lux": { "type": "integer" },
+        "sensor_humidity_milli_pct": { "type": "integer" },
+        "max7219_decode_mode": { "type": "integer" },
+        "max7219_intensity": { "type": "integer" },
+        "max7219_scan_limit": { "type": "integer" },
+        "max7219_shutdown": { "type": "boolean" },
+        "max7219_display_test": { "type": "boolean" }
+      }
+    }
+  }
+}

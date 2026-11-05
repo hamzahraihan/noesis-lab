@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:wasm && npm run build:solver && npm run build:engine && tsc -b && vite build",
+    "build": "npm run build:wasm && npm run build:solver && npm run build:engine && npm run build:engine:ffi && tsc -b && vite build",
     "build:wasm": "node scripts/build-avr-wasm.mjs",
     "build:solver": "node scripts/build-solver-wasm.mjs",
     "build:engine": "node scripts/build-engine-wasm.mjs",
+    "build:engine:ffi": "node scripts/build-engine-ffi-wasm.mjs",
     "build:parts": "node scripts/build-parts-wasm.mjs",
     "build:parts:probe": "node scripts/build-parts-probe.mjs",
     "test": "vitest run",
@@ -21,8 +22,9 @@
     "check:native": "node scripts/check-native.mjs",
     "generate:gallery": "tsx scripts/generate-gallery.ts",
     "generate:abi": "tsx scripts/generate-abi.ts",
+    "generate:ffi": "tsx scripts/generate-ffi.ts",
     "update:docs-counts": "tsx scripts/update-docs-counts.ts",
-    "prepare": "husky && npm run generate:gallery && npm run generate:abi",
+    "prepare": "husky && npm run generate:gallery && npm run generate:abi && npm run generate:ffi",
     "preview": "vite preview",
     "check": "npm run typecheck && npm run lint && npm run check:boundaries && npm run check:native && npm test"
   },

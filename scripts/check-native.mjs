@@ -4,6 +4,7 @@
 // unit with the same flags the wasm builds use.
 import { spawnSync } from 'node:child_process';
 
+import { existsSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,7 +15,10 @@ const include = join(root, 'native', 'include');
 const entryPoints = [
   join(root, 'native', 'src', 'solver.cpp'),
   join(root, 'native', 'src', 'parts', 'parts.cpp'),
-];
+  // #56 replaces the stub entry point; syntax-check whichever one is present.
+  [join(root, 'native', 'src', 'engine_main.cpp'), join(root, 'native', 'src', 'engine_ffi_stub.cpp')]
+    .filter((file) => existsSync(file)),
+].flat();
 const candidates = [process.env.CXX, 'clang++', 'g++', 'c++'].filter(Boolean);
 const cxx = candidates.find(
   (compiler) => spawnSync(compiler, ['--version'], { stdio: 'ignore' }).status === 0,
@@ -36,6 +40,7 @@ for (const file of entryPoints) {
       '-D_USE_MATH_DEFINES',
       '-fsyntax-only',
       '-I', include,
+      '-I', join(root, 'src', 'features', 'simulation', 'engine-wasm'),
       file,
     ],
     { encoding: 'utf8' },

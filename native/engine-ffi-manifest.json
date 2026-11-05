@@ -1,0 +1,9 @@
+{
+  "file": "engine.wasm",
+  "wasmSha256": "b648c0177d94d6aa678a13a14ba34acdb30891c5dee7b2db7a7ae9449be08600",
+  "jsSha256": "0509d077414e782601b2d1e328617ec5774ea3ae8b9e08ef7a23c629d3a4f7e8",
+  "sourcesHash": "cf21d4212f5e4abcbae31730b5b11c149e6d3a6a89e8b867677a2452b6cb80bf",
+  "toolchain": {
+    "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)"
+  }
+}
