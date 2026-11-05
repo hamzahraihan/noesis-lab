@@ -26,13 +26,18 @@ import { dirname, join, relative, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
+import { emccChildEnv, resolveEmcc } from './lib/parts-build.mjs';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NATIVE_DIR = join(ROOT, 'native');
 const DIST_DIR = join(ROOT, 'dist', 'assets');
 const WASM_FILE = join(DIST_DIR, 'solver.wasm');
 const JS_FILE = join(DIST_DIR, 'solver.js');
 const MANIFEST_FILE = join(NATIVE_DIR, 'build-manifest.json');
-const EMCC = 'emcc'; // Assumes emsdk is in PATH
+// Resolve emcc the same way the parts and engine builds do: $EMCC, then the
+// in-repo emsdk/, then PATH. `npm run build` must work without a sourced shell.
+const EMCC = resolveEmcc(ROOT);
+const CHILD_ENV = emccChildEnv(ROOT);
 
 // Rebuilds take seconds; a lock this old means the holder died mid-build.
 const LOCK = join(
@@ -45,7 +50,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function toolVersion() {
   try {
-    const out = execFileSync(EMCC, ['--version'], { encoding: 'utf8', timeout: 10000 });
+    const out = execFileSync(EMCC, ['--version'], { encoding: 'utf8', timeout: 10000, env: CHILD_ENV });
     return out.trim().split('\n')[0];
   } catch {
     return 'unknown';
@@ -54,11 +59,11 @@ function toolVersion() {
 
 function preflight() {
   try {
-    execFileSync(EMCC, ['--version'], { stdio: 'ignore', timeout: 10000 });
+    execFileSync(EMCC, ['--version'], { stdio: 'ignore', timeout: 10000, env: CHILD_ENV });
   } catch {
     console.error(
-      `Emscripten (emcc) not found in PATH. ` +
-      `Install emsdk and run 'source emsdk_env.sh' or add to PATH.`
+      `Emscripten (emcc) not found: tried $EMCC, the in-repo emsdk/, and PATH. ` +
+      `Install emsdk and run 'source emsdk_env.sh', or set EMSDK to the emsdk root.`
     );
     process.exit(1);
   }
@@ -172,7 +177,7 @@ function buildOnce() {
         '-fno-exceptions',
         '-fno-rtti',
       ],
-      { cwd: ROOT, stdio: 'inherit', timeout: 300000 },
+      { cwd: ROOT, stdio: 'inherit', timeout: 300000, env: CHILD_ENV },
     );
 
     // Replace committed artifacts only after compile succeeded

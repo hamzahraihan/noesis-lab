@@ -21,6 +21,8 @@ import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, wr
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ENGINE_EXPORTS } from './lib/engine-exports.mjs';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(ROOT, 'src', 'features', 'simulation', 'engine-wasm');
 const SOURCES = ['engine.cpp', 'solver.cpp', 'netlist.cpp', 'cpu.cpp', 'firmware.cpp'].map((file) =>
@@ -51,53 +53,7 @@ const FLAGS = [
   '-Wl,--allow-undefined',
   '-Wl,--initial-memory=1048576',
   // '-Wl,--strip-all',  // requires wasm-opt (not available on Windows)
-  '-Wl,--export=wasm_alloc',
-  '-Wl,--export=set_profiles',
-  '-Wl,--export=solve',
-  '-Wl,--export=result_voltages',
-  '-Wl,--export=result_source_currents',
-  '-Wl,--export=result_iterations',
-  '-Wl,--export=element_current',
-  '-Wl,--export=build_netlist',
-  '-Wl,--export=netlist_node_of_terminal',
-  '-Wl,--export=netlist_node_count',
-  '-Wl,--export=netlist_elements',
-  '-Wl,--export=netlist_element_count',
-  '-Wl,--export=netlist_labels',
-  '-Wl,--export=cpu_step',
-  '-Wl,--export=cpu_get_pc',
-  '-Wl,--export=cpu_set_pc',
-  '-Wl,--export=cpu_get_reg',
-  '-Wl,--export=cpu_set_reg',
-  '-Wl,--export=cpu_get_sreg',
-  '-Wl,--export=cpu_set_sreg',
-  '-Wl,--export=cpu_get_sp',
-  '-Wl,--export=cpu_set_sp',
-  '-Wl,--export=cpu_get_cycles',
-  '-Wl,--export=cpu_set_cycles',
-  '-Wl,--export=cpu_get_flash_capacity',
-  '-Wl,--export=cpu_reset',
-  '-Wl,--export=build_elements',
-  '-Wl,--export=netlist_labels',
-  '-Wl,--export=cpu_flash_base',
-  '-Wl,--export=cpu_get_instructions',
-  '-Wl,--export=vm_tokenize',
-  '-Wl,--export=vm_parse',
-  '-Wl,--export=vm_free_program',
-  '-Wl,--export=vm_ast_to_json',
-  '-Wl,--export=vm_create',
-  '-Wl,--export=vm_destroy',
-  '-Wl,--export=vm_load_sketch',
-  '-Wl,--export=vm_run',
-  '-Wl,--export=vm_step',
-  '-Wl,--export=vm_get_debug_state',
-  '-Wl,--export=vm_set_breakpoint',
-  '-Wl,--export=vm_clear_breakpoint',
-  '-Wl,--export=vm_set_step_over',
-  '-Wl,--export=vm_set_step_into',
-  '-Wl,--export=vm_pin_level',
-  '-Wl,--export=vm_set_pin_level',
-  '-Wl,--export=vm_serial_output',
+  ...ENGINE_EXPORTS.map((name) => `-Wl,--export=${name}`),
 ];
 
 
