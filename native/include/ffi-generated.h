@@ -471,5 +471,10 @@ int32_t engine_set_knob(int32_t handle, const char* part_id, const char* knob, d
 const FFIPartStateSnapshot* engine_get_state(int32_t handle, int32_t* out_count);
 const double* engine_get_voltages(int32_t handle, int32_t* out_count);
 const char* engine_get_serial(int32_t handle);
+int32_t engine_set_breakpoint(int32_t handle, int32_t pc);
+void engine_clear_breakpoint(int32_t handle, int32_t id);
+void engine_set_step_over(int32_t handle, int32_t enable);
+void engine_set_step_into(int32_t handle, int32_t enable);
+const char* engine_get_debug_state(int32_t handle);
 void engine_destroy(int32_t handle);
 }

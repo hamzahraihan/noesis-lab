@@ -1,8 +1,8 @@
 {
   "file": "engine.wasm",
-  "wasmSha256": "c20b76dfef2aee1e5aadb0810a8270a79b8017d1704bc48b56f1f8f26c2b28f9",
-  "jsSha256": "0509d077414e782601b2d1e328617ec5774ea3ae8b9e08ef7a23c629d3a4f7e8",
-  "sourcesHash": "8ce18e765d836d7566d24a00be75e773fd4fe364e0b458b7852c784c5aa2dd76",
+  "wasmSha256": "9fac410e99f60d43626dfd8e6b5711170aaeebb4147daddd1ad2e77e881ebaec",
+  "jsSha256": "6de6348d48f1aeca2d91a18bae9e64340a7a4ac68f65bb5bea850c6d3c551403",
+  "sourcesHash": "afdfc30b527c01311088901cd5970c145448c2ffc208a05f75006f7474b3c382",
   "toolchain": {
     "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)"
   }
