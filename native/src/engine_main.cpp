@@ -71,6 +71,7 @@ uint32_t netlist_node_of_terminal(void);
 int32_t netlist_node_count(void);
 uint32_t netlist_elements(void);
 int32_t netlist_element_count(void);
+int32_t build_elements(const BuildElementsInput* input, BuildElementsOutput* output);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,12 +398,29 @@ struct Engine {
   Program* program;
   char* sketch;
   const char* serial;
-  double* voltages;
+  // Netlist data.
+  int32_t terminal_count;
+  int32_t* node_of_terminal;
+  uint32_t* pin_node;
   int32_t node_count;
-  int32_t element_count;
-  ElementIn* elements;
+  ElementOut* netlist_elements;
+  int32_t netlist_element_count;
+  // Dynamic state.
+  uint32_t* pin_levels;
+  int32_t pin_level_count;
+  // pinTerminals: parallel arrays, key = "partId:pin".
+  char** pin_term_keys;
+  int32_t* pin_term_vals;
+  int32_t pin_term_count;
+  int32_t pin_term_cap;
+  // Solve state.
+  double* voltages;
   double* previous;
   int32_t previous_count;
+  ElementOut* elements;
+  int32_t element_count;
+  ElementIn* solve_elements;
+  int32_t solve_element_count;
   bool alive;
 };
 
@@ -417,12 +435,25 @@ void ensure_init() {
     engines[i].program = nullptr;
     engines[i].sketch = nullptr;
     engines[i].serial = "";
-    engines[i].voltages = nullptr;
+    engines[i].terminal_count = 0;
+    engines[i].node_of_terminal = nullptr;
+    engines[i].pin_node = nullptr;
     engines[i].node_count = 0;
-    engines[i].element_count = 0;
-    engines[i].elements = nullptr;
+    engines[i].netlist_elements = nullptr;
+    engines[i].netlist_element_count = 0;
+    engines[i].pin_levels = nullptr;
+    engines[i].pin_level_count = 0;
+    engines[i].pin_term_keys = nullptr;
+    engines[i].pin_term_vals = nullptr;
+    engines[i].pin_term_count = 0;
+    engines[i].pin_term_cap = 0;
+    engines[i].voltages = nullptr;
     engines[i].previous = nullptr;
     engines[i].previous_count = 0;
+    engines[i].elements = nullptr;
+    engines[i].element_count = 0;
+    engines[i].solve_elements = nullptr;
+    engines[i].solve_element_count = 0;
     engines[i].alive = false;
   }
   engines_inited = true;
@@ -514,6 +545,8 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
   e.node_count = 0;
   e.element_count = 0;
   e.elements = nullptr;
+  e.solve_elements = nullptr;
+  e.solve_element_count = 0;
   e.previous = nullptr;
   e.previous_count = 0;
   e.alive = true;
@@ -571,6 +604,25 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
       uint32_t* klarr = klcount > 0
           ? reinterpret_cast<uint32_t*>(wasm_alloc(static_cast<uint32_t>(klcount) * sizeof(uint32_t)))
           : nullptr;
+
+      const JsonValue* pinNode = json_get(root, "pinNode");
+      const int32_t pnCount = (pinNode && pinNode->type == J_ARR) ? pinNode->arr_len : 0;
+      const int32_t talloc = tcount > 0 ? tcount : 1;
+      uint32_t* pnarr = reinterpret_cast<uint32_t*>(
+          wasm_alloc(static_cast<uint32_t>(talloc) * sizeof(uint32_t)));
+      if (pnarr != nullptr) {
+        for (int32_t i = 0; i < talloc; i++) pnarr[i] = 0xFFFFFFFFu;
+        for (int32_t i = 0; i < pnCount && i < talloc; i++) {
+          int32_t v = json_int(pinNode->arr[i], -1);
+          pnarr[i] = (v < 0) ? 0xFFFFFFFFu : static_cast<uint32_t>(v);
+        }
+      }
+
+      const JsonValue* pinTerminals = json_get(root, "pinTerminals");
+      // Count entries.
+      int32_t ptCount = (pinTerminals && pinTerminals->type == J_OBJ) ? pinTerminals->obj_len : 0;
+
+      int32_t supplyNode = json_int(json_get(root, "supplyNode"), -1);
 
       for (int32_t i = 0; i < tcount; i++) {
         const JsonValue* o = terminals->arr[i];
@@ -641,15 +693,36 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
           pool, strings_bytes, ir, rp, gp, bp);
 
       if (rc == 0) {
+        e.terminal_count = tcount;
+        e.node_of_terminal = reinterpret_cast<int32_t*>(netlist_node_of_terminal());
+        e.pin_node = pnarr;
         e.node_count = netlist_node_count();
-        e.element_count = netlist_element_count();
-        e.elements = reinterpret_cast<ElementIn*>(netlist_elements());
+        e.netlist_elements = reinterpret_cast<ElementOut*>(netlist_elements());
+        e.netlist_element_count = netlist_element_count();
         int32_t n = e.node_count > 0 ? e.node_count : 1;
         e.voltages = reinterpret_cast<double*>(wasm_alloc(static_cast<uint32_t>(n) * sizeof(double)));
         e.previous = reinterpret_cast<double*>(wasm_alloc(static_cast<uint32_t>(n) * sizeof(double)));
         if (e.voltages != nullptr) for (int32_t i = 0; i < n; i++) e.voltages[i] = 0;
         if (e.previous != nullptr) for (int32_t i = 0; i < n; i++) e.previous[i] = 0;
         e.previous_count = n;
+        // pin levels + pinTerminals map.
+        int32_t talloc2 = tcount > 0 ? tcount : 1;
+        e.pin_levels = reinterpret_cast<uint32_t*>(wasm_alloc(static_cast<uint32_t>(talloc2) * sizeof(uint32_t)));
+        if (e.pin_levels != nullptr) for (int32_t i = 0; i < talloc2; i++) e.pin_levels[i] = 0;
+        e.pin_level_count = talloc2;
+        e.pin_term_count = 0;
+        e.pin_term_cap = ptCount > 0 ? ptCount : 4;
+        e.pin_term_keys = reinterpret_cast<char**>(wasm_alloc(static_cast<uint32_t>(e.pin_term_cap) * sizeof(char*)));
+        e.pin_term_vals = reinterpret_cast<int32_t*>(wasm_alloc(static_cast<uint32_t>(e.pin_term_cap) * sizeof(int32_t)));
+        if (pinTerminals != nullptr && pinTerminals->type == J_OBJ) {
+          for (int32_t i = 0; i < pinTerminals->obj_len; i++) {
+            if (e.pin_term_count >= e.pin_term_cap) break;
+            e.pin_term_keys[e.pin_term_count] = pinTerminals->keys[i];
+            e.pin_term_vals[e.pin_term_count] = json_int(pinTerminals->vals[i], -1);
+            e.pin_term_count++;
+          }
+        }
+        (void)supplyNode;
       }
     }
   }
@@ -668,9 +741,44 @@ extern "C" int32_t engine_step(int32_t handle, double dt_ms) {
   e->serial = (out != nullptr) ? out : "";
 
   // Solve, if a netlist is available.
-  if (e->elements != nullptr && e->node_count >= 0) {
+  if (e->netlist_elements != nullptr) {
+    BuildElementsInput in{};
+    in.netlist_elements = e->netlist_elements;
+    in.netlist_element_count = e->netlist_element_count;
+    in.node_count = e->node_count;
+    in.node_of_terminal = e->node_of_terminal;
+    in.terminal_count = e->terminal_count;
+    in.pin_node = e->pin_node;
+    in.time_ms = static_cast<double>(/*ms*/ 0);
+    in.knob_values = nullptr;
+    in.knob_count = 0;
+    in.pin_levels = e->pin_levels;
+    in.pin_level_count = e->pin_level_count;
+    in.supply_net = -1;
+    in.supply_node = -1;
+    BuildElementsOutput out{};
+    if (::build_elements(&in, &out) == 0 && out.elements != nullptr) {
+      e->elements = out.elements;
+      e->element_count = out.element_count;
+    } else {
+      e->elements = e->netlist_elements;
+      e->element_count = e->netlist_element_count;
+    }
     double dt = dt_ms <= 0 ? 1e-5 : dt_ms / 1000.0;
-    solve(e->elements, e->element_count, e->node_count, dt,
+    // Convert ElementOut (with labels) to ElementIn (solver input).
+    if (e->solve_elements == nullptr || e->solve_element_count < e->element_count) {
+      e->solve_elements = reinterpret_cast<ElementIn*>(
+          wasm_alloc(static_cast<uint32_t>(e->element_count > 0 ? e->element_count : 1) * sizeof(ElementIn)));
+      e->solve_element_count = e->element_count;
+    }
+    for (int32_t i = 0; i < e->element_count; i++) {
+      e->solve_elements[i].kind = e->elements[i].kind;
+      e->solve_elements[i].a = e->elements[i].a;
+      e->solve_elements[i].b = e->elements[i].b;
+      e->solve_elements[i].profile = e->elements[i].profile;
+      e->solve_elements[i].value = e->elements[i].value;
+    }
+    solve(e->solve_elements, e->element_count, e->node_count, dt,
           e->previous, e->previous_count, 50, 1e-9);
     uint32_t vp = result_voltages();
     if (vp != 0 && e->voltages != nullptr) {
@@ -685,8 +793,35 @@ extern "C" int32_t engine_step(int32_t handle, double dt_ms) {
 }
 
 extern "C" int32_t engine_set_pin(int32_t handle, const char* part_id, const char* pin, int32_t level) {
-  (void)handle; (void)part_id; (void)pin; (void)level;
-  return FFI_ERR_NOT_IMPLEMENTED;
+  Engine* e = lookup(handle);
+  if (e == nullptr) return FFI_ERR_INVALID_HANDLE;
+  if (part_id == nullptr || pin == nullptr) return FFI_ERR_INVALID_HANDLE;
+  // Build key "part_id:pin".
+  int32_t a = strlen_(part_id);
+  int32_t b = strlen_(pin);
+  int32_t keylen = a + 1 + b;
+  char* key = reinterpret_cast<char*>(wasm_alloc(static_cast<uint32_t>(keylen + 1)));
+  if (key == nullptr) return FFI_ERR_INVALID_HANDLE;
+  for (int32_t i = 0; i < a; i++) key[i] = part_id[i];
+  key[a] = ':';
+  for (int32_t i = 0; i < b; i++) key[a + 1 + i] = pin[i];
+  key[keylen] = '\0';
+  // Find terminal.
+  int32_t terminal = -1;
+  for (int32_t i = 0; i < e->pin_term_count; i++) {
+    const char* k = e->pin_term_keys[i];
+    bool same = true;
+    int32_t j = 0;
+    while (k[j] != '\0' || key[j] != '\0') {
+      if (k[j] != key[j]) { same = false; break; }
+      j++;
+    }
+    if (same) { terminal = e->pin_term_vals[i]; break; }
+  }
+  if (terminal < 0 || terminal >= e->pin_level_count) return FFI_ERR_INVALID_HANDLE;
+  if (e->pin_levels == nullptr) return FFI_ERR_INVALID_HANDLE;
+  e->pin_levels[terminal] = (level != 0) ? 1u : 0u;
+  return FFI_OK;
 }
 
 extern "C" int32_t engine_set_knob(int32_t handle, const char* part_id, const char* knob, double value) {
