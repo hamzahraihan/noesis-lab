@@ -12,7 +12,7 @@
         "required": ["partId", "kind"],
         "properties": {
           "partId": { "type": "string" },
-          "kind": { "type": "string", "enum": ["resistor", "capacitor", "led", "button", "potentiometer", "powerSupply", "breadboard", "mcu", "shift595", "pcf8574", "mcp23017", "ads1115", "max7219", "pcd8544", "tm1637", "stepper", "max6675", "mcp4725", "eeprom24lc256", "ds3231", "bmp180", "ina219", "bh1750", "tmp102", "sht31", "rc522", "pca9685", "a4988", "scripted"] }
+          "kind": { "type": "string", "enum": ["resistor", "capacitor", "led", "button", "potentiometer", "powerSupply", "breadboard", "mcu", "shift595", "pcf8574", "mcp23017", "ads1115", "max7219", "pcd8544", "tm1637", "stepper", "max6675", "mcp4725", "eeprom24lc256", "ds3231", "bmp180", "ina219", "bh1750", "tmp102", "sht31", "rc522", "pca9685", "a4988", "scripted", "sonar"] }
         }
       }
     }
@@ -24,7 +24,7 @@
       "required": [],
       "properties": {
         "partId": { "type": "string" },
-        "kind": { "type": "string", "enum": ["resistor", "capacitor", "led", "button", "potentiometer", "powerSupply", "breadboard", "mcu", "shift595", "pcf8574", "mcp23017", "ads1115", "max7219", "pcd8544", "tm1637", "stepper", "max6675", "mcp4725", "eeprom24lc256", "ds3231", "bmp180", "ina219", "bh1750", "tmp102", "sht31", "rc522", "pca9685", "a4988", "scripted"] },
+        "kind": { "type": "string", "enum": ["resistor", "capacitor", "led", "button", "potentiometer", "powerSupply", "breadboard", "mcu", "shift595", "pcf8574", "mcp23017", "ads1115", "max7219", "pcd8544", "tm1637", "stepper", "max6675", "mcp4725", "eeprom24lc256", "ds3231", "bmp180", "ina219", "bh1750", "tmp102", "sht31", "rc522", "pca9685", "a4988", "scripted", "sonar"] },
         "framebuffer": { "type": "integer", "description": "WASM memory offset to framebuffer data (converted from pointer)" },
         "framebuffer_size": { "type": "integer" },
         "width": { "type": "integer" },
@@ -83,7 +83,8 @@
         "max7219_intensity": { "type": "integer" },
         "max7219_scan_limit": { "type": "integer" },
         "max7219_shutdown": { "type": "boolean" },
-        "max7219_display_test": { "type": "boolean" }
+        "max7219_display_test": { "type": "boolean" },
+        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 }
       }
     }
   }

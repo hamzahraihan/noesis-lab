@@ -66,6 +66,7 @@ enum class PartContextType : uint8_t {
     POTENTIOMETER,
     SHIFT_REGISTER,
     RTC,
+    SONAR,
 };
 
 struct PartContext {
@@ -495,6 +496,13 @@ struct RTCContext : PartContext {
     int32_t vcc_net = -1;
     int32_t gnd_net = -1;
     PartContextType type() const override { return PartContextType::RTC; }
+};
+
+// HC-SR04 ultrasonic ranger
+struct SonarContext : PartContext {
+    double distance_cm = 100.0;        // knob-driven target distance (2..400 cm)
+    uint16_t echo_us = 5800;           // echo pulse width; echo_us = round(distance_cm * 58)
+    PartContextType type() const override { return PartContextType::SONAR; }
 };
 
 // ============================================================================
@@ -2020,6 +2028,11 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             }
             break;
         }
+        case PART_KIND_SONAR: {
+            SonarContext* ctx = static_cast<SonarContext*>(inst->impl);
+            snap->sonar_echo_us = ctx->echo_us;
+            break;
+        }
         default:
             break;
     }
@@ -2113,6 +2126,14 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
                 if (steps < 0) steps = 0;
                 if (steps > 0xFFF) steps = 0xFFF;
                 ctx->temp_quarter_deg = static_cast<int16_t>(steps);
+            }
+            break;
+        }
+        case PART_KIND_SONAR: {
+            SonarContext* ctx = static_cast<SonarContext*>(inst->impl);
+            if (strcmp(knob_name, "distance") == 0) {
+                ctx->distance_cm = std::clamp(value, 2.0, 400.0);
+                ctx->echo_us = static_cast<uint16_t>(std::lround(ctx->distance_cm * 58.0));
             }
             break;
         }
@@ -2610,7 +2631,11 @@ extern "C" void* part_create_neopixel(uint32_t part_id, uint16_t count) {
 extern "C" void* part_create_sonar(uint32_t part_id) {
     void* handle = part_register(part_id, PART_KIND_SONAR, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // HC-SR04 uses trigger/echo GPIO pins
+    SonarContext* ctx = new SonarContext();
+    ctx->distance_cm = 100.0;
+    ctx->echo_us = static_cast<uint16_t>(std::lround(ctx->distance_cm * 58.0));
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 

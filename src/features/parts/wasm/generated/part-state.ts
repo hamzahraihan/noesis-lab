@@ -117,6 +117,9 @@ export interface PartStateSnapshot {
   max7219_scan_limit: number;
   max7219_shutdown: boolean;
   max7219_display_test: boolean;
+
+  // HC-SR04 ultrasonic ranger
+  sonar_echo_us: number;
 }
 
 export interface PartStateSnapshotResponse {

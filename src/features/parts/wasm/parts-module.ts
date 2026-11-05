@@ -209,6 +209,9 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     max7219_scan_limit: rU8(),
     max7219_shutdown: rU8() !== 0,
     max7219_display_test: rU8() !== 0,
+
+    // HC-SR04 ultrasonic ranger
+    sonar_echo_us: rU16(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0

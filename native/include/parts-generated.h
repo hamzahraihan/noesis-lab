@@ -118,10 +118,13 @@ struct PartStateSnapshot {
     uint8_t max7219_scan_limit;
     bool max7219_shutdown;
     bool max7219_display_test;
+
+    // HC-SR04 ultrasonic ranger
+    uint16_t sonar_echo_us;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 314, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
