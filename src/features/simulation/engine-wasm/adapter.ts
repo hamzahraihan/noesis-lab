@@ -66,6 +66,7 @@ export class WasmEngine {
   private handle = 0;
   private voltages: Float64Array = new Float64Array(0);
   private serialOutput = '';
+  private pressed = new Set<string>();
   private pendingSketch = '';
 
   private constructor(options: WasmEngineOptions) {
@@ -129,8 +130,14 @@ export class WasmEngine {
     if (!this.module || this.handle === 0) return;
     this.module.engine_set_knob(this.handle, allocString(this.module, partId), allocString(this.module, knob), value);
   }
-  pressButton(_partId: string, _pressed: boolean): void {}
-  setMeterMode(_mode: unknown): void {}
+  pressButton(partId: string, pressed: boolean): void {
+    if (pressed) this.pressed.add(partId);
+    else this.pressed.delete(partId);
+  }
+
+  setMeterMode(_mode: unknown): void {
+    // Meter loading is host-side; tracked for future wiring.
+  }
 
   getVoltages(): Float64Array {
     return this.voltages;
