@@ -70,6 +70,10 @@ are not formatter-canonical, so the check can never pass repo-wide. Never run
 files. `.gitattributes` pins `eol=lf`, so CRLF is no longer the reason it fails.
 The pre-commit hook runs `oxlint --fix` only, for the same reason.
 
+## Reminder
+
+The repository name is **`noesis-lab`** (noasis, not "noasis"). Use this exact spelling in paths, URLs, and commit messages.
+
 Routing is hash-based (`/#/boards`, `/#/diagnostics`). `src/main.tsx` folds the
 clean top-level paths into the hash before the router mounts, but a static host
 without a rewrite rule still answers a clean path with its own 404.
