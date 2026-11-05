@@ -24,6 +24,7 @@ import {
   reportedFaults,
   type ScriptFault,
 } from '@/features/simulation';
+import type { WasmEngine } from '@/features/simulation/engine-wasm/adapter';
 import { McuRuntime } from '@/features/simulation';
 import { pythonModulesFor } from '@/features/simulation';
 import { compile } from '@/features/simulation';
@@ -244,6 +245,8 @@ export interface SimulationDeps {
   readonly liveNetwork?: boolean;
   /** Test seam: the fetcher a bridge uses instead of the browser's own. */
   readonly liveFetcher?: NetFetcher;
+  /** Optional engine instance. When absent, a TS `Engine` is created. */
+  readonly engine?: Engine | WasmEngine;
 }
 
 export class Simulation {
@@ -341,13 +344,39 @@ export class Simulation {
     this.engine.setScriptedI2c(createScriptedI2c(runtime, () => this.bench.parts));
   }
 
+  /**
+   * Async factory. When `WASM_DEFAULT=1` (or `true`) the WasmEngine adapter is
+   * used instead of the TS Engine; otherwise this is equivalent to `new Simulation(...)`.
+   */
+  static async create(board: PartDefinition, deps?: SimulationDeps): Promise<Simulation> {
+    let flag: string | undefined;
+    if (typeof process !== 'undefined' && process.env?.WASM_DEFAULT) flag = process.env.WASM_DEFAULT;
+    else if (typeof import.meta !== 'undefined') flag = (import.meta as { env?: Record<string, string | undefined> }).env?.WASM_DEFAULT;
+    const wasmDefault = !!flag && /^(1|true)$/.test(flag);
+    if (wasmDefault && deps?.engine === undefined) {
+      const { WasmEngine } = await import('@/features/simulation/engine-wasm/adapter');
+      const mcu = new McuRuntime(board);
+      const builder = new BenchBuilder();
+      const controls = new DynamicState();
+      const wasmEngine = await WasmEngine.create({ bench: builder.build(), mcu, dynamicState: controls });
+      return new Simulation(board, { ...deps, engine: wasmEngine as unknown as Engine | WasmEngine });
+    }
+    return new Simulation(board, deps);
+  }
+
   constructor(board: PartDefinition, deps?: SimulationDeps) {
     this.mcu = new McuRuntime(board);
-    this.engine = new Engine({
-      bench: this.builder.build(),
-      mcu: this.mcu,
-      dynamicState: this.controls,
-    });
+    if (deps?.engine) {
+      // WasmEngine is a (partial) drop-in for Engine; the flag is opt-in and the
+      // remaining Engine-only methods throw at runtime until they land.
+      this.engine = deps.engine as unknown as Engine;
+    } else {
+      this.engine = new Engine({
+        bench: this.builder.build(),
+        mcu: this.mcu,
+        dynamicState: this.controls,
+      });
+    }
     /*
      * Assigned after the engine because the clock is read from it. A bridge is
      * installed only when the build asked for one, so the default bench cannot
