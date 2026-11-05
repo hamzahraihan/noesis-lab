@@ -111,8 +111,19 @@ export class WasmEngine {
     await this.step(1e-5 * 1000);
   }
 
-  writeDigital(_gpio: number, _level: boolean): void {}
-  turnKnob(_partId: string, _knob: string, _value: number): void {}
+  writeDigital(gpio: number, level: boolean): void {
+    if (!this.module || this.handle === 0) return;
+    const pinId = this.mcu.pinIdForGpio(gpio);
+    if (!pinId) return;
+    const mcuPart = this.bench.parts.find((p) => p.definition.component.kind === 'mcu');
+    if (!mcuPart) return;
+    this.module.engine_set_pin(this.handle, allocString(this.module, mcuPart.id), allocString(this.module, pinId), level ? 1 : 0);
+  }
+
+  turnKnob(partId: string, knob: string, value: number): void {
+    if (!this.module || this.handle === 0) return;
+    this.module.engine_set_knob(this.handle, allocString(this.module, partId), allocString(this.module, knob), value);
+  }
   pressButton(_partId: string, _pressed: boolean): void {}
   setMeterMode(_mode: unknown): void {}
 
