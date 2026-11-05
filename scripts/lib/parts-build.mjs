@@ -93,6 +93,8 @@ export const EXPORTED_FUNCTIONS = Object.freeze([
   '_part_create_rfid',
   '_part_create_neopixel',
   '_part_create_sonar',
+  '_part_create_dht',
+  '_part_create_ds18b20',
   '_part_create_button',
   '_part_create_potentiometer',
   '_part_create_power_supply',

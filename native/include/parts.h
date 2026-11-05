@@ -213,6 +213,8 @@ extern "C" PartHandle part_create_thermocouple(uint32_t part_id);
 extern "C" PartHandle part_create_rfid(uint32_t part_id, uint8_t address);
 extern "C" PartHandle part_create_neopixel(uint32_t part_id, uint16_t count);
 extern "C" PartHandle part_create_sonar(uint32_t part_id);
+extern "C" PartHandle part_create_dht(uint32_t part_id);
+extern "C" PartHandle part_create_ds18b20(uint32_t part_id);
 extern "C" PartHandle part_create_button(uint32_t part_id);
 extern "C" PartHandle part_create_potentiometer(uint32_t part_id, double max_ohms);
 extern "C" PartHandle part_create_power_supply(uint32_t part_id, double initial_volts);
