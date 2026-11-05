@@ -13,7 +13,9 @@ import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from '../netlist';
 import { ProbeDeck } from '../probe';
 import { COMPONENT_KIND, paramsFor } from './netlist';
-import { KEYPAD_KEYS } from '@/features/parts';
+import { KEYPAD_KEYS, createController, type DisplayController } from '@/features/parts';
+import { SevenSegment } from '@/features/parts/display/sevensegment';
+import { Tm1637 } from '@/features/parts/tm1637';
 
 export interface WasmEngineOptions {
   bench: Bench;
@@ -69,6 +71,8 @@ export class WasmEngine {
   private pressed = new Set<string>();
   private pendingSketch = '';
 
+  private displays = new Map<string, DisplayController>();
+
   private constructor(options: WasmEngineOptions) {
     this.bench = options.bench;
     this.mcu = options.mcu;
@@ -93,6 +97,21 @@ export class WasmEngine {
     const sketchPtr = allocString(mod, this.pendingSketch);
     this.handle = mod.engine_create(circuitPtr, sketchPtr);
     if (this.handle === 0) throw new Error('WasmEngine: engine_create failed');
+
+    // Display controllers for display parts.
+    this.displays.clear();
+    for (const part of this.bench.parts) {
+      const kind = part.definition.component.kind;
+      let controller: DisplayController | null = null;
+      if (kind === 'tm1637') {
+        controller = new Tm1637();
+      } else if (kind === '7segment') {
+        controller = new SevenSegment(part.definition.component.digits ?? 1);
+      } else {
+        controller = createController(part.definition);
+      }
+      if (controller) this.displays.set(part.id, controller);
+    }
   }
 
   async step(dtMs: number): Promise<void> {
@@ -153,6 +172,10 @@ export class WasmEngine {
 
   getDisplayFramebuffers(): Map<string, unknown> {
     return new Map();
+  }
+
+  displayController(partId: string): DisplayController | undefined {
+    return this.displays.get(partId);
   }
 
   setBreakpoint(pc: number): void {
