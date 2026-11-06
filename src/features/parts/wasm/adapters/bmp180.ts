@@ -19,7 +19,11 @@ export const bmp180Adapter: PartAdapter = {
     if (module) {
       return module.part_create_sensor_i2c(part_id, type, address);
     } else {
-      return new Bmp180();
+      const dev = new Bmp180();
+      // Track conditions for knobs
+      const conditions = { celsius: 20, pascals: 101325 };
+      dev.setConditionsSource(() => conditions);
+      return { dev, conditions };
     }
   },
 
@@ -40,7 +44,7 @@ export const bmp180Adapter: PartAdapter = {
         module.part_set_knob(instance as number, stimulus.name, stimulus.value);
       }
     } else {
-      const dev = instance as Bmp180;
+      const { dev, conditions } = instance as { dev: Bmp180; conditions: { celsius: number; pascals: number } };
       if (stimulus.kind === 'i2c-write') {
         stimulus.bytes.forEach((byte: number) => {
           dev.receive(byte, true);
@@ -49,20 +53,20 @@ export const bmp180Adapter: PartAdapter = {
         dev.read(stimulus.count);
       } else if (stimulus.kind === 'knob') {
         if (stimulus.name === 'temperature') {
-          dev.setConditionsSource(() => ({ pascals: 101325, celsius: stimulus.value }));
+          conditions.celsius = stimulus.value;
         } else if (stimulus.name === 'pressure') {
-          dev.setConditionsSource(() => ({ pascals: stimulus.value * 100, celsius: 20 }));
+          conditions.pascals = stimulus.value * 100;
         }
       }
     }
   },
 
-  readScalars(_instance: unknown, module?: PartsModule): number[] {
+  readScalars(instance: unknown, module?: PartsModule): number[] {
     if (module) {
       throw new Error('BMP180: wasm path should use snapshotToScalars');
     } else {
-      // BMP180 doesn't expose celsius/pascals directly - use default
-      return [25000, 101325];
+      const { dev } = instance as { dev: Bmp180; conditions: { celsius: number; pascals: number } };
+      return [dev.getTemperatureMilliC(), dev.getPressurePa()];
     }
   },
 

@@ -25,6 +25,8 @@ import { max6675Adapter } from './max6675';
 import { sonarAdapter } from './sonar';
 import { dhtAdapter } from './dht';
 import { ds18b20Adapter } from './ds18b20';
+import { ina219Adapter } from './ina219';
+import { tmp102Adapter } from './tmp102';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -50,6 +52,8 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   sonar: sonarAdapter,
   dht: dhtAdapter,
   ds18b20: ds18b20Adapter,
+  ina219: ina219Adapter,
+  tmp102: tmp102Adapter,
 };
 
 export * from './pcf8574';
@@ -64,9 +68,15 @@ export * from './ssd1306';
 export * from './ili9341';
 export * from './max7219';
 export * from './hd44780';
+export * from './bh1750';
+export * from './bmp180';
+export * from './sht31';
+export * from './eeprom24lc256';
 export * from './pca9685';
 export * from './mcp4725';
 export * from './max6675';
 export * from './sonar';
 export * from './dht';
 export * from './ds18b20';
+export * from './ina219';
+export * from './tmp102';
