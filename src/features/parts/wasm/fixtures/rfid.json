@@ -1,0 +1,23 @@
+{
+  "part": "rfid",
+  "factoryArgs": [1, 40],
+  "stimuli": [
+    { "kind": "knob", "name": "card", "value": 1 },
+    { "kind": "spi-transfer", "byte": 2, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 0, "dc": true, "cs": false },
+    { "kind": "spi-transfer", "byte": 8, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 127, "dc": true, "cs": false },
+    { "kind": "spi-transfer", "byte": 20, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 128, "dc": true, "cs": false },
+    { "kind": "spi-transfer", "byte": 18, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 38, "dc": true, "cs": false },
+    { "kind": "spi-transfer", "byte": 2, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 12, "dc": true, "cs": false },
+    { "kind": "spi-transfer", "byte": 26, "dc": true, "cs": true },
+    { "kind": "spi-transfer", "byte": 135, "dc": true, "cs": false },
+    { "kind": "knob", "name": "card", "value": 0 },
+    { "kind": "knob", "name": "card", "value": 1 }
+  ],
+  "labels": ["rfid_card_present", "rfid_version"],
+  "note": "RFID card present, REQA + transceive sequence over SPI, card toggled off then on; card_present=1, version=0x92"
+}

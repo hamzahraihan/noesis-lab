@@ -213,6 +213,9 @@ extern "C" PartHandle part_create_adc(uint32_t part_id, uint8_t address, uint8_t
 extern "C" PartHandle part_create_thermocouple(uint32_t part_id);
 extern "C" PartHandle part_create_rfid(uint32_t part_id, uint8_t address);
 extern "C" PartHandle part_create_neopixel(uint32_t part_id, uint16_t count);
+extern "C" PartHandle part_create_dialer(uint32_t part_id);
+extern "C" PartHandle part_create_remote(uint32_t part_id);
+extern "C" PartHandle part_create_sdcard(uint32_t part_id);
 extern "C" PartHandle part_create_sonar(uint32_t part_id);
 extern "C" PartHandle part_create_dht(uint32_t part_id);
 extern "C" PartHandle part_create_ds18b20(uint32_t part_id);

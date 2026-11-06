@@ -2,7 +2,14 @@
  * Servo adapter for the differential harness.
  *
  * C++: part_create_servo(part_id) → ServoContext
- * TS:  Servo-like pulse decode
+ * TS:  Servo-like pulse decode (local ServoOracle, not the devices/Servo class)
+ *
+ * Adapter parity note: the real TS Servo class (devices/servo.ts) works at
+ * the degree level (write(degrees)), while the differential harness drives
+ * pin-level stimuli (PWM pulse on pin 0). The local ServoOracle mirrors the
+ * C++ pulse-width measurement and 10°/170° mechanical-stop clamp exactly,
+ * which is what the gate compares. Using devices/Servo would require a
+ * pin-to-degree conversion layer that the harness does not provide.
  */
 import type { PartAdapter } from '../probe';
 import type { PartsModule } from '../parts-module';

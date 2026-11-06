@@ -3,6 +3,13 @@
  *
  * C++: part_create_stepper(part_id, step_angle_deg) → StepperContext
  * TS:  stepper.ts windingPolarity / stepTransition / STEP_DEGREES
+ *      (local StepperOracle; no TS Stepper device class exists in devices/)
+ *
+ * Adapter parity note: there is no TS Stepper device class —
+ * src/features/parts/stepper.ts exports utility functions
+ * (stepTransition, windingPolarity, windingAngle, shortestAngleDelta) but no
+ * class with a pin-level interface. The local StepperOracle mirrors the C++
+ * Gray-cycle edge decoding exactly, which is what the gate compares.
  */
 import type { PartAdapter } from '../probe';
 import type { PartsModule } from '../parts-module';

@@ -70,6 +70,10 @@ enum class PartContextType : uint8_t {
     SONAR,
     DHT,
     DS18B20,
+    ENCODER,
+    DIALER,
+    REMOTE,
+    SD_CARD,
 };
 
 struct PartContext {
@@ -411,6 +415,9 @@ struct StepperDriverContext : PartContext {
     bool in_reset = false;
     // Pin state: 0=STEP, 1=DIR, 2=ENABLE, 3=RESET, 4=SLEEP, 5=MS1, 6=MS2, 7=MS3
     bool pin_state[8] = {false, false, false, false, false, false, false, false};
+    // VREF current limit, OCP/OTP fault and fixed off-time PWM (chopper) are
+    // outside the DC linear solver; the TS A4988 models the average output
+    // instead. Not implemented here.
     PartContextType type() const override { return PartContextType::STEPPER_DRIVER; }
 };
 
@@ -541,6 +548,53 @@ struct DHTContext : PartContext {
 struct DS18B20Context : PartContext {
     int32_t temp_milli_c = 22000;
     PartContextType type() const override { return PartContextType::DS18B20; }
+};
+
+// Rotary encoder (KY-040): knob-driven detent position, quadrature CLK/DT,
+// push button SW (active low).
+struct EncoderContext : PartContext {
+    int32_t detent = 0;             // Knob-driven detent position
+    bool clk_level = true;          // CLK pin level (idle high)
+    bool dt_level = true;           // DT pin level (idle high)
+    bool sw_level = true;           // SW push-button level (active low, idle high)
+    PartContextType type() const override { return PartContextType::ENCODER; }
+
+    // Recompute CLK/DT from detent position using the same quadrature pattern
+    // as the TS encoder.ts: QUADRATURE[[1,1],[0,1],[0,0],[1,0]], both idle high.
+    void update_quadrature() {
+        int idx = (((detent % 4) + 4) % 4);
+        static const bool quad[4][2] = {
+            {true, true},   // detent 0: CLK=1, DT=1 (idle high)
+            {false, true},  // detent 1: CLK=0, DT=1 (DT fell first = CW)
+            {false, false}, // detent 2: CLK=0, DT=0
+            {true, false},  // detent 3: CLK=1, DT=0 (CLK rose first = CCW)
+        };
+        clk_level = quad[idx][0];
+        dt_level = quad[idx][1];
+    }
+};
+
+// Rotary dialer: knob-driven digit (0-9), PULSE pin is topology-only
+struct DialerContext : PartContext {
+    int32_t digit = 0;             // Finger hole the dial stopped at (0-9)
+    PartContextType type() const override { return PartContextType::DIALER; }
+};
+
+// IR remote: pinless, momentary, key knob (0-19) + pressed state.
+// ir_code returns the pressed key's NEC code, or 0 when not pressed.
+struct RemoteContext : PartContext {
+    int32_t key = 0;               // Key index (0-19), matches REMOTE_KEY_KNOB
+    bool pressed = false;          // Key held down
+    PartContextType type() const override { return PartContextType::REMOTE; }
+};
+
+// MicroSD card: knob-driven file store (present/write/remove).
+struct SDCardContext : PartContext {
+    bool present = false;          // Card inserted
+    uint8_t last_byte = 0;         // Last byte written
+    uint32_t write_count = 0;      // Number of writes
+    uint32_t total_bytes = 0;      // Total bytes stored
+    PartContextType type() const override { return PartContextType::SD_CARD; }
 };
 
 // ============================================================================
@@ -1612,6 +1666,14 @@ static uint8_t spi_mfrc522_read(void* ctx, bool data_select, bool chip_selected)
     return 0;
 }
 
+static void spi_mfrc522_latch(void* ctx) {
+    // Chip-select rose: end of transaction. Reset the register pointer so the
+    // next transaction starts with an address byte, mirroring the TS model's
+    // endTransaction() resetting expectAddress.
+    MFRC522Context* dev = static_cast<MFRC522Context*>(ctx);
+    dev->reg_ptr = 0x00;
+}
+
 static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
     ILI9341Context* dev = static_cast<ILI9341Context*>(ctx);
     if (!chip_selected) return;
@@ -1900,6 +1962,11 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
             // No time-based advancement needed
             break;
         }
+        case PART_KIND_ENCODER: {
+            // Encoder is knob-driven (detent position) and pin-driven (SW button).
+            // No time-based advancement needed in part_stamp.
+            break;
+        }
         default:
             break;
     }
@@ -1907,6 +1974,16 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
 
 // Static buffer for part_get_state return value (single-threaded wasm use)
 static PartStateSnapshot g_part_state_snapshot = {};
+
+// NEC codes for the 20 remote keys, matching remote.ts NEC_CODES table
+static int32_t remote_code(int32_t key) {
+    static const int32_t codes[20] = {
+        0xa2, 0xe2, 0x22, 0x02, 0xc2, 0xe0, 0xa8, 0x90, 0x68, 0x98,
+        0xb0, 0x30, 0x18, 0x7a, 0x10, 0x38, 0x5a, 0x42, 0x4a, 0x52
+    };
+    if (key < 0 || key >= 20) return 0;
+    return codes[key];
+}
 
 extern "C" PartStateSnapshot* part_get_state(void* handle) {
     PartStateSnapshot* snap = &g_part_state_snapshot;
@@ -2041,6 +2118,10 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_SERVO: {
             ServoContext* ctx = static_cast<ServoContext*>(inst->impl);
+            // Mechanical stops clamp to 10°/170°, matching the TS Servo class's
+            // STOP_LOW_DEGREES/STOP_HIGH_DEGREES. A sketch asking for 0° or 180°
+            // is accepted by the pulse-to-angle map but the horn never travels
+            // past the stops — that is the servo's whole point.
             snap->servo_angle = ctx->current_angle;
             break;
         }
@@ -2061,7 +2142,9 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_RFID: {
             MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
-            snap->rfid_card_present = ctx->card_present;
+            snap->rfid_card_present = ctx->card_present ? 1 : 0;
+            snap->rfid_version = 0x92;  // VersionReg: MFRC522 v2.0
+            snap->rfid_com_irq = ctx->command == 0x0C ? 0x20 : 0x00;  // IRQ_RX after transceive
             break;
         }
         case PART_KIND_I2C_EXPANDER: {
@@ -2178,6 +2261,32 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         case PART_KIND_DS18B20: {
             DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
             snap->sensor_temp_milli_c = ctx->temp_milli_c;
+            break;
+        }
+        case PART_KIND_ENCODER: {
+            EncoderContext* ctx = static_cast<EncoderContext*>(inst->impl);
+            snap->encoder_detent = ctx->detent;
+            snap->encoder_clk = ctx->clk_level ? 1 : 0;
+            snap->encoder_dt = ctx->dt_level ? 1 : 0;
+            snap->encoder_sw = ctx->sw_level ? 1 : 0;
+            break;
+        }
+        case PART_KIND_DIALER: {
+            DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
+            snap->dialer_digit = ctx->digit;
+            break;
+        }
+        case PART_KIND_REMOTE: {
+            RemoteContext* ctx = static_cast<RemoteContext*>(inst->impl);
+            snap->ir_code = ctx->pressed ? remote_code(ctx->key) : 0;
+            break;
+        }
+        case PART_KIND_SD_CARD: {
+            SDCardContext* ctx = static_cast<SDCardContext*>(inst->impl);
+            snap->sd_present = ctx->present ? 1 : 0;
+            snap->sd_write_count = static_cast<int32_t>(ctx->write_count);
+            snap->sd_last_byte = static_cast<int32_t>(ctx->last_byte);
+            snap->sd_total_bytes = static_cast<int32_t>(ctx->total_bytes);
             break;
         }
         default:
@@ -2320,6 +2429,53 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_DS18B20: {
             DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
+            break;
+        }
+        case PART_KIND_ENCODER: {
+            EncoderContext* ctx = static_cast<EncoderContext*>(inst->impl);
+            if (strcmp(knob_name, "detent") == 0) {
+                ctx->detent = static_cast<int32_t>(std::round(value));
+                ctx->update_quadrature();
+            }
+            break;
+        }
+        case PART_KIND_RFID: {
+            MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
+            if (strcmp(knob_name, "card") == 0) ctx->card_present = (value != 0.0);
+            break;
+        }
+        case PART_KIND_DIALER: {
+            DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
+            if (strcmp(knob_name, "digit") == 0) {
+                ctx->digit = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 9));
+            }
+            break;
+        }
+        case PART_KIND_REMOTE: {
+            RemoteContext* ctx = static_cast<RemoteContext*>(inst->impl);
+            if (strcmp(knob_name, "key") == 0) {
+                ctx->key = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 19));
+            } else if (strcmp(knob_name, "pressed") == 0) {
+                ctx->pressed = (value != 0.0);
+            }
+            break;
+        }
+        case PART_KIND_SD_CARD: {
+            SDCardContext* ctx = static_cast<SDCardContext*>(inst->impl);
+            if (strcmp(knob_name, "present") == 0) {
+                ctx->present = (value != 0.0);
+            } else if (strcmp(knob_name, "write") == 0) {
+                if (ctx->present) {
+                    ctx->last_byte = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 255));
+                    ctx->write_count++;
+                    ctx->total_bytes++;
+                }
+            } else if (strcmp(knob_name, "remove") == 0) {
+                ctx->present = false;
+                ctx->write_count = 0;
+                ctx->total_bytes = 0;
+                ctx->last_byte = 0;
+            }
             break;
         }
         default:
@@ -2476,6 +2632,10 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
             }
             
             // Update coil outputs based on current state
+            // VREF current limit, OCP/OTP fault and fixed off-time PWM (the
+            // high-frequency chopper) are outside the DC linear solver; the TS
+            // A4988 models average output duties instead. Outputs here are the
+            // same binary/full-step or sine-duty average the TS produces.
             if (!ctx->enabled || ctx->asleep || ctx->in_reset) {
                 ctx->coil_outputs[0] = ctx->coil_outputs[1] = ctx->coil_outputs[2] = ctx->coil_outputs[3] = 0;
             } else if (ctx->active_microsteps == 1) {
@@ -2504,6 +2664,14 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
                 ctx->coil_outputs[1] = ((1.0 - a) / 2.0 > 0.5) ? 1 : 0;  // 1B
                 ctx->coil_outputs[2] = ((1.0 + b) / 2.0 > 0.5) ? 1 : 0;  // 2A
                 ctx->coil_outputs[3] = ((1.0 - b) / 2.0 > 0.5) ? 1 : 0;  // 2B
+            }
+            break;
+        }
+        case PART_KIND_ENCODER: {
+            EncoderContext* ctx = static_cast<EncoderContext*>(inst->impl);
+            // Pin mapping: 0=CLK, 1=DT, 2=SW (push button, active low)
+            if (pin_index == 2) {
+                ctx->sw_level = high;  // SW level directly from pin
             }
             break;
         }
@@ -2813,6 +2981,7 @@ extern "C" void* part_create_rfid(uint32_t part_id, uint8_t address) {
     spi_part.ctx = ctx;
     spi_part.receive = spi_mfrc522_receive;
     spi_part.read = spi_mfrc522_read;
+    spi_part.latch = spi_mfrc522_latch;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
@@ -2822,6 +2991,33 @@ extern "C" void* part_create_neopixel(uint32_t part_id, uint16_t count) {
     PartInstance* inst = static_cast<PartInstance*>(handle);
     // NeoPixel uses 1-wire protocol on a GPIO pin, not SPI/I2C
     // Implementation would be in part_stamp
+    return handle;
+}
+
+extern "C" void* part_create_dialer(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_DIALER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    DialerContext* ctx = new DialerContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_remote(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_REMOTE, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    RemoteContext* ctx = new RemoteContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_sdcard(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_SD_CARD, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    SDCardContext* ctx = new SDCardContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 
@@ -2852,6 +3048,15 @@ extern "C" void* part_create_sonar(uint32_t part_id) {
     SonarContext* ctx = new SonarContext();
     ctx->distance_cm = 100.0;
     ctx->echo_us = static_cast<uint16_t>(std::lround(ctx->distance_cm * 58.0));
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_encoder(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_ENCODER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    EncoderContext* ctx = new EncoderContext();
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
     return handle;

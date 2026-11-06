@@ -1,0 +1,13 @@
+{
+  "part": "remote",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "key", "value": 0 },
+    { "kind": "knob", "name": "pressed", "value": 1 },
+    { "kind": "knob", "name": "key", "value": 11 },
+    { "kind": "knob", "name": "pressed", "value": 0 },
+    { "kind": "knob", "name": "pressed", "value": 1 }
+  ],
+  "labels": ["ir_code"],
+  "note": "IR remote: key 0 pressed -> 0xa2; key 11 pressed -> 0x30; released -> 0; pressed again -> 0x30"
+}
