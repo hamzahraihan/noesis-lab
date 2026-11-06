@@ -388,6 +388,9 @@ struct StepperDriverContext : PartContext {
     bool in_reset = false;
     // Pin state: 0=STEP, 1=DIR, 2=ENABLE, 3=RESET, 4=SLEEP, 5=MS1, 6=MS2, 7=MS3
     bool pin_state[8] = {false, false, false, false, false, false, false, false};
+    // VREF current limit, OCP/OTP fault and fixed off-time PWM (chopper) are
+    // outside the DC linear solver; the TS A4988 models the average output
+    // instead. Not implemented here.
     PartContextType type() const override { return PartContextType::STEPPER_DRIVER; }
 };
 
@@ -1915,6 +1918,10 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_SERVO: {
             ServoContext* ctx = static_cast<ServoContext*>(inst->impl);
+            // Mechanical stops clamp to 10°/170°, matching the TS Servo class's
+            // STOP_LOW_DEGREES/STOP_HIGH_DEGREES. A sketch asking for 0° or 180°
+            // is accepted by the pulse-to-angle map but the horn never travels
+            // past the stops — that is the servo's whole point.
             snap->servo_angle = ctx->current_angle;
             break;
         }
@@ -2328,6 +2335,10 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
             }
             
             // Update coil outputs based on current state
+            // VREF current limit, OCP/OTP fault and fixed off-time PWM (the
+            // high-frequency chopper) are outside the DC linear solver; the TS
+            // A4988 models average output duties instead. Outputs here are the
+            // same binary/full-step or sine-duty average the TS produces.
             if (!ctx->enabled || ctx->asleep || ctx->in_reset) {
                 ctx->coil_outputs[0] = ctx->coil_outputs[1] = ctx->coil_outputs[2] = ctx->coil_outputs[3] = 0;
             } else if (ctx->active_microsteps == 1) {
