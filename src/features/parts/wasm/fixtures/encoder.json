@@ -1,0 +1,12 @@
+{
+  "part": "encoder",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "detent", "value": 0 },
+    { "kind": "pin", "index": 2, "high": false },
+    { "kind": "knob", "name": "detent", "value": 1 },
+    { "kind": "pin", "index": 2, "high": true }
+  ],
+  "labels": ["encoder_detent", "encoder_clk", "encoder_dt", "encoder_sw"],
+  "note": "Encoder detent 0 → CLK=1 DT=1 (idle); detent 1 → CLK=0 DT=1 (CW step); SW pressed (low) then released (high)"
+}
