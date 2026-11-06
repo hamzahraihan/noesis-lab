@@ -97,7 +97,16 @@
         "neopixel_pixel2_b": { "type": "integer", "description": "Pixel 2 blue channel (0-255)" },
         "neopixel_pixel3_r": { "type": "integer", "description": "Pixel 3 red channel (0-255)" },
         "neopixel_pixel3_g": { "type": "integer", "description": "Pixel 3 green channel (0-255)" },
-        "neopixel_pixel3_b": { "type": "integer", "description": "Pixel 3 blue channel (0-255)" }
+        "neopixel_pixel3_b": { "type": "integer", "description": "Pixel 3 blue channel (0-255)" },
+        "scripted_reg_ptr": { "type": "integer", "description": "Scripted I2C register pointer", "minimum": 0, "maximum": 255 },
+        "scripted_reg_0": { "type": "integer", "description": "Scripted register 0", "minimum": 0, "maximum": 255 },
+        "scripted_reg_1": { "type": "integer", "description": "Scripted register 1", "minimum": 0, "maximum": 255 },
+        "scripted_reg_2": { "type": "integer", "description": "Scripted register 2", "minimum": 0, "maximum": 255 },
+        "scripted_reg_3": { "type": "integer", "description": "Scripted register 3", "minimum": 0, "maximum": 255 },
+        "scripted_reg_4": { "type": "integer", "description": "Scripted register 4", "minimum": 0, "maximum": 255 },
+        "scripted_reg_5": { "type": "integer", "description": "Scripted register 5", "minimum": 0, "maximum": 255 },
+        "scripted_reg_6": { "type": "integer", "description": "Scripted register 6", "minimum": 0, "maximum": 255 },
+        "scripted_reg_7": { "type": "integer", "description": "Scripted register 7", "minimum": 0, "maximum": 255 }
       }
     }
   }

@@ -128,10 +128,21 @@ struct PartStateSnapshot {
     int32_t neopixel_pixel1_r, neopixel_pixel1_g, neopixel_pixel1_b;
     int32_t neopixel_pixel2_r, neopixel_pixel2_g, neopixel_pixel2_b;
     int32_t neopixel_pixel3_r, neopixel_pixel3_g, neopixel_pixel3_b;
+
+    // Scripted I2C slave: register file
+    int32_t scripted_reg_ptr;
+    int32_t scripted_reg_0;
+    int32_t scripted_reg_1;
+    int32_t scripted_reg_2;
+    int32_t scripted_reg_3;
+    int32_t scripted_reg_4;
+    int32_t scripted_reg_5;
+    int32_t scripted_reg_6;
+    int32_t scripted_reg_7;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 368, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 404, "PartStateSnapshot packing failed");

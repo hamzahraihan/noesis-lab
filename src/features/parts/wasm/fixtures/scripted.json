@@ -1,0 +1,13 @@
+{
+  "part": "scripted",
+  "factoryArgs": [1, 80],
+  "stimuli": [
+    { "kind": "i2c-write", "address": 80, "bytes": [2, 90] },
+    { "kind": "i2c-read", "address": 80, "count": 1 },
+    { "kind": "knob", "name": "reg_5", "value": 171 },
+    { "kind": "knob", "name": "reg_ptr", "value": 5 },
+    { "kind": "i2c-read", "address": 80, "count": 1 }
+  ],
+  "labels": ["scripted_reg_ptr", "scripted_reg_0", "scripted_reg_1", "scripted_reg_2", "scripted_reg_3", "scripted_reg_4", "scripted_reg_5", "scripted_reg_6", "scripted_reg_7"],
+  "note": "Scripted I2C slave: write reg 0x02=0x5a, read back; set reg_5=0xab via knob, set ptr=5, read reg 5"
+}

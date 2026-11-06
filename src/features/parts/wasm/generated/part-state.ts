@@ -135,6 +135,17 @@ export interface PartStateSnapshot {
   neopixel_pixel3_r: number;
   neopixel_pixel3_g: number;
   neopixel_pixel3_b: number;
+
+  // Scripted I2C slave: register file
+  scripted_reg_ptr: number;
+  scripted_reg_0: number;
+  scripted_reg_1: number;
+  scripted_reg_2: number;
+  scripted_reg_3: number;
+  scripted_reg_4: number;
+  scripted_reg_5: number;
+  scripted_reg_6: number;
+  scripted_reg_7: number;
 }
 
 export interface PartStateSnapshotResponse {

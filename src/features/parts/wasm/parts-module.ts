@@ -227,6 +227,17 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     neopixel_pixel3_r: rI32(),
     neopixel_pixel3_g: rI32(),
     neopixel_pixel3_b: rI32(),
+
+    // Scripted I2C slave: register file
+    scripted_reg_ptr: rI32(),
+    scripted_reg_0: rI32(),
+    scripted_reg_1: rI32(),
+    scripted_reg_2: rI32(),
+    scripted_reg_3: rI32(),
+    scripted_reg_4: rI32(),
+    scripted_reg_5: rI32(),
+    scripted_reg_6: rI32(),
+    scripted_reg_7: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
@@ -334,6 +345,7 @@ export interface PartsModule {
   part_create_eeprom(part_id: number, address: number): number;
   part_create_rfid(part_id: number, address: number): number;
   part_create_neopixel(part_id: number, count: number): number;
+  part_create_scripted(part_id: number, address: number): number;
   part_create_sonar(part_id: number): number;
   part_create_dht(part_id: number): number;
   part_create_ds18b20(part_id: number): number;
@@ -437,6 +449,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
   part_create_eeprom: exp.part_create_eeprom as (part_id: number, address: number) => number,
     part_create_rfid: exp.part_create_rfid as (part_id: number, address: number) => number,
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
+    part_create_scripted: exp.part_create_scripted as (part_id: number, address: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,
     part_create_dht: exp.part_create_dht as (part_id: number) => number,
     part_create_ds18b20: exp.part_create_ds18b20 as (part_id: number) => number,

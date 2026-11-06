@@ -70,6 +70,7 @@ enum class PartContextType : uint8_t {
     DHT,
     DS18B20,
     NEOPIXEL,
+    SCRIPTED,
 };
 
 struct PartContext {
@@ -536,6 +537,16 @@ struct NeoPixelContext : PartContext {
         if (b >= 0) pixels[base + 2] = static_cast<uint8_t>(std::clamp(b, 0, 255));
         if (index + 1 > pixel_count) pixel_count = static_cast<int32_t>(index + 1);
     }
+};
+
+// Scripted I2C slave: a register file whose read/write semantics are defined
+// by a QuickJS script on the TS side. The C++ model stores written bytes in
+// the register file and returns them on read, mirroring a script that echoes
+// its registers.
+struct ScriptedContext : PartContext {
+    uint8_t reg_ptr = 0;           // I2C register pointer (control byte)
+    uint8_t regs[256] = {0};       // Register file, one byte per address
+    PartContextType type() const override { return PartContextType::SCRIPTED; }
 };
 
 // ============================================================================
@@ -1407,6 +1418,27 @@ static void tmp102_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_
     *out_len = len;
 }
 
+// Scripted I2C slave callbacks
+static bool scripted_receive(void* ctx, uint8_t byte, bool is_control) {
+    ScriptedContext* dev = static_cast<ScriptedContext*>(ctx);
+    if (is_control) {
+        dev->reg_ptr = byte;
+        return true;
+    }
+    // Write data byte to current register
+    dev->regs[dev->reg_ptr] = byte;
+    return true;
+}
+
+static void scripted_read(void* ctx, uint8_t* buffer, uint8_t count, uint8_t* out_len) {
+    ScriptedContext* dev = static_cast<ScriptedContext*>(ctx);
+    uint8_t len = std::min<uint8_t>(count, 255);
+    for (uint8_t i = 0; i < len; ++i) {
+        buffer[i] = dev->regs[dev->reg_ptr];
+    }
+    *out_len = len;
+}
+
 // EEPROM 24LC256 I2C callbacks
 static bool eeprom24lc256_receive(void* ctx, uint8_t byte, bool is_control) {
     EEPROM24LC256Context* dev = static_cast<EEPROM24LC256Context*>(ctx);
@@ -2102,6 +2134,19 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             }
             break;
         }
+        case PART_KIND_SCRIPTED: {
+            ScriptedContext* ctx = static_cast<ScriptedContext*>(inst->impl);
+            snap->scripted_reg_ptr = ctx->reg_ptr;
+            snap->scripted_reg_0 = ctx->regs[0];
+            snap->scripted_reg_1 = ctx->regs[1];
+            snap->scripted_reg_2 = ctx->regs[2];
+            snap->scripted_reg_3 = ctx->regs[3];
+            snap->scripted_reg_4 = ctx->regs[4];
+            snap->scripted_reg_5 = ctx->regs[5];
+            snap->scripted_reg_6 = ctx->regs[6];
+            snap->scripted_reg_7 = ctx->regs[7];
+            break;
+        }
         default:
             break;
     }
@@ -2230,6 +2275,18 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
                 if (channel == 'r') ctx->set_pixel(pixel, v, -1, -1);
                 else if (channel == 'g') ctx->set_pixel(pixel, -1, v, -1);
                 else if (channel == 'b') ctx->set_pixel(pixel, -1, -1, v);
+            }
+            break;
+        }
+        case PART_KIND_SCRIPTED: {
+            ScriptedContext* ctx = static_cast<ScriptedContext*>(inst->impl);
+            if (strcmp(knob_name, "reg_ptr") == 0) {
+                ctx->reg_ptr = static_cast<uint8_t>(std::clamp(static_cast<int>(value), 0, 255));
+            } else if (knob_name && knob_name[0] == 'r' && knob_name[1] == 'e' &&
+                       knob_name[2] == 'g' && knob_name[3] == '_' &&
+                       knob_name[4] >= '0' && knob_name[4] <= '7' && knob_name[5] == '\0') {
+                int reg = knob_name[4] - '0';
+                ctx->regs[reg] = static_cast<uint8_t>(std::clamp(static_cast<int>(value), 0, 255));
             }
             break;
         }
@@ -2724,6 +2781,24 @@ extern "C" void* part_create_neopixel(uint32_t part_id, uint16_t count) {
     if (ctx->pixel_count > 8) ctx->pixel_count = 8;
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_scripted(uint32_t part_id, uint8_t address) {
+    void* handle = part_register(part_id, PART_KIND_SCRIPTED, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    
+    ScriptedContext* ctx = new ScriptedContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    
+    // Register as I2C device
+    void* dev_handle = i2c_bus_register_device(address, part_id);
+    I2CDeviceImpl* dev = static_cast<I2CDeviceImpl*>(dev_handle);
+    dev->ctx = ctx;
+    dev->receive = scripted_receive;
+    dev->read = scripted_read;
+    inst->kind = PART_KIND_SCRIPTED;
     return handle;
 }
 
