@@ -84,7 +84,20 @@
         "max7219_scan_limit": { "type": "integer" },
         "max7219_shutdown": { "type": "boolean" },
         "max7219_display_test": { "type": "boolean" },
-        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 }
+        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 },
+        "neopixel_count": { "type": "integer", "description": "Number of pixels on the NeoPixel strip", "minimum": 0, "maximum": 255 },
+        "neopixel_pixel0_r": { "type": "integer", "description": "Pixel 0 red channel (0-255)" },
+        "neopixel_pixel0_g": { "type": "integer", "description": "Pixel 0 green channel (0-255)" },
+        "neopixel_pixel0_b": { "type": "integer", "description": "Pixel 0 blue channel (0-255)" },
+        "neopixel_pixel1_r": { "type": "integer", "description": "Pixel 1 red channel (0-255)" },
+        "neopixel_pixel1_g": { "type": "integer", "description": "Pixel 1 green channel (0-255)" },
+        "neopixel_pixel1_b": { "type": "integer", "description": "Pixel 1 blue channel (0-255)" },
+        "neopixel_pixel2_r": { "type": "integer", "description": "Pixel 2 red channel (0-255)" },
+        "neopixel_pixel2_g": { "type": "integer", "description": "Pixel 2 green channel (0-255)" },
+        "neopixel_pixel2_b": { "type": "integer", "description": "Pixel 2 blue channel (0-255)" },
+        "neopixel_pixel3_r": { "type": "integer", "description": "Pixel 3 red channel (0-255)" },
+        "neopixel_pixel3_g": { "type": "integer", "description": "Pixel 3 green channel (0-255)" },
+        "neopixel_pixel3_b": { "type": "integer", "description": "Pixel 3 blue channel (0-255)" }
       }
     }
   }

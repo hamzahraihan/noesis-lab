@@ -1,0 +1,20 @@
+{
+  "part": "neopixel",
+  "factoryArgs": [1, 4],
+  "stimuli": [
+    { "kind": "knob", "name": "pixel0_r", "value": 255 },
+    { "kind": "knob", "name": "pixel0_g", "value": 128 },
+    { "kind": "knob", "name": "pixel0_b", "value": 64 },
+    { "kind": "knob", "name": "pixel1_r", "value": 0 },
+    { "kind": "knob", "name": "pixel1_g", "value": 255 },
+    { "kind": "knob", "name": "pixel1_b", "value": 0 },
+    { "kind": "knob", "name": "pixel2_r", "value": 300 },
+    { "kind": "knob", "name": "pixel2_g", "value": -20 },
+    { "kind": "knob", "name": "pixel2_b", "value": 12.7 },
+    { "kind": "knob", "name": "pixel3_r", "value": 10 },
+    { "kind": "knob", "name": "pixel3_g", "value": 20 },
+    { "kind": "knob", "name": "pixel3_b", "value": 30 }
+  ],
+  "labels": ["neopixel_count", "neopixel_pixel0_r", "neopixel_pixel0_g", "neopixel_pixel0_b", "neopixel_pixel1_r", "neopixel_pixel1_g", "neopixel_pixel1_b", "neopixel_pixel2_r", "neopixel_pixel2_g", "neopixel_pixel2_b", "neopixel_pixel3_r", "neopixel_pixel3_g", "neopixel_pixel3_b"],
+  "note": "NeoPixel 4 pixels: pixel0=255/128/64, pixel1=0/255/0, pixel2=300→255/-20→0/12.7→13 (clamp), pixel3=10/20/30"
+}

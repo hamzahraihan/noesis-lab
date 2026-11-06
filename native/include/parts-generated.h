@@ -121,10 +121,17 @@ struct PartStateSnapshot {
 
     // HC-SR04 ultrasonic ranger
     uint16_t sonar_echo_us;
+
+    // NeoPixel / addressable LED strip (pixel buffer, up to 4 pixels in snapshot)
+    int32_t neopixel_count;
+    int32_t neopixel_pixel0_r, neopixel_pixel0_g, neopixel_pixel0_b;
+    int32_t neopixel_pixel1_r, neopixel_pixel1_g, neopixel_pixel1_b;
+    int32_t neopixel_pixel2_r, neopixel_pixel2_g, neopixel_pixel2_b;
+    int32_t neopixel_pixel3_r, neopixel_pixel3_g, neopixel_pixel3_b;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 368, "PartStateSnapshot packing failed");

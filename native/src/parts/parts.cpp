@@ -69,6 +69,7 @@ enum class PartContextType : uint8_t {
     SONAR,
     DHT,
     DS18B20,
+    NEOPIXEL,
 };
 
 struct PartContext {
@@ -518,6 +519,23 @@ struct DHTContext : PartContext {
 struct DS18B20Context : PartContext {
     int32_t temp_milli_c = 22000;
     PartContextType type() const override { return PartContextType::DS18B20; }
+};
+
+// NeoPixel / addressable LED strip: pixel buffer driven by knob, up to 4 pixels
+// tracked in the snapshot. Colours are clamped to 0-255 per channel.
+struct NeoPixelContext : PartContext {
+    int32_t pixel_count = 0;
+    uint8_t pixels[24];  // 8 pixels * 3 channels (R,G,B); snapshot reads first 4
+    PartContextType type() const override { return PartContextType::NEOPIXEL; }
+
+    void set_pixel(int index, int r, int g, int b) {
+        if (index < 0 || index >= 8) return;
+        int base = index * 3;
+        if (r >= 0) pixels[base] = static_cast<uint8_t>(std::clamp(r, 0, 255));
+        if (g >= 0) pixels[base + 1] = static_cast<uint8_t>(std::clamp(g, 0, 255));
+        if (b >= 0) pixels[base + 2] = static_cast<uint8_t>(std::clamp(b, 0, 255));
+        if (index + 1 > pixel_count) pixel_count = static_cast<int32_t>(index + 1);
+    }
 };
 
 // ============================================================================
@@ -2059,6 +2077,31 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->sensor_temp_milli_c = ctx->temp_milli_c;
             break;
         }
+        case PART_KIND_NEOPIXEL: {
+            NeoPixelContext* ctx = static_cast<NeoPixelContext*>(inst->impl);
+            snap->neopixel_count = ctx->pixel_count;
+            if (ctx->pixel_count > 0) {
+                snap->neopixel_pixel0_r = ctx->pixels[0];
+                snap->neopixel_pixel0_g = ctx->pixels[1];
+                snap->neopixel_pixel0_b = ctx->pixels[2];
+            }
+            if (ctx->pixel_count > 1) {
+                snap->neopixel_pixel1_r = ctx->pixels[3];
+                snap->neopixel_pixel1_g = ctx->pixels[4];
+                snap->neopixel_pixel1_b = ctx->pixels[5];
+            }
+            if (ctx->pixel_count > 2) {
+                snap->neopixel_pixel2_r = ctx->pixels[6];
+                snap->neopixel_pixel2_g = ctx->pixels[7];
+                snap->neopixel_pixel2_b = ctx->pixels[8];
+            }
+            if (ctx->pixel_count > 3) {
+                snap->neopixel_pixel3_r = ctx->pixels[9];
+                snap->neopixel_pixel3_g = ctx->pixels[10];
+                snap->neopixel_pixel3_b = ctx->pixels[11];
+            }
+            break;
+        }
         default:
             break;
     }
@@ -2172,6 +2215,22 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_DS18B20: {
             DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
+            break;
+        }
+        case PART_KIND_NEOPIXEL: {
+            NeoPixelContext* ctx = static_cast<NeoPixelContext*>(inst->impl);
+            // Knob names: "pixel0_r", "pixel0_g", "pixel0_b", ..., "pixel3_b"
+            if (knob_name && knob_name[0] == 'p' && knob_name[1] == 'i' &&
+                knob_name[2] == 'x' && knob_name[3] == 'e' && knob_name[4] == 'l' &&
+                knob_name[5] >= '0' && knob_name[5] <= '3' && knob_name[6] == '_' &&
+                knob_name[7] != '\0' && knob_name[8] == '\0') {
+                int pixel = knob_name[5] - '0';
+                char channel = knob_name[7];
+                int v = static_cast<int>(std::lround(std::clamp(value, 0.0, 255.0)));
+                if (channel == 'r') ctx->set_pixel(pixel, v, -1, -1);
+                else if (channel == 'g') ctx->set_pixel(pixel, -1, v, -1);
+                else if (channel == 'b') ctx->set_pixel(pixel, -1, -1, v);
+            }
             break;
         }
         default:
@@ -2660,8 +2719,11 @@ extern "C" void* part_create_rfid(uint32_t part_id, uint8_t address) {
 extern "C" void* part_create_neopixel(uint32_t part_id, uint16_t count) {
     void* handle = part_register(part_id, PART_KIND_NEOPIXEL, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
-    // NeoPixel uses 1-wire protocol on a GPIO pin, not SPI/I2C
-    // Implementation would be in part_stamp
+    NeoPixelContext* ctx = new NeoPixelContext();
+    ctx->pixel_count = static_cast<int32_t>(count);
+    if (ctx->pixel_count > 8) ctx->pixel_count = 8;
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 

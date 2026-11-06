@@ -25,6 +25,7 @@ import { max6675Adapter } from './max6675';
 import { sonarAdapter } from './sonar';
 import { dhtAdapter } from './dht';
 import { ds18b20Adapter } from './ds18b20';
+import { neopixelAdapter } from './neopixel';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -50,6 +51,7 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   sonar: sonarAdapter,
   dht: dhtAdapter,
   ds18b20: ds18b20Adapter,
+  neopixel: neopixelAdapter,
 };
 
 export * from './pcf8574';
@@ -70,3 +72,4 @@ export * from './max6675';
 export * from './sonar';
 export * from './dht';
 export * from './ds18b20';
+export * from './neopixel';

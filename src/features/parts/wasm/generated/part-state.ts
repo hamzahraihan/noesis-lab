@@ -120,6 +120,21 @@ export interface PartStateSnapshot {
 
   // HC-SR04 ultrasonic ranger
   sonar_echo_us: number;
+
+  // NeoPixel / addressable LED strip (pixel buffer, up to 4 pixels in snapshot)
+  neopixel_count: number;
+  neopixel_pixel0_r: number;
+  neopixel_pixel0_g: number;
+  neopixel_pixel0_b: number;
+  neopixel_pixel1_r: number;
+  neopixel_pixel1_g: number;
+  neopixel_pixel1_b: number;
+  neopixel_pixel2_r: number;
+  neopixel_pixel2_g: number;
+  neopixel_pixel2_b: number;
+  neopixel_pixel3_r: number;
+  neopixel_pixel3_g: number;
+  neopixel_pixel3_b: number;
 }
 
 export interface PartStateSnapshotResponse {

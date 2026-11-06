@@ -212,6 +212,21 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
 
     // HC-SR04 ultrasonic ranger
     sonar_echo_us: rU16(),
+
+    // NeoPixel / addressable LED strip (pixel buffer, up to 4 pixels in snapshot)
+    neopixel_count: rI32(),
+    neopixel_pixel0_r: rI32(),
+    neopixel_pixel0_g: rI32(),
+    neopixel_pixel0_b: rI32(),
+    neopixel_pixel1_r: rI32(),
+    neopixel_pixel1_g: rI32(),
+    neopixel_pixel1_b: rI32(),
+    neopixel_pixel2_r: rI32(),
+    neopixel_pixel2_g: rI32(),
+    neopixel_pixel2_b: rI32(),
+    neopixel_pixel3_r: rI32(),
+    neopixel_pixel3_g: rI32(),
+    neopixel_pixel3_b: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
