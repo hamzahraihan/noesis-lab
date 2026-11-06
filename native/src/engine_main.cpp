@@ -38,11 +38,35 @@ using namespace engine;
 
 #include <stddef.h>
 #include <stdint.h>
+#include <cstring>
 
 extern "C" {
 extern unsigned char __heap_base;
 uint32_t wasm_alloc(uint32_t bytes);
+void wasm_free(void* ptr);
 }
+
+// Arena free-list allocator: a bump allocator with a free list for reuse.
+// All allocations are 8-byte aligned. Free blocks are kept in a singly-linked
+// list sorted by address for coalescing adjacent free blocks.
+namespace {
+struct FreeBlock {
+  uint32_t next;   // offset of next free block, or 0 if last
+  uint32_t size;   // total block size including this header
+};
+
+// Heap starts right after __heap_base. We reserve space for the free list head.
+static uint32_t g_heap_ptr = 0;        // bump pointer (bytes from __heap_base)
+static uint32_t g_free_list = 0;       // offset of first free block, or 0 if none
+
+static uint32_t align8(uint32_t n) {
+  return (n + 7) & ~7u;
+}
+
+
+
+
+
 
 extern "C" {
 VM* vm_create(void);
@@ -851,9 +875,16 @@ extern "C" int32_t engine_set_pin(int32_t handle, const char* part_id, const cha
     }
     if (same) { terminal = e->pin_term_vals[i]; break; }
   }
-  if (terminal < 0 || terminal >= e->pin_level_count) return FFI_ERR_INVALID_HANDLE;
-  if (e->pin_levels == nullptr) return FFI_ERR_INVALID_HANDLE;
+  if (terminal < 0 || terminal >= e->pin_level_count) {
+    wasm_free(key);
+    return FFI_ERR_INVALID_HANDLE;
+  }
+  if (e->pin_levels == nullptr) {
+    wasm_free(key);
+    return FFI_ERR_INVALID_HANDLE;
+  }
   e->pin_levels[terminal] = (level != 0) ? 1u : 0u;
+  wasm_free(key);
   return FFI_OK;
 }
 
@@ -883,9 +914,11 @@ extern "C" int32_t engine_set_knob(int32_t handle, const char* part_id, const ch
       if (idx >= 0 && idx < e->knob_count && e->knob_values != nullptr) {
         e->knob_values[idx] = value;
       }
+      wasm_free(key);
       return FFI_OK;
     }
   }
+  wasm_free(key);
   return FFI_ERR_INVALID_HANDLE;
 }
 
@@ -956,14 +989,97 @@ extern "C" const char* engine_get_debug_state(int32_t handle) {
   return e->debug_state;
 }
 
+extern "C" void wasm_free(void* ptr) {
+  if (ptr == nullptr) return;
+  uint32_t ptr_off = reinterpret_cast<uintptr_t>(ptr) -
+                     reinterpret_cast<uintptr_t>(&__heap_base);
+  uint32_t block_ptr = ptr_off - 8;
+  uint32_t block_size;
+  memcpy(&block_size, reinterpret_cast<const uint8_t*>(&__heap_base) + block_ptr + 4, sizeof(uint32_t));
+
+  // Find insertion point to keep list sorted by address.
+  uint32_t prev = 0;
+  uint32_t curr = g_free_list;
+  while (curr != 0 && curr < block_ptr) {
+    prev = curr;
+    uint32_t next_val;
+    memcpy(&next_val, reinterpret_cast<const uint8_t*>(&__heap_base) + curr, sizeof(uint32_t));
+    curr = next_val;
+  }
+
+  // Coalesce with previous block if adjacent.
+  if (prev != 0) {
+    uint32_t prev_size;
+    memcpy(&prev_size, reinterpret_cast<const uint8_t*>(&__heap_base) + prev + 4, sizeof(uint32_t));
+    if (prev + prev_size == block_ptr) {
+      prev_size += block_size;
+      uint32_t new_size = prev_size;
+      memcpy(reinterpret_cast<uint8_t*>(&__heap_base) + prev + 4, &new_size, sizeof(uint32_t));
+      block_ptr = prev;
+      block_size = prev_size;
+    }
+  }
+
+  // Coalesce with next block if adjacent.
+  if (curr != 0 && block_ptr + block_size == curr) {
+    uint32_t curr_size;
+    memcpy(&curr_size, reinterpret_cast<const uint8_t*>(&__heap_base) + curr + 4, sizeof(uint32_t));
+    block_size += curr_size;
+    uint32_t curr_next;
+    memcpy(&curr_next, reinterpret_cast<const uint8_t*>(&__heap_base) + curr, sizeof(uint32_t));
+    *reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(&__heap_base) + block_ptr) = curr_next;
+  } else {
+    uint32_t* block_ptr_ptr = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(&__heap_base) + block_ptr);
+    *block_ptr_ptr = curr;
+  }
+
+  *reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(&__heap_base) + block_ptr + 4) = block_size;
+
+  // Link block into free list.
+  if (prev != 0) {
+    uint32_t prev_size_check;
+    memcpy(&prev_size_check, reinterpret_cast<const uint8_t*>(&__heap_base) + prev + 4, sizeof(uint32_t));
+    if (prev + prev_size_check != block_ptr) {
+      *reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(&__heap_base) + prev) = block_ptr;
+    }
+  } else {
+    g_free_list = block_ptr;
+  }
+}
+
 extern "C" void engine_destroy(int32_t handle) {
   Engine* e = lookup(handle);
   if (e == nullptr) return;
   if (e->vm != nullptr) vm_destroy(e->vm);
   if (e->program != nullptr) vm_free_program(e->program);
+  // Free all wasm_alloc'd memory.
+  if (e->sketch != nullptr) wasm_free(e->sketch);
+  if (e->voltages != nullptr) wasm_free(e->voltages);
+  if (e->previous != nullptr) wasm_free(e->previous);
+  if (e->pin_levels != nullptr) wasm_free(e->pin_levels);
+  if (e->pin_term_keys != nullptr) wasm_free(e->pin_term_keys);
+  if (e->pin_term_vals != nullptr) wasm_free(e->pin_term_vals);
+  if (e->knob_values != nullptr) wasm_free(e->knob_values);
+  if (e->knob_keys != nullptr) wasm_free(e->knob_keys);
+  if (e->knob_vals != nullptr) wasm_free(e->knob_vals);
+  if (e->elements != nullptr) wasm_free(e->elements);
+  if (e->solve_elements != nullptr) wasm_free(e->solve_elements);
+  if (e->debug_state != nullptr) wasm_free(e->debug_state);
   e->vm = nullptr;
   e->program = nullptr;
   e->sketch = nullptr;
+  e->voltages = nullptr;
+  e->previous = nullptr;
+  e->pin_levels = nullptr;
+  e->pin_term_keys = nullptr;
+  e->pin_term_vals = nullptr;
+  e->knob_values = nullptr;
+  e->knob_keys = nullptr;
+  e->knob_vals = nullptr;
+  e->elements = nullptr;
+  e->solve_elements = nullptr;
+  e->debug_state = nullptr;
   e->alive = false;
   e->handle = 0;
+}
 }

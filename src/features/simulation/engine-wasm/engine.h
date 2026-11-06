@@ -243,8 +243,4 @@ struct BuildElementsOutput {
   int32_t element_count;
 };
 
-int32_t build_elements(
-    const BuildElementsInput* input,
-    BuildElementsOutput* output);
-
 }  // namespace engine

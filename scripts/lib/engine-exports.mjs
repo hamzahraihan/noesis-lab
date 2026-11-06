@@ -12,6 +12,7 @@
 export const ENGINE_EXPORTS = Object.freeze([
   // Shared runtime
   'wasm_alloc',
+  'wasm_free',
   'set_profiles',
   // Solver
   'solve',

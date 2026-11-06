@@ -76,9 +76,12 @@ enum class PartContextType : uint8_t {
     SD_CARD,
 };
 
+struct PartInstance;
+
 struct PartContext {
     virtual ~PartContext() = default;
     virtual PartContextType type() const = 0;
+    PartInstance* part_instance = nullptr;
 };
 
 // PCF8574 - 8-bit I/O expander with quasi-bidirectional pins
