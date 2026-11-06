@@ -460,6 +460,13 @@ struct Engine {
   int32_t solve_element_count;
   char* debug_state;
   int32_t debug_state_cap;
+  // Parts (lightweight registry, no STL dependency).
+  struct PartInfo {
+    uint32_t part_id;
+    uint32_t kind;  // PartKind enum value
+  };
+  PartInfo* part_infos;
+  int32_t part_count;
   bool alive;
 };
 
@@ -599,6 +606,8 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
   e.alive = true;
   e.debug_state = nullptr;
   e.debug_state_cap = 0;
+  e.part_infos = nullptr;
+  e.part_count = 0;
 
   // Sketch.
   if (sketch_json != nullptr) {
@@ -693,6 +702,21 @@ extern "C" int32_t engine_create(const char* circuit_json, const char* sketch_js
         }
         parr[i].scripted = json_num(json_get(o, "scripted"), 0);
       }
+
+      // Register parts with the C++ parts system so engine_get_state can
+      // report per-part snapshots. part_id is a per-engine sequential id.
+      e.part_count = pcount;
+      if (pcount > 0) {
+        e.part_infos = reinterpret_cast<Engine::PartInfo*>(
+            wasm_alloc(static_cast<uint32_t>(pcount) * sizeof(Engine::PartInfo)));
+        if (e.part_infos != nullptr) {
+          for (int32_t i = 0; i < pcount; i++) {
+            e.part_infos[i].part_id = static_cast<uint32_t>(i + 1);
+            e.part_infos[i].kind = static_cast<uint32_t>(parr[i].kind);
+          }
+        }
+      }
+
       for (int32_t i = 0; i < pincount; i++) {
         const JsonValue* o = pins->arr[i];
         pinarr[i].terminal = static_cast<uint32_t>(json_int(json_get(o, "terminal"), 0));
@@ -923,9 +947,94 @@ extern "C" int32_t engine_set_knob(int32_t handle, const char* part_id, const ch
 }
 
 extern "C" const FFIPartStateSnapshot* engine_get_state(int32_t handle, int32_t* out_count) {
-  (void)handle;
-  if (out_count != nullptr) *out_count = 0;
-  return nullptr;
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->part_infos == nullptr || e->part_count == 0) {
+    if (out_count != nullptr) *out_count = 0;
+    return nullptr;
+  }
+
+  // Allocate result array in wasm memory.
+  FFIPartStateSnapshot* result = reinterpret_cast<FFIPartStateSnapshot*>(
+      wasm_alloc(static_cast<uint32_t>(e->part_count) * sizeof(FFIPartStateSnapshot)));
+  if (result == nullptr) {
+    if (out_count != nullptr) *out_count = 0;
+    return nullptr;
+  }
+
+  for (int32_t i = 0; i < e->part_count; i++) {
+    memset(&result[i], 0, sizeof(FFIPartStateSnapshot));
+    // Write partId as decimal string (truncated to 63 chars + NUL).
+    char id_buf[64];
+    int32_t id_len = 0;
+    uint32_t id = e->part_infos[i].part_id;
+    if (id == 0) {
+      id_buf[0] = '0';
+      id_len = 1;
+    } else {
+      char tmp[16];
+      int32_t tmp_len = 0;
+      while (id > 0) {
+        tmp[tmp_len++] = static_cast<char>('0' + (id % 10));
+        id /= 10;
+      }
+      while (tmp_len > 0) id_buf[id_len++] = tmp[--tmp_len];
+    }
+    id_buf[id_len] = '\0';
+    int32_t copy_len = id_len < 63 ? id_len : 63;
+    memcpy(result[i].part_id, id_buf, copy_len);
+    result[i].part_id[copy_len] = '\0';
+
+    // Write kind name. PartKind enum values map to string names.
+    const char* kind_name = "unknown";
+    switch (e->part_infos[i].kind) {
+      case 0:  kind_name = "passive"; break;
+      case 1:  kind_name = "mcu"; break;
+      case 2:  kind_name = "powerSupply"; break;
+      case 3:  kind_name = "relay"; break;
+      case 4:  kind_name = "servo"; break;
+      case 5:  kind_name = "stepper"; break;
+      case 6:  kind_name = "stepperDriver"; break;
+      case 7:  kind_name = "shiftRegister"; break;
+      case 8:  kind_name = "displayI2C"; break;
+      case 9:  kind_name = "displaySPI"; break;
+      case 10: kind_name = "display7Seg"; break;
+      case 11: kind_name = "displayLCD"; break;
+      case 12: kind_name = "i2cExpander"; break;
+      case 13: kind_name = "pwmDriver"; break;
+      case 14: kind_name = "rtc"; break;
+      case 15: kind_name = "sensorI2C"; break;
+      case 16: kind_name = "dac"; break;
+      case 17: kind_name = "adc"; break;
+      case 18: kind_name = "thermocouple"; break;
+      case 19: kind_name = "rfid"; break;
+      case 20: kind_name = "neopixel"; break;
+      case 21: kind_name = "sonar"; break;
+      case 22: kind_name = "dht"; break;
+      case 23: kind_name = "ds18b20"; break;
+      case 24: kind_name = "encoder"; break;
+      case 25: kind_name = "button"; break;
+      case 26: kind_name = "potentiometer"; break;
+      case 27: kind_name = "remote"; break;
+      case 28: kind_name = "dialer"; break;
+      case 29: kind_name = "sdCard"; break;
+      case 30: kind_name = "eeprom"; break;
+      case 31: kind_name = "bh1750"; break;
+      case 32: kind_name = "bmp180"; break;
+      case 33: kind_name = "sht31"; break;
+      case 34: kind_name = "tmp102"; break;
+      case 35: kind_name = "ina219"; break;
+      case 36: kind_name = "scripted"; break;
+      default: kind_name = "unknown"; break;
+    }
+    int32_t kl = static_cast<int32_t>(strlen_(kind_name));
+    int32_t kcopy = kl < 31 ? kl : 31;
+    memcpy(result[i].kind, kind_name, kcopy);
+    result[i].kind[kcopy] = '\0';
+    // All numeric state fields remain zeroed (no part context impl yet).
+  }
+
+  if (out_count != nullptr) *out_count = e->part_count;
+  return result;
 }
 
 extern "C" const double* engine_get_voltages(int32_t handle, int32_t* out_count) {
@@ -1065,6 +1174,7 @@ extern "C" void engine_destroy(int32_t handle) {
   if (e->elements != nullptr) wasm_free(e->elements);
   if (e->solve_elements != nullptr) wasm_free(e->solve_elements);
   if (e->debug_state != nullptr) wasm_free(e->debug_state);
+  if (e->part_infos != nullptr) wasm_free(e->part_infos);
   e->vm = nullptr;
   e->program = nullptr;
   e->sketch = nullptr;
@@ -1079,6 +1189,8 @@ extern "C" void engine_destroy(int32_t handle) {
   e->elements = nullptr;
   e->solve_elements = nullptr;
   e->debug_state = nullptr;
+  e->part_infos = nullptr;
+  e->part_count = 0;
   e->alive = false;
   e->handle = 0;
 }
