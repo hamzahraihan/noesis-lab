@@ -120,6 +120,12 @@ export interface PartStateSnapshot {
 
   // HC-SR04 ultrasonic ranger
   sonar_echo_us: number;
+
+  // Rotary encoder (KY-040): quadrature CLK/DT + push button SW
+  encoder_detent: number;   // Knob-driven detent position
+  encoder_clk: number;      // CLK pin level (0/1), from quadrature at detent
+  encoder_dt: number;       // DT pin level (0/1), from quadrature at detent
+  encoder_sw: number;       // SW push-button level (0/1, active low)
 }
 
 export interface PartStateSnapshotResponse {

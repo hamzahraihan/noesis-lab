@@ -84,7 +84,11 @@
         "max7219_scan_limit": { "type": "integer" },
         "max7219_shutdown": { "type": "boolean" },
         "max7219_display_test": { "type": "boolean" },
-        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 }
+        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 },
+        "encoder_detent": { "type": "integer", "description": "Encoder detent position (knob-driven)", "minimum": -32768, "maximum": 32767 },
+        "encoder_clk": { "type": "integer", "description": "Encoder CLK pin level (0/1)" },
+        "encoder_dt": { "type": "integer", "description": "Encoder DT pin level (0/1)" },
+        "encoder_sw": { "type": "integer", "description": "Encoder push-button SW pin level (0/1, active low)" }
       }
     }
   }

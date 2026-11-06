@@ -121,10 +121,16 @@ struct PartStateSnapshot {
 
     // HC-SR04 ultrasonic ranger
     uint16_t sonar_echo_us;
+
+    // Rotary encoder (KY-040): quadrature CLK/DT + push button SW
+    int32_t encoder_detent;   // Knob-driven detent position
+    uint8_t encoder_clk;      // CLK pin level (0/1), from quadrature at detent
+    uint8_t encoder_dt;       // DT pin level (0/1), from quadrature at detent
+    uint8_t encoder_sw;       // SW push-button level (0/1, active low)
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 323, "PartStateSnapshot packing failed");

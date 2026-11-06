@@ -212,6 +212,12 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
 
     // HC-SR04 ultrasonic ranger
     sonar_echo_us: rU16(),
+
+    // Rotary encoder (KY-040): quadrature CLK/DT + push button SW
+    encoder_detent: rI32(),
+    encoder_clk: rU8(),
+    encoder_dt: rU8(),
+    encoder_sw: rU8(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
@@ -320,6 +326,7 @@ export interface PartsModule {
   part_create_rfid(part_id: number, address: number): number;
   part_create_neopixel(part_id: number, count: number): number;
   part_create_sonar(part_id: number): number;
+  part_create_encoder(part_id: number): number;
   part_create_dht(part_id: number): number;
   part_create_ds18b20(part_id: number): number;
   part_create_button(part_id: number): number;
@@ -423,6 +430,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_rfid: exp.part_create_rfid as (part_id: number, address: number) => number,
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,
+    part_create_encoder: exp.part_create_encoder as (part_id: number) => number,
     part_create_dht: exp.part_create_dht as (part_id: number) => number,
     part_create_ds18b20: exp.part_create_ds18b20 as (part_id: number) => number,
     part_create_button: exp.part_create_button as (part_id: number) => number,

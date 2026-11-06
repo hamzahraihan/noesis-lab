@@ -69,6 +69,7 @@ enum class PartContextType : uint8_t {
     SONAR,
     DHT,
     DS18B20,
+    ENCODER,
 };
 
 struct PartContext {
@@ -518,6 +519,30 @@ struct DHTContext : PartContext {
 struct DS18B20Context : PartContext {
     int32_t temp_milli_c = 22000;
     PartContextType type() const override { return PartContextType::DS18B20; }
+};
+
+// Rotary encoder (KY-040): knob-driven detent position, quadrature CLK/DT,
+// push button SW (active low).
+struct EncoderContext : PartContext {
+    int32_t detent = 0;             // Knob-driven detent position
+    bool clk_level = true;          // CLK pin level (idle high)
+    bool dt_level = true;           // DT pin level (idle high)
+    bool sw_level = true;           // SW push-button level (active low, idle high)
+    PartContextType type() const override { return PartContextType::ENCODER; }
+
+    // Recompute CLK/DT from detent position using the same quadrature pattern
+    // as the TS encoder.ts: QUADRATURE[[1,1],[0,1],[0,0],[1,0]], both idle high.
+    void update_quadrature() {
+        int idx = (((detent % 4) + 4) % 4);
+        static const bool quad[4][2] = {
+            {true, true},   // detent 0: CLK=1, DT=1 (idle high)
+            {false, true},  // detent 1: CLK=0, DT=1 (DT fell first = CW)
+            {false, false}, // detent 2: CLK=0, DT=0
+            {true, false},  // detent 3: CLK=1, DT=0 (CLK rose first = CCW)
+        };
+        clk_level = quad[idx][0];
+        dt_level = quad[idx][1];
+    }
 };
 
 // ============================================================================
@@ -1774,6 +1799,11 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
             // No time-based advancement needed
             break;
         }
+        case PART_KIND_ENCODER: {
+            // Encoder is knob-driven (detent position) and pin-driven (SW button).
+            // No time-based advancement needed in part_stamp.
+            break;
+        }
         default:
             break;
     }
@@ -2059,6 +2089,14 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->sensor_temp_milli_c = ctx->temp_milli_c;
             break;
         }
+        case PART_KIND_ENCODER: {
+            EncoderContext* ctx = static_cast<EncoderContext*>(inst->impl);
+            snap->encoder_detent = ctx->detent;
+            snap->encoder_clk = ctx->clk_level ? 1 : 0;
+            snap->encoder_dt = ctx->dt_level ? 1 : 0;
+            snap->encoder_sw = ctx->sw_level ? 1 : 0;
+            break;
+        }
         default:
             break;
     }
@@ -2172,6 +2210,14 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_DS18B20: {
             DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
+            break;
+        }
+        case PART_KIND_ENCODER: {
+            EncoderContext* ctx = static_cast<EncoderContext*>(inst->impl);
+            if (strcmp(knob_name, "detent") == 0) {
+                ctx->detent = static_cast<int32_t>(std::round(value));
+                ctx->update_quadrature();
+            }
             break;
         }
         default:
@@ -2356,6 +2402,14 @@ extern "C" void part_set_pin_level(void* handle, uint32_t pin_index, bool high) 
                 ctx->coil_outputs[1] = ((1.0 - a) / 2.0 > 0.5) ? 1 : 0;  // 1B
                 ctx->coil_outputs[2] = ((1.0 + b) / 2.0 > 0.5) ? 1 : 0;  // 2A
                 ctx->coil_outputs[3] = ((1.0 - b) / 2.0 > 0.5) ? 1 : 0;  // 2B
+            }
+            break;
+        }
+        case PART_KIND_ENCODER: {
+            EncoderContext* ctx = static_cast<EncoderContext*>(inst->impl);
+            // Pin mapping: 0=CLK, 1=DT, 2=SW (push button, active low)
+            if (pin_index == 2) {
+                ctx->sw_level = high;  // SW level directly from pin
             }
             break;
         }
@@ -2692,6 +2746,15 @@ extern "C" void* part_create_sonar(uint32_t part_id) {
     SonarContext* ctx = new SonarContext();
     ctx->distance_cm = 100.0;
     ctx->echo_us = static_cast<uint16_t>(std::lround(ctx->distance_cm * 58.0));
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_encoder(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_ENCODER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    EncoderContext* ctx = new EncoderContext();
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
     return handle;
