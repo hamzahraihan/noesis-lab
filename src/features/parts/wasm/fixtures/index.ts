@@ -30,6 +30,7 @@ import neopixel from './neopixel.json';
 import scripted from './scripted.json';
 import dialer from './dialer.json';
 import remote from './remote.json';
+import sdcard from './sdcard.json';
 import type { Stimulus } from '../probe';
 
 export interface Fixture {
@@ -69,6 +70,7 @@ export const FIXTURE_LIST = [
   scripted,
   dialer,
   remote,
+  sdcard,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs

@@ -29,6 +29,7 @@ import { neopixelAdapter } from './neopixel';
 import { scriptedAdapter } from './scripted';
 import { dialerAdapter } from './dialer';
 import { remoteAdapter } from './remote';
+import { sdcardAdapter } from './sdcard';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -58,6 +59,7 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   scripted: scriptedAdapter,
   dialer: dialerAdapter,
   remote: remoteAdapter,
+  sdcard: sdcardAdapter,
 };
 
 export * from './pcf8574';
@@ -82,3 +84,4 @@ export * from './neopixel';
 export * from './scripted';
 export * from './dialer';
 export * from './remote';
+export * from './sdcard';

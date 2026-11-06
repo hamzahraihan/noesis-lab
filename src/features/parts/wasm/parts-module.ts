@@ -244,6 +244,12 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
 
     // IR remote: current code (0 when not pressed)
     ir_code: rI32(),
+
+    // MicroSD card: present/write/remove model
+    sd_present: rI32(),
+    sd_write_count: rI32(),
+    sd_last_byte: rI32(),
+    sd_total_bytes: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
@@ -354,6 +360,7 @@ export interface PartsModule {
   part_create_scripted(part_id: number, address: number): number;
   part_create_dialer(part_id: number): number;
   part_create_remote(part_id: number): number;
+  part_create_sdcard(part_id: number): number;
   part_create_sonar(part_id: number): number;
   part_create_dht(part_id: number): number;
   part_create_ds18b20(part_id: number): number;
@@ -460,6 +467,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_scripted: exp.part_create_scripted as (part_id: number, address: number) => number,
     part_create_dialer: exp.part_create_dialer as (part_id: number) => number,
     part_create_remote: exp.part_create_remote as (part_id: number) => number,
+    part_create_sdcard: exp.part_create_sdcard as (part_id: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,
     part_create_dht: exp.part_create_dht as (part_id: number) => number,
     part_create_ds18b20: exp.part_create_ds18b20 as (part_id: number) => number,

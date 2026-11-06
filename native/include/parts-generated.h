@@ -145,10 +145,16 @@ struct PartStateSnapshot {
 
     // IR remote: current code (0 when not pressed)
     int32_t ir_code;
+
+    // MicroSD card: present/write/remove model
+    int32_t sd_present;
+    int32_t sd_write_count;
+    int32_t sd_last_byte;
+    int32_t sd_total_bytes;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 412, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 428, "PartStateSnapshot packing failed");

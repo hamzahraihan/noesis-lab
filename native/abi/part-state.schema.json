@@ -108,7 +108,11 @@
         "scripted_reg_6": { "type": "integer", "description": "Scripted register 6", "minimum": 0, "maximum": 255 },
         "scripted_reg_7": { "type": "integer", "description": "Scripted register 7", "minimum": 0, "maximum": 255 },
         "dialer_digit": { "type": "integer", "description": "Rotary dialer digit knob (0-9)", "minimum": 0, "maximum": 9 },
-        "ir_code": { "type": "integer", "description": "IR remote current code (0 when not pressed)", "minimum": 0, "maximum": 65535 }
+        "ir_code": { "type": "integer", "description": "IR remote current code (0 when not pressed)", "minimum": 0, "maximum": 65535 },
+        "sd_present": { "type": "integer", "description": "SD card inserted (0/1)" },
+        "sd_write_count": { "type": "integer", "description": "Number of write operations" },
+        "sd_last_byte": { "type": "integer", "description": "Last byte written (0-255)" },
+        "sd_total_bytes": { "type": "integer", "description": "Total bytes stored" }
       }
     }
   }

@@ -73,6 +73,7 @@ enum class PartContextType : uint8_t {
     SCRIPTED,
     DIALER,
     REMOTE,
+    SD_CARD,
 };
 
 struct PartContext {
@@ -565,6 +566,16 @@ struct RemoteContext : PartContext {
     int32_t key = 0;               // Key index (0-19), matches REMOTE_KEY_KNOB
     bool pressed = false;          // Key held down
     PartContextType type() const override { return PartContextType::REMOTE; }
+};
+
+// MicroSD card: knob-driven file store (present/write/remove). The engine
+// manages the real file store; this is a lightweight differential model.
+struct SDCardContext : PartContext {
+    bool present = false;          // Card inserted
+    uint8_t last_byte = 0;         // Last byte written
+    uint32_t write_count = 0;      // Number of writes
+    uint32_t total_bytes = 0;      // Total bytes stored
+    PartContextType type() const override { return PartContextType::SD_CARD; }
 };
 
 // ============================================================================
@@ -2185,6 +2196,14 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->ir_code = ctx->pressed ? remote_code(ctx->key) : 0;
             break;
         }
+        case PART_KIND_SD_CARD: {
+            SDCardContext* ctx = static_cast<SDCardContext*>(inst->impl);
+            snap->sd_present = ctx->present ? 1 : 0;
+            snap->sd_write_count = static_cast<int32_t>(ctx->write_count);
+            snap->sd_last_byte = static_cast<int32_t>(ctx->last_byte);
+            snap->sd_total_bytes = static_cast<int32_t>(ctx->total_bytes);
+            break;
+        }
         default:
             break;
     }
@@ -2341,6 +2360,24 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
                 ctx->key = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 19));
             } else if (strcmp(knob_name, "pressed") == 0) {
                 ctx->pressed = (value != 0.0);
+            }
+            break;
+        }
+        case PART_KIND_SD_CARD: {
+            SDCardContext* ctx = static_cast<SDCardContext*>(inst->impl);
+            if (strcmp(knob_name, "present") == 0) {
+                ctx->present = (value != 0.0);
+            } else if (strcmp(knob_name, "write") == 0) {
+                if (ctx->present) {
+                    ctx->last_byte = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 255));
+                    ctx->write_count++;
+                    ctx->total_bytes++;
+                }
+            } else if (strcmp(knob_name, "remove") == 0) {
+                ctx->present = false;
+                ctx->write_count = 0;
+                ctx->total_bytes = 0;
+                ctx->last_byte = 0;
             }
             break;
         }
@@ -2869,6 +2906,15 @@ extern "C" void* part_create_remote(uint32_t part_id) {
     void* handle = part_register(part_id, PART_KIND_REMOTE, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
     RemoteContext* ctx = new RemoteContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_sdcard(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_SD_CARD, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    SDCardContext* ctx = new SDCardContext();
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
     return handle;

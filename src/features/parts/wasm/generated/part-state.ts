@@ -152,6 +152,12 @@ export interface PartStateSnapshot {
 
   // IR remote: current code (0 when not pressed)
   ir_code: number;
+
+  // MicroSD card: present/write/remove model
+  sd_present: number;
+  sd_write_count: number;
+  sd_last_byte: number;
+  sd_total_bytes: number;
 }
 
 export interface PartStateSnapshotResponse {
