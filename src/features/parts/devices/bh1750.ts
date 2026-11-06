@@ -171,4 +171,10 @@ export class Bh1750 implements I2cDevice {
     const raw = Math.round(lux * COUNTS_PER_LUX[this.resolution]);
     this.counts = Math.min(0xffff, Math.max(0, raw));
   }
+
+  /** Returns the current lux reading based on the last measurement. */
+  getLux(): number {
+    if (this.counts === 0) return 0;
+    return Math.round(this.counts / COUNTS_PER_LUX[this.resolution]);
+  }
 }

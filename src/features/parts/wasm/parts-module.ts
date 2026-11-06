@@ -212,6 +212,12 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
 
     // HC-SR04 ultrasonic ranger
     sonar_echo_us: rU16(),
+
+    // INA219 current/power monitor state
+    ina219_bus_milli_v: rI32(),
+    ina219_shunt_micro_v: rI32(),
+    ina219_current_milli_a: rI32(),
+    ina219_power_milli_w: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0

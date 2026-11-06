@@ -120,6 +120,12 @@ export interface PartStateSnapshot {
 
   // HC-SR04 ultrasonic ranger
   sonar_echo_us: number;
+
+  // INA219 current/power monitor state
+  ina219_bus_milli_v: number;
+  ina219_shunt_micro_v: number;
+  ina219_current_milli_a: number;
+  ina219_power_milli_w: number;
 }
 
 export interface PartStateSnapshotResponse {

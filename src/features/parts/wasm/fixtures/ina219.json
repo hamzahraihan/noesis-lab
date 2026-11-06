@@ -1,0 +1,10 @@
+{
+  "part": "ina219",
+  "factoryArgs": [1, 5, 64],
+  "stimuli": [
+    { "kind": "knob", "name": "bus", "value": 5.0 },
+    { "kind": "knob", "name": "current", "value": 100 }
+  ],
+  "labels": ["bus_milli_v", "shunt_micro_v", "current_milli_a", "power_milli_w"],
+  "note": "INA219 knob-driven: 5V bus, 100mA -> 5000mV, 10000uV shunt, 100mA, 500mW"
+}

@@ -58,7 +58,8 @@ typedef enum {
     PART_KIND_BMP180 = 32,           // BMP180 pressure sensor
     PART_KIND_SHT31 = 33,            // SHT31 temp/humidity sensor
     PART_KIND_TMP102 = 34,           // TMP102 temperature sensor
-    PART_KIND_SCRIPTED = 35,         // Scripted part (QuickJS)
+    PART_KIND_INA219 = 35,           // INA219 current/power monitor
+    PART_KIND_SCRIPTED = 36,         // Scripted part (QuickJS)
     PART_KIND_UNKNOWN = 255
 } PartKind;
 
