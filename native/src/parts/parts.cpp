@@ -70,6 +70,9 @@ enum class PartContextType : uint8_t {
     DHT,
     DS18B20,
     ENCODER,
+    DIALER,
+    REMOTE,
+    SD_CARD,
 };
 
 struct PartContext {
@@ -546,6 +549,29 @@ struct EncoderContext : PartContext {
         clk_level = quad[idx][0];
         dt_level = quad[idx][1];
     }
+};
+
+// Rotary dialer: knob-driven digit (0-9), PULSE pin is topology-only
+struct DialerContext : PartContext {
+    int32_t digit = 0;             // Finger hole the dial stopped at (0-9)
+    PartContextType type() const override { return PartContextType::DIALER; }
+};
+
+// IR remote: pinless, momentary, key knob (0-19) + pressed state.
+// ir_code returns the pressed key's NEC code, or 0 when not pressed.
+struct RemoteContext : PartContext {
+    int32_t key = 0;               // Key index (0-19), matches REMOTE_KEY_KNOB
+    bool pressed = false;          // Key held down
+    PartContextType type() const override { return PartContextType::REMOTE; }
+};
+
+// MicroSD card: knob-driven file store (present/write/remove).
+struct SDCardContext : PartContext {
+    bool present = false;          // Card inserted
+    uint8_t last_byte = 0;         // Last byte written
+    uint32_t write_count = 0;      // Number of writes
+    uint32_t total_bytes = 0;      // Total bytes stored
+    PartContextType type() const override { return PartContextType::SD_CARD; }
 };
 
 // ============================================================================
@@ -1514,6 +1540,14 @@ static uint8_t spi_mfrc522_read(void* ctx, bool data_select, bool chip_selected)
     return 0;
 }
 
+static void spi_mfrc522_latch(void* ctx) {
+    // Chip-select rose: end of transaction. Reset the register pointer so the
+    // next transaction starts with an address byte, mirroring the TS model's
+    // endTransaction() resetting expectAddress.
+    MFRC522Context* dev = static_cast<MFRC522Context*>(ctx);
+    dev->reg_ptr = 0x00;
+}
+
 static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
     ILI9341Context* dev = static_cast<ILI9341Context*>(ctx);
     if (!chip_selected) return;
@@ -1815,6 +1849,16 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
 // Static buffer for part_get_state return value (single-threaded wasm use)
 static PartStateSnapshot g_part_state_snapshot = {};
 
+// NEC codes for the 20 remote keys, matching remote.ts NEC_CODES table
+static int32_t remote_code(int32_t key) {
+    static const int32_t codes[20] = {
+        0xa2, 0xe2, 0x22, 0x02, 0xc2, 0xe0, 0xa8, 0x90, 0x68, 0x98,
+        0xb0, 0x30, 0x18, 0x7a, 0x10, 0x38, 0x5a, 0x42, 0x4a, 0x52
+    };
+    if (key < 0 || key >= 20) return 0;
+    return codes[key];
+}
+
 extern "C" PartStateSnapshot* part_get_state(void* handle) {
     PartStateSnapshot* snap = &g_part_state_snapshot;
     // Zero out the snapshot
@@ -1972,7 +2016,9 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_RFID: {
             MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
-            snap->rfid_card_present = ctx->card_present;
+            snap->rfid_card_present = ctx->card_present ? 1 : 0;
+            snap->rfid_version = 0x92;  // VersionReg: MFRC522 v2.0
+            snap->rfid_com_irq = ctx->command == 0x0C ? 0x20 : 0x00;  // IRQ_RX after transceive
             break;
         }
         case PART_KIND_I2C_EXPANDER: {
@@ -2104,6 +2150,24 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->encoder_sw = ctx->sw_level ? 1 : 0;
             break;
         }
+        case PART_KIND_DIALER: {
+            DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
+            snap->dialer_digit = ctx->digit;
+            break;
+        }
+        case PART_KIND_REMOTE: {
+            RemoteContext* ctx = static_cast<RemoteContext*>(inst->impl);
+            snap->ir_code = ctx->pressed ? remote_code(ctx->key) : 0;
+            break;
+        }
+        case PART_KIND_SD_CARD: {
+            SDCardContext* ctx = static_cast<SDCardContext*>(inst->impl);
+            snap->sd_present = ctx->present ? 1 : 0;
+            snap->sd_write_count = static_cast<int32_t>(ctx->write_count);
+            snap->sd_last_byte = static_cast<int32_t>(ctx->last_byte);
+            snap->sd_total_bytes = static_cast<int32_t>(ctx->total_bytes);
+            break;
+        }
         default:
             break;
     }
@@ -2224,6 +2288,45 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             if (strcmp(knob_name, "detent") == 0) {
                 ctx->detent = static_cast<int32_t>(std::round(value));
                 ctx->update_quadrature();
+            }
+            break;
+        }
+        case PART_KIND_RFID: {
+            MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
+            if (strcmp(knob_name, "card") == 0) ctx->card_present = (value != 0.0);
+            break;
+        }
+        case PART_KIND_DIALER: {
+            DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
+            if (strcmp(knob_name, "digit") == 0) {
+                ctx->digit = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 9));
+            }
+            break;
+        }
+        case PART_KIND_REMOTE: {
+            RemoteContext* ctx = static_cast<RemoteContext*>(inst->impl);
+            if (strcmp(knob_name, "key") == 0) {
+                ctx->key = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 19));
+            } else if (strcmp(knob_name, "pressed") == 0) {
+                ctx->pressed = (value != 0.0);
+            }
+            break;
+        }
+        case PART_KIND_SD_CARD: {
+            SDCardContext* ctx = static_cast<SDCardContext*>(inst->impl);
+            if (strcmp(knob_name, "present") == 0) {
+                ctx->present = (value != 0.0);
+            } else if (strcmp(knob_name, "write") == 0) {
+                if (ctx->present) {
+                    ctx->last_byte = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 255));
+                    ctx->write_count++;
+                    ctx->total_bytes++;
+                }
+            } else if (strcmp(knob_name, "remove") == 0) {
+                ctx->present = false;
+                ctx->write_count = 0;
+                ctx->total_bytes = 0;
+                ctx->last_byte = 0;
             }
             break;
         }
@@ -2718,6 +2821,7 @@ extern "C" void* part_create_rfid(uint32_t part_id, uint8_t address) {
     spi_part.ctx = ctx;
     spi_part.receive = spi_mfrc522_receive;
     spi_part.read = spi_mfrc522_read;
+    spi_part.latch = spi_mfrc522_latch;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
@@ -2727,6 +2831,33 @@ extern "C" void* part_create_neopixel(uint32_t part_id, uint16_t count) {
     PartInstance* inst = static_cast<PartInstance*>(handle);
     // NeoPixel uses 1-wire protocol on a GPIO pin, not SPI/I2C
     // Implementation would be in part_stamp
+    return handle;
+}
+
+extern "C" void* part_create_dialer(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_DIALER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    DialerContext* ctx = new DialerContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_remote(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_REMOTE, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    RemoteContext* ctx = new RemoteContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_sdcard(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_SD_CARD, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    SDCardContext* ctx = new SDCardContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 

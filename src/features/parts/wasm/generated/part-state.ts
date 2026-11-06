@@ -126,6 +126,22 @@ export interface PartStateSnapshot {
   encoder_clk: number;      // CLK pin level (0/1), from quadrature at detent
   encoder_dt: number;       // DT pin level (0/1), from quadrature at detent
   encoder_sw: number;       // SW push-button level (0/1, active low)
+
+  // RFID reader (MFRC522)
+  rfid_version: number;
+  rfid_com_irq: number;
+
+  // Rotary dialer: knob-driven digit (0-9)
+  dialer_digit: number;
+
+  // IR remote: current code (0 when not pressed)
+  ir_code: number;
+
+  // MicroSD card: present/write/remove model
+  sd_present: number;
+  sd_write_count: number;
+  sd_last_byte: number;
+  sd_total_bytes: number;
 }
 
 export interface PartStateSnapshotResponse {

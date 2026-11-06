@@ -27,6 +27,10 @@ import sonar from './sonar.json';
 import dht from './dht.json';
 import ds18b20 from './ds18b20.json';
 import encoder from './encoder.json';
+import rfid from './rfid.json';
+import dialer from './dialer.json';
+import remote from './remote.json';
+import sdcard from './sdcard.json';
 import type { Stimulus } from '../probe';
 
 export interface Fixture {
@@ -63,6 +67,10 @@ export const FIXTURE_LIST = [
   dht,
   ds18b20,
   encoder,
+  rfid,
+  dialer,
+  remote,
+  sdcard,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs

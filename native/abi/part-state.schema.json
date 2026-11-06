@@ -88,7 +88,15 @@
         "encoder_detent": { "type": "integer", "description": "Encoder detent position (knob-driven)", "minimum": -32768, "maximum": 32767 },
         "encoder_clk": { "type": "integer", "description": "Encoder CLK pin level (0/1)" },
         "encoder_dt": { "type": "integer", "description": "Encoder DT pin level (0/1)" },
-        "encoder_sw": { "type": "integer", "description": "Encoder push-button SW pin level (0/1, active low)" }
+        "encoder_sw": { "type": "integer", "description": "Encoder push-button SW pin level (0/1, active low)" },
+        "rfid_version": { "type": "integer", "description": "MFRC522 VersionReg (0x92)" },
+        "rfid_com_irq": { "type": "integer", "description": "MFRC522 ComIrqReg interrupt flags" },
+        "dialer_digit": { "type": "integer", "description": "Rotary dialer digit knob (0-9)", "minimum": 0, "maximum": 9 },
+        "ir_code": { "type": "integer", "description": "IR remote current code (0 when not pressed)", "minimum": 0, "maximum": 65535 },
+        "sd_present": { "type": "integer", "description": "SD card inserted (0/1)" },
+        "sd_write_count": { "type": "integer", "description": "Number of write operations" },
+        "sd_last_byte": { "type": "integer", "description": "Last byte written (0-255)" },
+        "sd_total_bytes": { "type": "integer", "description": "Total bytes stored" }
       }
     }
   }

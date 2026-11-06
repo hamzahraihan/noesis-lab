@@ -1,0 +1,18 @@
+{
+  "part": "sdcard",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "present", "value": 1 },
+    { "kind": "knob", "name": "write", "value": 72 },
+    { "kind": "knob", "name": "write", "value": 69 },
+    { "kind": "knob", "name": "write", "value": 76 },
+    { "kind": "knob", "name": "write", "value": 76 },
+    { "kind": "knob", "name": "write", "value": 79 },
+    { "kind": "knob", "name": "remove", "value": 1 },
+    { "kind": "knob", "name": "present", "value": 1 },
+    { "kind": "knob", "name": "write", "value": 87 },
+    { "kind": "knob", "name": "write", "value": 79 }
+  ],
+  "labels": ["sd_present", "sd_write_count", "sd_last_byte", "sd_total_bytes"],
+  "note": "SD card: insert, write 5 bytes ('Hello'), remove, reinsert, write 2 bytes ('Wo')"
+}

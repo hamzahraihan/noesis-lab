@@ -26,6 +26,10 @@ import { sonarAdapter } from './sonar';
 import { dhtAdapter } from './dht';
 import { ds18b20Adapter } from './ds18b20';
 import { encoderAdapter } from './encoder';
+import { rfidAdapter } from './rfid';
+import { dialerAdapter } from './dialer';
+import { remoteAdapter } from './remote';
+import { sdcardAdapter } from './sdcard';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -52,6 +56,10 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   dht: dhtAdapter,
   ds18b20: ds18b20Adapter,
   encoder: encoderAdapter,
+  rfid: rfidAdapter,
+  dialer: dialerAdapter,
+  remote: remoteAdapter,
+  sdcard: sdcardAdapter,
 };
 
 export * from './pcf8574';
@@ -73,3 +81,7 @@ export * from './sonar';
 export * from './dht';
 export * from './ds18b20';
 export * from './encoder';
+export * from './rfid';
+export * from './dialer';
+export * from './remote';
+export * from './sdcard';

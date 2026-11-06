@@ -218,6 +218,22 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     encoder_clk: rU8(),
     encoder_dt: rU8(),
     encoder_sw: rU8(),
+
+    // RFID reader (MFRC522)
+    rfid_version: rI32(),
+    rfid_com_irq: rI32(),
+
+    // Rotary dialer: knob-driven digit (0-9)
+    dialer_digit: rI32(),
+
+    // IR remote: current code (0 when not pressed)
+    ir_code: rI32(),
+
+    // MicroSD card: present/write/remove model
+    sd_present: rI32(),
+    sd_write_count: rI32(),
+    sd_last_byte: rI32(),
+    sd_total_bytes: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
@@ -327,6 +343,9 @@ export interface PartsModule {
   part_create_neopixel(part_id: number, count: number): number;
   part_create_sonar(part_id: number): number;
   part_create_encoder(part_id: number): number;
+  part_create_dialer(part_id: number): number;
+  part_create_remote(part_id: number): number;
+  part_create_sdcard(part_id: number): number;
   part_create_dht(part_id: number): number;
   part_create_ds18b20(part_id: number): number;
   part_create_button(part_id: number): number;
@@ -431,6 +450,9 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,
     part_create_encoder: exp.part_create_encoder as (part_id: number) => number,
+    part_create_dialer: exp.part_create_dialer as (part_id: number) => number,
+    part_create_remote: exp.part_create_remote as (part_id: number) => number,
+    part_create_sdcard: exp.part_create_sdcard as (part_id: number) => number,
     part_create_dht: exp.part_create_dht as (part_id: number) => number,
     part_create_ds18b20: exp.part_create_ds18b20 as (part_id: number) => number,
     part_create_button: exp.part_create_button as (part_id: number) => number,
