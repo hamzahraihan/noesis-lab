@@ -142,10 +142,13 @@ struct PartStateSnapshot {
 
     // Rotary dialer: knob-driven digit (0-9)
     int32_t dialer_digit;
+
+    // IR remote: current code (0 when not pressed)
+    int32_t ir_code;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 408, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 412, "PartStateSnapshot packing failed");

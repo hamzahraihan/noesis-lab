@@ -1,7 +1,7 @@
 {
   "file": "parts.wasm",
-  "wasmSha256": "2d2bc1a3070e084f8e65bc6f4b13a74a5e142c386ff18277123d49d8e62772d3",
-  "sourcesHash": "4596ff5ffe6f4f3527b276527f60a82771403132b09e2aad62ef5f439243145a",
+  "wasmSha256": "60147f3d5d25329faf5b899de8c8376b43216c402f94a079171d2b0e12f55ce2",
+  "sourcesHash": "1462aa3b88e0d652a017e49407f9462de42eb211172f7b2ccf53642412fb5950",
   "toolchain": {
     "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)\r"
   }

@@ -28,6 +28,7 @@ import { ds18b20Adapter } from './ds18b20';
 import { neopixelAdapter } from './neopixel';
 import { scriptedAdapter } from './scripted';
 import { dialerAdapter } from './dialer';
+import { remoteAdapter } from './remote';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -56,6 +57,7 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   neopixel: neopixelAdapter,
   scripted: scriptedAdapter,
   dialer: dialerAdapter,
+  remote: remoteAdapter,
 };
 
 export * from './pcf8574';
@@ -79,3 +81,4 @@ export * from './ds18b20';
 export * from './neopixel';
 export * from './scripted';
 export * from './dialer';
+export * from './remote';

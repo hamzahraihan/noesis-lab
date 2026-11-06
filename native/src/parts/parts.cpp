@@ -72,6 +72,7 @@ enum class PartContextType : uint8_t {
     NEOPIXEL,
     SCRIPTED,
     DIALER,
+    REMOTE,
 };
 
 struct PartContext {
@@ -556,6 +557,14 @@ struct ScriptedContext : PartContext {
 struct DialerContext : PartContext {
     int32_t digit = 0;             // Finger hole the dial stopped at (0-9)
     PartContextType type() const override { return PartContextType::DIALER; }
+};
+
+// IR remote: pinless, momentary, key knob (0-19) + pressed state.
+// ir_code returns the pressed key's NEC code, or 0 when not pressed.
+struct RemoteContext : PartContext {
+    int32_t key = 0;               // Key index (0-19), matches REMOTE_KEY_KNOB
+    bool pressed = false;          // Key held down
+    PartContextType type() const override { return PartContextType::REMOTE; }
 };
 
 // ============================================================================
@@ -1841,6 +1850,16 @@ extern "C" void part_stamp(void* handle, const SolverSolution* solution, double 
 // Static buffer for part_get_state return value (single-threaded wasm use)
 static PartStateSnapshot g_part_state_snapshot = {};
 
+// NEC codes for the 20 remote keys, matching remote.ts NEC_CODES table
+static int32_t remote_code(int32_t key) {
+    static const int32_t codes[20] = {
+        0xa2, 0xe2, 0x22, 0x02, 0xc2, 0xe0, 0xa8, 0x90, 0x68, 0x98,
+        0xb0, 0x30, 0x18, 0x7a, 0x10, 0x38, 0x5a, 0x42, 0x4a, 0x52
+    };
+    if (key < 0 || key >= 20) return 0;
+    return codes[key];
+}
+
 extern "C" PartStateSnapshot* part_get_state(void* handle) {
     PartStateSnapshot* snap = &g_part_state_snapshot;
     // Zero out the snapshot
@@ -2161,6 +2180,11 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->dialer_digit = ctx->digit;
             break;
         }
+        case PART_KIND_REMOTE: {
+            RemoteContext* ctx = static_cast<RemoteContext*>(inst->impl);
+            snap->ir_code = ctx->pressed ? remote_code(ctx->key) : 0;
+            break;
+        }
         default:
             break;
     }
@@ -2308,6 +2332,15 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
             DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
             if (strcmp(knob_name, "digit") == 0) {
                 ctx->digit = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 9));
+            }
+            break;
+        }
+        case PART_KIND_REMOTE: {
+            RemoteContext* ctx = static_cast<RemoteContext*>(inst->impl);
+            if (strcmp(knob_name, "key") == 0) {
+                ctx->key = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 19));
+            } else if (strcmp(knob_name, "pressed") == 0) {
+                ctx->pressed = (value != 0.0);
             }
             break;
         }
@@ -2827,6 +2860,15 @@ extern "C" void* part_create_dialer(uint32_t part_id) {
     void* handle = part_register(part_id, PART_KIND_DIALER, "{}");
     PartInstance* inst = static_cast<PartInstance*>(handle);
     DialerContext* ctx = new DialerContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
+    return handle;
+}
+
+extern "C" void* part_create_remote(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_REMOTE, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    RemoteContext* ctx = new RemoteContext();
     inst->impl = ctx;
     g_part_impls.push_back(ctx);
     return handle;

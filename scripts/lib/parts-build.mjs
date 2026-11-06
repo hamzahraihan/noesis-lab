@@ -94,6 +94,7 @@ export const EXPORTED_FUNCTIONS = Object.freeze([
   '_part_create_neopixel',
   '_part_create_scripted',
   '_part_create_dialer',
+  '_part_create_remote',
   '_part_create_sonar',
   '_part_create_dht',
   '_part_create_ds18b20',

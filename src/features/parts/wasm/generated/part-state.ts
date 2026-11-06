@@ -149,6 +149,9 @@ export interface PartStateSnapshot {
 
   // Rotary dialer: knob-driven digit (0-9)
   dialer_digit: number;
+
+  // IR remote: current code (0 when not pressed)
+  ir_code: number;
 }
 
 export interface PartStateSnapshotResponse {
