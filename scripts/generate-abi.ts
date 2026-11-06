@@ -139,13 +139,41 @@ struct PartStateSnapshot {
 
     // HC-SR04 ultrasonic ranger
     uint16_t sonar_echo_us;
+
+    // INA219 current/power monitor state
+    int32_t ina219_bus_milli_v;
+    int32_t ina219_shunt_micro_v;
+    int32_t ina219_current_milli_a;
+    int32_t ina219_power_milli_w;
+
+    // Rotary encoder (KY-040): quadrature CLK/DT + push button SW
+    int32_t encoder_detent;   // Knob-driven detent position
+    uint8_t encoder_clk;      // CLK pin level (0/1), from quadrature at detent
+    uint8_t encoder_dt;       // DT pin level (0/1), from quadrature at detent
+    uint8_t encoder_sw;       // SW push-button level (0/1, active low)
+
+    // RFID reader (MFRC522)
+    int32_t rfid_version;   // VersionReg (0x92)
+    int32_t rfid_com_irq;   // ComIrqReg interrupt flags
+
+    // Rotary dialer: knob-driven digit (0-9)
+    int32_t dialer_digit;
+
+    // IR remote: current code (0 when not pressed)
+    int32_t ir_code;
+
+    // MicroSD card: present/write/remove model
+    int32_t sd_present;
+    int32_t sd_write_count;
+    int32_t sd_last_byte;
+    int32_t sd_total_bytes;
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 371, "PartStateSnapshot packing failed");
 `;
 }
 
@@ -274,6 +302,34 @@ export interface PartStateSnapshot {
 
   // HC-SR04 ultrasonic ranger
   sonar_echo_us: number;
+
+  // INA219 current/power monitor state
+  ina219_bus_milli_v: number;
+  ina219_shunt_micro_v: number;
+  ina219_current_milli_a: number;
+  ina219_power_milli_w: number;
+
+  // Rotary encoder (KY-040): quadrature CLK/DT + push button SW
+  encoder_detent: number;   // Knob-driven detent position
+  encoder_clk: number;      // CLK pin level (0/1), from quadrature at detent
+  encoder_dt: number;       // DT pin level (0/1), from quadrature at detent
+  encoder_sw: number;       // SW push-button level (0/1, active low)
+
+  // RFID reader (MFRC522)
+  rfid_version: number;
+  rfid_com_irq: number;
+
+  // Rotary dialer: knob-driven digit (0-9)
+  dialer_digit: number;
+
+  // IR remote: current code (0 when not pressed)
+  ir_code: number;
+
+  // MicroSD card: present/write/remove model
+  sd_present: number;
+  sd_write_count: number;
+  sd_last_byte: number;
+  sd_total_bytes: number;
 }
 
 export interface PartStateSnapshotResponse {
