@@ -14,9 +14,7 @@ import { buildNetlist } from '../netlist';
 import type { Netlist } from '../netlist';
 import { ProbeDeck } from '../probe';
 import { COMPONENT_KIND, paramsFor } from './netlist';
-import { KEYPAD_KEYS, createController, type DisplayController } from '@/features/parts';
-import { SevenSegment } from '@/features/parts/display/sevensegment';
-import { Tm1637 } from '@/features/parts/tm1637';
+import { KEYPAD_KEYS, createController, type DisplayController, SevenSegment, Tm1637 } from '@/features/parts';
 
 export interface WasmEngineOptions {
   bench: Bench;

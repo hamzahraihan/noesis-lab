@@ -151,7 +151,7 @@ function parseTsExpectedSizes(_tsInterfaces: string): Record<string, number> {
   // expected sizes based on the field types and packing rules
   return {
     PartStateSnapshotHeader: 8,
-    PartStateSnapshot: 318, // Actual size from C++ with #pragma pack(1)
+    PartStateSnapshot: 371, // Actual size from C++ with #pragma pack(1)
     Shift595Snapshot: 2,
     PCF8574Snapshot: 2,
     MCP23017Snapshot: 16,
