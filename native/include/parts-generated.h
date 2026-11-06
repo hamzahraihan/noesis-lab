@@ -121,10 +121,14 @@ struct PartStateSnapshot {
 
     // HC-SR04 ultrasonic ranger
     uint16_t sonar_echo_us;
+
+    // RFID reader (MFRC522)
+    int32_t rfid_version;   // VersionReg (0x92)
+    int32_t rfid_com_irq;   // ComIrqReg interrupt flags
 };
 
 #pragma pack(pop)
 
 // Static assertions for struct sizes (framebuffer_offset is uint32_t, so size is platform-independent)
 static_assert(sizeof(PartStateSnapshotHeader) == 8, "PartStateSnapshotHeader packing failed");
-static_assert(sizeof(PartStateSnapshot) == 316, "PartStateSnapshot packing failed");
+static_assert(sizeof(PartStateSnapshot) == 324, "PartStateSnapshot packing failed");

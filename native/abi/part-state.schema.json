@@ -84,7 +84,9 @@
         "max7219_scan_limit": { "type": "integer" },
         "max7219_shutdown": { "type": "boolean" },
         "max7219_display_test": { "type": "boolean" },
-        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 }
+        "sonar_echo_us": { "type": "integer", "description": "HC-SR04 echo pulse width in microseconds; echo_us = round(distance_cm * 58)", "minimum": 0, "maximum": 65535 },
+        "rfid_version": { "type": "integer", "description": "MFRC522 VersionReg (0x92)" },
+        "rfid_com_irq": { "type": "integer", "description": "MFRC522 ComIrqReg interrupt flags" }
       }
     }
   }

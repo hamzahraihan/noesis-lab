@@ -120,6 +120,10 @@ export interface PartStateSnapshot {
 
   // HC-SR04 ultrasonic ranger
   sonar_echo_us: number;
+
+  // RFID reader (MFRC522)
+  rfid_version: number;
+  rfid_com_irq: number;
 }
 
 export interface PartStateSnapshotResponse {

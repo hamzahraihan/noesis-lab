@@ -212,6 +212,10 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
 
     // HC-SR04 ultrasonic ranger
     sonar_echo_us: rU16(),
+
+    // RFID reader (MFRC522)
+    rfid_version: rI32(),
+    rfid_com_irq: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0

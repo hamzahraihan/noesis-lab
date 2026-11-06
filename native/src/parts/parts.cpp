@@ -1486,6 +1486,14 @@ static uint8_t spi_mfrc522_read(void* ctx, bool data_select, bool chip_selected)
     return 0;
 }
 
+static void spi_mfrc522_latch(void* ctx) {
+    // Chip-select rose: end of transaction. Reset the register pointer so the
+    // next transaction starts with an address byte, mirroring the TS model's
+    // endTransaction() resetting expectAddress.
+    MFRC522Context* dev = static_cast<MFRC522Context*>(ctx);
+    dev->reg_ptr = 0x00;
+}
+
 static void spi_ili9341_receive(void* ctx, uint8_t byte, bool data_select, bool chip_selected) {
     ILI9341Context* dev = static_cast<ILI9341Context*>(ctx);
     if (!chip_selected) return;
@@ -1935,7 +1943,9 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
         }
         case PART_KIND_RFID: {
             MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
-            snap->rfid_card_present = ctx->card_present;
+            snap->rfid_card_present = ctx->card_present ? 1 : 0;
+            snap->rfid_version = 0x92;  // VersionReg: MFRC522 v2.0
+            snap->rfid_com_irq = ctx->command == 0x0C ? 0x20 : 0x00;  // IRQ_RX after transceive
             break;
         }
         case PART_KIND_I2C_EXPANDER: {
@@ -2172,6 +2182,11 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
         case PART_KIND_DS18B20: {
             DS18B20Context* ctx = static_cast<DS18B20Context*>(inst->impl);
             if (strcmp(knob_name, "temperature") == 0) ctx->temp_milli_c = static_cast<int32_t>(value * 1000.0);
+            break;
+        }
+        case PART_KIND_RFID: {
+            MFRC522Context* ctx = static_cast<MFRC522Context*>(inst->impl);
+            if (strcmp(knob_name, "card") == 0) ctx->card_present = (value != 0.0);
             break;
         }
         default:
@@ -2653,6 +2668,7 @@ extern "C" void* part_create_rfid(uint32_t part_id, uint8_t address) {
     spi_part.ctx = ctx;
     spi_part.receive = spi_mfrc522_receive;
     spi_part.read = spi_mfrc522_read;
+    spi_part.latch = spi_mfrc522_latch;
     g_spi_parts.push_back(spi_part);
     return handle;
 }
