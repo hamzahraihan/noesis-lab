@@ -437,8 +437,8 @@ export async function loadWasmModule(
   };
 }
 
-/** Rollout default (Stage 3 flips this to true once the gates pass). */
-export const WASM_DEFAULT = false;
+/** Rollout default (Stage 3: C++ engine is the default). */
+export const WASM_DEFAULT = true;
 
 export function resolveWasmFlag(explicit?: boolean): boolean {
   return explicit ?? WASM_DEFAULT;

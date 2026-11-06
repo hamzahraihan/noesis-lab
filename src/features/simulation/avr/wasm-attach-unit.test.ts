@@ -49,8 +49,8 @@ describe('loadWasmModule', () => {
 });
 
 describe('rollout default', () => {
-  it('defaults off until the gates pass', () => {
-    expect(WASM_DEFAULT).toBe(false);
+  it('defaults on now that the C++ engine is the default', () => {
+    expect(WASM_DEFAULT).toBe(true);
   });
 
   it('explicit choice always wins over the default', () => {

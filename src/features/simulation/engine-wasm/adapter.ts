@@ -11,7 +11,6 @@ import type { McuRuntime } from '../mcu';
 import type { DynamicState } from '@/features/parts';
 import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from '../netlist';
-import type { Netlist } from '../netlist';
 import { ProbeDeck } from '../probe';
 import { COMPONENT_KIND, paramsFor } from './netlist';
 import { KEYPAD_KEYS, createController, type DisplayController, SevenSegment, Tm1637 } from '@/features/parts';
@@ -38,6 +37,8 @@ interface FfiExports {
   engine_set_step_into(handle: number, enable: number): void;
   engine_get_debug_state(handle: number): number;
   engine_destroy(handle: number): void;
+  netlist_node_of_terminal(): number;
+  netlist_node_count(): number;
 }
 
 async function instantiateEngineModule(): Promise<FfiExports> {
@@ -65,7 +66,7 @@ export class WasmEngine {
   private dynamicState: DynamicState;
   private module: FfiExports | null = null;
   private handle = 0;
-  private netlist: Netlist | null = null;
+  private pinNodeMap = new Map<string, number>();
   private voltages: Float64Array = new Float64Array(0);
   private serialOutput = '';
   private pressed = new Set<string>();
@@ -91,13 +92,30 @@ export class WasmEngine {
 
   async loadCircuit(_json: unknown): Promise<void> {
     if (!this.module) throw new Error('WasmEngine: module not loaded');
-    this.netlist = buildNetlist(this.bench, this.dynamicState);
+    this.pinNodeMap.clear();
     const expanded = expandBench(this.bench, this.dynamicState);
     const mod = this.module;
     const circuitPtr = allocString(mod, JSON.stringify(expanded));
     const sketchPtr = allocString(mod, this.pendingSketch);
     this.handle = mod.engine_create(circuitPtr, sketchPtr);
     if (this.handle === 0) throw new Error('WasmEngine: engine_create failed');
+
+    // Build pinNodeMap from C++ wasm: partId:pin -> node index.
+    // netlist_node_of_terminal() returns the terminal->node array computed
+    // by the C++ build_netlist during engine_create.
+    const nodePtr = mod.netlist_node_of_terminal();
+    const nodeCount = mod.netlist_node_count();
+    if (nodePtr !== 0 && nodeCount > 0) {
+      const nodeOfTerminal = new Int32Array(mod.memory.buffer, nodePtr, nodeCount);
+      for (const part of this.bench.parts) {
+        for (const pinId of Object.keys(part.terminals)) {
+          const terminal = part.terminals[pinId];
+          if (terminal !== undefined && terminal < nodeCount) {
+            this.pinNodeMap.set(`${part.id}:${pinId}`, nodeOfTerminal[terminal]);
+          }
+        }
+      }
+    }
 
     // Display controllers for display parts.
     this.displays.clear();
@@ -141,8 +159,7 @@ export class WasmEngine {
 
   private pumpDisplays(): void {
     const high = this.mcu.board.logicVolts / 2;
-    const netlist = this.netlist;
-    if (!netlist) return;
+    if (this.pinNodeMap.size === 0) return;
     for (const [partId, controller] of this.displays) {
       if (controller instanceof SevenSegment) {
         // Simplified: pump using solved volts (no mcuOutputLevel fallback).
@@ -192,19 +209,15 @@ export class WasmEngine {
   private lcdStrobe = new Map<string, boolean>();
 
   private lcdNets(partId: string): { rs: number; enable: number; d0: number; d4: number; d5: number; d6: number; d7: number } | null {
-    const netlist = this.netlist;
-    if (!netlist) return null;
-    const net = (pin: string): number => netlist.pinNode.get(`${partId}:${pin}`) ?? -1;
+    const net = (pin: string): number => this.pinNodeMap.get(`${partId}:${pin}`) ?? -1;
     const data = [net('D0'), net('D4'), net('D5'), net('D6'), net('D7')];
     if (data.some((n) => n === -1)) return null;
     return { rs: net('RS'), enable: net('E'), d0: data[0], d4: data[1], d5: data[2], d6: data[3], d7: data[4] };
   }
 
   private sevenSegmentNets(partId: string, digitCount: number): { segments: number[]; digits: number[]; colon: { com: number; cln: number } | null } | null {
-    const netlist = this.netlist;
-    if (!netlist) return null;
-    const net = (pin: string): number => netlist.pinNode.get(`${partId}:${pin}`) ?? -1;
-    const hasPin = (pin: string): boolean => netlist.pinNode.has(`${partId}:${pin}`);
+    const net = (pin: string): number => this.pinNodeMap.get(`${partId}:${pin}`) ?? -1;
+    const hasPin = (pin: string): boolean => this.pinNodeMap.has(`${partId}:${pin}`);
     const segments = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'DP'].map(net);
     const digitPins = digitCount > 1
       ? Array.from({ length: digitCount }, (_, i) => `DIG${i + 1}`)
