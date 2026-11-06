@@ -106,7 +106,8 @@
         "scripted_reg_4": { "type": "integer", "description": "Scripted register 4", "minimum": 0, "maximum": 255 },
         "scripted_reg_5": { "type": "integer", "description": "Scripted register 5", "minimum": 0, "maximum": 255 },
         "scripted_reg_6": { "type": "integer", "description": "Scripted register 6", "minimum": 0, "maximum": 255 },
-        "scripted_reg_7": { "type": "integer", "description": "Scripted register 7", "minimum": 0, "maximum": 255 }
+        "scripted_reg_7": { "type": "integer", "description": "Scripted register 7", "minimum": 0, "maximum": 255 },
+        "dialer_digit": { "type": "integer", "description": "Rotary dialer digit knob (0-9)", "minimum": 0, "maximum": 9 }
       }
     }
   }

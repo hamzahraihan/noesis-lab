@@ -71,6 +71,7 @@ enum class PartContextType : uint8_t {
     DS18B20,
     NEOPIXEL,
     SCRIPTED,
+    DIALER,
 };
 
 struct PartContext {
@@ -547,6 +548,14 @@ struct ScriptedContext : PartContext {
     uint8_t reg_ptr = 0;           // I2C register pointer (control byte)
     uint8_t regs[256] = {0};       // Register file, one byte per address
     PartContextType type() const override { return PartContextType::SCRIPTED; }
+};
+
+// Rotary dialer: knob-driven digit (0-9), PULSE pin is topology-only
+// (DC solver cannot draw a pulse train, so the digit travels through the
+// dialer firmware port instead).
+struct DialerContext : PartContext {
+    int32_t digit = 0;             // Finger hole the dial stopped at (0-9)
+    PartContextType type() const override { return PartContextType::DIALER; }
 };
 
 // ============================================================================
@@ -2147,6 +2156,11 @@ extern "C" PartStateSnapshot* part_get_state(void* handle) {
             snap->scripted_reg_7 = ctx->regs[7];
             break;
         }
+        case PART_KIND_DIALER: {
+            DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
+            snap->dialer_digit = ctx->digit;
+            break;
+        }
         default:
             break;
     }
@@ -2287,6 +2301,13 @@ extern "C" void part_set_knob(void* handle, const char* knob_name, double value)
                        knob_name[4] >= '0' && knob_name[4] <= '7' && knob_name[5] == '\0') {
                 int reg = knob_name[4] - '0';
                 ctx->regs[reg] = static_cast<uint8_t>(std::clamp(static_cast<int>(value), 0, 255));
+            }
+            break;
+        }
+        case PART_KIND_DIALER: {
+            DialerContext* ctx = static_cast<DialerContext*>(inst->impl);
+            if (strcmp(knob_name, "digit") == 0) {
+                ctx->digit = static_cast<int32_t>(std::clamp(static_cast<int>(std::lround(value)), 0, 9));
             }
             break;
         }
@@ -2799,6 +2820,15 @@ extern "C" void* part_create_scripted(uint32_t part_id, uint8_t address) {
     dev->receive = scripted_receive;
     dev->read = scripted_read;
     inst->kind = PART_KIND_SCRIPTED;
+    return handle;
+}
+
+extern "C" void* part_create_dialer(uint32_t part_id) {
+    void* handle = part_register(part_id, PART_KIND_DIALER, "{}");
+    PartInstance* inst = static_cast<PartInstance*>(handle);
+    DialerContext* ctx = new DialerContext();
+    inst->impl = ctx;
+    g_part_impls.push_back(ctx);
     return handle;
 }
 

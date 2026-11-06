@@ -28,6 +28,7 @@ import dht from './dht.json';
 import ds18b20 from './ds18b20.json';
 import neopixel from './neopixel.json';
 import scripted from './scripted.json';
+import dialer from './dialer.json';
 import type { Stimulus } from '../probe';
 
 export interface Fixture {
@@ -65,6 +66,7 @@ export const FIXTURE_LIST = [
   ds18b20,
   neopixel,
   scripted,
+  dialer,
 ] as Fixture[];
 
 // Derive the keyed view from the list so the two cannot drift: the harness runs

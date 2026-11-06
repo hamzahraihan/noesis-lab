@@ -1,0 +1,12 @@
+{
+  "part": "dialer",
+  "factoryArgs": [1],
+  "stimuli": [
+    { "kind": "knob", "name": "digit", "value": 0 },
+    { "kind": "knob", "name": "digit", "value": 3 },
+    { "kind": "knob", "name": "digit", "value": 9 },
+    { "kind": "knob", "name": "digit", "value": 5 }
+  ],
+  "labels": ["dialer_digit"],
+  "note": "Rotary dialer digit knob: 0 -> 3 -> 9 -> 5, dialer_digit follows"
+}

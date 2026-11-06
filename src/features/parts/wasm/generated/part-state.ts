@@ -146,6 +146,9 @@ export interface PartStateSnapshot {
   scripted_reg_5: number;
   scripted_reg_6: number;
   scripted_reg_7: number;
+
+  // Rotary dialer: knob-driven digit (0-9)
+  dialer_digit: number;
 }
 
 export interface PartStateSnapshotResponse {

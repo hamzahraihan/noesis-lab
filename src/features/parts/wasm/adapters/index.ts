@@ -27,6 +27,7 @@ import { dhtAdapter } from './dht';
 import { ds18b20Adapter } from './ds18b20';
 import { neopixelAdapter } from './neopixel';
 import { scriptedAdapter } from './scripted';
+import { dialerAdapter } from './dialer';
 import type { PartAdapter } from '../probe';
 
 export const ADAPTERS: Record<string, PartAdapter> = {
@@ -54,6 +55,7 @@ export const ADAPTERS: Record<string, PartAdapter> = {
   ds18b20: ds18b20Adapter,
   neopixel: neopixelAdapter,
   scripted: scriptedAdapter,
+  dialer: dialerAdapter,
 };
 
 export * from './pcf8574';
@@ -76,3 +78,4 @@ export * from './dht';
 export * from './ds18b20';
 export * from './neopixel';
 export * from './scripted';
+export * from './dialer';

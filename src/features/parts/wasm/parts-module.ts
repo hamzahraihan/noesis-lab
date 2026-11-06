@@ -238,6 +238,9 @@ export function readPartStateSnapshot(wasmMemory: WasmMemory, ptr: number): Part
     scripted_reg_5: rI32(),
     scripted_reg_6: rI32(),
     scripted_reg_7: rI32(),
+
+    // Rotary dialer: knob-driven digit (0-9)
+    dialer_digit: rI32(),
   };
   // Read framebuffer data if present
   const framebufferData = snap.framebuffer && snap.framebuffer_size > 0
@@ -346,6 +349,7 @@ export interface PartsModule {
   part_create_rfid(part_id: number, address: number): number;
   part_create_neopixel(part_id: number, count: number): number;
   part_create_scripted(part_id: number, address: number): number;
+  part_create_dialer(part_id: number): number;
   part_create_sonar(part_id: number): number;
   part_create_dht(part_id: number): number;
   part_create_ds18b20(part_id: number): number;
@@ -450,6 +454,7 @@ export async function loadPartsModule(wasmBytes: () => Promise<ArrayBuffer>): Pr
     part_create_rfid: exp.part_create_rfid as (part_id: number, address: number) => number,
     part_create_neopixel: exp.part_create_neopixel as (part_id: number, count: number) => number,
     part_create_scripted: exp.part_create_scripted as (part_id: number, address: number) => number,
+    part_create_dialer: exp.part_create_dialer as (part_id: number) => number,
     part_create_sonar: exp.part_create_sonar as (part_id: number) => number,
     part_create_dht: exp.part_create_dht as (part_id: number) => number,
     part_create_ds18b20: exp.part_create_ds18b20 as (part_id: number) => number,
