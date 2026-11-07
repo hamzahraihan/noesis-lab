@@ -505,12 +505,19 @@ export class WasmEngine {
     // No-op: C++ engine handles state internally.
   }
 
-  netOfMcuPin(_pinId: unknown): number {
-    return -1;
+  netOfMcuPin(pinId: string): number {
+    const mcuPart = this.bench.parts.find((p) => p.definition.component.kind === 'mcu');
+    if (!mcuPart) return -1;
+    return this.pinNodeMap.get(`${mcuPart.id}:${pinId}`) ?? -1;
   }
 
-  readDigital(_gpio: number): boolean {
-    return false;
+  readDigital(gpio: number): boolean {
+    const pinId = this.mcu.pinIdForGpio(gpio);
+    if (pinId === undefined) return false;
+    const net = this.netOfMcuPin(pinId);
+    if (net === -1) return false;
+    const vcc = this.mcu.board.logicVolts / 2;
+    return this.voltageOfNet(net) >= vcc;
   }
 
   writeI2C(_address: number, _byte: number, _isFirst: boolean): boolean {
