@@ -48,7 +48,8 @@
  * canvas blit path.
  */
 
-import { Engine, type I2cBusPins } from '../engine';
+import { Engine } from '../engine';
+import type { I2cBusPins } from '../elements';
 import { McuRuntime } from '../mcu';
 import { AvrBackend } from '../avr/core';
 import { loadWasmModule } from '../avr/wasm-core';

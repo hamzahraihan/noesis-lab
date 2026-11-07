@@ -16,7 +16,7 @@ import { parsePython } from './python';
 import type { PythonModule } from './python-modules';
 import { type DebugFrame, type DebugVariable, FirmwareDebugger } from './debugger';
 import type { ArduinoPins } from '@/features/parts';
-import type { I2cBusPins } from '../engine';
+import type { I2cBusPins } from '../elements';
 import {
   WL_CONNECT_FAILED,
   WL_CONNECTED,

@@ -9,6 +9,12 @@ import { THERMAL_VOLTAGE } from './units';
 
 export const GROUND = -1;
 
+/** I2C bus pin indices (SDA/SCL net indices). */
+export interface I2cBusPins {
+  readonly sda: number;
+  readonly scl: number;
+}
+
 export interface Resistor {
   readonly kind: 'resistor';
   readonly a: number;

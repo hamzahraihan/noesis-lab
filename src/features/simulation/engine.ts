@@ -71,7 +71,7 @@ import { Pcd8544 } from '@/features/parts';
 import { solveCircuit, type Solution } from './circuit';
 import { ProbeDeck } from './probe';
 import type { Multimeter } from './multimeter';
-import { GROUND, type Element } from './elements';
+import { GROUND, type Element, type I2cBusPins } from './elements';
 import { buildNetlist, type Netlist } from './netlist';
 import type { Bench, PartInstance } from './bench';
 import { NO_DYNAMIC_STATE, type DynamicState } from '@/features/parts';
@@ -112,11 +112,6 @@ interface StepperAxisState {
  * none gets the board's own bus. The numbers are the board's pin numbers, the
  * ones the silkscreen carries.
  */
-export interface I2cBusPins {
-  readonly sda: number;
-  readonly scl: number;
-}
-
 /**
  * Silkscreen name of each board's regulated supply rail.
  *
