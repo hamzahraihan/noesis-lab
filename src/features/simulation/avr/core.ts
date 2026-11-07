@@ -257,6 +257,7 @@ export class AvrBackend implements ExecutionBackend {
       setReg(i: number, v: number): void;
       setPc(v: number): void;
       setSreg(v: number): void;
+      setSp?(v: number): void;
     } | null;
     if (wasm === null || typeof wasm.step !== 'function') {
       // Degenerate attach: fall back to the JS shadow for the whole slice.
@@ -272,6 +273,7 @@ export class AvrBackend implements ExecutionBackend {
         setReg(i: number, v: number): void;
         setPc(v: number): void;
         setSreg(v: number): void;
+        setSp?(v: number): void;
       };
       if (
         typeof w.setReg !== 'function' ||

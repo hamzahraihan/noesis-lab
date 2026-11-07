@@ -14,16 +14,12 @@ import type { PartStateSnapshot } from '../parts-module';
 declare module '@/features/parts/devices/pcf8574' {
   interface Pcf8574 {
     readonly outputReg: number;
-    readonly inputReg: number;
   }
 }
 
 // Add accessors at runtime (no behavior change)
 Object.defineProperty(Pcf8574.prototype, 'outputReg', {
   get() { return (this as any).latch; },
-});
-Object.defineProperty(Pcf8574.prototype, 'inputReg', {
-  get() { return (this as any).input_reg; },
 });
 
 export const pcf8574Adapter: PartAdapter = {
@@ -75,9 +71,9 @@ export const pcf8574Adapter: PartAdapter = {
       // Wasm path - now uses snapshotToScalars via probe
       throw new Error('PCF8574: wasm path should use snapshotToScalars');
     } else {
-      // TS oracle path: PCF8574 has no separate input register in the model
+      // TS oracle path: PCF8574 input register mirrors the output latch
       const dev = _instance as Pcf8574;
-      return [dev.outputReg, dev.outputReg];
+      return [dev.outputReg, dev.inputReg];
     }
   },
 

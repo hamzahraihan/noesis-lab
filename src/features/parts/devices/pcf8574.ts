@@ -48,6 +48,16 @@ export class Pcf8574 implements I2cDevice {
   /** The output latch: the ports the chip is driving. */
   private latch = 0xff;
 
+  /** The input register: mirrors the output latch (PCF8574 has no separate
+   *  input register — every byte written is output data, and reads return
+   *  the latch). */
+  private input_reg = 0xff;
+
+  /** Read-back value: the input register mirrors the output latch. */
+  get inputReg(): number {
+    return this.input_reg;
+  }
+
   /**
    * One written byte.
    *
@@ -57,6 +67,7 @@ export class Pcf8574 implements I2cDevice {
    */
   receive(byte: number, _isControlPosition: boolean): boolean {
     this.latch = byte & 0xff;
+    this.input_reg = byte & 0xff;
     return true;
   }
 
