@@ -578,8 +578,15 @@ export class WasmEngine {
     };
   }
 
-  readAnalog(_gpio: number): number {
-    return 0;
+  readAnalog(gpio: number): number {
+    const pinId = this.mcu.pinIdForGpio(gpio);
+    if (pinId === undefined) return 0;
+    const net = this.netOfMcuPin(pinId);
+    if (net === -1) return 0;
+    const volts = this.voltageOfNet(net);
+    const vcc = this.mcu.board.logicVolts;
+    const clamped = Math.min(vcc, Math.max(0, volts));
+    return Math.round((clamped / vcc) * this.adcFullScale());
   }
 
   setMeter(_meter: unknown): void {
@@ -625,7 +632,7 @@ export class WasmEngine {
   }
 
   adcFullScale(): number {
-    return 0;
+    return this.mcu.board.adcBits === 12 ? 4095 : 1023;
   }
 
   hasI(): boolean {
