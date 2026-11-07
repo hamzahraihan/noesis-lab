@@ -559,10 +559,11 @@ export class WasmEngine {
     // No-op.
   }
 
-  servo(partId: string): unknown {
+  servo(partId: string): { angle: number; loadOhms: number } | null {
     // Read servo angle from C++ part state snapshot.
     const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    return state ? { angle: state.servo_angle } : null;
+    if (!state) return null;
+    return { angle: state.servo_angle, loadOhms: 0 };
   }
 
   stepperAngles(): number[] {
@@ -624,34 +625,30 @@ export class WasmEngine {
     // No-op.
   }
 
-  sdExists(path: string): boolean {
-    const [partId, name] = path.split(':');
-    if (!this.sdBegin(partId)) return false;
-    return this.sdFiles.get(partId)?.has(name) ?? false;
+  sdExists(partId: string, name: string): number {
+    if (!this.sdBegin(partId)) return 0;
+    return this.sdFiles.get(partId)?.has(name) ? 1 : 0;
   }
 
-  sdRead(path: string): string {
-    const [partId, name] = path.split(':');
+  sdRead(partId: string, name: string): string {
     if (!this.sdBegin(partId)) return '';
     return this.sdFiles.get(partId)?.get(name) ?? '';
   }
 
-  sdWrite(path: string, content: string): number {
-    const [partId, name] = path.split(':');
+  sdWrite(partId: string, name: string, text: string): number {
     if (!this.sdBegin(partId)) return 0;
     const files = this.sdFiles.get(partId) ?? new Map<string, string>();
     const SD_CARD_BYTES = 1024 * 1024;
-    const usage = this.sdBytes(partId) - (files.get(name)?.length ?? 0) + content.length;
+    const usage = this.sdBytes(partId) - (files.get(name)?.length ?? 0) + text.length;
     if (usage > SD_CARD_BYTES) return 0;
-    files.set(name, content);
+    files.set(name, text);
     this.sdFiles.set(partId, files);
-    return content.length;
+    return text.length;
   }
 
-  sdRemove(path: string): boolean {
-    const [partId, name] = path.split(':');
-    if (!this.sdBegin(partId)) return false;
-    return this.sdFiles.get(partId)?.delete(name) ?? false;
+  sdRemove(partId: string, name: string): number {
+    if (!this.sdBegin(partId)) return 0;
+    return this.sdFiles.get(partId)?.delete(name) ? 1 : 0;
   }
 
   dialedDigit(partId: string): number {
