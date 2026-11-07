@@ -12,6 +12,8 @@ import { clearReportedFaults } from '../scripted/diagnostics';
 import { ACK_STALE_MS, headerView, shouldThrottle, type SimulationSpeed } from './protocol';
 import { runStepBatch, stepBudgetMs, TICK_MS } from './scheduler';
 import type { Bench } from '../bench';
+import { McuRuntime } from '../mcu';
+import { DynamicState } from '@/features/parts';
 import { parseDebugInfo, type CompiledDebugInfo } from '../avr/debug/lines';
 import type { Breakpoint, DebugFrame } from '../firmware/debugger';
 import type { FirmwareProject } from '../firmware/project';
@@ -70,7 +72,7 @@ let lastAckMs = 0;
  */
 let pausedFrame: DebugFrame | null = null;
 type Port = { postMessage(message: unknown): void };
-function handle(port: Port, msg: Incoming): void {
+async function handle(port: Port, msg: Incoming): Promise<void> {
   const debugStatus = (): Record<string, unknown> => ({
     debugWatchable: core?.debugWatchable() ?? false,
     debugCompiled: core?.debugCompiled() ?? false,
@@ -90,10 +92,21 @@ function handle(port: Port, msg: Incoming): void {
       try {
         // A fresh run is the operator's retry: the previous run's rows are gone.
         clearReportedFaults();
-        core = createSimCore(board, undefined, { liveNetwork: msg.liveNetwork ?? false });
+        wasm = msg.wasm ?? false;
+        // When wasm is enabled, create a WasmEngine (C++ engine) instead of
+        // the TS Engine. Issue #58.
+        let wasmEngine: any = undefined;
+        if (wasm) {
+          try {
+            const { WasmEngine } = await import('../engine-wasm/adapter');
+            wasmEngine = await WasmEngine.create({ bench: msg.bench, mcu: new McuRuntime(board), dynamicState: new DynamicState() });
+          } catch (e) {
+            console.error('WasmEngine init failed, falling back to TS:', e);
+          }
+        }
+        core = createSimCore(board, undefined, { liveNetwork: msg.liveNetwork ?? false, engine: wasmEngine });
         firmware = msg.firmware;
         execution = msg.execution;
-        wasm = msg.wasm ?? false;
         running = false;
         cancelWorkerTick();
         unread = 0;

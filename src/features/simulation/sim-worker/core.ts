@@ -214,6 +214,9 @@ export interface CoreOptions {
   readonly liveNetwork?: boolean;
   /** Test seam: the fetcher a bridge uses instead of the browser's own. */
   readonly liveFetcher?: NetFetcher;
+  /** Pre-created engine instance (e.g. WasmEngine). When provided, used
+   *  instead of creating a new TS Engine. Issue #58. */
+  readonly engine?: Engine;
 }
 
 export function createSimCore(
@@ -262,7 +265,7 @@ function displayBytesForBench(bench: Bench): number {
 class SimCore implements CoreHandle {
   private readonly controls: DynamicState;
   private readonly mcu: McuRuntime;
-  private readonly engine: Engine;
+  private engine: Engine;
   private readonly onNeedsRealloc: ((nodeCount: number, terminalCount: number) => void) | undefined;
   private readonly busLog = new BusLog();
   private readonly spi: SpiBus;
@@ -356,7 +359,11 @@ class SimCore implements CoreHandle {
     this.controls = new DynamicState();
     this.mcu = new McuRuntime(board);
     this.bench = { parts: [], wires: [], terminals: [], revision: 0 };
-    this.engine = new Engine({ bench: this.bench, mcu: this.mcu, dynamicState: this.controls });
+    if (options.engine) {
+      this.engine = options.engine;
+    } else {
+      this.engine = new Engine({ bench: this.bench, mcu: this.mcu, dynamicState: this.controls });
+    }
     this.onNeedsRealloc = onNeedsRealloc;
     // Same rule as the in-page bench: a bridge exists only when the build said
     // so, and the fetcher is the worker's own `fetch` on this origin.
@@ -536,13 +543,15 @@ class SimCore implements CoreHandle {
     this.wasmFetch = fetchWasm;
     this.executionMode = execution;
     this.bench = bench;
-    this.engine.timeMs = 0;
     this.mcu.reset();
     // A fresh sketch owes nothing: without this, the previous sketch's
     // in-flight delay would gate the new one, which reads as a hang.
     this.pendingDelayMs = 0;
     this.serial = [];
     this.serialCursor = 0;
+
+    this.engine = new Engine({ bench: this.bench, mcu: this.mcu, dynamicState: this.controls });
+    this.engine.timeMs = 0;
 
     try {
       this.runner = new FirmwareRunner(firmware, this.services(), firmware.language);
