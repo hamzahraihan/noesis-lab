@@ -434,7 +434,12 @@ export class WasmEngine {
   }
 
   get supplyRailNet(): number {
-    return -1;
+    // Find the MCU's supply rail net from the bench.
+    const mcuPart = this.bench.parts.find((p) => p.definition.component.kind === 'mcu');
+    if (!mcuPart) return -1;
+    // The supply rail is typically the first terminal of the MCU.
+    const firstTerminal = mcuPart.terminals[Object.keys(mcuPart.terminals)[0]];
+    return firstTerminal !== undefined ? firstTerminal : -1;
   }
 
   get isFloating(): boolean {
@@ -465,8 +470,13 @@ export class WasmEngine {
     return false;
   }
 
-  netOfTerminal(_terminal: number): number {
-    return -1;
+  netOfTerminal(terminal: number): number {
+    if (!this.module || this.handle === 0) return -1;
+    const nodePtr = this.module.netlist_node_of_terminal();
+    const nodeCount = this.module.netlist_node_count();
+    if (nodePtr === 0 || terminal < 0 || terminal >= nodeCount) return -1;
+    const nodeOfTerminal = new Int32Array(this.module.memory.buffer, nodePtr, nodeCount);
+    return nodeOfTerminal[terminal];
   }
 
   pinCurrentAmps(_partId: string, _pin: string): number {
@@ -489,8 +499,9 @@ export class WasmEngine {
     return 0;
   }
 
-  stepperAngle(_partId: string): number {
-    return 0;
+  stepperAngle(partId: string): number {
+    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    return state ? state.stepper_angle_deci_deg / 10 : 0;
   }
 
   rebuildBus(): void {
