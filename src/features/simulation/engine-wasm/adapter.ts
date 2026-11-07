@@ -423,6 +423,78 @@ export class WasmEngine {
     return null;
   }
 
+  get currentSolution(): unknown {
+    return null;
+  }
+
+  get supplyRailNet(): number {
+    return -1;
+  }
+
+  get isFloating(): boolean {
+    return false;
+  }
+
+  cardReader(_partId: string): unknown {
+    return null;
+  }
+
+  hasI2cDevice(_address: number): boolean {
+    return false;
+  }
+
+  i2cDevice(_address: number): unknown {
+    return null;
+  }
+
+  isOnSpiBus(_partId: string): boolean {
+    return false;
+  }
+
+  isOnSpiBusAsReader(_partId: string): boolean {
+    return false;
+  }
+
+  isThermocoupleOnSpiBus(_partId: string): boolean {
+    return false;
+  }
+
+  netOfTerminal(_terminal: number): number {
+    return -1;
+  }
+
+  pinCurrentAmps(_partId: string, _pin: string): number {
+    return 0;
+  }
+
+  pumpServoPulse(_partId: string, _pulseUs: number): void {
+    // No-op: C++ engine handles servo pulse internally.
+  }
+
+  readPinDigital(_pin: number): boolean {
+    return false;
+  }
+
+  sdBegin(_partId: string): void {
+    // No-op.
+  }
+
+  sdBytes(_partId: string): number {
+    return 0;
+  }
+
+  stepperAngle(_partId: string): number {
+    return 0;
+  }
+
+  rebuildBus(): void {
+    // No-op: C++ engine handles bus internally.
+  }
+
+  mapStepperDrivers(): void {
+    // No-op: C++ engine handles stepper drivers internally.
+  }
+
   touch(): void {
     // No-op: C++ engine handles state internally.
   }
