@@ -385,7 +385,12 @@ export class WasmEngine {
   rebuild(bench: unknown, dynamicState?: unknown): void {
     this.bench = bench as Bench;
     this.dynamicState = (dynamicState as DynamicState) ?? this.dynamicState;
-    if (!this.module) return;
+    if (!this.module) {
+      // Fire-and-forget: load the module and circuit asynchronously.
+      // The engine will be ready by the time step() runs.
+      void this.loadCircuit(null).catch(() => {});
+      return;
+    }
     this.pinNodeMap.clear();
     const expanded = expandBench(this.bench, this.dynamicState);
     const mod = this.module;
