@@ -9,6 +9,9 @@ const EXAMPLE = fileURLToPath(new URL('../../../../examples/ci/blink', import.me
 /** The example that asserts what the bench itself is doing. */
 const HARDWARE = fileURLToPath(new URL('../../../../examples/ci/hardware', import.meta.url));
 
+/** The project that exercises the bench's simulated network. */
+const NETWORK = fileURLToPath(new URL('../../../../examples/ci/network-time', import.meta.url));
+
 /**
  * The project the environment names, when there is one.
  *
@@ -45,6 +48,14 @@ describe('the CI runner', () => {
       'text p4',
     ]);
     expect(run.hardware.every((reading) => reading.ok)).toBe(true);
+  });
+
+  it('runs the network project and sees what it expects', () => {
+    const project = loadCiProject(NETWORK);
+    const run = runCiProject(project);
+    expect(run.failures, run.failures.join('; ')).toEqual([]);
+    expect(run.serial.join('')).toContain('connected');
+    expect(run.serial.join('')).toContain('2026-10-17T12:00:00Z');
   });
 
   it('says what the hardware did not do', () => {
