@@ -540,20 +540,42 @@ export class WasmEngine {
     // No-op.
   }
 
-  servo(_partId: string): unknown {
-    return null;
+  servo(partId: string): unknown {
+    // Read servo angle from C++ part state snapshot.
+    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    return state ? { angle: state.servo_angle } : null;
   }
 
   stepperAngles(): number[] {
-    return [];
+    // Read stepper angles from C++ part state snapshots.
+    return this.getPartStates()
+      .filter((s: any) => s.stepper_angle_deci_deg !== undefined)
+      .map((s: any) => s.stepper_angle_deci_deg / 10);
   }
 
-  pixelColors(_partId: string): unknown {
-    return new Map();
+  pixelColors(partId: string): unknown {
+    // Read framebuffer from C++ part state snapshot.
+    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    if (!state || !state.framebuffer) return new Map();
+    const mod = this.module;
+    if (!mod) return new Map();
+    const fb = new Uint8Array(mod.memory.buffer, state.framebuffer, state.framebuffer_size);
+    const colors = new Map();
+    colors.set('framebuffer', fb);
+    colors.set('width', state.width);
+    colors.set('height', state.height);
+    return colors;
   }
 
-  lcd(_partId: string): unknown {
-    return null;
+  lcd(partId: string): unknown {
+    // Read LCD state from C++ part state snapshot.
+    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    if (!state) return null;
+    return {
+      chars: state.lcd_chars,
+      rows: state.lcd_rows,
+      cols: state.lcd_cols,
+    };
   }
 
   readAnalog(_gpio: number): number {
@@ -592,12 +614,14 @@ export class WasmEngine {
     // No-op.
   }
 
-  dialedDigit(_partId: string): number {
-    return 0;
+  dialedDigit(partId: string): number {
+    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    return state?.dialer_digit ?? 0;
   }
 
-  irCode(_partId: string): number {
-    return 0;
+  irCode(partId: string): number {
+    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    return state?.ir_code ?? 0;
   }
 
   adcFullScale(): number {
