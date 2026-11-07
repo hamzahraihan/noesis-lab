@@ -13,7 +13,7 @@ import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from '../netlist';
 import { ProbeDeck } from '../probe';
 import { COMPONENT_KIND, paramsFor } from './netlist';
-import { KEYPAD_KEYS, createController, type DisplayController, SevenSegment, Tm1637 } from '@/features/parts';
+import { KEYPAD_KEYS, createController, type DisplayController, SevenSegment, Servo, Tm1637 } from '@/features/parts';
 
 export interface WasmEngineOptions {
   bench: Bench;
@@ -448,7 +448,8 @@ export class WasmEngine {
     return firstTerminal !== undefined ? firstTerminal : -1;
   }
 
-  get isFloating(): boolean {
+  isFloating(_pinId: string): boolean {
+    // C++ engine handles floating detection internally.
     return false;
   }
 
@@ -559,11 +560,13 @@ export class WasmEngine {
     // No-op.
   }
 
-  servo(partId: string): { angle: number; loadOhms: number } | null {
+  servo(partId: string): Servo | undefined {
     // Read servo angle from C++ part state snapshot.
     const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    if (!state) return null;
-    return { angle: state.servo_angle, loadOhms: 0 };
+    if (!state || state.servo_angle === undefined) return undefined;
+    const servo = new Servo();
+    servo.write(state.servo_angle);
+    return servo;
   }
 
   stepperAngles(): number[] {
@@ -606,7 +609,7 @@ export class WasmEngine {
     const volts = this.voltageOfNet(net);
     const vcc = this.mcu.board.logicVolts;
     const clamped = Math.min(vcc, Math.max(0, volts));
-    return Math.round((clamped / vcc) * this.adcFullScale());
+    return Math.round((clamped / vcc) * this.adcFullScale);
   }
 
   setMeter(_meter: unknown): void {
@@ -661,7 +664,7 @@ export class WasmEngine {
     return state?.ir_code ?? 0;
   }
 
-  adcFullScale(): number {
+  get adcFullScale(): number {
     return this.mcu.board.adcBits === 12 ? 4095 : 1023;
   }
 
@@ -669,7 +672,7 @@ export class WasmEngine {
     return false;
   }
 
-  needsFineSteps(): boolean {
+  get needsFineSteps(): boolean {
     return false;
   }
 

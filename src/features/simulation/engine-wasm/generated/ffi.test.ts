@@ -38,6 +38,7 @@ describe('FFI Schema Round-trip', () => {
       'engine_clear_breakpoint',
       'engine_set_step_over',
       'engine_set_step_into',
+      'engine_continue',
       'engine_get_debug_state',
       'engine_destroy',
     ]);
