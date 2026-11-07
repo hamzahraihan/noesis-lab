@@ -61,6 +61,11 @@
         "parameters": ["int32_t handle", "int32_t enable"]
       },
       {
+        "name": "engine_continue",
+        "returns": "void",
+        "parameters": ["int32_t handle"]
+      },
+      {
         "name": "engine_get_debug_state",
         "returns": "const char*",
         "parameters": ["int32_t handle"]

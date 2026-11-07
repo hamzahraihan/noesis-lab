@@ -475,6 +475,7 @@ int32_t engine_set_breakpoint(int32_t handle, int32_t pc);
 void engine_clear_breakpoint(int32_t handle, int32_t id);
 void engine_set_step_over(int32_t handle, int32_t enable);
 void engine_set_step_into(int32_t handle, int32_t enable);
+void engine_continue(int32_t handle);
 const char* engine_get_debug_state(int32_t handle);
 void engine_destroy(int32_t handle);
 }

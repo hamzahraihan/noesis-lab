@@ -35,6 +35,7 @@ interface FfiExports {
   engine_clear_breakpoint(handle: number, id: number): void;
   engine_set_step_over(handle: number, enable: number): void;
   engine_set_step_into(handle: number, enable: number): void;
+  engine_continue(handle: number): void;
   engine_get_debug_state(handle: number): number;
   engine_destroy(handle: number): void;
   netlist_node_of_terminal(): number;
@@ -285,8 +286,7 @@ export class WasmEngine {
 
   continue(): void {
     if (!this.module || this.handle === 0) return;
-    this.module.engine_set_step_over(this.handle, 0);
-    this.module.engine_set_step_into(this.handle, 0);
+    this.module.engine_continue(this.handle);
   }
 
   stepOver(): void {

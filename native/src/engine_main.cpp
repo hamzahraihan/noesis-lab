@@ -1078,6 +1078,14 @@ extern "C" void engine_set_step_into(int32_t handle, int32_t enable) {
   vm_set_step_into(e->vm, enable != 0);
 }
 
+extern "C" void engine_continue(int32_t handle) {
+  Engine* e = lookup(handle);
+  if (e == nullptr || e->vm == nullptr) return;
+  // Clear step-over and step-into flags to resume normal execution.
+  vm_set_step_over(e->vm, false);
+  vm_set_step_into(e->vm, false);
+}
+
 extern "C" const char* engine_get_debug_state(int32_t handle) {
   Engine* e = lookup(handle);
   if (e == nullptr || e->vm == nullptr) return "";
