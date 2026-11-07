@@ -2,6 +2,7 @@
 // Code outside this folder must import from '@/features/simulation', never deep.
 export * from './engine';
 export * from './engine-wasm/adapter';
+export * from './engine-wasm/parts';
 export { solveCircuit, elementCurrent, type SolveOptions, type Solution } from './circuit';
 export * from './circuit-doc';
 export * from './circuit-edit';

@@ -13,7 +13,9 @@ import { NO_DYNAMIC_STATE } from '@/features/parts';
 import { buildNetlist } from '../netlist';
 import { ProbeDeck } from '../probe';
 import { COMPONENT_KIND, paramsFor } from './netlist';
-import { KEYPAD_KEYS, createController, type DisplayController, SevenSegment, Servo, Tm1637 } from '@/features/parts';
+import { KEYPAD_KEYS, createController, createLcd, type DisplayController, type Lcd1602, SevenSegment, Servo, Tm1637 } from '@/features/parts';
+import type { PixelColor } from '@/features/parts';
+import type { FFIPartStateSnapshot } from './generated/ffi';
 
 export interface WasmEngineOptions {
   bench: Bench;
@@ -270,7 +272,7 @@ export class WasmEngine {
     return this.voltages;
   }
 
-  getPartStates(): unknown[] {
+  getPartStates(): FFIPartStateSnapshot[] {
     if (!this.module || this.handle === 0) return [];
     const mod = this.module;
     const countPtr = mod.wasm_alloc(4);
@@ -278,7 +280,7 @@ export class WasmEngine {
     const count = new Int32Array(mod.memory.buffer, countPtr, 1)[0];
     if (ptr === 0 || count <= 0) return [];
     const SIZE = 314; // sizeof(FFIPartStateSnapshot) on wasm32
-    const result: unknown[] = [];
+    const result: FFIPartStateSnapshot[] = [];
     for (let i = 0; i < count; i++) {
       const off = ptr + i * SIZE;
       const dv = new DataView(mod.memory.buffer, off, SIZE);
@@ -509,7 +511,7 @@ export class WasmEngine {
   }
 
   stepperAngle(partId: string): number {
-    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
+    const state = this.getPartStates().find((s) => s.partId === partId);
     return state ? state.stepper_angle_deci_deg / 10 : 0;
   }
 
@@ -523,6 +525,16 @@ export class WasmEngine {
 
   touch(): void {
     // No-op: C++ engine handles state internally.
+  }
+
+  /** Net index for a part pin, or -1 when the pin is not mapped yet. */
+  pinNodeOf(partId: string, pinId: string): number {
+    return this.pinNodeMap.get(`${partId}:${pinId}`) ?? -1;
+  }
+
+  /** Solved volts on a part pin, from the C++ engine's voltage array. */
+  pinVoltage(partId: string, pinId: string): number {
+    return this.voltageOfNet(this.pinNodeOf(partId, pinId));
   }
 
   netOfMcuPin(pinId: string): number {
@@ -562,43 +574,62 @@ export class WasmEngine {
 
   servo(partId: string): Servo | undefined {
     // Read servo angle from C++ part state snapshot.
-    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    if (!state || state.servo_angle === undefined) return undefined;
+    const state = this.getPartStates().find((s) => s.partId === partId);
+    if (!state) return undefined;
     const servo = new Servo();
     servo.write(state.servo_angle);
     return servo;
   }
 
-  stepperAngles(): number[] {
-    // Read stepper angles from C++ part state snapshots.
-    return this.getPartStates()
-      .filter((s: any) => s.stepper_angle_deci_deg !== undefined)
-      .map((s: any) => s.stepper_angle_deci_deg / 10);
+  stepperAngles(): ReadonlyMap<string, number> {
+    // Shaft angles from C++ part state snapshots, keyed by part id like the
+    // legacy engine, so the bench's artwork reads them the same either way.
+    const angles = new Map<string, number>();
+    const states = this.getPartStates();
+    for (const part of this.bench.parts) {
+      if (part.definition.component.kind !== 'stepper') continue;
+      const state = states.find((s) => s.partId === part.id);
+      if (state) angles.set(part.id, state.stepper_angle_deci_deg / 10);
+    }
+    return angles;
   }
 
-  pixelColors(partId: string): unknown {
-    // Read framebuffer from C++ part state snapshot.
-    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    if (!state || !state.framebuffer) return new Map();
+  pixelColors(partId: string): ReadonlyArray<PixelColor> {
+    // Decode the framebuffer from the C++ part state snapshot as RGB
+    // triplets in DIN order; empty with nothing there.
+    const state = this.getPartStates().find((s) => s.partId === partId);
+    if (!state || state.framebuffer_size === 0) return [];
     const mod = this.module;
-    if (!mod) return new Map();
+    if (!mod) return [];
     const fb = new Uint8Array(mod.memory.buffer, state.framebuffer, state.framebuffer_size);
-    const colors = new Map();
-    colors.set('framebuffer', fb);
-    colors.set('width', state.width);
-    colors.set('height', state.height);
+    const colors: PixelColor[] = [];
+    for (let i = 0; i + 2 < fb.length; i += 3) {
+      colors.push({ r: fb[i] ?? 0, g: fb[i + 1] ?? 0, b: fb[i + 2] ?? 0 });
+    }
     return colors;
   }
 
-  lcd(partId: string): unknown {
-    // Read LCD state from C++ part state snapshot.
-    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    if (!state) return null;
-    return {
-      chars: state.lcd_chars,
-      rows: state.lcd_rows,
-      cols: state.lcd_cols,
+  lcd(partId: string): Lcd1602 | undefined {
+    // Rebuild the character LCD from the C++ part state snapshot: cursor to
+    // each row's DDRAM base, then the row's codes as data nibbles. The rows
+    // are gapped in DDRAM, so a straight run would land in the gap.
+    const state = this.getPartStates().find((s) => s.partId === partId);
+    if (!state || state.lcd_cols === 0 || state.lcd_rows === 0) return undefined;
+    const part = this.bench.parts.find((candidate) => candidate.id === partId);
+    if (!part) return undefined;
+    const panel = createLcd(part.definition);
+    if (!panel) return undefined;
+    const sendByte = (rs: boolean, byte: number) => {
+      panel.receive(rs, (byte >> 4) & 0x0f);
+      panel.receive(rs, byte & 0x0f);
     };
+    for (let row = 0; row < state.lcd_rows; row++) {
+      sendByte(false, 0x80 | panel.rowBase(row));
+      for (let column = 0; column < state.lcd_cols; column++) {
+        sendByte(true, state.lcd_chars[row * state.lcd_cols + column] ?? 32);
+      }
+    }
+    return panel;
   }
 
   readAnalog(gpio: number): number {
@@ -655,13 +686,15 @@ export class WasmEngine {
   }
 
   dialedDigit(partId: string): number {
-    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    return state?.dialer_digit ?? 0;
+    const state = this.getPartStates().find((s) => s.partId === partId);
+    const value = state ? (state as unknown as Record<string, unknown>).dialer_digit : undefined;
+    return typeof value === 'number' ? value : 0;
   }
 
   irCode(partId: string): number {
-    const state = this.getPartStates().find((s: any) => s.partId === partId) as any;
-    return state?.ir_code ?? 0;
+    const state = this.getPartStates().find((s) => s.partId === partId);
+    const value = state ? (state as unknown as Record<string, unknown>).ir_code : undefined;
+    return typeof value === 'number' ? value : 0;
   }
 
   get adcFullScale(): number {

@@ -47,6 +47,7 @@ import {
 } from './library-manager';
 import { DynamicState, type KnobSpec } from '@/features/parts';
 import { formatOhms, formatVolts } from '@/utils';
+import type { PartStateSnapshot } from '@/features/simulation';
 import { FIRMWARE_LANGUAGE, FIRMWARE_THEME, PYTHON_LANGUAGE } from './editor-constants';
 import type { Breakpoint, FirmwareLanguage, FirmwareProject } from '@/features/simulation';
 import type { Example } from '@/features/learn';
@@ -81,6 +82,13 @@ import {
 export interface InspectorProps {
   part: PartInstance | null;
   pinVoltages: ReadonlyMap<string, number>;
+  /**
+   * The selected part's live `PartStateSnapshot` from the C++ engine, when the
+   * engine answers with one. Snapshot values are what the part's internals are
+   * doing right now — servo horn, stepper shaft, sensor readings — while
+   * `controls` holds what the operator is doing to it.
+   */
+  partState?: PartStateSnapshot | null;
   /** What the operator is doing to this part, read as the panel is drawn. */
   controls: DynamicState;
   onDelete(): void;
@@ -121,6 +129,7 @@ export interface InspectorProps {
 export function Inspector({
   part,
   pinVoltages,
+  partState = null,
   controls,
   panelSize,
   rotation,
@@ -213,6 +222,8 @@ export function Inspector({
             </ul>
           </div>
         )}
+
+        {partState && <PartStatePanel state={partState} />}
 
         {definition.component.kind === 'button' && (
           <div>
@@ -396,6 +407,164 @@ function Row({ label, value }: { label: string; value: string }) {
       <dd className="text-[var(--hd-text)] tabular-nums">{value}</dd>
     </div>
   );
+}
+
+/**
+ * One part's live `PartStateSnapshot`, as the C++ engine reports it.
+ *
+ * Only the rows the part's `kind` carries are rendered, so a servo shows its
+ * horn and its supply of nothing else, and an I2C sensor shows its readings.
+ * A part with no snapshot never reaches here — `Bench` passes `partState`
+ * only when the engine answers with one.
+ */
+function PartStatePanel({ state }: { state: PartStateSnapshot }) {
+  const rows = partStateRows(state);
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <CardTitle className="mb-1.5 flex items-center gap-2">
+        <CubeIcon className="icon-sm" aria-hidden="true" />
+        Live part state
+      </CardTitle>
+      <dl className="flex flex-col gap-1 text-xs">
+        {rows.map((row) => (
+          <Row key={row.label} label={row.label} value={row.value} />
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** The readable rows for one snapshot, by the part's kind. */
+function partStateRows(state: PartStateSnapshot): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [
+    { label: 'Kind', value: state.kind },
+  ];
+  if (state.servo_angle !== 0 || state.kind === 'servo') {
+    rows.push({ label: 'Servo', value: `${state.servo_angle}°` });
+  }
+  if (state.stepper_angle_deci_deg !== 0 || state.kind === 'stepper') {
+    rows.push({
+      label: 'Stepper',
+      value: `${(state.stepper_angle_deci_deg / 10).toFixed(1)}°`,
+    });
+    rows.push({
+      label: 'Drivers',
+      value: state.stepper_driver_outputs.join(' '),
+    });
+  }
+  if (state.lcd_cols > 0 && state.lcd_rows > 0) {
+    rows.push({ label: 'LCD', value: `${state.lcd_cols} × ${state.lcd_rows}` });
+  }
+  if (state.seven_seg_digits.some((digit) => digit !== 0) || state.seven_seg_colon !== 0) {
+    rows.push({
+      label: '7-seg',
+      value: `${[...state.seven_seg_digits].filter((digit) => digit !== 0).length} lit${
+        state.seven_seg_colon !== 0 ? ' :' : ''
+      }`,
+    });
+  }
+  if (state.shift_register_outputs.some((level) => level !== 0)) {
+    rows.push({ label: 'Shift out', value: [...state.shift_register_outputs].join(' ') });
+  }
+  if (state.relay_contacts_closed || state.kind === 'relay') {
+    rows.push({ label: 'Contacts', value: state.relay_contacts_closed ? 'closed' : 'open' });
+  }
+  if (state.button_pressed || state.kind === 'button') {
+    rows.push({ label: 'Button', value: state.button_pressed ? 'pressed' : 'released' });
+  }
+  if (state.pot_wiper !== 0 || state.kind === 'potentiometer') {
+    rows.push({ label: 'Wiper', value: `${Math.round(state.pot_wiper * 100)}%` });
+  }
+  if (state.rfid_card_present) {
+    rows.push({ label: 'RFID', value: 'card present' });
+  }
+  if (state.thermocouple_temp_quarter_deg !== 0) {
+    rows.push({
+      label: 'Thermocouple',
+      value: `${(state.thermocouple_temp_quarter_deg / 4).toFixed(2)} °C`,
+    });
+  }
+  if (state.pcf8574_output_reg !== 0 || state.pcf8574_input_reg !== 0) {
+    rows.push({
+      label: 'PCF8574',
+      value: `P0=0x${state.pcf8574_output_reg.toString(16).padStart(2, '0')} P1=0x${state.pcf8574_input_reg.toString(16).padStart(2, '0')}`,
+    });
+  }
+  if (
+    state.mcp23017_gpioa !== 0 ||
+    state.mcp23017_gpiob !== 0 ||
+    state.mcp23017_olata !== 0 ||
+    state.mcp23017_olatb !== 0
+  ) {
+    rows.push({
+      label: 'MCP23017',
+      value: `GPIO=0x${state.mcp23017_gpioa.toString(16).padStart(2, '0')}/0x${state.mcp23017_gpiob.toString(16).padStart(2, '0')} OLAT=0x${state.mcp23017_olata.toString(16).padStart(2, '0')}/0x${state.mcp23017_olatb.toString(16).padStart(2, '0')}`,
+    });
+  }
+  if (state.ads1115_conversion_ready || state.ads1115_conversion !== 0) {
+    rows.push({
+      label: 'ADS1115',
+      value: `${state.ads1115_conversion}${state.ads1115_conversion_ready ? ' ready' : ''}`,
+    });
+  }
+  if (state.shift595_storage_reg !== 0 || state.shift595_shift_reg !== 0) {
+    rows.push({
+      label: '74HC595',
+      value: `SR=0x${state.shift595_shift_reg.toString(16).padStart(2, '0')} R=0x${state.shift595_storage_reg.toString(16).padStart(2, '0')}${
+        state.shift595_outputs_enabled ? ' OE' : ''
+      }`,
+    });
+  }
+  if (state.pcd8544_vop !== 0 || state.pcd8544_x !== 0 || state.pcd8544_y !== 0) {
+    rows.push({
+      label: 'PCD8544',
+      value: `(${state.pcd8544_x}, ${state.pcd8544_y}) Vop=${state.pcd8544_vop}${
+        state.pcd8544_blanked ? ' blank' : ''
+      }${state.pcd8544_inverse ? ' inv' : ''}`,
+    });
+  }
+  if (state.mcp4725_value !== 0) {
+    rows.push({ label: 'DAC', value: `0x${state.mcp4725_value.toString(16).padStart(4, '0')}` });
+  }
+  if (state.pca9685_duty.some((duty) => duty !== 0)) {
+    rows.push({
+      label: 'PCA9685',
+      value: `${state.pca9685_duty.filter((duty) => duty !== 0).length}/16 ch, prescale ${state.pca9685_prescale}`,
+    });
+  }
+  if (state.rtc_hours !== 0 || state.rtc_minutes !== 0 || state.rtc_seconds !== 0) {
+    rows.push({
+      label: 'RTC',
+      value: `${String(state.rtc_hours).padStart(2, '0')}:${String(state.rtc_minutes).padStart(2, '0')}:${String(state.rtc_seconds).padStart(2, '0')}`,
+    });
+  }
+  if (
+    state.sensor_temp_milli_c !== 0 ||
+    state.sensor_pressure_pa !== 0 ||
+    state.sensor_lux !== 0 ||
+    state.sensor_humidity_milli_pct !== 0
+  ) {
+    rows.push({
+      label: 'Sensor',
+      value: `${(state.sensor_temp_milli_c / 1000).toFixed(1)} °C, ${state.sensor_pressure_pa} Pa`,
+    });
+  }
+  if (state.max7219_intensity !== 0 || state.max7219_decode_mode !== 0) {
+    rows.push({
+      label: 'MAX7219',
+      value: `int ${state.max7219_intensity} scan ${state.max7219_scan_limit}${
+        state.max7219_shutdown ? ' off' : ''
+      }`,
+    });
+  }
+  if (state.framebuffer_size > 0) {
+    rows.push({
+      label: 'Framebuffer',
+      value: `${state.width} × ${state.height}, ${state.framebuffer_size} B`,
+    });
+  }
+  return rows;
 }
 
 /**

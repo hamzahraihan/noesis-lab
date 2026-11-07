@@ -99,7 +99,7 @@ import {
 import { I2CBus } from '@/features/simulation';
 import { SpiBus } from '@/features/simulation';
 import { BusLog, type BusEntry } from '@/features/simulation';
-import type { Servo } from '@/features/parts';
+import { Servo } from '@/features/parts';
 import type { Lcd1602 } from '@/features/parts';
 import { LcdDriver, type LcdCommand } from '@/features/parts';
 
@@ -108,7 +108,9 @@ import {
   AMP_RANGES,
   OHM_RANGES,
   Multimeter,
+  findPartState,
   type AmpRange,
+  type FFIPartStateSnapshot,
   type MeterMode,
   type MeterReading,
   type OhmRange,
@@ -1518,8 +1520,28 @@ export class Simulation {
 
   /** Volts on each board pin's net, keyed for the footprint renderer. */
   pinVoltages(): Map<string, number> {
-    const netlist = this.engine.currentNetlist;
     const volts = new Map<string, number>();
+    // Wasm path first: the C++ engine reports solved volts per pin node
+    // without handing over a TS netlist (its `currentNetlist` is a stub), so
+    // ask it for each pin directly.
+    const wasmPinVoltage = (this.engine as unknown as {
+      pinVoltage?: (partId: string, pinId: string) => number;
+    }).pinVoltage;
+    if (typeof wasmPinVoltage === 'function') {
+      const engine = this.engine as unknown as {
+        pinVoltage: (partId: string, pinId: string) => number;
+      };
+      for (const part of this.bench.parts) {
+        // Breadboards are excluded: their 882 holes are drawn as part of the
+        // board itself and never queried for a voltage.
+        if (part.definition.component.kind === 'breadboard') continue;
+        for (const pin of part.definition.pins) {
+          volts.set(`${part.id}:${pin.id}`, engine.pinVoltage(part.id, pin.id));
+        }
+      }
+      return volts;
+    }
+    const netlist = this.engine.currentNetlist;
     for (const part of this.bench.parts) {
       // Breadboards are excluded: their 882 holes are drawn as part of the
       // board itself and never queried for a voltage.
@@ -1586,18 +1608,61 @@ export class Simulation {
     this.edit((doc) => setCapColourInDoc(doc, partId, colour));
   }
 
+  /**
+   * Every part's decoded state from the C++ engine, when it has one.
+   *
+   * The snapshot array is the one representation of part state both engines
+   * agree on: the legacy TS engine has no snapshots and answers `[]`, so
+   * callers fall back to the engine methods below. UI code that wants a live
+   * reading (the Inspector's state panel) goes through here so it never
+   * reads the TS engine's internals directly.
+   */
+  getPartStates(): FFIPartStateSnapshot[] {
+    const source = this.engine as unknown as { getPartStates?: () => FFIPartStateSnapshot[] };
+    return typeof source.getPartStates === 'function' ? source.getPartStates() : [];
+  }
+
+  /** One part's snapshot, or null when it has none. */
+  partState(partId: string): FFIPartStateSnapshot | null {
+    return findPartState(this.getPartStates(), partId);
+  }
+
   /** Servo models, so the artwork can draw each horn where it was told to. */
   servoModels(): ReadonlyMap<string, Servo> {
     const servos = new Map<string, Servo>();
-    for (const part of this.bench.parts) {
-      const servo = this.engine.servo(part.id);
-      if (servo) servos.set(part.id, servo);
+    const states = this.getPartStates();
+    if (states.length > 0) {
+      // Snapshot path: the horn's angle comes from the C++ engine's state,
+      // not from any TS model the adapter happens to keep.
+      for (const part of this.bench.parts) {
+        if (part.definition.component.kind !== 'servo') continue;
+        const state = findPartState(states, part.id);
+        if (!state) continue;
+        const servo = this.engine.servo(part.id) ?? new Servo();
+        servo.write(state.servo_angle);
+        servos.set(part.id, servo);
+      }
+    } else {
+      for (const part of this.bench.parts) {
+        const servo = this.engine.servo(part.id);
+        if (servo) servos.set(part.id, servo);
+      }
     }
     return servos;
   }
 
   /** Stepper shaft angles, so the artwork can draw each rotor turned. */
   stepperAngles(): ReadonlyMap<string, number> {
+    const states = this.getPartStates();
+    if (states.length > 0) {
+      const angles = new Map<string, number>();
+      for (const part of this.bench.parts) {
+        if (part.definition.component.kind !== 'stepper') continue;
+        const state = findPartState(states, part.id);
+        if (state) angles.set(part.id, state.stepper_angle_deci_deg / 10);
+      }
+      return angles;
+    }
     return this.engine.stepperAngles();
   }
 

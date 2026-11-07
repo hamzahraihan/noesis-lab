@@ -2618,6 +2618,7 @@ export default function Bench(props: BenchProps) {
             <Inspector
               part={selected}
               pinVoltages={renderState.pinVolts}
+              partState={selected ? simulation.partState(selected.id) : null}
               controls={renderState.controls}
               locked={layoutLocked}
               onDelete={() => {
