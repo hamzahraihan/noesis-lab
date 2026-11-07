@@ -48,6 +48,7 @@ import {
   ds3231Definition,
   hx711Definition,
   ina219Definition,
+  mcp9808Definition,
   mpu6050Definition,
   sht31Definition,
   tmp102Definition,
@@ -553,6 +554,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A signed twelve-bit thermometer at 0.0625 °C a count, left-justified across two bytes. It also carries a configuration register and two trip points.',
     make: tmp102Definition,
+  },
+  {
+    id: 'mcp9808-temperature',
+    name: 'MCP9808 Temperature Sensor',
+    group: 'input',
+    note: '±0.25 °C accuracy at 0.0625 °C resolution over I2C; the sketch reads the temperature register and the chip divides it into integer and fractional counts.',
+    make: mcp9808Definition,
   },
   {
     id: 'sht31-temp-humidity',

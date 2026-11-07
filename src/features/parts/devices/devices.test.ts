@@ -17,9 +17,11 @@ import {
   mpu6050Definition,
   sht31Definition,
   tmp102Definition,
+  mcp9808Definition,
 } from '../devices/sensors';
 import { BH1750_LIGHT_KNOB } from '../devices/bh1750';
 import { TMP102_TEMPERATURE_KNOB } from '../devices/tmp102';
+import { MCP9808_TEMPERATURE_KNOB } from '../devices/mcp9808';
 import {
   SHT31_HUMIDITY_KNOB,
   SHT31_TEMPERATURE_KNOB,
@@ -1127,6 +1129,27 @@ describe('a TMP102 on the bench', () => {
     expect(readRegister(bus, 0x48, 0x01, 2)).toEqual([0x60, 0xa0]);
     expect(readRegister(bus, 0x48, 0x02, 2)).toEqual([0x4b, 0x00]);
     expect(readRegister(bus, 0x48, 0x03, 2)).toEqual([0x50, 0x00]);
+  });
+});
+
+describe('an MCP9808 on the bench', () => {
+  it('reports the knob as a left-justified signed temperature word', () => {
+    const { bus, engine, device, dynamicState } = i2cBench(mcp9808Definition());
+    dynamicState.setKnob(device.id, MCP9808_TEMPERATURE_KNOB, 30);
+    engine.step(0.05);
+
+    // 30 C is 480 counts at 0.0625 C, left-justified in the top thirteen bits.
+    expect(readRegister(bus, 0x18, 0x05, 2)).toEqual([0x0f, 0x00]);
+
+    dynamicState.setKnob(device.id, MCP9808_TEMPERATURE_KNOB, -10);
+    engine.step(0.05);
+    // -160 counts is two's complement in the top thirteen bits.
+    expect(readRegister(bus, 0x18, 0x05, 2)).toEqual([0xfb, 0x00]);
+  });
+
+  it('keeps the configuration its datasheet resets to', () => {
+    const { bus } = i2cBench(mcp9808Definition());
+    expect(readRegister(bus, 0x18, 0x01, 2)).toEqual([0x00, 0x00]);
   });
 });
 
