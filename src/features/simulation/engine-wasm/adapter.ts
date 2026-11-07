@@ -153,7 +153,7 @@ export class WasmEngine {
     this.pumpDisplays();
   }
 
-  private voltageOfNet(net: number): number {
+  voltageOfNet(net: number): number {
     if (net === -1 || net < 0 || net >= this.voltages.length) return 0;
     return this.voltages[net];
   }
@@ -371,6 +371,184 @@ export class WasmEngine {
 
   displayController(partId: string): DisplayController | undefined {
     return this.displays.get(partId);
+  }
+
+  // --- Methods for SimCore integration (issue #58) ---
+
+  rebuild(bench: unknown, dynamicState?: unknown): void {
+    this.bench = bench as Bench;
+    this.dynamicState = (dynamicState as DynamicState) ?? this.dynamicState;
+    if (!this.module) return;
+    this.pinNodeMap.clear();
+    const expanded = expandBench(this.bench, this.dynamicState);
+    const mod = this.module;
+    const circuitPtr = allocString(mod, JSON.stringify(expanded));
+    const sketchPtr = allocString(mod, this.pendingSketch);
+    this.handle = mod.engine_create(circuitPtr, sketchPtr);
+    if (this.handle === 0) {
+      throw new Error('WasmEngine: engine_create failed');
+    }
+    // Build pinNodeMap from C++ wasm.
+    const nodePtr = mod.netlist_node_of_terminal();
+    const nodeCount = mod.netlist_node_count();
+    if (nodePtr !== 0 && nodeCount > 0) {
+      const nodeOfTerminal = new Int32Array(mod.memory.buffer, nodePtr, nodeCount);
+      for (const part of this.bench.parts) {
+        for (const pinId of Object.keys(part.terminals)) {
+          const terminal = part.terminals[pinId];
+          if (terminal !== undefined && terminal < nodeCount) {
+            this.pinNodeMap.set(`${part.id}:${pinId}`, nodeOfTerminal[terminal]);
+          }
+        }
+      }
+    }
+    // Display controllers.
+    this.displays.clear();
+    for (const part of this.bench.parts) {
+      const kind = part.definition.component.kind;
+      let controller: DisplayController | null = null;
+      if (kind === 'tm1637') {
+        controller = new Tm1637();
+      } else if (kind === '7segment') {
+        controller = new SevenSegment(part.definition.component.digits ?? 1);
+      } else {
+        controller = createController(part.definition);
+      }
+      if (controller) this.displays.set(part.id, controller);
+    }
+    this.voltages = new Float64Array(0);
+  }
+
+  get currentNetlist(): unknown {
+    return null;
+  }
+
+  touch(): void {
+    // No-op: C++ engine handles state internally.
+  }
+
+  netOfMcuPin(_pinId: unknown): number {
+    return -1;
+  }
+
+  readDigital(_gpio: number): boolean {
+    return false;
+  }
+
+  writeI2C(_address: number, _byte: number, _isFirst: boolean): boolean {
+    return true;
+  }
+
+  requestI2C(_address: number, _count: number): number[] {
+    return [];
+  }
+
+  deliverSpi(_byte: number, _dataSelect: boolean, _chipSelected: boolean): number {
+    return 0;
+  }
+
+  hasDynamics(): boolean {
+    return false;
+  }
+
+  skip(_seconds: number): void {
+    // No-op.
+  }
+
+  servo(_partId: string): unknown {
+    return null;
+  }
+
+  stepperAngles(): number[] {
+    return [];
+  }
+
+  pixelColors(_partId: string): unknown {
+    return new Map();
+  }
+
+  lcd(_partId: string): unknown {
+    return null;
+  }
+
+  readAnalog(_gpio: number): number {
+    return 0;
+  }
+
+  setMeter(_meter: unknown): void {
+    // No-op.
+  }
+
+  get isBeingProbed(): boolean {
+    return false;
+  }
+
+  recordGpioEdge(_gpio: number, _cycles: number, _high: boolean): void {
+    // No-op.
+  }
+
+  resampleScripted(): void {
+    // No-op.
+  }
+
+  sdExists(_path: string): boolean {
+    return false;
+  }
+
+  sdRead(_path: string): string {
+    return '';
+  }
+
+  sdWrite(_path: string, _content: string): void {
+    // No-op.
+  }
+
+  sdRemove(_path: string): void {
+    // No-op.
+  }
+
+  dialedDigit(_partId: string): number {
+    return 0;
+  }
+
+  irCode(_partId: string): number {
+    return 0;
+  }
+
+  adcFullScale(): number {
+    return 0;
+  }
+
+  hasI(): boolean {
+    return false;
+  }
+
+  needsFineSteps(): boolean {
+    return false;
+  }
+
+  primeLcdEdges(_partId: string): void {
+    // No-op.
+  }
+
+  setSonarMeasuring(_partId: string, _measuring: boolean): void {
+    // No-op.
+  }
+
+  setScriptedI(_sampler: unknown): void {
+    // No-op.
+  }
+
+  setScriptedSampler(_sampler: unknown): void {
+    // No-op.
+  }
+
+  setPixel(_partId: string, _index: number, _color: unknown): void {
+    // No-op.
+  }
+
+  endSpiTransfer(): void {
+    // No-op.
   }
 
   setBreakpoint(pc: number): void {
