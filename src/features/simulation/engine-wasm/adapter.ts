@@ -75,12 +75,13 @@ export class WasmEngine {
 
   private displays = new Map<string, DisplayController>();
 
-  private constructor(options: WasmEngineOptions) {
+  constructor(options: WasmEngineOptions) {
     this.bench = options.bench;
     this.mcu = options.mcu;
     this.dynamicState = options.dynamicState ?? NO_DYNAMIC_STATE;
   }
 
+  /** Async factory that also instantiates the Wasm module. */
   static async create(options: WasmEngineOptions): Promise<WasmEngine> {
     const engine = new WasmEngine(options);
     engine.module = await instantiateEngineModule();
@@ -92,7 +93,9 @@ export class WasmEngine {
   }
 
   async loadCircuit(_json: unknown): Promise<void> {
-    if (!this.module) throw new Error('WasmEngine: module not loaded');
+    if (!this.module) {
+      this.module = await instantiateEngineModule();
+    }
     this.pinNodeMap.clear();
     const expanded = expandBench(this.bench, this.dynamicState);
     const mod = this.module;
@@ -135,7 +138,10 @@ export class WasmEngine {
   }
 
   async step(dtMs: number): Promise<void> {
-    if (!this.module || this.handle === 0) return;
+    if (!this.module) {
+      this.module = await instantiateEngineModule();
+    }
+    if (this.handle === 0) return;
     this.timeMs += dtMs;
     const mod = this.module;
     const status = mod.engine_step(this.handle, dtMs);
