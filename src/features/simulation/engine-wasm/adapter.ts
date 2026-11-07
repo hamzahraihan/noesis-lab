@@ -264,7 +264,101 @@ export class WasmEngine {
   }
 
   getPartStates(): unknown[] {
-    return [];
+    if (!this.module || this.handle === 0) return [];
+    const mod = this.module;
+    const countPtr = mod.wasm_alloc(4);
+    const ptr = mod.engine_get_state(this.handle, countPtr);
+    const count = new Int32Array(mod.memory.buffer, countPtr, 1)[0];
+    if (ptr === 0 || count <= 0) return [];
+    const SIZE = 314; // sizeof(FFIPartStateSnapshot) on wasm32
+    const result: unknown[] = [];
+    for (let i = 0; i < count; i++) {
+      const off = ptr + i * SIZE;
+      const dv = new DataView(mod.memory.buffer, off, SIZE);
+      const readStr = (base: number, len: number): string => {
+        let s = '';
+        for (let j = 0; j < len; j++) {
+          const c = dv.getUint8(base + j);
+          if (c === 0) break;
+          s += String.fromCharCode(c);
+        }
+        return s;
+      };
+      const readArr8 = (base: number, len: number): number[] => {
+        const arr: number[] = [];
+        for (let j = 0; j < len; j++) arr.push(dv.getUint8(base + j));
+        return arr;
+      };
+      const readArr16 = (base: number, len: number): number[] => {
+        const arr: number[] = [];
+        for (let j = 0; j < len; j++) arr.push(dv.getUint16(base + j * 2, true));
+        return arr;
+      };
+      result.push({
+        partId: readStr(0, 64),
+        kind: readStr(64, 32),
+        framebuffer: dv.getUint32(96, true),
+        framebuffer_size: dv.getUint32(100, true),
+        width: dv.getUint16(104, true),
+        height: dv.getUint16(106, true),
+        servo_angle: dv.getUint8(108),
+        stepper_angle_deci_deg: dv.getInt16(109, true),
+        stepper_driver_outputs: readArr8(111, 4) as [number, number, number, number],
+        seven_seg_digits: readArr8(115, 8) as [number, number, number, number, number, number, number, number],
+        seven_seg_colon: dv.getUint8(123),
+        lcd_chars: readArr8(124, 80),
+        lcd_rows: dv.getUint8(204),
+        lcd_cols: dv.getUint8(205),
+        shift_register_outputs: readArr8(206, 8) as [number, number, number, number, number, number, number, number],
+        relay_contacts_closed: dv.getUint8(214) !== 0,
+        button_pressed: dv.getUint8(215) !== 0,
+        pot_wiper: dv.getFloat64(216, true),
+        rfid_card_present: dv.getUint8(224) !== 0,
+        thermocouple_temp_quarter_deg: dv.getInt16(225, true),
+        pcf8574_output_reg: dv.getUint8(227),
+        pcf8574_input_reg: dv.getUint8(228),
+        mcp23017_iodira: dv.getUint8(229),
+        mcp23017_iodirb: dv.getUint8(230),
+        mcp23017_gpioa: dv.getUint8(231),
+        mcp23017_gpiob: dv.getUint8(232),
+        mcp23017_olata: dv.getUint8(233),
+        mcp23017_olatb: dv.getUint8(234),
+        ads1115_config: dv.getUint16(235, true),
+        ads1115_conversion: dv.getInt16(237, true),
+        ads1115_conversion_ready: dv.getUint8(239) !== 0,
+        shift595_shift_reg: dv.getUint8(240),
+        shift595_storage_reg: dv.getUint8(241),
+        shift595_outputs_enabled: dv.getUint8(242) !== 0,
+        pcd8544_x: dv.getUint8(243),
+        pcd8544_y: dv.getUint8(244),
+        pcd8544_vertical: dv.getUint8(245) !== 0,
+        pcd8544_extended: dv.getUint8(246) !== 0,
+        pcd8544_powerDown: dv.getUint8(247) !== 0,
+        pcd8544_blanked: dv.getUint8(248) !== 0,
+        pcd8544_inverse: dv.getUint8(249) !== 0,
+        pcd8544_vop: dv.getUint8(250),
+        mcp4725_value: dv.getUint16(251, true),
+        pca9685_duty: readArr16(253, 16),
+        pca9685_prescale: dv.getUint8(285),
+        rtc_seconds: dv.getUint8(286),
+        rtc_minutes: dv.getUint8(287),
+        rtc_hours: dv.getUint8(288),
+        rtc_day: dv.getUint8(289),
+        rtc_date: dv.getUint8(290),
+        rtc_month: dv.getUint8(291),
+        rtc_year: dv.getUint8(292),
+        sensor_temp_milli_c: dv.getInt32(293, true),
+        sensor_pressure_pa: dv.getInt32(297, true),
+        sensor_lux: dv.getUint32(301, true),
+        sensor_humidity_milli_pct: dv.getUint32(305, true),
+        max7219_decode_mode: dv.getUint8(309),
+        max7219_intensity: dv.getUint8(310),
+        max7219_scan_limit: dv.getUint8(311),
+        max7219_shutdown: dv.getUint8(312) !== 0,
+        max7219_display_test: dv.getUint8(313) !== 0,
+      });
+    }
+    return result;
   }
 
   getSerialOutput(): string {
