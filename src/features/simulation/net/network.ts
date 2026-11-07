@@ -468,6 +468,42 @@ export class VirtualNetwork {
           '/epoch': () => String(this.epochSeconds()),
         },
       },
+      /*
+       * A version host the bench answers for: a sketch that polls for an
+       * update finds a number it can compare against its own, and a changelog
+       * it can print. One name on the network, one version it serves.
+       */
+      'repo.noesis': {
+        address: '192.168.4.5',
+        routes: {
+          '/version': () => '1.2.3',
+          '/changelog': () =>
+            '1.2.3\n- fixed: the brownout never latched\n- added: the status host',
+        },
+      },
+      /*
+       * A location host someone else owns: the bench's own address and a
+       * position it reports as JSON, a different shape from `sensor.noesis`.
+       */
+      'geo.noesis': {
+        address: '192.168.4.6',
+        routes: {
+          '/ip': () => NET_LOCAL_IP,
+          '/location': () =>
+            JSON.stringify({ lat: 51.5, lon: -0.1, city: 'London' }),
+        },
+      },
+      /*
+       * A health host: a dependency a sketch can poll, re-readable answers,
+       * and an uptime that moves with the simulated clock.
+       */
+      'status.noesis': {
+        address: '192.168.4.7',
+        routes: {
+          '/health': () => 'ok',
+          '/uptime': () => String(Math.floor(this.nowMs() / 1000)),
+        },
+      },
     };
   }
 

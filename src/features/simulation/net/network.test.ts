@@ -299,6 +299,92 @@ describe('the NTP host', () => {
   });
 });
 
+describe('the version host', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('answers a version string on its own address', () => {
+    const { network, advance } = joined();
+    network.get('http://repo.noesis/version');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://repo.noesis/version')).toBe(1);
+    expect(network.read()).toBe('1.2.3');
+    expect(network.failed()).toBe(0);
+  });
+
+  it('serves a changelog under the same host', () => {
+    const { network, advance } = joined();
+    network.get('http://repo.noesis/changelog');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://repo.noesis/changelog')).toBe(1);
+    expect(network.read()).toBe(
+      '1.2.3\n- fixed: the brownout never latched\n- added: the status host',
+    );
+  });
+});
+
+describe('the geo host', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('answers the bench IP on its own route', () => {
+    const { network, advance } = joined();
+    network.get('http://geo.noesis/ip');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://geo.noesis/ip')).toBe(1);
+    expect(network.read()).toBe(NET_LOCAL_IP);
+    expect(network.failed()).toBe(0);
+  });
+
+  it('serves a location as JSON under the same host', () => {
+    const { network, advance } = joined();
+    network.get('http://geo.noesis/location');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://geo.noesis/location')).toBe(1);
+    expect(network.read()).toBe('{"lat":51.5,"lon":-0.1,"city":"London"}');
+    expect(JSON.parse(network.read())).toEqual({
+      lat: 51.5,
+      lon: -0.1,
+      city: 'London',
+    });
+  });
+});
+
+describe('the status host', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('reports health on its own route', () => {
+    const { network, advance } = joined();
+    network.get('http://status.noesis/health');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://status.noesis/health')).toBe(1);
+    expect(network.read()).toBe('ok');
+    expect(network.failed()).toBe(0);
+  });
+
+  it('reports uptime in whole seconds from the simulated clock', () => {
+    const { network, advance } = joined();
+    advance(2500);
+    network.get('http://status.noesis/uptime');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://status.noesis/uptime')).toBe(1);
+    expect(network.read()).toBe('2');
+  });
+});
+
 describe('the port a sketch talks to', () => {
   it('is the same object either backend wires', () => {
     const { network, advance } = bench();
