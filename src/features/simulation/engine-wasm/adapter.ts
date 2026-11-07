@@ -74,6 +74,7 @@ export class WasmEngine {
   private pendingSketch = '';
 
   private displays = new Map<string, DisplayController>();
+  private sdFiles = new Map<string, Map<string, string>>();
 
   constructor(options: WasmEngineOptions) {
     this.bench = options.bench;
@@ -491,12 +492,14 @@ export class WasmEngine {
     return false;
   }
 
-  sdBegin(_partId: string): void {
-    // No-op.
+  sdBegin(partId: string): boolean {
+    return this.bench.parts.some((p) => p.id === partId && p.definition.id === 'microsd-card');
   }
 
-  sdBytes(_partId: string): number {
-    return 0;
+  sdBytes(partId: string): number {
+    let total = 0;
+    for (const text of this.sdFiles.get(partId)?.values() ?? []) total += text.length;
+    return total;
   }
 
   stepperAngle(partId: string): number {
@@ -616,20 +619,34 @@ export class WasmEngine {
     // No-op.
   }
 
-  sdExists(_path: string): boolean {
-    return false;
+  sdExists(path: string): boolean {
+    const [partId, name] = path.split(':');
+    if (!this.sdBegin(partId)) return false;
+    return this.sdFiles.get(partId)?.has(name) ?? false;
   }
 
-  sdRead(_path: string): string {
-    return '';
+  sdRead(path: string): string {
+    const [partId, name] = path.split(':');
+    if (!this.sdBegin(partId)) return '';
+    return this.sdFiles.get(partId)?.get(name) ?? '';
   }
 
-  sdWrite(_path: string, _content: string): void {
-    // No-op.
+  sdWrite(path: string, content: string): number {
+    const [partId, name] = path.split(':');
+    if (!this.sdBegin(partId)) return 0;
+    const files = this.sdFiles.get(partId) ?? new Map<string, string>();
+    const SD_CARD_BYTES = 1024 * 1024;
+    const usage = this.sdBytes(partId) - (files.get(name)?.length ?? 0) + content.length;
+    if (usage > SD_CARD_BYTES) return 0;
+    files.set(name, content);
+    this.sdFiles.set(partId, files);
+    return content.length;
   }
 
-  sdRemove(_path: string): void {
-    // No-op.
+  sdRemove(path: string): boolean {
+    const [partId, name] = path.split(':');
+    if (!this.sdBegin(partId)) return false;
+    return this.sdFiles.get(partId)?.delete(name) ?? false;
   }
 
   dialedDigit(partId: string): number {
