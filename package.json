@@ -14,6 +14,7 @@
     "build:parts:probe": "node scripts/build-parts-probe.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:fuzz": "vitest run src/features/simulation/fuzz-parity.test.ts",
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "format": "oxfmt src scripts",
