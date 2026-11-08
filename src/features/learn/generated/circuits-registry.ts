@@ -13,6 +13,7 @@ import circuit_42 from '../circuits/4.2.json';
 import circuit_51 from '../circuits/5.1.json';
 import circuit_52 from '../circuits/5.2.json';
 import circuitA4988 from '../circuits/a4988.json';
+import circuitAht20 from '../circuits/aht20.json';
 import circuitAlarmClock from '../circuits/alarm-clock.json';
 import circuitBme280 from '../circuits/bme280.json';
 import circuitBmp280 from '../circuits/bmp280.json';
@@ -55,6 +56,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "5.1": parseCircuit(circuit_51, "5.1"),
   "5.2": parseCircuit(circuit_52, "5.2"),
   "a4988": parseCircuit(circuitA4988, "a4988"),
+  "aht20": parseCircuit(circuitAht20, "aht20"),
   "alarm-clock": parseCircuit(circuitAlarmClock, "alarm-clock"),
   "bme280": parseCircuit(circuitBme280, "bme280"),
   "bmp280": parseCircuit(circuitBmp280, "bmp280"),

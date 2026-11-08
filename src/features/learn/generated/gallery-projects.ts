@@ -503,5 +503,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports the moisture in percent, following the part's Moisture knob.", "Turn the knob below forty percent and the light comes on; turn it back up and the light goes out.", "The percent in the log matches the ADC count on A0."],
+  },
+  {
+    id: "aht20",
+    title: "Weather Sensor",
+    blurb: "An AHT20 environment sensor on I2C � temperature and humidity from one breakout. The sketch starts a measurement and reads the raw counts. A light comes on in wet air.",
+    parts: [{ name: "AHT20 Environment Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["aht20"],
+        sketch: "#include <Arduino.h>\n#include <Wire.h>\n\n// AHT20 environment sensor on I2C: temperature and humidity.\n// Start a measurement, read raw counts.\nconst byte SENSOR = 0x38;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xAC);\n  Wire.write(0x33);\n  Wire.write(0x00);\n  Wire.endTransmission();\n\n  Serial.println(\"aht20 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xAC);\n  Wire.write(0x33);\n  Wire.write(0x00);\n  Wire.endTransmission();\n  delay(100);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x71);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 6);\n\n  int hum = 0;\n  int temp = 0;\n  if (Wire.available() >= 6) {\n    Wire.read(); // status\n    int b1 = Wire.read();\n    int b2 = Wire.read();\n    int b3 = Wire.read();\n    int b4 = Wire.read();\n    int b5 = Wire.read();\n    hum = (b1 << 12) | (b2 << 4) | (b3 >> 4);\n    temp = ((b3 & 0x0F) << 12) | (b4 << 4) | (b5 >> 4);\n  }\n\n  Serial.print(\"hum \");\n  Serial.print(hum);\n  Serial.print(\" temp \");\n  Serial.println(temp);\n\n  digitalWrite(LED, hum > 500000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports the humidity and temperature raw counts.", "Turn the Temperature knob and the reading follows.", "Turn the Humidity knob and the reading follows.", "In wet air above fifty percent the light comes on; below it, the light goes out."],
   }
 ];

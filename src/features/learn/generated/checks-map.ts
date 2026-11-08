@@ -32,6 +32,7 @@ import {
   vl53l0xChecks,
   bme280Checks,
   soilMoistureChecks,
+  aht20Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -71,4 +72,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "vl53l0x": (build) => vl53l0xChecks(build),
   "bme280": (build) => bme280Checks(build),
   "soil-moisture": (build) => soilMoistureChecks(build),
+  "aht20": (build) => aht20Checks(build),
 };
