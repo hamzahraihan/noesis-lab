@@ -2540,6 +2540,10 @@ export default function Bench(props: BenchProps) {
                     ? workerClient.serialLines()
                     : simulation.serialLines()
                 }
+                onSend={(text) => {
+                  if (workerClient !== null && workerLive) workerClient.sendSerialInput(text);
+                  else simulation.sendSerialInput(text);
+                }}
               />
             }
             plot={

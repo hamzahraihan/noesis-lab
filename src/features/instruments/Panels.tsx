@@ -7,7 +7,7 @@
  */
 
 import type { OnMount } from '@monaco-editor/react';
-import { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { PartInstance } from '@/features/simulation';
 import {
   addFile,
@@ -601,12 +601,25 @@ function EditorFallback({ height }: { height: string }) {
   );
 }
 
-export const SerialMonitor = memo(function SerialMonitor({ lines }: { lines: readonly string[] }) {
+export const SerialMonitor = memo(function SerialMonitor({
+  lines,
+  onSend,
+}: {
+  lines: readonly string[];
+  onSend?: (text: string) => void;
+}) {
   const endRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState('');
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [lines]);
+
+  const handleSend = () => {
+    if (!onSend || input === '') return;
+    onSend(input + '\n');
+    setInput('');
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -631,6 +644,25 @@ export const SerialMonitor = memo(function SerialMonitor({ lines }: { lines: rea
         )}
         <div ref={endRef} />
       </div>
+      {onSend && (
+        <div className="flex shrink-0 items-center gap-2 border-t border-[var(--hd-border)] px-3 py-1">
+          <input
+            className="flex-1 rounded border border-[var(--hd-border)] bg-transparent px-2 py-1 font-mono text-xs text-[var(--hd-text)]"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSend();
+            }}
+            placeholder="Send to serial..."
+          />
+          <button
+            className="rounded border border-[var(--hd-border)] px-2 py-1 font-mono text-xs text-[var(--hd-text)]"
+            onClick={handleSend}
+          >
+            Send
+          </button>
+        </div>
+      )}
     </div>
   );
 });

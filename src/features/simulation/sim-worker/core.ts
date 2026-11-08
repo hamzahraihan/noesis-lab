@@ -213,6 +213,8 @@ export interface CoreHandle {
   stepDebug(mode: 'over' | 'into'): void;
   /** Resolves once the scripted runtime is installed, for benches with scripts. */
   scriptedReady(): Promise<void>;
+  /** Sends text to the serial input buffer. */
+  sendSerialInput(text: string): void;
   readonly wasmAttached: boolean;
   readonly rp2040Attached: boolean;
   readonly esp32Attached: boolean;
@@ -328,6 +330,7 @@ class SimCore implements CoreHandle {
   // fallback-demote path is for transport failures only).
   private faultText: string | null = null;
   private serial: string[] = [];
+  private serialInput: number[] = [];
   private serialCursor = 0;
   /**
    * The last frame pulled out of the bench's colour panel, so a snapshot of an
@@ -541,6 +544,12 @@ class SimCore implements CoreHandle {
   scriptedReady(): Promise<void> {
     this.ensureScriptedRuntime();
     return this.scriptedStart ?? Promise.resolve();
+  }
+
+  sendSerialInput(text: string): void {
+    for (let i = 0; i < text.length; i++) {
+      this.serialInput.push(text.charCodeAt(i));
+    }
   }
 
   /** Test seam: whether the live AVR backend has Wasm attached. */
@@ -1696,6 +1705,11 @@ class SimCore implements CoreHandle {
       serialWrite: (text) => {
         this.pushSerial(text);
       },
+      serialRead: () => {
+        if (this.serialInput.length === 0) return -1;
+        return this.serialInput.shift()!;
+      },
+      serialAvailable: () => this.serialInput.length,
     };
   }
 }

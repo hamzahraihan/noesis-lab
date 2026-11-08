@@ -268,6 +268,7 @@ export class Simulation {
   firmwareError: string | null = null;
   compileState: CompileState = 'idle';
   serial: string[] = [];
+  serialInput: number[] = [];
   running = false;
 
   /** What the operator is doing to the parts, shared with the renderers. */
@@ -1743,6 +1744,13 @@ export class Simulation {
     return reportedFaults();
   }
 
+  /** Sends text to the serial input buffer. */
+  sendSerialInput(text: string): void {
+    for (let i = 0; i < text.length; i++) {
+      this.serialInput.push(text.charCodeAt(i));
+    }
+  }
+
   serialLines(): readonly string[] {
     if (this.serialDirty) {
       this.serialSnapshot = [...this.serial];
@@ -2527,6 +2535,11 @@ export class Simulation {
       serialWrite: (text) => {
         this.pushSerial(text);
       },
+      serialRead: () => {
+        if (this.serialInput.length === 0) return -1;
+        return this.serialInput.shift()!;
+      },
+      serialAvailable: () => this.serialInput.length,
     };
   }
 }

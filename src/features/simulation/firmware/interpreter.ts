@@ -452,6 +452,10 @@ export interface FirmwareServices {
   adcFullScale?: number;
   serialBegin(baud: number): void;
   serialWrite(text: string): void;
+  /** Reads one byte from the serial input buffer, or -1 when empty. */
+  serialRead?(): number;
+  /** How many bytes are waiting in the serial input buffer. */
+  serialAvailable?(): number;
   /** The I2C bus, for sketches that drive a display or sensor directly. */
   wire: WirePort;
   /**
@@ -4924,9 +4928,9 @@ export class FirmwareRuntime {
         services.serialWrite(String.fromCharCode(asNumber(args[0] ?? 0)));
         return 0;
       case 'available':
-        return 0;
+        return services.serialAvailable?.() ?? 0;
       case 'read':
-        return -1;
+        return services.serialRead?.() ?? -1;
       default:
         /*
          * A member the port does not have. It used to answer 0, which reads

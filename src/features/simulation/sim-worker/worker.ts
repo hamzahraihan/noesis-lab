@@ -54,7 +54,8 @@ type Incoming =
   | { id: number; type: 'read-memory'; address: number; length: number }
   | { id: number; type: 'add-watchpoint'; address: number; size: number }
   | { id: number; type: 'remove-watchpoint'; watchpointId: number }
-  | { id: number; type: 'gdb-packet'; payload: string };
+  | { id: number; type: 'gdb-packet'; payload: string }
+  | { id: number; type: 'serial-input'; text: string };
 
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
@@ -241,6 +242,10 @@ async function handle(port: Port, msg: Incoming): Promise<void> {
       break;
     case 'gdb-packet':
       ok(msg.id, { response: core?.handleGdbPacket(msg.payload) ?? '' });
+      break;
+    case 'serial-input':
+      core?.sendSerialInput(msg.text);
+      ok(msg.id);
       break;
   }
 }

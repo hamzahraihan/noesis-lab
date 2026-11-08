@@ -622,6 +622,8 @@ export interface WorkerClient {
   resumeDebug(): void;
   /** Runs the program to the next statement, over a call or into it. */
   stepDebug(mode: 'over' | 'into'): void;
+  /** Sends text to the serial input buffer. */
+  sendSerialInput(text: string): void;
   /** Reads `length` bytes from the AVR data space at `address`. */
   debugReadMemory(address: number, length: number): Promise<number[]>;
   /** Adds a write watchpoint. Returns the watchpoint id or -1. */
@@ -1086,6 +1088,10 @@ class WorkerClientImpl implements WorkerClient {
 
   stepDebug(mode: 'over' | 'into'): void {
     this.post('debug-step', { mode });
+  }
+
+  sendSerialInput(text: string): void {
+    this.post('serial-input', { text });
   }
 
   /** Reads `length` bytes from the AVR data space at `address`. */
