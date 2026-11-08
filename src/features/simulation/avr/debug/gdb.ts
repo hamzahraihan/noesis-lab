@@ -146,23 +146,24 @@ export class GdbRemoteProtocol {
   private readRegisters(): string {
     const frame = this.backend.debugFrame();
     if (!frame) return '';
+    const registers = frame.registers ?? [];
     // GDB AVR register order: r0-r31, SREG, SP (2 bytes), PC (4 bytes, in bytes).
     const regs: string[] = [];
     for (let i = 0; i < 32; i++) {
-      const reg = frame.registers.find((r) => r.name === `r${i}`);
+      const reg = registers.find((r) => r.name === `r${i}`);
       const val = reg ? parseInt(reg.value, 16) : 0;
       regs.push(val.toString(16).padStart(2, '0'));
     }
     // SREG
-    const sreg = frame.registers.find((r) => r.name === 'SREG');
+    const sreg = registers.find((r) => r.name === 'SREG');
     regs.push((sreg ? parseInt(sreg.value, 16) : 0).toString(16).padStart(2, '0'));
     // SP (2 bytes, little-endian)
-    const sp = frame.registers.find((r) => r.name === 'SP');
+    const sp = registers.find((r) => r.name === 'SP');
     const spVal = sp ? parseInt(sp.value, 16) : 0;
     regs.push((spVal & 0xff).toString(16).padStart(2, '0'));
     regs.push(((spVal >> 8) & 0xff).toString(16).padStart(2, '0'));
     // PC (4 bytes, in bytes, little-endian)
-    const pcVal = frame.pc;
+    const pcVal = frame.pc ?? 0;
     for (let i = 0; i < 4; i++) {
       regs.push(((pcVal >> (i * 8)) & 0xff).toString(16).padStart(2, '0'));
     }

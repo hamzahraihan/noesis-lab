@@ -830,6 +830,27 @@ export default function Bench(props: BenchProps) {
     else simulation.stepDebugInto();
     forceRender((n) => n + 1);
   }, [workerActive, workerClient, simulation]);
+  const debugReadMemory = useCallback(
+    (address: number, length: number) => {
+      if (workerActive && workerClient) return workerClient.debugReadMemory(address, length);
+      return Promise.resolve(simulation.debugReadMemory(address, length));
+    },
+    [workerActive, workerClient, simulation],
+  );
+  const debugAddWatchpoint = useCallback(
+    (address: number, size: number) => {
+      if (workerActive && workerClient) return workerClient.debugAddWatchpoint(address, size);
+      return Promise.resolve(simulation.debugAddWatchpoint(address, size));
+    },
+    [workerActive, workerClient, simulation],
+  );
+  const debugRemoveWatchpoint = useCallback(
+    (id: number) => {
+      if (workerActive && workerClient) return workerClient.debugRemoveWatchpoint(id);
+      return Promise.resolve(simulation.debugRemoveWatchpoint(id));
+    },
+    [workerActive, workerClient, simulation],
+  );
   /* Firmware verdict from the owning backend (worker fault travels by
    * message; the parse/fallback verdicts stay in-page). */
   const activeFirmwareError = workerActive
@@ -2570,6 +2591,9 @@ export default function Bench(props: BenchProps) {
                 onStepOver={stepDebugOver}
                 onStepInto={stepDebugInto}
                 onClear={clearStops}
+                onReadMemory={debugReadMemory}
+                onAddWatchpoint={debugAddWatchpoint}
+                onRemoveWatchpoint={debugRemoveWatchpoint}
               />
             }
             problems={

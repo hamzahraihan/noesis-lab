@@ -994,6 +994,21 @@ export class Simulation {
     return this.avrBackend?.debugPaused() ?? this.runner?.paused === true;
   }
 
+  /** Reads `length` bytes from the AVR data space at `address`. */
+  debugReadMemory(address: number, length: number): number[] {
+    return this.avrBackend?.readMemory(address, length) ?? [];
+  }
+
+  /** Adds a write watchpoint on `[address, address + size)`. Returns id or -1. */
+  debugAddWatchpoint(address: number, size: number): number {
+    return this.avrBackend?.addWatchpoint(address, size) ?? -1;
+  }
+
+  /** Removes a watchpoint by id. */
+  debugRemoveWatchpoint(id: number): boolean {
+    return this.avrBackend?.removeWatchpoint(id) ?? false;
+  }
+
   /**
    * Lets the program carry on from where the debugger stopped it.
    *

@@ -622,6 +622,12 @@ export interface WorkerClient {
   resumeDebug(): void;
   /** Runs the program to the next statement, over a call or into it. */
   stepDebug(mode: 'over' | 'into'): void;
+  /** Reads `length` bytes from the AVR data space at `address`. */
+  debugReadMemory(address: number, length: number): Promise<number[]>;
+  /** Adds a write watchpoint. Returns the watchpoint id or -1. */
+  debugAddWatchpoint(address: number, size: number): Promise<number>;
+  /** Removes a watchpoint by id. */
+  debugRemoveWatchpoint(watchpointId: number): Promise<boolean>;
   readonly fault: string | null;
   readonly timeMs: number;
   /** Generation of the last ingested snapshot frame. */
@@ -771,6 +777,8 @@ class WorkerClientImpl implements WorkerClient {
   private onPortFallback: ((reason: string) => void) | null = null;
   private nextId = 1;
   private readonly pending = new Map<number, string>();
+  /** Resolvers for request/reply methods that return data (readMemory, watchpoints). */
+  private readonly pendingResolvers = new Map<number, (value: unknown) => void>();
   private readonly outbox: Array<{ id: number; type: string; msg: Record<string, unknown> }> = [];
   private handshakeOk = false;
   private demoted = false;
@@ -1078,6 +1086,72 @@ class WorkerClientImpl implements WorkerClient {
     this.post('debug-step', { mode });
   }
 
+  /** Reads `length` bytes from the AVR data space at `address`. */
+  debugReadMemory(address: number, length: number): Promise<number[]> {
+    return new Promise((resolve) => {
+      if (this.port === null || this.demoted || this.disposed) {
+        resolve([]);
+        return;
+      }
+      const id = this.nextId++;
+      this.pendingResolvers.set(id, resolve as (value: unknown) => void);
+      this.pending.set(id, 'read-memory');
+      const msg = { id, type: 'read-memory', address, length };
+      try {
+        this.port.postMessage(msg);
+      } catch {
+        this.pending.delete(id);
+        this.pendingResolvers.delete(id);
+        this.demote('sim worker post failed');
+        resolve([]);
+      }
+    });
+  }
+
+  /** Adds a write watchpoint. Returns the watchpoint id or -1. */
+  debugAddWatchpoint(address: number, size: number): Promise<number> {
+    return new Promise((resolve) => {
+      if (this.port === null || this.demoted || this.disposed) {
+        resolve(-1);
+        return;
+      }
+      const id = this.nextId++;
+      this.pendingResolvers.set(id, resolve as (value: unknown) => void);
+      this.pending.set(id, 'add-watchpoint');
+      const msg = { id, type: 'add-watchpoint', address, size };
+      try {
+        this.port.postMessage(msg);
+      } catch {
+        this.pending.delete(id);
+        this.pendingResolvers.delete(id);
+        this.demote('sim worker post failed');
+        resolve(-1);
+      }
+    });
+  }
+
+  /** Removes a watchpoint by id. */
+  debugRemoveWatchpoint(watchpointId: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (this.port === null || this.demoted || this.disposed) {
+        resolve(false);
+        return;
+      }
+      const id = this.nextId++;
+      this.pendingResolvers.set(id, resolve as (value: unknown) => void);
+      this.pending.set(id, 'remove-watchpoint');
+      const msg = { id, type: 'remove-watchpoint', watchpointId };
+      try {
+        this.port.postMessage(msg);
+      } catch {
+        this.pending.delete(id);
+        this.pendingResolvers.delete(id);
+        this.demote('sim worker post failed');
+        resolve(false);
+      }
+    });
+  }
+
   status(): WorkerStatus {
     const now = performance.now();
     this.pruneSamples(now);
@@ -1185,6 +1259,9 @@ class WorkerClientImpl implements WorkerClient {
       rows?: unknown;
       debugWatchable?: unknown;
       debugCompiled?: unknown;
+      bytes?: unknown;
+      watchpointId?: unknown;
+      removed?: unknown;
     };
     /*
      * The worker owns the run, so its answer is the truth about the backend it
@@ -1214,12 +1291,33 @@ class WorkerClientImpl implements WorkerClient {
     if (reply.ok === false) {
       const detail =
         typeof reply.error === 'string' && reply.error !== '' ? reply.error : 'worker fault';
+      const kind = this.pending.get(reply.id);
+      const resolver = this.pendingResolvers.get(reply.id);
       this.pending.delete(reply.id);
+      this.pendingResolvers.delete(reply.id);
+      if (kind === 'read-memory') resolver?.([]);
+      else if (kind === 'add-watchpoint') resolver?.(-1);
+      else if (kind === 'remove-watchpoint') resolver?.(false);
       this.demote(`sim worker fault: ${detail}`);
       return;
     }
     if (reply.ok !== true) return;
     this.pending.delete(reply.id);
+    if (kind === 'read-memory') {
+      const resolver = this.pendingResolvers.get(reply.id);
+      this.pendingResolvers.delete(reply.id);
+      const bytes = Array.isArray(reply.bytes) ? (reply.bytes as number[]) : [];
+      resolver?.(bytes);
+    } else if (kind === 'add-watchpoint') {
+      const resolver = this.pendingResolvers.get(reply.id);
+      this.pendingResolvers.delete(reply.id);
+      const wpId = typeof reply.watchpointId === 'number' ? reply.watchpointId : -1;
+      resolver?.(wpId);
+    } else if (kind === 'remove-watchpoint') {
+      const resolver = this.pendingResolvers.get(reply.id);
+      this.pendingResolvers.delete(reply.id);
+      resolver?.(reply.removed === true);
+    }
     if (typeof reply.fault === 'string' && reply.fault !== '') {
       this.faultText = reply.fault;
     } else if (reply.fault === null && (kind === 'init' || kind === 'edit')) {
@@ -1294,7 +1392,17 @@ class WorkerClientImpl implements WorkerClient {
       // Terminate is best-effort on the way out.
     }
     this.port = null;
+    // Resolve any pending data requests with their fallback values before
+    // clearing the pending map.
+    for (const [id, resolver] of this.pendingResolvers) {
+      const kind = this.pending.get(id);
+      if (kind === 'read-memory') resolver([]);
+      else if (kind === 'add-watchpoint') resolver(-1);
+      else if (kind === 'remove-watchpoint') resolver(false);
+      else resolver(null);
+    }
     this.pending.clear();
+    this.pendingResolvers.clear();
     this.outbox.length = 0;
     this.onPortFallback?.(reason);
   }

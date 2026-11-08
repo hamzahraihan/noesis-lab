@@ -15,7 +15,7 @@
  * person can act on before the next run.
  */
 
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import type { Breakpoint, DebugFrame } from '@/features/simulation';
 import { Button } from '@/components';
 import { memoryRows } from './memory';
@@ -38,6 +38,12 @@ export interface DebugPanelProps {
   onStepOver(): void;
   onStepInto(): void;
   onClear(): void;
+  /** Reads `length` bytes from the AVR data space at `address`. */
+  onReadMemory?: (address: number, length: number) => number[] | Promise<number[]>;
+  /** Adds a write watchpoint on `[address, address + size)`. Returns id or -1. */
+  onAddWatchpoint?: (address: number, size: number) => number | Promise<number>;
+  /** Removes a watchpoint by id. */
+  onRemoveWatchpoint?: (id: number) => boolean | Promise<boolean>;
 }
 
 export const DebugPanel = memo(function DebugPanel({
@@ -49,7 +55,50 @@ export const DebugPanel = memo(function DebugPanel({
   onStepOver,
   onStepInto,
   onClear,
+  onReadMemory,
+  onAddWatchpoint,
+  onRemoveWatchpoint,
 }: DebugPanelProps) {
+  // Memory read state.
+  const [readAddr, setReadAddr] = useState('0x100');
+  const [readResult, setReadResult] = useState<number[] | null>(null);
+  const [readBusy, setReadBusy] = useState(false);
+  // Watchpoint state.
+  const [wpAddr, setWpAddr] = useState('0x100');
+  const [wpSize, setWpSize] = useState('1');
+  const [watchpoints, setWatchpoints] = useState<Array<{ id: number; address: number; size: number }>>([]);
+
+  const doReadMemory = useCallback(async () => {
+    if (!onReadMemory) return;
+    const addr = parseInt(readAddr, 16);
+    if (!Number.isFinite(addr)) return;
+    setReadBusy(true);
+    try {
+      const bytes = await onReadMemory(addr, 16);
+      setReadResult(bytes);
+    } finally {
+      setReadBusy(false);
+    }
+  }, [onReadMemory, readAddr]);
+
+  const doAddWatchpoint = useCallback(async () => {
+    if (!onAddWatchpoint) return;
+    const addr = parseInt(wpAddr, 16);
+    const size = parseInt(wpSize, 10);
+    if (!Number.isFinite(addr) || !Number.isFinite(size) || size < 1) return;
+    const id = await onAddWatchpoint(addr, size);
+    if (id > 0) {
+      setWatchpoints((prev) => [...prev, { id, address: addr, size }]);
+    }
+  }, [onAddWatchpoint, wpAddr, wpSize]);
+
+  const doRemoveWatchpoint = useCallback(async (id: number) => {
+    if (!onRemoveWatchpoint) return;
+    const ok = await onRemoveWatchpoint(id);
+    if (ok) {
+      setWatchpoints((prev) => prev.filter((wp) => wp.id !== id));
+    }
+  }, [onRemoveWatchpoint]);
   // The frame is the program the person is looking at; the prop only speaks
   // for a run that has not stopped yet.
   const compiledRun = frame !== null ? frame.compiled === true : compiled;
@@ -159,6 +208,71 @@ export const DebugPanel = memo(function DebugPanel({
                   </tbody>
                 </table>
               </div>
+            </details>
+          )}
+          {compiledRun && onReadMemory && (
+            <details className="rounded border border-[var(--hd-border)]">
+              <summary className="cursor-pointer px-2 py-1 font-sans text-[11px] tracking-[0.08em] uppercase text-[var(--hd-faint)]">
+                Memory read
+              </summary>
+              <div className="flex items-center gap-2 px-2 py-1">
+                <input
+                  className="w-24 rounded border border-[var(--hd-border)] bg-transparent px-1 py-0.5 font-mono text-[11px] text-[var(--hd-text)]"
+                  value={readAddr}
+                  onChange={(e) => setReadAddr(e.target.value)}
+                  placeholder="0x100"
+                />
+                <Button size="sm" variant="secondary" onClick={doReadMemory} disabled={readBusy}>
+                  {readBusy ? 'Reading...' : 'Read 16'}
+                </Button>
+              </div>
+              {readResult !== null && (
+                <div className="px-2 pb-1 font-mono text-[11px] text-[var(--hd-text)]">
+                  {readResult.map((b) => b.toString(16).padStart(2, '0')).join(' ')}
+                </div>
+              )}
+            </details>
+          )}
+          {compiledRun && onAddWatchpoint && (
+            <details className="rounded border border-[var(--hd-border)]">
+              <summary className="cursor-pointer px-2 py-1 font-sans text-[11px] tracking-[0.08em] uppercase text-[var(--hd-faint)]">
+                Watchpoints
+              </summary>
+              <div className="flex items-center gap-2 px-2 py-1">
+                <input
+                  className="w-24 rounded border border-[var(--hd-border)] bg-transparent px-1 py-0.5 font-mono text-[11px] text-[var(--hd-text)]"
+                  value={wpAddr}
+                  onChange={(e) => setWpAddr(e.target.value)}
+                  placeholder="0x100"
+                />
+                <input
+                  className="w-12 rounded border border-[var(--hd-border)] bg-transparent px-1 py-0.5 font-mono text-[11px] text-[var(--hd-text)]"
+                  value={wpSize}
+                  onChange={(e) => setWpSize(e.target.value)}
+                  placeholder="1"
+                />
+                <Button size="sm" variant="secondary" onClick={doAddWatchpoint}>
+                  Add
+                </Button>
+              </div>
+              {watchpoints.length > 0 && (
+                <ul className="px-2 pb-1 font-mono text-[11px] text-[var(--hd-text)]">
+                  {watchpoints.map((wp) => (
+                    <li key={wp.id} className="flex items-center gap-2">
+                      <span>
+                        0x{wp.address.toString(16).padStart(4, '0')} ({wp.size} byte{wp.size === 1 ? '' : 's'})
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => doRemoveWatchpoint(wp.id)}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </details>
           )}
         </>
