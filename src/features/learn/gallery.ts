@@ -29,7 +29,7 @@ export interface GalleryBuild {
   /** Build flavor on one board (`'library'`); absent means the default build. */
   readonly variant?: string;
   /** Backend this build needs; default `'interpreter'`. */
-  readonly execution?: 'interpreter' | 'avr' | 'rp2040' | 'esp32';
+  readonly execution?: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine';
   /**
    * `'live'` when this build's sketch talks to a real host (`net/live-hosts`).
    *

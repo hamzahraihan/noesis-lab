@@ -63,7 +63,7 @@ export function esp32AvailableFor(
 }
 
 export interface BackendSelection {
-  readonly value: 'avr' | 'interpreter' | 'rp2040' | 'esp32';
+  readonly value: 'avr' | 'interpreter' | 'rp2040' | 'esp32' | 'esp32-machine';
   readonly interpreterDisabled: boolean;
   readonly interpreterTitle: string;
 }
@@ -84,7 +84,7 @@ export function resolveBackendSelection({
   rp2040Mode,
   esp32Mode,
 }: {
-  readonly execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | undefined;
+  readonly execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine' | undefined;
   readonly avr: BackendAvailability;
   readonly rp2040: BackendAvailability;
   readonly esp32: BackendAvailability;
@@ -111,6 +111,13 @@ export function resolveBackendSelection({
       value: 'esp32',
       interpreterDisabled: true,
       interpreterTitle: 'This build runs on the emulated ESP32 only',
+    };
+  }
+  if (execution === 'esp32-machine') {
+    return {
+      value: 'esp32-machine',
+      interpreterDisabled: true,
+      interpreterTitle: 'This build runs on the ESP32 machine code backend only',
     };
   }
   if (rp2040Mode && rp2040.ok) {

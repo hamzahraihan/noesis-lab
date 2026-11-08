@@ -589,7 +589,7 @@ export interface WorkerClient {
   /** Selects the worker's clock-paced or maximum-throughput scheduler. */
   setSpeed(speed: SimulationSpeed): void;
   /** Chooses the backend the next init runs on. */
-  setExecution(execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32'): void;
+  setExecution(execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine'): void;
   loadFirmware(project: FirmwareProject): void;
   compileAndRun(project: FirmwareProject): Promise<void>;
   cancelCompile(): void;
@@ -749,7 +749,7 @@ class WorkerClientImpl implements WorkerClient {
   private bench: Bench | null = null;
   private live: SharedArrayBuffer | null = null;
   private loadedFirmware: FirmwareProject | null = null;
-  private execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
+  private execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine' = 'interpreter';
   private wasm = false;
   /* Whether this bench's network may bridge to real hosts. Build data, set
    * once: a worker is recreated when the board or bench changes, and the flag
@@ -795,7 +795,7 @@ class WorkerClientImpl implements WorkerClient {
       port: SimWorkerPort;
       bench: Bench;
       firmware: FirmwareProject;
-      execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32';
+      execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine';
       wasm?: boolean;
       liveNetwork?: boolean;
       onFallback: (reason: string) => void;
@@ -892,7 +892,7 @@ class WorkerClientImpl implements WorkerClient {
    * the worker core takes the execution with its `init`, and a Run posts a
    * fresh one anyway.
    */
-  setExecution(execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32'): void {
+  setExecution(execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine'): void {
     if (execution !== this.execution) {
       this.workerDebugWatchable = null;
       this.workerDebugCompiled = null;
@@ -1544,7 +1544,7 @@ export function createWorkerClient(opts: {
   board: PartDefinition;
   bench?: Bench;
   firmware?: FirmwareProject;
-  execution?: 'interpreter' | 'avr' | 'rp2040' | 'esp32';
+  execution?: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine';
   wasm?: boolean;
   /** Whether this bench's network may bridge to real hosts (build data). */
   liveNetwork?: boolean;

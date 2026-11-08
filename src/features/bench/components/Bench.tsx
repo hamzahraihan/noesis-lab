@@ -457,7 +457,9 @@ export default function Bench(props: BenchProps) {
    * speaks MicroPython, so it is offered for a Python sketch and the selector
    * falls back to the interpreter for a C++ one, with the reason shown.
    */
-  const [esp32Mode, setEsp32Mode] = useState(projectBuild?.execution === 'esp32');
+  const [esp32Mode, setEsp32Mode] = useState(
+    projectBuild?.execution === 'esp32' || projectBuild?.execution === 'esp32-machine',
+  );
   /* Whether a worker compile is in flight, driving the progress + cancel UI. */
   const [compiling, setCompiling] = useState(false);
   /* The selected simulation pacing survives pause/resume and recompiles. */
@@ -512,6 +514,7 @@ export default function Bench(props: BenchProps) {
     if (projectBuild?.execution === 'avr') setAvrMode(true);
     if (projectBuild?.execution === 'rp2040') setRp2040Mode(true);
     if (projectBuild?.execution === 'esp32') setEsp32Mode(true);
+    if (projectBuild?.execution === 'esp32-machine') setEsp32Mode(true);
   }, [projectBuild]);
 
   /* The exercise guide auto-opens on arrival unless dismissed for this exercise. */
