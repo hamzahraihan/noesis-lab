@@ -36,6 +36,12 @@ import {
   lm35Output,
   MOISTURE_KNOB,
   soilMoistureOutput,
+  ADXL335_X_KNOB,
+  ADXL335_Y_KNOB,
+  ADXL335_Z_KNOB,
+  adxl335OutputX,
+  adxl335OutputY,
+  adxl335OutputZ,
   SEVEN_SEGMENT_SEGMENTS,
   SENSOR_STIMULUS_KNOBS,
   SLIDE_POSITION_KNOB,
@@ -432,6 +438,20 @@ function elementsForPart(
       if (output === GROUND) return [];
       return [
         { kind: 'voltageSource', a: output, b: GROUND, volts: fraction, label: 'soil-moisture' },
+      ];
+    }
+
+    case 'adxl335': {
+      const x = state.knob(part.id, ADXL335_X_KNOB);
+      const y = state.knob(part.id, ADXL335_Y_KNOB);
+      const z = state.knob(part.id, ADXL335_Z_KNOB);
+      const xNode = nodeAt('X');
+      const yNode = nodeAt('Y');
+      const zNode = nodeAt('Z');
+      return [
+        ...(xNode !== GROUND ? [{ kind: 'voltageSource' as const, a: xNode, b: GROUND, volts: adxl335OutputX(x), label: 'adxl335-x' }] : []),
+        ...(yNode !== GROUND ? [{ kind: 'voltageSource' as const, a: yNode, b: GROUND, volts: adxl335OutputY(y), label: 'adxl335-y' }] : []),
+        ...(zNode !== GROUND ? [{ kind: 'voltageSource' as const, a: zNode, b: GROUND, volts: adxl335OutputZ(z), label: 'adxl335-z' }] : []),
       ];
     }
 

@@ -66,6 +66,7 @@ import {
   bno055Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
+import { adxl335Definition } from './devices/adxl335';
 import { soilMoistureDefinition } from './devices/soil-moisture';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
@@ -652,6 +653,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'An analog temperature sensor: Vout is 10 mV per degree Celsius, so a sketch reads it with analogRead and converts the count back to degrees. No bus, no registers -- just a voltage on a pin.',
     make: lm35Definition,
+  },
+  {
+    id: 'adxl335',
+    name: 'ADXL335 Accelerometer',
+    group: 'input',
+    note: 'A three-axis analog accelerometer: X, Y and Z are voltages, so a sketch reads them with analogRead and converts the counts back to g. No bus, no registers -- just three voltages on pins.',
+    make: adxl335Definition,
   },
   {
     id: 'soil-moisture',
