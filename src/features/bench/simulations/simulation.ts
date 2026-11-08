@@ -51,6 +51,7 @@ import {
   parseIntelHex,
   sourcesHashForProject,
 } from '@/features/simulation';
+import { GdbRemoteProtocol } from '@/features/simulation/avr/debug/gdb';
 import {
   compileInWorker as builtinCompileInWorker,
   compileProjectWithLibraries as builtinCompileProjectWithLibraries,
@@ -294,6 +295,7 @@ export class Simulation {
   }
   /** Live AVR core while execution is `'avr'` with a flashed HEX; null otherwise. */
   private avrBackend: AvrBackend | null = null;
+  private gdbProtocol: GdbRemoteProtocol | null = null;
   /**
    * MCU revision at the last AVR PIN-read settle. Reads settle once after a
    * pin-intent change (pinMode, reset) so the boot transient cannot read LOW
@@ -664,6 +666,7 @@ export class Simulation {
     // An AVR run needs a flashed core on top of the interpreter runner above;
     // anything missing falls back to that runner silently.
     this.avrBackend = null;
+    this.gdbProtocol = null;
     if (this.executionMode === 'avr') this.tryFlashAvr();
     this.rebuild();
   }
@@ -724,6 +727,7 @@ export class Simulation {
     flashed.attachDebug(debug ?? null);
     flashed.setDebugStops(this.debugger);
     this.avrBackend = flashed;
+    this.gdbProtocol = new GdbRemoteProtocol(flashed);
   }
 
   /**
@@ -1007,6 +1011,16 @@ export class Simulation {
   /** Removes a watchpoint by id. */
   debugRemoveWatchpoint(id: number): boolean {
     return this.avrBackend?.removeWatchpoint(id) ?? false;
+  }
+
+  /** Handles one GDB remote protocol packet. */
+  gdbPacket(payload: string): string {
+    if (!this.avrBackend) return '';
+    // Create a GdbRemoteProtocol on demand.
+    if (!this.gdbProtocol) {
+      this.gdbProtocol = new GdbRemoteProtocol(this.avrBackend);
+    }
+    return this.gdbProtocol.handlePacket(payload);
   }
 
   /**

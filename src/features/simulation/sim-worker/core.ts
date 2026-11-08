@@ -51,6 +51,7 @@
 import { Engine } from '../engine';
 import type { I2cBusPins } from '../elements';
 import { McuRuntime } from '../mcu';
+import { GdbRemoteProtocol } from '../avr/debug/gdb';
 import { AvrBackend } from '../avr/core';
 import { loadWasmModule } from '../avr/wasm-core';
 import avrCoreWasmUrl from '../avr/wasm/avr-core.wasm?url';
@@ -200,6 +201,8 @@ export interface CoreHandle {
   addWatchpoint(address: number, size: number): number;
   /** Removes a watchpoint by id. */
   removeWatchpoint(id: number): boolean;
+  /** Handles one GDB remote protocol packet and returns the response. */
+  handleGdbPacket(payload: string): string;
   /** Whether the run can be watched at its source lines. */
   debugWatchable(): boolean;
   /** Whether the running core is compiled firmware rather than the script. */
@@ -288,6 +291,7 @@ class SimCore implements CoreHandle {
    */
   private debugger: FirmwareDebugger | null = null;
   private avrBackend: AvrBackend | null = null;
+  private gdbProtocol: GdbRemoteProtocol | null = null;
   private executionMode: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
   private avrSettledRevision = -1;
   private wantWasm = false;
@@ -491,6 +495,14 @@ class SimCore implements CoreHandle {
     return this.avrBackend?.removeWatchpoint(id) ?? false;
   }
 
+  handleGdbPacket(payload: string): string {
+    if (!this.avrBackend) return '';
+    if (!this.gdbProtocol) {
+      this.gdbProtocol = new GdbRemoteProtocol(this.avrBackend);
+    }
+    return this.gdbProtocol.handlePacket(payload);
+  }
+
   /** A compiled core is watchable only when its build carried source rows. */
   debugWatchable(): boolean {
     if (this.avrBackend !== null) return this.avrBackend.hasDebugInfo;
@@ -593,6 +605,7 @@ class SimCore implements CoreHandle {
     // attaches asynchronously (assets must arrive first), so the interpreter
     // runs until it lands -- same contract as the Wasm attach.
     this.avrBackend = null;
+    this.gdbProtocol = null;
     this.avrSettledRevision = -1;
     this.rp2040Backend = null;
     this.rp2040Generation += 1;
@@ -985,6 +998,7 @@ class SimCore implements CoreHandle {
     flashed.attachDebug(debug ?? null);
     flashed.setDebugStops(this.debugger);
     this.avrBackend = flashed;
+    this.gdbProtocol = new GdbRemoteProtocol(flashed);
     if (this.wantWasm && !this.wasmDemoted)
       void this.attachWasmAsync(flashed, this.wasmGeneration, program);
   }

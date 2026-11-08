@@ -53,7 +53,8 @@ type Incoming =
   | { id: number; type: 'debug-step'; mode: 'over' | 'into' }
   | { id: number; type: 'read-memory'; address: number; length: number }
   | { id: number; type: 'add-watchpoint'; address: number; size: number }
-  | { id: number; type: 'remove-watchpoint'; watchpointId: number };
+  | { id: number; type: 'remove-watchpoint'; watchpointId: number }
+  | { id: number; type: 'gdb-packet'; payload: string };
 
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
@@ -237,6 +238,9 @@ async function handle(port: Port, msg: Incoming): Promise<void> {
       break;
     case 'remove-watchpoint':
       ok(msg.id, { removed: core?.removeWatchpoint(msg.watchpointId) ?? false });
+      break;
+    case 'gdb-packet':
+      ok(msg.id, { response: core?.handleGdbPacket(msg.payload) ?? '' });
       break;
   }
 }

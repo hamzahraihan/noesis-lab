@@ -628,6 +628,8 @@ export interface WorkerClient {
   debugAddWatchpoint(address: number, size: number): Promise<number>;
   /** Removes a watchpoint by id. */
   debugRemoveWatchpoint(watchpointId: number): Promise<boolean>;
+  /** Handles one GDB remote protocol packet and returns the response. */
+  gdbPacket(payload: string): Promise<string>;
   readonly fault: string | null;
   readonly timeMs: number;
   /** Generation of the last ingested snapshot frame. */
@@ -1152,6 +1154,27 @@ class WorkerClientImpl implements WorkerClient {
     });
   }
 
+  gdbPacket(payload: string): Promise<string> {
+    return new Promise((resolve) => {
+      if (this.port === null || this.demoted || this.disposed) {
+        resolve('');
+        return;
+      }
+      const id = this.nextId++;
+      this.pendingResolvers.set(id, resolve as (value: unknown) => void);
+      this.pending.set(id, 'gdb-packet');
+      const msg = { id, type: 'gdb-packet', payload };
+      try {
+        this.port.postMessage(msg);
+      } catch {
+        this.pending.delete(id);
+        this.pendingResolvers.delete(id);
+        this.demote('sim worker post failed');
+        resolve('');
+      }
+    });
+  }
+
   status(): WorkerStatus {
     const now = performance.now();
     this.pruneSamples(now);
@@ -1262,6 +1285,7 @@ class WorkerClientImpl implements WorkerClient {
       bytes?: unknown;
       watchpointId?: unknown;
       removed?: unknown;
+      response?: unknown;
     };
     /*
      * The worker owns the run, so its answer is the truth about the backend it
@@ -1317,6 +1341,11 @@ class WorkerClientImpl implements WorkerClient {
       const resolver = this.pendingResolvers.get(reply.id);
       this.pendingResolvers.delete(reply.id);
       resolver?.(reply.removed === true);
+    } else if (kind === 'gdb-packet') {
+      const resolver = this.pendingResolvers.get(reply.id);
+      this.pendingResolvers.delete(reply.id);
+      const response = typeof reply.response === 'string' ? reply.response : '';
+      resolver?.(response);
     }
     if (typeof reply.fault === 'string' && reply.fault !== '') {
       this.faultText = reply.fault;
