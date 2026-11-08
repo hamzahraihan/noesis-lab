@@ -17,6 +17,7 @@ import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
 import { SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from './sht31';
 import { TMP102_TEMPERATURE_KNOB } from './tmp102';
 import { MCP9808_TEMPERATURE_KNOB } from './mcp9808';
+import { LM75_TEMPERATURE_KNOB } from './lm75';
 
 /** The hole pitch, and the grid every module's header is snapped to. */
 const PITCH = 2.54;
@@ -177,6 +178,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [MCP9808_TEMPERATURE_KNOB],
   },
+  lm75: {
+    id: 'lm75-temperature',
+    name: 'LM75 Temperature Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1a3a3a',
+    legendColour: '#e8f5f2',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [LM75_TEMPERATURE_KNOB],
+  },
   sht31: {
     id: 'sht31-temp-humidity',
     name: 'SHT31 Temp/Humidity',
@@ -272,6 +283,11 @@ export function tmp102Definition(): PartDefinition {
 /** MCP9808 thermometer: a signed thirteen-bit temperature at 0.0625 °C a count. */
 export function mcp9808Definition(): PartDefinition {
   return i2cSensorDefinition('mcp9808');
+}
+
+/** LM75 thermometer: a signed eleven-bit temperature at 0.125 °C a count. */
+export function lm75Definition(): PartDefinition {
+  return i2cSensorDefinition('lm75');
 }
 
 /** SHT31 temp/humidity sensor: two CRC-protected words in one frame. */

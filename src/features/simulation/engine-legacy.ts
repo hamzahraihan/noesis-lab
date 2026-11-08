@@ -38,7 +38,7 @@ import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts'
 import { Ds1307 } from '@/features/parts';
 import { Ds3231, DS3231_TEMPERATURE_KNOB } from '@/features/parts';
 import { Sht31, SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from '@/features/parts';
-import { Tmp102, TMP102_TEMPERATURE_KNOB, Mcp9808, MCP9808_TEMPERATURE_KNOB } from '@/features/parts';
+import { Tmp102, TMP102_TEMPERATURE_KNOB, Mcp9808, MCP9808_TEMPERATURE_KNOB, Lm75, LM75_TEMPERATURE_KNOB } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
@@ -645,6 +645,10 @@ export class Engine {
       } else if (device instanceof Mcp9808) {
         device.setTemperatureSource(() =>
           this.dynamicState.knob(part.id, MCP9808_TEMPERATURE_KNOB),
+        );
+      } else if (device instanceof Lm75) {
+        device.setTemperatureSource(() =>
+          this.dynamicState.knob(part.id, LM75_TEMPERATURE_KNOB),
         );
       } else if (device instanceof Sht31) {
         device.setConditionsSource(() => ({

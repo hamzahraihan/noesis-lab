@@ -22,6 +22,7 @@ import { Mcp23017 } from './mcp23017';
 import { Pca9685 } from './pca9685';
 import { Mcp4725 } from './mcp4725';
 import { Mcp9808 } from './mcp9808';
+import { Lm75 } from './lm75';
 import { Eeprom24lc256 } from './eeprom24lc256';
 import { ScriptedI2cDevice } from './scripted';
 import { Sht31 } from './sht31';
@@ -89,6 +90,7 @@ export function createI2cDevice(
       if (component.device === 'bh1750') return new Bh1750();
       if (component.device === 'tmp102') return new Tmp102();
       if (component.device === 'mcp9808') return new Mcp9808();
+      if (component.device === 'lm75') return new Lm75();
       if (component.device === 'sht31') return new Sht31();
       return new Hx711();
     default:

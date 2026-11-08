@@ -49,6 +49,7 @@ import {
   hx711Definition,
   ina219Definition,
   mcp9808Definition,
+  lm75Definition,
   mpu6050Definition,
   sht31Definition,
   tmp102Definition,
@@ -561,6 +562,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: '±0.25 °C accuracy at 0.0625 °C resolution over I2C; the sketch reads the temperature register and the chip divides it into integer and fractional counts.',
     make: mcp9808Definition,
+  },
+  {
+    id: 'lm75-temperature',
+    name: 'LM75 Temperature Sensor',
+    group: 'input',
+    note: 'A signed eleven-bit thermometer at 0.125 °C a count, left-justified across two bytes. It carries a configuration register and two trip points.',
+    make: lm75Definition,
   },
   {
     id: 'sht31-temp-humidity',
