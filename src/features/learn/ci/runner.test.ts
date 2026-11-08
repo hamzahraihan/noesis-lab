@@ -12,6 +12,12 @@ const HARDWARE = fileURLToPath(new URL('../../../../examples/ci/hardware', impor
 /** The project that exercises the bench's simulated network. */
 const NETWORK = fileURLToPath(new URL('../../../../examples/ci/network-time', import.meta.url));
 
+/** The project that fetches three endpoints in sequence. */
+const NETWORK_MULTI = fileURLToPath(new URL('../../../../examples/ci/network-multi', import.meta.url));
+
+/** The project that exercises the failure path. */
+const NETWORK_FAILURE = fileURLToPath(new URL('../../../../examples/ci/network-failure', import.meta.url));
+
 /**
  * The project the environment names, when there is one.
  *
@@ -56,6 +62,23 @@ describe('the CI runner', () => {
     expect(run.failures, run.failures.join('; ')).toEqual([]);
     expect(run.serial.join('')).toContain('connected');
     expect(run.serial.join('')).toContain('2026-10-17T12:00:00Z');
+  });
+
+  it('runs the multi-endpoint project and sees what it expects', () => {
+    const project = loadCiProject(NETWORK_MULTI);
+    const run = runCiProject(project);
+    expect(run.failures, run.failures.join('; ')).toEqual([]);
+    expect(run.serial.join('')).toContain('connected');
+    expect(run.serial.join('')).toContain('20.0');
+    expect(run.serial.join('')).toContain('40.0');
+  });
+
+  it('runs the network-failure project and sees what it expects', () => {
+    const project = loadCiProject(NETWORK_FAILURE);
+    const run = runCiProject(project);
+    expect(run.failures, run.failures.join('; ')).toEqual([]);
+    expect(run.serial.join('')).toContain('network failed');
+    expect(run.serial.join('')).toContain('still running');
   });
 
   it('says what the hardware did not do', () => {

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "esp32-devkit-v1",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    }
+  ],
+  "wires": []
+}
