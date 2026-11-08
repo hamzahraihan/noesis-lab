@@ -548,5 +548,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports the chip id (0x15) and then infrared and red counts.", "Turn the Heart rate knob and the counts follow.", "Turn the SpO2 knob and the counts follow.", "With a strong pulse the light comes on; with a weak one, it goes out."],
+  },
+  {
+    id: "bme680",
+    title: "Gas Sensor",
+    blurb: "A BME680 gas sensor on I2C � temperature, pressure, humidity and gas resistance from one breakout. The sketch starts a measurement and reads the raw counts. A light comes on when the gas resistance drops.",
+    parts: [{ name: "BME680 Gas Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["bme680"],
+        sketch: "#include <Arduino.h>\n#include <Wire.h>\n\n// BME680 gas sensor on I2C: temperature, pressure, humidity and gas.\n// Start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x72);\n  Wire.write(0x10);\n  Wire.endTransmission();\n\n  Serial.println(\"bme680 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x72);\n  Wire.write(0x10);\n  Wire.endTransmission();\n  delay(100);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF7);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 8);\n\n  int press = 0;\n  int temp = 0;\n  int hum = 0;\n  int gas = 0;\n  if (Wire.available() >= 8) {\n    press = (Wire.read() << 8) | Wire.read();\n    temp = (Wire.read() << 8) | Wire.read();\n    hum = (Wire.read() << 8) | Wire.read();\n    gas = (Wire.read() << 8) | Wire.read();\n  }\n\n  Serial.print(\"press \");\n  Serial.print(press);\n  Serial.print(\" temp \");\n  Serial.print(temp);\n  Serial.print(\" hum \");\n  Serial.print(hum);\n  Serial.print(\" gas \");\n  Serial.println(gas);\n\n  digitalWrite(LED, gas < 5000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports the chip id (0x61) and then pressure, temperature, humidity and gas counts.", "Turn the Gas resistance knob and the reading follows.", "Turn the Temperature, Pressure and Humidity knobs and the readings follow.", "When the gas resistance drops low enough, the light comes on."],
   }
 ];

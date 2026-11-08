@@ -16,6 +16,7 @@ import circuitA4988 from '../circuits/a4988.json';
 import circuitAht20 from '../circuits/aht20.json';
 import circuitAlarmClock from '../circuits/alarm-clock.json';
 import circuitBme280 from '../circuits/bme280.json';
+import circuitBme680 from '../circuits/bme680.json';
 import circuitBmp280 from '../circuits/bmp280.json';
 import circuitDashboard from '../circuits/dashboard.json';
 import circuitDs3231 from '../circuits/ds3231.json';
@@ -61,6 +62,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "aht20": parseCircuit(circuitAht20, "aht20"),
   "alarm-clock": parseCircuit(circuitAlarmClock, "alarm-clock"),
   "bme280": parseCircuit(circuitBme280, "bme280"),
+  "bme680": parseCircuit(circuitBme680, "bme680"),
   "bmp280": parseCircuit(circuitBmp280, "bmp280"),
   "dashboard": parseCircuit(circuitDashboard, "dashboard"),
   "ds3231": parseCircuit(circuitDs3231, "ds3231"),

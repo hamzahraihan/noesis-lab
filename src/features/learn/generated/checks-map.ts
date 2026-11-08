@@ -35,6 +35,7 @@ import {
   aht20Checks,
   scd40Checks,
   max30102Checks,
+  bme680Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -77,4 +78,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "aht20": (build) => aht20Checks(build),
   "scd40": (build) => scd40Checks(build),
   "max30102": (build) => max30102Checks(build),
+  "bme680": (build) => bme680Checks(build),
 };
