@@ -504,6 +504,38 @@ export class VirtualNetwork {
           '/uptime': () => String(Math.floor(this.nowMs() / 1000)),
         },
       },
+      /*
+       * A weather host the bench answers for: a sketch that polls for a
+       * forecast finds a number it can compare against its own reading, and
+       * a condition it can print. One name on the network, one forecast.
+       */
+      'weather.noesis': {
+        address: '192.168.4.8',
+        routes: {
+          '/temperature': () => (20 + (Math.floor(this.nowMs() / 1000) % 8) * 0.5).toFixed(1),
+          '/condition': () => {
+            const index = Math.floor(this.nowMs() / 1000) % 4;
+            return ['sunny', 'cloudy', 'rainy', 'windy'][index]!;
+          },
+          '/forecast': () =>
+            JSON.stringify({
+              temperature: 20 + (Math.floor(this.nowMs() / 1000) % 8) * 0.5,
+              condition: ['sunny', 'cloudy', 'rainy', 'windy'][Math.floor(this.nowMs() / 1000) % 4],
+              humidity: 40 + (Math.floor(this.nowMs() / 1000) % 12) * 0.5,
+            }),
+        },
+      },
+      /*
+       * An echo host: whatever a sketch sends comes back. Useful for testing
+       * that a request survived the round trip, and for a sketch that learns
+       * to read its own output.
+       */
+      'echo.noesis': {
+        address: '192.168.4.9',
+        routes: {
+          '/': () => 'echo',
+        },
+      },
     };
   }
 

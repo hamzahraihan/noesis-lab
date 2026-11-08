@@ -385,6 +385,60 @@ describe('the status host', () => {
   });
 });
 
+describe('the weather host', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('serves temperature and condition', () => {
+    const { network, advance } = joined();
+    network.get('http://weather.noesis/temperature');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://weather.noesis/temperature')).toBe(1);
+    expect(network.read()).toBe('20.0');
+    expect(network.failed()).toBe(0);
+
+    network.reset();
+    network.get('http://weather.noesis/condition');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://weather.noesis/condition')).toBe(1);
+    expect(network.read()).toBe('sunny');
+  });
+
+  it('serves a forecast as JSON', () => {
+    const { network, advance } = joined();
+    network.get('http://weather.noesis/forecast');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://weather.noesis/forecast')).toBe(1);
+    expect(network.failed()).toBe(0);
+    const parsed = JSON.parse(network.read());
+    expect(parsed).toHaveProperty('temperature');
+    expect(parsed).toHaveProperty('condition');
+    expect(parsed).toHaveProperty('humidity');
+  });
+});
+
+describe('the echo host', () => {
+  function joined(): { network: VirtualNetwork; advance: (ms: number) => void } {
+    const held = bench();
+    held.network.begin(NET_SSID, NET_PASSWORD);
+    held.advance(NET_LATENCY_MS);
+    return held;
+  }
+
+  it('answers on its own address', () => {
+    const { network, advance } = joined();
+    network.get('http://echo.noesis/');
+    advance(NET_LATENCY_MS);
+    expect(network.get('http://echo.noesis/')).toBe(1);
+    expect(network.read()).toBe('echo');
+    expect(network.failed()).toBe(0);
+  });
+});
+
 describe('the port a sketch talks to', () => {
   it('is the same object either backend wires', () => {
     const { network, advance } = bench();
