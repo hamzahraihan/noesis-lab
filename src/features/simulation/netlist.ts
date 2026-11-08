@@ -34,6 +34,8 @@ import {
   LIGHT_KNOB,
   LM35_TEMPERATURE_KNOB,
   lm35Output,
+  MOISTURE_KNOB,
+  soilMoistureOutput,
   SEVEN_SEGMENT_SEGMENTS,
   SENSOR_STIMULUS_KNOBS,
   SLIDE_POSITION_KNOB,
@@ -420,6 +422,16 @@ function elementsForPart(
       if (output === GROUND) return [];
       return [
         { kind: 'voltageSource', a: output, b: GROUND, volts, label: 'lm35' },
+      ];
+    }
+
+    case 'soil-moisture': {
+      const moisture = state.knob(part.id, MOISTURE_KNOB);
+      const fraction = soilMoistureOutput(moisture);
+      const output = nodeAt('AOUT');
+      if (output === GROUND) return [];
+      return [
+        { kind: 'voltageSource', a: output, b: GROUND, volts: fraction, label: 'soil-moisture' },
       ];
     }
 

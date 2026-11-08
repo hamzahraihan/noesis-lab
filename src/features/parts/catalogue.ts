@@ -56,8 +56,11 @@ import {
   sht31Definition,
   tmp102Definition,
   bmp280Definition,
+  vl53l0xDefinition,
+  bme280Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
+import { soilMoistureDefinition } from './devices/soil-moisture';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
 import {
@@ -540,6 +543,20 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: bmp280Definition,
   },
   {
+    id: 'vl53l0x-distance',
+    name: 'VL53L0X Distance Sensor',
+    group: 'input',
+    note: 'Time-of-flight distance sensor: the sketch starts a ranging measurement and reads millimetres back over I2C. No moving parts, no sound -- just light timed to a stopwatch.',
+    make: vl53l0xDefinition,
+  },
+  {
+    id: 'bme280-environment',
+    name: 'BME280 Environment Sensor',
+    group: 'input',
+    note: 'Temperature, pressure and humidity over I2C — the all-in-one weather station on a single breakout. The sketch reads compensation coefficients and applies the datasheet formula to the raw counts.',
+    make: bme280Definition,
+  },
+  {
     id: 'ina219-current-monitor',
     name: 'INA219 Current Monitor',
     group: 'input',
@@ -587,6 +604,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'An analog temperature sensor: Vout is 10 mV per degree Celsius, so a sketch reads it with analogRead and converts the count back to degrees. No bus, no registers -- just a voltage on a pin.',
     make: lm35Definition,
+  },
+  {
+    id: 'soil-moisture',
+    name: 'Soil Moisture Sensor',
+    group: 'input',
+    note: 'An analog soil moisture sensor: AOUT is a fraction of the supply proportional to moisture (0 = dry, 100 = saturated). A sketch reads it with analogRead and converts the count back to percent. No bus, no registers -- just a voltage on a pin.',
+    make: soilMoistureDefinition,
   },
   {
     id: 'tcs34725-color',

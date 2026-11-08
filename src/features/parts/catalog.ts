@@ -129,7 +129,7 @@ export type ComponentSpec =
   | { readonly kind: 'rgb-led' }
   | { readonly kind: 'buzzer' }
   | { readonly kind: 'lm35' }
-  | { readonly kind: 'bmp280' }
+  | { readonly kind: 'soil-moisture' }
   | { readonly kind: 'sensor-module'; readonly variant: SensorVariant }
   | { readonly kind: 'dip-switch'; readonly ways: number }
   | { readonly kind: 'slide-potentiometer'; readonly ohms: number }
@@ -232,7 +232,9 @@ export type I2cSensorVariant =
   | 'tcs34725'
   | 'pcf8591'
   | 'sht31'
-  | 'bmp280';
+  | 'bmp280'
+  | 'vl53l0x'
+  | 'bme280';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

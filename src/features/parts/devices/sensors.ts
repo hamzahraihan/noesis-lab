@@ -13,6 +13,8 @@ import { ADS1115_CHANNEL_KNOBS } from './ads1115';
 import { BH1750_LIGHT_KNOB } from './bh1750';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
 import { BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB } from './bmp280';
+import { BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB } from './bme280';
+import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
 import { SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from './sht31';
@@ -231,6 +233,26 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB],
   },
+  vl53l0x: {
+    id: 'vl53l0x-distance',
+    name: 'VL53L0X Distance Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [VL53L0X_DISTANCE_KNOB],
+  },
+  bme280: {
+    id: 'bme280-environment',
+    name: 'BME280 Environment Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -341,4 +363,14 @@ export function sht31Definition(): PartDefinition {
 /** BMP280 barometer: pressure and temperature over I2C. */
 export function bmp280Definition(): PartDefinition {
   return i2cSensorDefinition('bmp280');
+}
+
+/** VL53L0X time-of-flight distance sensor: millimetres over I2C. */
+export function vl53l0xDefinition(): PartDefinition {
+  return i2cSensorDefinition('vl53l0x');
+}
+
+/** BME280 environment sensor: temperature, pressure and humidity over I2C. */
+export function bme280Definition(): PartDefinition {
+  return i2cSensorDefinition('bme280');
 }

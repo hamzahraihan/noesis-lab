@@ -13,6 +13,8 @@ import { Ads1115 } from './ads1115';
 import { Bh1750 } from './bh1750';
 import { Bmp180 } from './bmp180';
 import { Bmp280 } from './bmp280';
+import { Bme280 } from './bme280';
+import { Vl53l0x } from './vl53l0x';
 import { Ds1307 } from './ds1307';
 import { Ds3231 } from './ds3231';
 import { Hx711 } from './hx711';
@@ -98,6 +100,8 @@ export function createI2cDevice(
       if (component.device === 'pcf8591') return new Pcf8591();
       if (component.device === 'sht31') return new Sht31();
       if (component.device === 'bmp280') return new Bmp280();
+      if (component.device === 'bme280') return new Bme280();
+      if (component.device === 'vl53l0x') return new Vl53l0x();
       return new Hx711();
     default:
       return null;

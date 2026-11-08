@@ -80,6 +80,8 @@ export const COMPONENT_KIND: Record<ComponentSpec['kind'], number> = {
   servo: 47,
   scripted: 48,
   '7segment': 49,
+  lm35: 50,
+  'soil-moisture': 51,
 };
 
 /** Sensor-module variants, in `SensorVariant` order. */
