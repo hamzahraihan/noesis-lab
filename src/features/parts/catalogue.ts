@@ -63,6 +63,7 @@ import {
   max30102Definition,
   bme680Definition,
   apds9960Definition,
+  bno055Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { soilMoistureDefinition } from './devices/soil-moisture';
@@ -595,6 +596,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Gesture, proximity and ambient light over I2C — the hand-wave module that reads a swipe through the air and a finger close up. The sketch reads the data registers back.',
     make: apds9960Definition,
+  },
+  {
+    id: 'bno055-imu',
+    name: 'BNO055 Absolute Orientation',
+    group: 'input',
+    note: 'Heading, pitch and roll over I2C — the nine-axis sensor with a magnetometer and sensor fusion. The sketch reads the orientation registers back.',
+    make: bno055Definition,
   },
   {
     id: 'ina219-current-monitor',
