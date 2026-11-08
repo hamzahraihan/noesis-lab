@@ -14,6 +14,7 @@ import circuit_51 from '../circuits/5.1.json';
 import circuit_52 from '../circuits/5.2.json';
 import circuitA4988 from '../circuits/a4988.json';
 import circuitAlarmClock from '../circuits/alarm-clock.json';
+import circuitBme280 from '../circuits/bme280.json';
 import circuitBmp280 from '../circuits/bmp280.json';
 import circuitDashboard from '../circuits/dashboard.json';
 import circuitDs3231 from '../circuits/ds3231.json';
@@ -35,8 +36,10 @@ import circuitPcf8574 from '../circuits/pcf8574.json';
 import circuitReaction from '../circuits/reaction.json';
 import circuitSafe from '../circuits/safe.json';
 import circuitShiftRegister from '../circuits/shift-register.json';
+import circuitSoilMoisture from '../circuits/soil-moisture.json';
 import circuitSoilProbe from '../circuits/soil-probe.json';
 import circuitTm1637 from '../circuits/tm1637.json';
+import circuitVl53l0x from '../circuits/vl53l0x.json';
 import circuitWeather from '../circuits/weather.json';
 
 export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
@@ -53,6 +56,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "5.2": parseCircuit(circuit_52, "5.2"),
   "a4988": parseCircuit(circuitA4988, "a4988"),
   "alarm-clock": parseCircuit(circuitAlarmClock, "alarm-clock"),
+  "bme280": parseCircuit(circuitBme280, "bme280"),
   "bmp280": parseCircuit(circuitBmp280, "bmp280"),
   "dashboard": parseCircuit(circuitDashboard, "dashboard"),
   "ds3231": parseCircuit(circuitDs3231, "ds3231"),
@@ -74,7 +78,9 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "reaction": parseCircuit(circuitReaction, "reaction"),
   "safe": parseCircuit(circuitSafe, "safe"),
   "shift-register": parseCircuit(circuitShiftRegister, "shift-register"),
+  "soil-moisture": parseCircuit(circuitSoilMoisture, "soil-moisture"),
   "soil-probe": parseCircuit(circuitSoilProbe, "soil-probe"),
   "tm1637": parseCircuit(circuitTm1637, "tm1637"),
+  "vl53l0x": parseCircuit(circuitVl53l0x, "vl53l0x"),
   "weather": parseCircuit(circuitWeather, "weather"),
 };

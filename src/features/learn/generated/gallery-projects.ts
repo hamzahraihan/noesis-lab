@@ -458,5 +458,50 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports the temperature in whole degrees, following the part's Temperature knob.", "Turn the knob past thirty and the light comes on; turn it back down and the light goes out.", "The count in the log matches the voltage on A0: ten millivolts per degree."],
+  },
+  {
+    id: "vl53l0x",
+    title: "Distance Sensor",
+    blurb: "A VL53L0X time-of-flight distance sensor on I2C. The sketch starts a ranging measurement, reads the distance in millimetres, and prints it. A light comes on within one metre.",
+    parts: [{ name: "VL53L0X Distance Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["vl53l0x"],
+        sketch: "#include <Arduino.h>\n#include <Wire.h>\n\n// VL53L0X time-of-flight distance sensor on I2C. The sketch starts a\n// ranging measurement, reads the distance in millimetres, and prints it.\nconst byte SENSOR = 0x29;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readDistance() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x14);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  if (Wire.available() >= 2) {\n    return (Wire.read() << 8) | Wire.read();\n  }\n  return 0;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0x00), HEX);\n\n  // Start a ranging measurement.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x00);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Serial.println(\"vl53l0x up\");\n}\n\nvoid loop() {\n  // Restart the measurement.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x00);\n  Wire.write(0x01);\n  Wire.endTransmission();\n  delay(50);\n\n  int distance = readDistance();\n\n  Serial.print(\"distance \");\n  Serial.print(distance);\n  Serial.println(\" mm\");\n\n  // The light comes on within one metre.\n  digitalWrite(LED, distance > 0 && distance < 1000 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports the chip id (0xEE) and then the distance in millimetres.", "Turn the Distance knob and the reading follows, within a millimetre.", "Within one metre the light comes on; beyond it, the light goes out."],
+  },
+  {
+    id: "bme280",
+    title: "Environment Station",
+    blurb: "A BME280 environment sensor on I2C � temperature, pressure and humidity from one breakout. The sketch reads calibration coefficients, applies the datasheet compensation, and prints all three readings. A light comes on above 25�C.",
+    parts: [{ name: "BME280 Environment Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["bme280"],
+        sketch: "#include <Arduino.h>\n#include <Wire.h>\n\n// BME280 environment sensor on I2C: temperature, pressure and humidity.\n// Read chip id, start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  return (Wire.read() << 8) | Wire.read();\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  // Start a forced measurement: humidity x1, pressure/temp x1.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF2);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n\n  Serial.println(\"bme280 up\");\n}\n\nvoid loop() {\n  // Restart measurement.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF2);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n  delay(100);\n\n  // Read 8 bytes: pressure (3), temperature (3), humidity (2).\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF7);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 8);\n\n  int rawP = 0;\n  int rawT = 0;\n  int rawH = 0;\n  if (Wire.available() >= 8) {\n    rawP = (Wire.read() << 12) | (Wire.read() << 4) | (Wire.read() >> 4);\n    rawT = ((Wire.read() & 0x0F) << 12) | (Wire.read() << 4) | (Wire.read() >> 4);\n    rawH = (Wire.read() << 8) | Wire.read();\n  }\n\n  Serial.print(\"raw temp \");\n  Serial.print(rawT);\n  Serial.print(\" raw press \");\n  Serial.print(rawP);\n  Serial.print(\" raw hum \");\n  Serial.println(rawH);\n\n  digitalWrite(LED, rawT > 50000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports the chip id (0x60) and then temperature, pressure and humidity.", "Turn the Temperature knob and the reading follows, within a hundredth of a degree.", "Turn the Pressure knob and the pressure reading follows; turn the Humidity knob and the humidity reading follows.", "Above 25�C the light comes on; below it, the light goes out."],
+  },
+  {
+    id: "soil-moisture",
+    title: "Soil Moisture Monitor",
+    blurb: "A soil moisture sensor on A0. The sketch reads the analog count, converts it to percent, and prints it to the serial log. A light comes on when the soil is dry enough to need watering.",
+    parts: [{ name: "Soil Moisture Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["soil-moisture"],
+        sketch: "#include <Arduino.h>\n\n// Soil moisture sensor on A0. The sensor outputs a fraction of the supply\n// proportional to moisture; the sketch converts the ADC count back to percent.\nconst byte SENSOR = A0;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Serial.println(\"soil-moisture up\");\n}\n\nvoid loop() {\n  int count = analogRead(SENSOR);\n  int percent = count * 100 / 1023;\n\n  Serial.print(\"moisture \");\n  Serial.print(percent);\n  Serial.println(\" %\");\n\n  // The light comes on when the soil is dry enough to need watering.\n  digitalWrite(LED, percent < 40 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports the moisture in percent, following the part's Moisture knob.", "Turn the knob below forty percent and the light comes on; turn it back up and the light goes out.", "The percent in the log matches the ADC count on A0."],
   }
 ];

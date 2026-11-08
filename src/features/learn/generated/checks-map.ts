@@ -29,6 +29,9 @@ import {
   mcp4725Checks,
   lm35Checks,
   bmp280Checks,
+  vl53l0xChecks,
+  bme280Checks,
+  soilMoistureChecks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -65,4 +68,7 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "environment-bench": () => environmentBenchChecks,
   "bmp280": (build) => bmp280Checks(build),
   "lm35": (build) => lm35Checks(build),
+  "vl53l0x": (build) => vl53l0xChecks(build),
+  "bme280": (build) => bme280Checks(build),
+  "soil-moisture": (build) => soilMoistureChecks(build),
 };
