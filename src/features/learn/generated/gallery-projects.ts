@@ -518,5 +518,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports the humidity and temperature raw counts.", "Turn the Temperature knob and the reading follows.", "Turn the Humidity knob and the reading follows.", "In wet air above fifty percent the light comes on; below it, the light goes out."],
+  },
+  {
+    id: "scd40",
+    title: "Air Quality Monitor",
+    blurb: "An SCD40 CO2 sensor on I2C � carbon dioxide, temperature and humidity from one breakout. The sketch starts periodic measurement and reads three words with their CRCs. A light comes on when the CO2 climbs above 1250 ppm.",
+    parts: [{ name: "SCD40 CO2 Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["scd40"],
+        sketch: "#include <Arduino.h>\n#include <Wire.h>\n\n// SCD40 CO2 sensor on I2C: carbon dioxide, temperature and humidity.\n// Start periodic measurement, read three words with CRCs.\nconst byte SENSOR = 0x62;\nconst byte LED = 9;\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  if (Wire.available() >= 2) {\n    return (Wire.read() << 8) | Wire.read();\n  }\n  return 0;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  // Start periodic measurement.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x21);\n  Wire.write(0xB1);\n  Wire.endTransmission();\n\n  Serial.println(\"scd40 up\");\n}\n\nvoid loop() {\n  delay(1000);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xE0);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 9);\n\n  int co2 = 0;\n  int temp = 0;\n  int hum = 0;\n  if (Wire.available() >= 9) {\n    co2 = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n    temp = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n    hum = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n  }\n\n  Serial.print(\"co2 \");\n  Serial.print(co2);\n  Serial.print(\" temp \");\n  Serial.print(temp);\n  Serial.print(\" hum \");\n  Serial.println(hum);\n\n  digitalWrite(LED, co2 > 20000 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports the CO2, temperature and humidity raw counts.", "Turn the CO2 knob and the reading follows.", "Turn the Temperature and Humidity knobs and the readings follow.", "Above 1250 ppm the light comes on; below it, the light goes out."],
   }
 ];

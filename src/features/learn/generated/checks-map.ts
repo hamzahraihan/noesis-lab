@@ -33,6 +33,7 @@ import {
   bme280Checks,
   soilMoistureChecks,
   aht20Checks,
+  scd40Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -73,4 +74,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "bme280": (build) => bme280Checks(build),
   "soil-moisture": (build) => soilMoistureChecks(build),
   "aht20": (build) => aht20Checks(build),
+  "scd40": (build) => scd40Checks(build),
 };
