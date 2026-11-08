@@ -55,7 +55,9 @@ import {
   mpu6050Definition,
   sht31Definition,
   tmp102Definition,
+  bmp280Definition,
 } from './devices/sensors';
+import { lm35Definition } from './devices/lm35';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
 import {
@@ -531,6 +533,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     make: bmp180Definition,
   },
   {
+    id: 'bmp280-barometer',
+    name: 'BMP280 Barometer',
+    group: 'input',
+    note: 'Pressure and temperature as raw counts over I2C, with calibration coefficients the sketch reads from the chip\u2019s own registers. The successor to the BMP180, with a tighter tolerance and a lower supply current.',
+    make: bmp280Definition,
+  },
+  {
     id: 'ina219-current-monitor',
     name: 'INA219 Current Monitor',
     group: 'input',
@@ -571,6 +580,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A signed eleven-bit thermometer at 0.125 °C a count, left-justified across two bytes. It carries a configuration register and two trip points.',
     make: lm75Definition,
+  },
+  {
+    id: 'lm35',
+    name: 'LM35 Temperature Sensor',
+    group: 'input',
+    note: 'An analog temperature sensor: Vout is 10 mV per degree Celsius, so a sketch reads it with analogRead and converts the count back to degrees. No bus, no registers -- just a voltage on a pin.',
+    make: lm35Definition,
   },
   {
     id: 'tcs34725-color',

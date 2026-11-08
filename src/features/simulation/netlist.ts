@@ -32,6 +32,8 @@ import {
   KEYPAD_KEY_KNOBS,
   LED_BAR_GRAPH_SEGMENTS,
   LIGHT_KNOB,
+  LM35_TEMPERATURE_KNOB,
+  lm35Output,
   SEVEN_SEGMENT_SEGMENTS,
   SENSOR_STIMULUS_KNOBS,
   SLIDE_POSITION_KNOB,
@@ -408,6 +410,16 @@ function elementsForPart(
           ohms: MODULE_DIVIDER_OHMS,
           label: 'divider',
         },
+      ];
+    }
+
+    case 'lm35': {
+      const celsius = state.knob(part.id, LM35_TEMPERATURE_KNOB);
+      const volts = lm35Output(celsius);
+      const output = nodeAt('Vout');
+      if (output === GROUND) return [];
+      return [
+        { kind: 'voltageSource', a: output, b: GROUND, volts, label: 'lm35' },
       ];
     }
 

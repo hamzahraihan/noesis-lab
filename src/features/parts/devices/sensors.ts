@@ -12,6 +12,7 @@ import type { I2cSensorVariant, KnobSpec, PartDefinition, PinSpec } from '../cat
 import { ADS1115_CHANNEL_KNOBS } from './ads1115';
 import { BH1750_LIGHT_KNOB } from './bh1750';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
+import { BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB } from './bmp280';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
 import { SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from './sht31';
@@ -220,6 +221,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [SHT31_TEMPERATURE_KNOB, SHT31_HUMIDITY_KNOB],
   },
+  bmp280: {
+    id: 'bmp280-barometer',
+    name: 'BMP280 Barometer',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -325,4 +336,9 @@ export function pcf8591Definition(): PartDefinition {
 /** SHT31 temp/humidity sensor: two CRC-protected words in one frame. */
 export function sht31Definition(): PartDefinition {
   return i2cSensorDefinition('sht31');
+}
+
+/** BMP280 barometer: pressure and temperature over I2C. */
+export function bmp280Definition(): PartDefinition {
+  return i2cSensorDefinition('bmp280');
 }
