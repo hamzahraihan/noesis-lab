@@ -74,6 +74,16 @@ The pre-commit hook runs `oxlint --fix` only, for the same reason.
 
 The repository name is **`noesis-lab`** (noasis, not "noasis"). Use this exact spelling in paths, URLs, and commit messages.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in the repo's GitHub Issues (uses the `gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context layout (root `GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.
+
 Routing is hash-based (`/#/boards`, `/#/diagnostics`). `src/main.tsx` folds the
 clean top-level paths into the hash before the router mounts, but a static host
 without a rewrite rule still answers a clean path with its own 404.
