@@ -51,7 +51,9 @@ type Incoming =
   | { id: number; type: 'debug-stops'; stops: Breakpoint[] }
   | { id: number; type: 'debug-resume' }
   | { id: number; type: 'debug-step'; mode: 'over' | 'into' }
-  | { id: number; type: 'read-memory'; address: number; length: number };
+  | { id: number; type: 'read-memory'; address: number; length: number }
+  | { id: number; type: 'add-watchpoint'; address: number; size: number }
+  | { id: number; type: 'remove-watchpoint'; watchpointId: number };
 
 let core: CoreHandle | null = null;
 let firmware: FirmwareProject | null = null;
@@ -229,6 +231,12 @@ async function handle(port: Port, msg: Incoming): Promise<void> {
       break;
     case 'read-memory':
       ok(msg.id, { bytes: core?.readMemory(msg.address, msg.length) ?? [] });
+      break;
+    case 'add-watchpoint':
+      ok(msg.id, { watchpointId: core?.addWatchpoint(msg.address, msg.size) ?? -1 });
+      break;
+    case 'remove-watchpoint':
+      ok(msg.id, { removed: core?.removeWatchpoint(msg.watchpointId) ?? false });
       break;
   }
 }

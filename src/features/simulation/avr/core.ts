@@ -112,6 +112,16 @@ export class AvrBackend implements ExecutionBackend {
   /** PC of the stop just released; it must run one instruction before re-arming. */
   private debugSkipPc: number | null = null;
 
+  /**
+   * Data watchpoints: address + size pairs the core checks after each
+   * instruction in the debug-active path. A write that changes any byte
+   * in the range stops the program, the way a real debugger's watchpoint
+   * does. Read watchpoints are not implemented (they need instruction-level
+   * load tracing), so this is write-only.
+   */
+  private watchpoints: Map<number, { address: number; size: number }> = new Map();
+  private watchpointIdCounter = 0;
+
   /** Attaches (or clears) the source map a compiled sketch was built with. */
   attachDebug(info: CompiledDebugInfo | null): void {
     const lines = info?.lines ?? [];
@@ -149,6 +159,28 @@ export class AvrBackend implements ExecutionBackend {
   /** The held frame, by reference until the program moves. */
   debugFrame(): DebugFrame | null {
     return this.pausedFrame;
+  }
+
+  /**
+   * Adds a write watchpoint on `[address, address + size)` in the AVR data
+   * space. Returns the watchpoint's id, or -1 when the address is out of
+   * range.
+   */
+  addWatchpoint(address: number, size: number): number {
+    if (address < 0 || address >= this.cpu.data.length || size <= 0) return -1;
+    const id = ++this.watchpointIdCounter;
+    this.watchpoints.set(id, { address, size: Math.min(size, this.cpu.data.length - address) });
+    return id;
+  }
+
+  /** Removes a watchpoint by id. Returns true when it existed. */
+  removeWatchpoint(id: number): boolean {
+    return this.watchpoints.delete(id);
+  }
+
+  /** The number of active watchpoints. */
+  get watchpointCount(): number {
+    return this.watchpoints.size;
   }
 
   /**
@@ -430,7 +462,32 @@ export class AvrBackend implements ExecutionBackend {
       while (remaining > 0) {
         if (this.checkDebugStop(this.cpu.pc)) return;
         this.noteStepCall(this.cpu.pc);
+        // Snapshot watched addresses before the instruction executes, so a
+        // write that changes any byte in the range is detected afterwards.
+        const snapshots = new Map<number, number[]>();
+        for (const [id, wp] of this.watchpoints) {
+          snapshots.set(id, Array.from(this.cpu.data.subarray(wp.address, wp.address + wp.size)));
+        }
         if (!this.stepShadowInstruction(settleEvery)) return;
+        // Check whether any watchpoint fired.
+        let firedId: number | null = null;
+        for (const [id, wp] of this.watchpoints) {
+          const before = snapshots.get(id)!;
+          const after = this.cpu.data.subarray(wp.address, wp.address + wp.size);
+          if (!before.every((byte, index) => byte === after[index])) {
+            firedId = id;
+            break;
+          }
+        }
+        if (firedId !== null) {
+          // Find a source row for the current PC, or synthesize one.
+          const rows = this.debugRows.get(this.cpu.pc);
+          const row = rows?.[0] ?? { pc: this.cpu.pc, file: 'watchpoint', line: 0 };
+          this.pausedLine = null;
+          this.pausedFrame = this.frameFor(row);
+          this.msCarry = 0;
+          return;
+        }
         remaining -= 1;
       }
     } else {
@@ -578,6 +635,8 @@ export class AvrBackend implements ExecutionBackend {
     this.pausedFrame = null;
     this.lastDebugLineKey = null;
     this.debugSkipPc = null;
+    this.watchpoints.clear();
+    this.watchpointIdCounter = 0;
     // Attached Wasm reset hook fires alongside the JS rebuild (spec: reset
     // clears both).
     this.wasmReset?.();

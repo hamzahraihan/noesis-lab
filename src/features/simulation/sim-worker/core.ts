@@ -196,6 +196,10 @@ export interface CoreHandle {
   debugPaused(): boolean;
   /** Reads `length` bytes from the AVR data space at `address`. */
   readMemory(address: number, length: number): number[];
+  /** Adds a write watchpoint on `[address, address + size)`. Returns id or -1. */
+  addWatchpoint(address: number, size: number): number;
+  /** Removes a watchpoint by id. */
+  removeWatchpoint(id: number): boolean;
   /** Whether the run can be watched at its source lines. */
   debugWatchable(): boolean;
   /** Whether the running core is compiled firmware rather than the script. */
@@ -477,6 +481,14 @@ class SimCore implements CoreHandle {
   /** Reads `length` bytes from the AVR data space at `address`. */
   readMemory(address: number, length: number): number[] {
     return this.avrBackend?.readMemory(address, length) ?? [];
+  }
+
+  addWatchpoint(address: number, size: number): number {
+    return this.avrBackend?.addWatchpoint(address, size) ?? -1;
+  }
+
+  removeWatchpoint(id: number): boolean {
+    return this.avrBackend?.removeWatchpoint(id) ?? false;
   }
 
   /** A compiled core is watchable only when its build carried source rows. */
