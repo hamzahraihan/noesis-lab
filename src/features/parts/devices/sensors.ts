@@ -19,6 +19,7 @@ import { TMP102_TEMPERATURE_KNOB } from './tmp102';
 import { MCP9808_TEMPERATURE_KNOB } from './mcp9808';
 import { LM75_TEMPERATURE_KNOB } from './lm75';
 import { TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB } from './tcs34725';
+import { PCF8591_CH0_KNOB, PCF8591_CH1_KNOB, PCF8591_CH2_KNOB, PCF8591_CH3_KNOB, PCF8591_DAC_KNOB } from './pcf8591';
 
 /** The hole pitch, and the grid every module's header is snapped to. */
 const PITCH = 2.54;
@@ -199,6 +200,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB],
   },
+  pcf8591: {
+    id: 'pcf8591-adc',
+    name: 'PCF8591 ADC/DAC',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1a2a3a',
+    legendColour: '#e8f2f5',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [PCF8591_CH0_KNOB, PCF8591_CH1_KNOB, PCF8591_CH2_KNOB, PCF8591_CH3_KNOB, PCF8591_DAC_KNOB],
+  },
   sht31: {
     id: 'sht31-temp-humidity',
     name: 'SHT31 Temp/Humidity',
@@ -304,6 +315,11 @@ export function lm75Definition(): PartDefinition {
 /** TCS34725 color sensor: red, green, blue and clear channels over I2C. */
 export function tcs34725Definition(): PartDefinition {
   return i2cSensorDefinition('tcs34725');
+}
+
+/** PCF8591 ADC/DAC: four channels and a DAC output over I2C. */
+export function pcf8591Definition(): PartDefinition {
+  return i2cSensorDefinition('pcf8591');
 }
 
 /** SHT31 temp/humidity sensor: two CRC-protected words in one frame. */

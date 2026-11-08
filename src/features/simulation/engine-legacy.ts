@@ -38,7 +38,7 @@ import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts'
 import { Ds1307 } from '@/features/parts';
 import { Ds3231, DS3231_TEMPERATURE_KNOB } from '@/features/parts';
 import { Sht31, SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from '@/features/parts';
-import { Tmp102, TMP102_TEMPERATURE_KNOB, Mcp9808, MCP9808_TEMPERATURE_KNOB, Lm75, LM75_TEMPERATURE_KNOB, Tcs34725, TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB } from '@/features/parts';
+import { Tmp102, TMP102_TEMPERATURE_KNOB, Mcp9808, MCP9808_TEMPERATURE_KNOB, Lm75, LM75_TEMPERATURE_KNOB, Tcs34725, TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB, Pcf8591, PCF8591_CH0_KNOB, PCF8591_CH1_KNOB, PCF8591_CH2_KNOB, PCF8591_CH3_KNOB } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
@@ -657,6 +657,13 @@ export class Engine {
           blue: this.dynamicState.knob(part.id, TCS34725_BLUE_KNOB),
           clear: this.dynamicState.knob(part.id, TCS34725_CLEAR_KNOB),
         }));
+      } else if (device instanceof Pcf8591) {
+        device.setChannelsSource(() => [
+          this.dynamicState.knob(part.id, PCF8591_CH0_KNOB),
+          this.dynamicState.knob(part.id, PCF8591_CH1_KNOB),
+          this.dynamicState.knob(part.id, PCF8591_CH2_KNOB),
+          this.dynamicState.knob(part.id, PCF8591_CH3_KNOB),
+        ]);
       } else if (device instanceof Sht31) {
         device.setConditionsSource(() => ({
           celsius: this.dynamicState.knob(part.id, SHT31_TEMPERATURE_KNOB),

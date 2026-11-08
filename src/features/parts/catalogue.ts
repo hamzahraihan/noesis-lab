@@ -51,6 +51,7 @@ import {
   mcp9808Definition,
   lm75Definition,
   tcs34725Definition,
+  pcf8591Definition,
   mpu6050Definition,
   sht31Definition,
   tmp102Definition,
@@ -577,6 +578,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Red, green, blue and clear channels as sixteen-bit counts over I2C. The sketch enables the sensor, sets integration time and gain, and reads four registers.',
     make: tcs34725Definition,
+  },
+  {
+    id: 'pcf8591-adc',
+    name: 'PCF8591 ADC/DAC',
+    group: 'input',
+    note: 'Four eight-bit ADC channels and one DAC output over I2C. The sketch writes a control byte to select the channel, reads the conversion, and writes the DAC.',
+    make: pcf8591Definition,
   },
   {
     id: 'sht31-temp-humidity',

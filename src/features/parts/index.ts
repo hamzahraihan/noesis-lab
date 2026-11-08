@@ -20,6 +20,7 @@ export * from './devices/mcp4725';
 export * from './devices/mcp9808';
 export * from './devices/lm75';
 export * from './devices/tcs34725';
+export * from './devices/pcf8591';
 export * from './power-supply';
 export * from './devices/eeprom24lc256';
 export * from './devices/ina219';
