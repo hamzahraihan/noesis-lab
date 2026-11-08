@@ -5,7 +5,7 @@
  * a circular dependency (registry.ts consumes the generated CHECKS_MAP).
  */
 
-import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, SEGMENT_MAP } from '@/features/parts';
+import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, SEGMENT_MAP } from '@/features/parts';
 import {
   convergeGlass,
   FIVE_GLYPH,
@@ -2233,6 +2233,57 @@ export function bno055Checks(build: GalleryBuild): CheckDef[] {
             'fail',
             `the sketch read roll ${roll} and the knob is at ${expectedRoll}`,
           );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
+ * adxl335 on uno: the readings follow the X, Y and Z knobs.
+ *
+ * The sensor puts mid-rail at rest and near the rail at full scale, the
+ * Uno's ADC maps five volts across 1024 counts, and the sketch converts
+ * back. The sketch's reported g has to agree with the knob within one.
+ * ------------------------------------------------------------------ */
+
+export function adxl335Checks(build: GalleryBuild): CheckDef[] {
+  const sensor = build.circuit.parts?.find((part) => part.type === 'adxl335')?.id;
+  return [
+    {
+      name: 'the readings follow the axis knobs',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the readings follow the axis knobs';
+        const knob = sim.knob;
+        if (knob === undefined || sensor === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read the axis knobs');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        const log = sim.serialText();
+        const xMatch = /x ([-\d]+)/.exec(log);
+        const yMatch = /y ([-\d]+)/.exec(log);
+        const zMatch = /z ([-\d]+)/.exec(log);
+        if (xMatch === null || yMatch === null || zMatch === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report axis readings');
+        }
+        const cases: ReadonlyArray<readonly [string, string, string]> = [
+          ['x', xMatch[1]!, ADXL335_X_KNOB.id],
+          ['y', yMatch[1]!, ADXL335_Y_KNOB.id],
+          ['z', zMatch[1]!, ADXL335_Z_KNOB.id],
+        ];
+        for (const [axis, text, knobId] of cases) {
+          const read = Number(text);
+          const expected = knob(sensor, knobId);
+          if (Math.abs(read - expected) > 1) {
+            return verdict(
+              name,
+              started,
+              'fail',
+              `the sketch read ${axis} ${read} and the knob is at ${expected}`,
+            );
+          }
         }
         return verdict(name, started, 'pass');
       },

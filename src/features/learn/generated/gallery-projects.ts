@@ -593,5 +593,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports the chip id (0xA0) and then heading, pitch and roll.", "Turn the Heading knob and the reading follows.", "Turn the Pitch and Roll knobs and the readings follow.", "Past ninety degrees the light comes on; below it, the light goes out."],
+  },
+  {
+    id: "adxl335",
+    title: "Tilt Sensor",
+    blurb: "An ADXL335 analog accelerometer on A0, A1 and A2. The sketch reads the three axes, converts the counts back to g, and prints them. A light comes on when the X tilt is strong.",
+    parts: [{ name: "ADXL335 Accelerometer", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["adxl335"],
+        sketch: "#include <Arduino.h>\n\n// ADXL335 analog accelerometer on A0, A1 and A2. X, Y and Z are voltages:\n// the mid-rail at rest, near the rail at full scale. The sketch converts\n// the ADC counts back to g.\nconst byte X_PIN = A0;\nconst byte Y_PIN = A1;\nconst byte Z_PIN = A2;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Serial.println(\"adxl335 up\");\n}\n\nint readG(byte pin) {\n  int count = analogRead(pin);\n  int millivolts = count * 5000 / 1024;\n  // Half the supply at zero g, so subtract mid-rail and scale: 1 g is 1/6 of 5 V.\n  int g = (millivolts - 2500) * 6 / 5000;\n  return g;\n}\n\nvoid loop() {\n  int x = readG(X_PIN);\n  int y = readG(Y_PIN);\n  int z = readG(Z_PIN);\n\n  Serial.print(\"x \");\n  Serial.print(x);\n  Serial.print(\" y \");\n  Serial.print(y);\n  Serial.print(\" z \");\n  Serial.println(z);\n\n  // The light comes on when the tilt on X is strong.\n  digitalWrite(LED, x > 1 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports X, Y and Z in g, following the part's knobs.", "Turn the X knob past one g and the light comes on.", "At rest the axes read near zero, mid-rail, as the chip does."],
   }
 ];

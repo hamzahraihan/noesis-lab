@@ -38,6 +38,7 @@ import {
   bme680Checks,
   apds9960Checks,
   bno055Checks,
+  adxl335Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -83,4 +84,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "bme680": (build) => bme680Checks(build),
   "apds9960": (build) => apds9960Checks(build),
   "bno055": (build) => bno055Checks(build),
+  "adxl335": (build) => adxl335Checks(build),
 };
