@@ -272,7 +272,7 @@
         {
           "board": "uno",
           "circuit": "weather.json",
-          "sketch": "#include <Arduino.h>\n\nbyte SENSOR_PIN = 10;\nbyte ONEWIRE_PIN = 9;\n\n// The one-wire sensor takes its pin in the constructor, the way Arduino's\n// library takes it.\nOneWire ow(ONEWIRE_PIN);\n\nvoid setup() {\n  Serial.begin(115200);\n  dht.begin(SENSOR_PIN);\n  lcd.begin(16, 2);\n  lcd.backlight();\n  Serial.println(\"weather up\");\n}\n\nvoid loop() {\n  float temperature = dht.temperature(SENSOR_PIN);\n  float humidity = dht.humidity(SENSOR_PIN);\n  float outside = ow.getTemp();\n\n  int percent = humidity;\n  if (percent < 0) { percent = 0; }\n  if (percent > 100) { percent = 100; }\n\n  lcd.setCursor(0, 0);\n  lcd.print(\"t \");\n  lcd.print(temperature);\n  lcd.print(\"C\");\n  lcd.setCursor(0, 1);\n  lcd.print(\"rh \");\n  lcd.print(percent);\n  lcd.print(\"%\");\n\n  Serial.print(\"t \");\n  Serial.print(temperature);\n  Serial.print(\" C rh \");\n  Serial.print(percent);\n  Serial.print(\" %  outside \");\n  Serial.print(outside);\n  Serial.println(\" C\");\n  delay(2000);\n}\n",
+          "sketch": "#include <Arduino.h>\n\nbyte SENSOR_PIN = 10;\nbyte ONEWIRE_PIN = 9;\n\n// The one-wire sensor takes its pin in the constructor, the way Arduino's\n// library takes it.\nOneWire ow(ONEWIRE_PIN);\n\nvoid setup() {\n  Serial.begin(115200);\n  dht.begin(SENSOR_PIN);\n  lcd.begin(16, 2);\n  lcd.backlight();\n  Serial.println(\"weather up\");\n}\n\nvoid loop() {\n  int temperature = dht.temperature(SENSOR_PIN);\n  float humidity = dht.humidity(SENSOR_PIN);\n  float outside = ow.getTemp();\n\n  int percent = humidity;\n  if (percent < 0) { percent = 0; }\n  if (percent > 100) { percent = 100; }\n\n  lcd.setCursor(0, 0);\n  lcd.print(\"t \");\n  lcd.print(temperature);\n  lcd.print(\"C\");\n  lcd.setCursor(0, 1);\n  lcd.print(\"rh \");\n  lcd.print(percent);\n  lcd.print(\"%\");\n\n  Serial.print(\"t \");\n  Serial.print(temperature);\n  Serial.print(\" C rh \");\n  Serial.print(percent);\n  Serial.print(\" %  outside \");\n  Serial.print(outside);\n  Serial.println(\" C\");\n  delay(2000);\n}\n",
           "libraries": []
         }
       ],
@@ -795,7 +795,7 @@
         {
           "board": "esp32",
           "circuit": "esp32-tft.json",
-          "sketch": "#include <WiFi.h>\n\n#define BLACK 0x0000\n#define WHITE 0xFFFF\n#define GREEN 0x07E0\n#define SKY   0x867D\n\n/* 0 asks for the clock, 1 for temperature, 2 for humidity. */\nint stage = 0;\n\nvoid setup() {\n  Serial.begin(115200);\n  tft.begin();\n  tft.setRotation(1);\n  tft.clear();\n  tft.print(\"NETWORK WEATHER\", 20, 20, SKY);\n\n  WiFi.begin(\"noesis-bench\", \"benchwifi\");\n  while (WiFi.status() != WL_CONNECTED) {\n    delay(50);\n  }\n  Serial.print(\"joined \");\n  Serial.println(WiFi.localIP());\n\n  tft.print(\"time\", 20, 80, SKY);\n  tft.print(\"temperature\", 20, 140, SKY);\n  tft.print(\"humidity\", 20, 200, SKY);\n}\n\nvoid loop() {\n  /*\n   * One radio, one request. The stage says which answer this pass is waiting\n   * for; reset() is what makes the next get() a new request rather than the\n   * answer the port already has.\n   */\n  if (stage == 0) {\n    if (net.get(\"http://ntp.noesis/time\") == 1) {\n      tft.fillRect(140, 80, 300, 30, BLACK);\n      if (net.failed()) {\n        Serial.println(\"time failed\");\n        tft.print(\"no time\", 140, 80, 0xF800);\n      } else {\n        Serial.print(\"time \");\n        Serial.println(net.read());\n        tft.print(net.read(), 140, 80, GREEN);\n      }\n      net.reset();\n      stage = 1;\n    }\n  } else if (stage == 1) {\n    if (net.get(\"http://sensor.noesis/temperature\") == 1) {\n      tft.fillRect(140, 140, 300, 30, BLACK);\n      if (net.failed()) {\n        Serial.println(\"temp failed\");\n        tft.print(\"no temperature\", 140, 140, 0xF800);\n      } else {\n        Serial.print(\"temp \");\n        Serial.println(net.read());\n        tft.print(net.read(), 140, 140, GREEN);\n      }\n      net.reset();\n      stage = 2;\n    }\n  } else {\n    if (net.get(\"http://sensor.noesis/humidity\") == 1) {\n      tft.fillRect(140, 200, 300, 30, BLACK);\n      if (net.failed()) {\n        Serial.println(\"humidity failed\");\n        tft.print(\"no humidity\", 140, 200, 0xF800);\n      } else {\n        Serial.print(\"humidity \");\n        Serial.println(net.read());\n        tft.print(net.read(), 140, 200, GREEN);\n      }\n      net.reset();\n      stage = 0;\n    }\n  }\n\n  delay(20);\n}\n"
+          "sketch": "#include <WiFi.h>\n\n#define BLACK 0x0000\n#define WHITE 0xFFFF\n#define GREEN 0x07E0\n#define SKY   0x867D\n\n/* 0 asks for the clock, 1 for temperature for humidity. */\nint stage = 0;\n\nvoid setup() {\n  Serial.begin(115200);\n  tft.begin();\n  tft.setRotation(1);\n  tft.clear();\n  tft.print(\"NETWORK WEATHER\", 20, 20, SKY);\n\n  WiFi.begin(\"noesis-bench\", \"benchwifi\");\n  while (WiFi.status() != WL_CONNECTED) {\n    delay(50);\n  }\n  Serial.print(\"joined \");\n  Serial.println(WiFi.localIP());\n\n  tft.print(\"time\", 20, 80, SKY);\n  tft.print(\"temperature\", 20, 140, SKY);\n  tft.print(\"humidity\", 20, 200, SKY);\n}\n\nvoid loop() {\n  /*\n   * One radio, one request. The stage says which answer this pass is waiting\n   * for; reset() is what makes the next get() a new request rather than the\n   * answer the port already has.\n   */\n  if (stage == 0) {\n    if (net.get(\"http://ntp.noesis/time\") == 1) {\n      tft.fillRect(140, 80, 300, 30, BLACK);\n      if (net.failed()) {\n        Serial.println(\"time failed\");\n        tft.print(\"no time\", 140, 80, 0xF800);\n      } else {\n        Serial.print(\"time \");\n        Serial.println(net.read());\n        tft.print(net.read(), 140, 80, GREEN);\n      }\n      net.reset();\n      stage = 1;\n    }\n  } else if (stage == 1) {\n    if (net.get(\"http://sensor.noesis/temperature\") == 1) {\n      tft.fillRect(140, 140, 300, 30, BLACK);\n      if (net.failed()) {\n        Serial.println(\"temp failed\");\n        tft.print(\"no temperature\", 140, 140, 0xF800);\n      } else {\n        Serial.print(\"temp \");\n        Serial.println(net.read());\n        tft.print(net.read(), 140, 140, GREEN);\n      }\n      net.reset();\n      stage = 2;\n    }\n  } else {\n    if (net.get(\"http://sensor.noesis/humidity\") == 1) {\n      tft.fillRect(140, 200, 300, 30, BLACK);\n      if (net.failed()) {\n        Serial.println(\"humidity failed\");\n        tft.print(\"no humidity\", 140, 200, 0xF800);\n      } else {\n        Serial.print(\"humidity \");\n        Serial.println(net.read());\n        tft.print(net.read(), 140, 200, GREEN);\n      }\n      net.reset();\n      stage = 0;\n    }\n  }\n\n  delay(20);\n}\n"
         }
       ],
       "working": [
@@ -914,6 +914,71 @@
         "Turn the Light knob and the lux follows: the chip is in continuous mode, so every read is the current light.",
         "Turn the Temperature and Humidity knobs on the SHT31 and the next measurement follows; the TMP102 has its own Temperature knob, read on every pass.",
         "The CRC is recomputed in the sketch from the two data bytes, and the line ends in \"crc ok\" only when both words agree."
+      ]
+    },
+    {
+      "id": "bmp280",
+      "title": "Barometer",
+      "blurb": "A BMP280 barometer on the I2C bus. The sketch reads the chip id, starts a pressure and temperature measurement, reads the raw counts, and applies the datasheet's compensation with calibration coefficients read from the chip itself. Pressure and temperature print to the serial log, and a light comes on above one thousand hectopascals.",
+      "parts": [
+        {
+          "name": "BMP280 Barometer",
+          "qty": 1
+        },
+        {
+          "name": "Red LED",
+          "qty": 1
+        },
+        {
+          "name": "220 Resistor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "bmp280",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// BMP280 barometer on I2C: read chip id, start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  return (Wire.read() << 8) | Wire.read();\n}\n\nint readThreeBytes(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 3);\n  return (Wire.read() << 16) | (Wire.read() << 8) | Wire.read();\n}\n\n// Calibration words, big-endian pairs from 0x88.\nint digT1, digT2, digT3;\nint digP1, digP2, digP3, digP4, digP5, digP6, digP7, digP8, digP9;\n\nvoid loadCalibration() {\n  digT1 = readWord(0x88);\n  digT2 = readWord(0x8A);\n  digT3 = readWord(0x8C);\n  digP1 = readWord(0x8E);\n  digP2 = readWord(0x90);\n  digP3 = readWord(0x92);\n  digP4 = readWord(0x94);\n  digP5 = readWord(0x96);\n  digP6 = readWord(0x98);\n  digP7 = readWord(0x9A);\n  digP8 = readWord(0x9C);\n  digP9 = readWord(0x9E);\n}\n\nint tFine;\n\nint compensateTemperature(int rawT) {\n  int var1 = (((rawT >> 3) - (digT1 << 1)) * digT2) >> 11;\n  int var2 = (((((rawT >> 4) - digT1) * ((rawT >> 4) - digT1)) >> 12) * digT3) >> 14;\n  tFine = var1 + var2;\n  return (tFine * 5 + 128) >> 8;\n}\n\nint compensatePressure(int rawP) {\n  int var1 = tFine - 128000;\n  int var2 = var1 * var1 * digP6;\n  var2 = var2 + ((var1 * digP5) << 17);\n  var2 = var2 + ((digP4) << 35);\n  var1 = ((var1 * var1 * digP3) >> 8) + ((var1 * digP2) << 12);\n  var1 = (((1 << 47) + var1) * digP1) >> 33;\n  if (var1 == 0) return 0;\n  int p = 1048576 - rawP;\n  p = (((p << 31) - var2) * 3125) / var1;\n  var1 = (digP9 * (p >> 13) * (p >> 13)) >> 25;\n  var2 = (digP8 * p) >> 19;\n  p = ((p + var1 + var2) >> 8) + (digP7 << 4);\n  return p / 256;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  loadCalibration();\n  Serial.println(\"bmp280 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n  delay(100);\n\n  int raw = readThreeBytes(0xF7);\n  int rawP = raw >> 4;\n  int rawT = (raw & 0x0FFFFF) >> 4;\n\n  int temperature = compensateTemperature(rawT) / 100.0;\n  int pressure = compensatePressure(rawP);\n\n  Serial.print(\"temperature \");\n  Serial.print(temperature);\n  Serial.print(\" C  pressure \");\n  Serial.print(pressure);\n  Serial.println(\" hPa\");\n\n  digitalWrite(LED, pressure > 1010 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports the chip id (0x58) and then pressure in hPa and temperature in degrees.",
+        "Turn the Pressure knob and the reading follows, within a hectopascal.",
+        "Turn the Temperature knob and the reading follows, within a tenth of a degree.",
+        "Above one thousand hectopascals the light comes on; below it, the light goes out."
+      ]
+    },
+    {
+      "id": "lm35",
+      "title": "Thermometer",
+      "blurb": "An LM35 analog temperature sensor on A0. The sketch reads the voltage, converts it to degrees, and prints it to the serial log. A light comes on above thirty degrees, so the operator can see the reading without opening the monitor.",
+      "parts": [
+        {
+          "name": "LM35 Temperature Sensor",
+          "qty": 1
+        },
+        {
+          "name": "Red LED",
+          "qty": 1
+        },
+        {
+          "name": "220 Resistor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "lm35",
+          "sketch": "#include <Arduino.h>\n\n// LM35 analog temperature sensor on A0. Ten millivolts per degree; the Uno's\n// ADC maps five volts across 1024 counts, so each count is half a degree.\nconst byte SENSOR = A0;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Serial.println(\"lm35 up\");\n}\n\nvoid loop() {\n  int count = analogRead(SENSOR);\n  int millivolts = count * 5000 / 1024;\n  int celsius = millivolts / 10;\n\n  Serial.print(\"temperature \");\n  Serial.print(celsius);\n  Serial.println(\" C\");\n\n  digitalWrite(LED, celsius > 30 ? HIGH : LOW);\n\n  delay(200);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports the temperature in whole degrees, following the part's Temperature knob.",
+        "Turn the knob past thirty and the light comes on; turn it back down and the light goes out.",
+        "The count in the log matches the voltage on A0: ten millivolts per degree."
       ]
     }
   ]

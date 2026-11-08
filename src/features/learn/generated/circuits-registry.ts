@@ -14,6 +14,7 @@ import circuit_51 from '../circuits/5.1.json';
 import circuit_52 from '../circuits/5.2.json';
 import circuitA4988 from '../circuits/a4988.json';
 import circuitAlarmClock from '../circuits/alarm-clock.json';
+import circuitBmp280 from '../circuits/bmp280.json';
 import circuitDashboard from '../circuits/dashboard.json';
 import circuitDs3231 from '../circuits/ds3231.json';
 import circuitEeprom24lc256 from '../circuits/eeprom24lc256.json';
@@ -21,6 +22,7 @@ import circuitEnvironmentBench from '../circuits/environment-bench.json';
 import circuitEsp32Tft from '../circuits/esp32-tft.json';
 import circuitExpanderInterrupt from '../circuits/expander-interrupt.json';
 import circuitInstrumentBench from '../circuits/instrument-bench.json';
+import circuitLm35 from '../circuits/lm35.json';
 import circuitMax6675 from '../circuits/max6675.json';
 import circuitMax7219 from '../circuits/max7219.json';
 import circuitMcp23017 from '../circuits/mcp23017.json';
@@ -51,6 +53,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "5.2": parseCircuit(circuit_52, "5.2"),
   "a4988": parseCircuit(circuitA4988, "a4988"),
   "alarm-clock": parseCircuit(circuitAlarmClock, "alarm-clock"),
+  "bmp280": parseCircuit(circuitBmp280, "bmp280"),
   "dashboard": parseCircuit(circuitDashboard, "dashboard"),
   "ds3231": parseCircuit(circuitDs3231, "ds3231"),
   "eeprom24lc256": parseCircuit(circuitEeprom24lc256, "eeprom24lc256"),
@@ -58,6 +61,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "esp32-tft": parseCircuit(circuitEsp32Tft, "esp32-tft"),
   "expander-interrupt": parseCircuit(circuitExpanderInterrupt, "expander-interrupt"),
   "instrument-bench": parseCircuit(circuitInstrumentBench, "instrument-bench"),
+  "lm35": parseCircuit(circuitLm35, "lm35"),
   "max6675": parseCircuit(circuitMax6675, "max6675"),
   "max7219": parseCircuit(circuitMax7219, "max7219"),
   "mcp23017": parseCircuit(circuitMcp23017, "mcp23017"),

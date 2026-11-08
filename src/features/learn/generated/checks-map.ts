@@ -27,6 +27,8 @@ import {
   ds3231Checks,
   max6675Checks,
   mcp4725Checks,
+  lm35Checks,
+  bmp280Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -61,4 +63,6 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "soil-probe": () => soilProbeChecks,
   "instrument-bench": () => instrumentBenchChecks,
   "environment-bench": () => environmentBenchChecks,
+  "bmp280": (build) => bmp280Checks(build),
+  "lm35": (build) => lm35Checks(build),
 };
