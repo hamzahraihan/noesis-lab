@@ -58,6 +58,7 @@ import {
   bmp280Definition,
   vl53l0xDefinition,
   bme280Definition,
+  aht20Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { soilMoistureDefinition } from './devices/soil-moisture';
@@ -555,6 +556,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Temperature, pressure and humidity over I2C — the all-in-one weather station on a single breakout. The sketch reads compensation coefficients and applies the datasheet formula to the raw counts.',
     make: bme280Definition,
+  },
+  {
+    id: 'aht20-environment',
+    name: 'AHT20 Environment Sensor',
+    group: 'input',
+    note: 'Temperature and humidity over I2C — the compact all-in-one weather module on a single breakout. The sketch starts a measurement and reads the raw counts back.',
+    make: aht20Definition,
   },
   {
     id: 'ina219-current-monitor',

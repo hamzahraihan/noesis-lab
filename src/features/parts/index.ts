@@ -11,6 +11,7 @@ export * from './devices/bh1750';
 export * from './devices/bmp180';
 export * from './devices/bmp280';
 export * from './devices/bme280';
+export * from './devices/aht20';
 export * from './devices/soil-moisture';
 export * from './devices/vl53l0x';
 export * from './devices/ds1307';

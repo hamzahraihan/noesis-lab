@@ -14,6 +14,7 @@ import { BH1750_LIGHT_KNOB } from './bh1750';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
 import { BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB } from './bmp280';
 import { BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB } from './bme280';
+import { AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB } from './aht20';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -253,6 +254,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB],
   },
+  aht20: {
+    id: 'aht20-environment',
+    name: 'AHT20 Environment Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#123b2e',
+    legendColour: '#eef7f2',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -373,4 +384,9 @@ export function vl53l0xDefinition(): PartDefinition {
 /** BME280 environment sensor: temperature, pressure and humidity over I2C. */
 export function bme280Definition(): PartDefinition {
   return i2cSensorDefinition('bme280');
+}
+
+/** AHT20 environment sensor: temperature and humidity over I2C. */
+export function aht20Definition(): PartDefinition {
+  return i2cSensorDefinition('aht20');
 }

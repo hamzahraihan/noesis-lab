@@ -234,7 +234,8 @@ export type I2cSensorVariant =
   | 'sht31'
   | 'bmp280'
   | 'vl53l0x'
-  | 'bme280';
+  | 'bme280'
+  | 'aht20';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';
