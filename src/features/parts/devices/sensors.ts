@@ -16,6 +16,7 @@ import { BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB } from './bmp280';
 import { BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB } from './bme280';
 import { AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB } from './aht20';
 import { SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB } from './scd40';
+import { MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB } from './max30102';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -275,6 +276,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB],
   },
+  max30102: {
+    id: 'max30102-pulse',
+    name: 'MAX30102 Pulse Oximeter',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -405,4 +416,9 @@ export function aht20Definition(): PartDefinition {
 /** SCD40 CO2 sensor: carbon dioxide, temperature and humidity over I2C. */
 export function scd40Definition(): PartDefinition {
   return i2cSensorDefinition('scd40');
+}
+
+/** MAX30102 pulse oximeter: heart rate and blood oxygen over I2C. */
+export function max30102Definition(): PartDefinition {
+  return i2cSensorDefinition('max30102');
 }

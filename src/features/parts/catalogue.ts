@@ -60,6 +60,7 @@ import {
   bme280Definition,
   aht20Definition,
   scd40Definition,
+  max30102Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { soilMoistureDefinition } from './devices/soil-moisture';
@@ -571,6 +572,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Carbon dioxide, temperature and humidity over I2C — the air-quality monitor on a single breakout. The sketch starts periodic measurement and reads three words with their CRCs back.',
     make: scd40Definition,
+  },
+  {
+    id: 'max30102-pulse',
+    name: 'MAX30102 Pulse Oximeter',
+    group: 'input',
+    note: 'Heart rate and blood oxygen over I2C — the fingertip monitor that reads the pulse with red and infrared light. The sketch starts the PPG and reads the FIFO counts back.',
+    make: max30102Definition,
   },
   {
     id: 'ina219-current-monitor',
