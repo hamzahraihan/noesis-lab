@@ -61,6 +61,7 @@ import {
   aht20Definition,
   scd40Definition,
   max30102Definition,
+  bme680Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { soilMoistureDefinition } from './devices/soil-moisture';
@@ -579,6 +580,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Heart rate and blood oxygen over I2C — the fingertip monitor that reads the pulse with red and infrared light. The sketch starts the PPG and reads the FIFO counts back.',
     make: max30102Definition,
+  },
+  {
+    id: 'bme680-gas',
+    name: 'BME680 Gas Sensor',
+    group: 'input',
+    note: 'Temperature, pressure, humidity and gas resistance over I2C — the air-quality upgrade of the BME280 with a VOC sensor on the same breakout. The sketch reads the raw counts back.',
+    make: bme680Definition,
   },
   {
     id: 'ina219-current-monitor',
