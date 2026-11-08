@@ -78,8 +78,27 @@ If successful, this would move:
 - Pillar 4 (Architectures): 46 → ~60 (ESP32 family gains real CPU)
 - Gap #6 (ESP32 machine code): closed
 
-## Open questions
+## Spike results (2026-11-08, commit d7ab5c0)
 
+**Integration path validated:**
+- `esp32-machine/backend.ts`: wraps `SimulatorWorker`, boots Xtensa core, flashes firmware, bridges UART/GPIO/I2C/SPI
+- `sim-worker/core.ts`: `'esp32-machine'` execution value with async attach, pending gating (nothing runs while chip boots), step delegation, fault propagation
+- `sim-worker/worker.ts`: execution type includes `'esp32-machine'`
+- Full type chain from gallery build → bench → worker message → core → backend
+
+**Verified:**
+- `esp32-emu@1.2.0` boots Xtensa LX6 core in Node.js (validated 2026-11-08)
+- `SimulatorWorker` with `worker.memory.flash` for firmware flashing
+- TypeScript compiles clean after full type widening
+- 56 sim-worker/bench tests pass
+
+**What's still missing for production:**
+- Firmware compilation: no `xtensa-esp32-elf-gcc` toolchain in-browser yet
+- Real firmware images to flash (currently empty)
+- Assets are fetched from URLs that don't exist in repo layout yet
+- GPIO bridging is a stub (chip polls its own GPIO state)
+
+**Open questions:**
 1. Can `esp32-emu` run a compiled ESP-IDF or Arduino sketch? (Needs Xtensa ELF, not just MicroPython)
 2. How does pin bridging work? (GPIO → McuRuntime)
 3. Can the emulator run in the existing sim-worker (which already uses SharedArrayBuffer)?
