@@ -547,6 +547,16 @@ class SimCore implements CoreHandle {
   }
 
   sendSerialInput(text: string): void {
+    const trimmed = text.trim();
+    if (trimmed.startsWith('$')) {
+      // GDB packet: route to the protocol handler and push the response.
+      const payload = trimmed.startsWith('$')
+        ? trimmed.slice(1).split('#')[0]!
+        : trimmed;
+      const response = this.handleGdbPacket(payload);
+      this.pushSerial(`${response}\n`);
+      return;
+    }
     for (let i = 0; i < text.length; i++) {
       this.serialInput.push(text.charCodeAt(i));
     }
