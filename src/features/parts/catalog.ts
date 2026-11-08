@@ -227,6 +227,7 @@ export type I2cSensorVariant =
   | 'tmp102'
   | 'mcp9808'
   | 'lm75'
+  | 'tcs34725'
   | 'sht31';
 
 /** The character LCDs, which differ only in how much glass they have. */

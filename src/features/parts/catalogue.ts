@@ -50,6 +50,7 @@ import {
   ina219Definition,
   mcp9808Definition,
   lm75Definition,
+  tcs34725Definition,
   mpu6050Definition,
   sht31Definition,
   tmp102Definition,
@@ -569,6 +570,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A signed eleven-bit thermometer at 0.125 °C a count, left-justified across two bytes. It carries a configuration register and two trip points.',
     make: lm75Definition,
+  },
+  {
+    id: 'tcs34725-color',
+    name: 'TCS34725 Color Sensor',
+    group: 'input',
+    note: 'Red, green, blue and clear channels as sixteen-bit counts over I2C. The sketch enables the sensor, sets integration time and gain, and reads four registers.',
+    make: tcs34725Definition,
   },
   {
     id: 'sht31-temp-humidity',

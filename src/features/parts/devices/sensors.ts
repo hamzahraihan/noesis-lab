@@ -18,6 +18,7 @@ import { SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from './sht31';
 import { TMP102_TEMPERATURE_KNOB } from './tmp102';
 import { MCP9808_TEMPERATURE_KNOB } from './mcp9808';
 import { LM75_TEMPERATURE_KNOB } from './lm75';
+import { TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB } from './tcs34725';
 
 /** The hole pitch, and the grid every module's header is snapped to. */
 const PITCH = 2.54;
@@ -188,6 +189,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [LM75_TEMPERATURE_KNOB],
   },
+  tcs34725: {
+    id: 'tcs34725-color',
+    name: 'TCS34725 Color Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#2a1a3a',
+    legendColour: '#f2e8f5',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB],
+  },
   sht31: {
     id: 'sht31-temp-humidity',
     name: 'SHT31 Temp/Humidity',
@@ -288,6 +299,11 @@ export function mcp9808Definition(): PartDefinition {
 /** LM75 thermometer: a signed eleven-bit temperature at 0.125 °C a count. */
 export function lm75Definition(): PartDefinition {
   return i2cSensorDefinition('lm75');
+}
+
+/** TCS34725 color sensor: red, green, blue and clear channels over I2C. */
+export function tcs34725Definition(): PartDefinition {
+  return i2cSensorDefinition('tcs34725');
 }
 
 /** SHT31 temp/humidity sensor: two CRC-protected words in one frame. */
