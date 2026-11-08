@@ -59,6 +59,7 @@ import {
   vl53l0xDefinition,
   bme280Definition,
   aht20Definition,
+  scd40Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { soilMoistureDefinition } from './devices/soil-moisture';
@@ -563,6 +564,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Temperature and humidity over I2C — the compact all-in-one weather module on a single breakout. The sketch starts a measurement and reads the raw counts back.',
     make: aht20Definition,
+  },
+  {
+    id: 'scd40-co2',
+    name: 'SCD40 CO2 Sensor',
+    group: 'input',
+    note: 'Carbon dioxide, temperature and humidity over I2C — the air-quality monitor on a single breakout. The sketch starts periodic measurement and reads three words with their CRCs back.',
+    make: scd40Definition,
   },
   {
     id: 'ina219-current-monitor',

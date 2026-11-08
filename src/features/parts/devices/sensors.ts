@@ -15,6 +15,7 @@ import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
 import { BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB } from './bmp280';
 import { BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB } from './bme280';
 import { AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB } from './aht20';
+import { SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB } from './scd40';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -264,6 +265,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB],
   },
+  scd40: {
+    id: 'scd40-co2',
+    name: 'SCD40 CO2 Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -389,4 +400,9 @@ export function bme280Definition(): PartDefinition {
 /** AHT20 environment sensor: temperature and humidity over I2C. */
 export function aht20Definition(): PartDefinition {
   return i2cSensorDefinition('aht20');
+}
+
+/** SCD40 CO2 sensor: carbon dioxide, temperature and humidity over I2C. */
+export function scd40Definition(): PartDefinition {
+  return i2cSensorDefinition('scd40');
 }
