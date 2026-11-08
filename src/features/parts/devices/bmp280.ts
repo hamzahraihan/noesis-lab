@@ -93,7 +93,7 @@ const COUNTS_PER_HECTOPASCAL = 16;
  * The datasheet's temperature compensation: raw count in, hundredths of a
  * degree out. The divisions truncate towards zero, matching the chip's C.
  */
-export function compensateTemperature(raw: number): number {
+export function bmp280CompensateTemperature(raw: number): number {
   const cal = BMP280_CALIBRATION;
   const var1 = (((raw >> 3) - (cal.digT1 << 1)) * cal.digT2) / 2048;
   const var2 =
@@ -106,7 +106,7 @@ export function compensateTemperature(raw: number): number {
  * The datasheet's pressure compensation: raw count and t_fine in, hectopascals
  * out. The divisions truncate towards zero, matching the chip's C.
  */
-export function compensatePressure(raw: number, tFine: number): number {
+export function bmp280CompensatePressure(raw: number, tFine: number): number {
   const cal = BMP280_CALIBRATION;
   let var1 = tFine / 2 - 64000;
   let var2 =
@@ -143,9 +143,6 @@ export class Bmp280 implements I2cDevice {
   /** The temperature of that air, in degrees Celsius. */
   private celsius = 25;
 
-  /** The oversampling the sketch last asked for. */
-  private ossT = 1;
-  private ossP = 1;
   /** The raw counts the chip's converter is holding. */
   private rawTemperature = 0;
   private rawPressure = 0;
@@ -237,9 +234,6 @@ export class Bmp280 implements I2cDevice {
   /** Handles a written byte: only the control register starts a measurement. */
   private write(address: number, value: number): void {
     if (address === CONTROL && (value & 0x03) !== 0) {
-      // Bits 7-5 are temperature oversampling, bits 4-2 pressure oversampling.
-      this.ossT = (value >> 5) & 0x07;
-      this.ossP = (value >> 2) & 0x07;
       this.stale = true;
     }
   }
