@@ -37,6 +37,7 @@ export * from './firmware/python-modules';
 export * from './avr/backend';
 export * from './avr/core';
 export type { CompiledDebugInfo } from './avr/debug/lines';
+export { GdbRemoteProtocol } from './avr/debug/gdb';
 export * from './avr/hex';
 export * from './avr/packager';
 export * from './avr/toolchain/client';

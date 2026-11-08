@@ -75,6 +75,7 @@ export const DebugPanel = memo(function DebugPanel({
   const [gdbCmd, setGdbCmd] = useState('');
   const [gdbResp, setGdbResp] = useState('');
   const [gdbBusy, setGdbBusy] = useState(false);
+  const [gdbHistory, setGdbHistory] = useState<Array<{ cmd: string; resp: string }>>([]);
 
   const doReadMemory = useCallback(async () => {
     if (!onReadMemory) return;
@@ -110,10 +111,12 @@ export const DebugPanel = memo(function DebugPanel({
 
   const doGdbSend = useCallback(async () => {
     if (!onGdbPacket || !gdbCmd.trim()) return;
+    const cmd = gdbCmd.trim();
     setGdbBusy(true);
     try {
-      const resp = await onGdbPacket(gdbCmd.trim());
+      const resp = await onGdbPacket(cmd);
       setGdbResp(resp);
+      setGdbHistory((prev) => [...prev.slice(-9), { cmd, resp }]);
     } finally {
       setGdbBusy(false);
     }
@@ -316,6 +319,17 @@ export const DebugPanel = memo(function DebugPanel({
               {gdbResp !== '' && (
                 <div className="px-2 pb-1 font-mono text-[11px] text-[var(--hd-text)] break-all">
                   {gdbResp}
+                </div>
+              )}
+              {gdbHistory.length > 0 && (
+                <div className="max-h-32 overflow-auto px-2 pb-1 font-mono text-[10px] text-[var(--hd-muted)]">
+                  {gdbHistory.map((entry, i) => (
+                    <div key={i} className="truncate">
+                      <span className="text-[var(--hd-faint)]">{entry.cmd}</span>
+                      {' → '}
+                      <span>{entry.resp.slice(0, 60)}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </details>
