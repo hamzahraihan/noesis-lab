@@ -1143,6 +1143,39 @@
         "Turn the Temperature and Humidity knobs and the readings follow.",
         "Above 1250 ppm the light comes on; below it, the light goes out."
       ]
+    },
+    {
+      "id": "max30102",
+      "title": "Pulse Monitor",
+      "blurb": "A MAX30102 pulse oximeter on I2C — heart rate and blood oxygen from one fingertip module. The sketch starts the PPG and reads infrared and red counts. A light comes on with a strong pulse.",
+      "parts": [
+        {
+          "name": "MAX30102 Pulse Oximeter",
+          "qty": 1
+        },
+        {
+          "name": "Red LED",
+          "qty": 1
+        },
+        {
+          "name": "220 Resistor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "max30102",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// MAX30102 pulse oximeter on I2C: heart rate and blood oxygen.\n// Start the PPG, read FIFO counts.\nconst byte SENSOR = 0x57;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xFF), HEX);\n\n  // Start the PPG: mode register 0x09, value 0x03 (SpO2 + heart rate).\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x09);\n  Wire.write(0x03);\n  Wire.endTransmission();\n\n  Serial.println(\"max30102 up\");\n}\n\nvoid loop() {\n  delay(500);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x05);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 6);\n\n  int ir = 0;\n  int red = 0;\n  if (Wire.available() >= 6) {\n    ir = (Wire.read() << 16) | (Wire.read() << 8) | Wire.read();\n    red = (Wire.read() << 16) | (Wire.read() << 8) | Wire.read();\n  }\n\n  Serial.print(\"ir \");\n  Serial.print(ir);\n  Serial.print(\" red \");\n  Serial.println(red);\n\n  digitalWrite(LED, ir > 50000 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports the chip id (0x15) and then infrared and red counts.",
+        "Turn the Heart rate knob and the counts follow.",
+        "Turn the SpO2 knob and the counts follow.",
+        "With a strong pulse the light comes on; with a weak one, it goes out."
+      ]
     }
   ]
 }
