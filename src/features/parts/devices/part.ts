@@ -18,6 +18,7 @@ import { Aht20 } from './aht20';
 import { Scd40 } from './scd40';
 import { Max30102 } from './max30102';
 import { Bme680 } from './bme680';
+import { Apds9960 } from './apds9960';
 import { Vl53l0x } from './vl53l0x';
 import { Ds1307 } from './ds1307';
 import { Ds3231 } from './ds3231';
@@ -109,6 +110,7 @@ export function createI2cDevice(
       if (component.device === 'scd40') return new Scd40();
       if (component.device === 'max30102') return new Max30102();
       if (component.device === 'bme680') return new Bme680();
+      if (component.device === 'apds9960') return new Apds9960();
       if (component.device === 'vl53l0x') return new Vl53l0x();
       return new Hx711();
     default:

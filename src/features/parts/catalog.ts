@@ -238,7 +238,8 @@ export type I2cSensorVariant =
   | 'aht20'
   | 'scd40'
   | 'max30102'
-  | 'bme680';
+  | 'bme680'
+  | 'apds9960';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

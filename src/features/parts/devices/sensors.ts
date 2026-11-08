@@ -18,6 +18,7 @@ import { AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB } from './aht20';
 import { SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB } from './scd40';
 import { MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB } from './max30102';
 import { BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB } from './bme680';
+import { APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB } from './apds9960';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -297,6 +298,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB],
   },
+  apds9960: {
+    id: 'apds9960-gesture',
+    name: 'APDS9960 Gesture Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -437,4 +448,9 @@ export function max30102Definition(): PartDefinition {
 /** BME680 gas sensor: temperature, pressure, humidity and gas over I2C. */
 export function bme680Definition(): PartDefinition {
   return i2cSensorDefinition('bme680');
+}
+
+/** APDS9960 gesture sensor: gesture, proximity and ambient light over I2C. */
+export function apds9960Definition(): PartDefinition {
+  return i2cSensorDefinition('apds9960');
 }

@@ -62,6 +62,7 @@ import {
   scd40Definition,
   max30102Definition,
   bme680Definition,
+  apds9960Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { soilMoistureDefinition } from './devices/soil-moisture';
@@ -587,6 +588,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Temperature, pressure, humidity and gas resistance over I2C — the air-quality upgrade of the BME280 with a VOC sensor on the same breakout. The sketch reads the raw counts back.',
     make: bme680Definition,
+  },
+  {
+    id: 'apds9960-gesture',
+    name: 'APDS9960 Gesture Sensor',
+    group: 'input',
+    note: 'Gesture, proximity and ambient light over I2C — the hand-wave module that reads a swipe through the air and a finger close up. The sketch reads the data registers back.',
+    make: apds9960Definition,
   },
   {
     id: 'ina219-current-monitor',

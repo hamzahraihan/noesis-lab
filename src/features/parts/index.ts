@@ -15,6 +15,7 @@ export * from './devices/aht20';
 export * from './devices/scd40';
 export * from './devices/max30102';
 export * from './devices/bme680';
+export * from './devices/apds9960';
 export * from './devices/soil-moisture';
 export * from './devices/vl53l0x';
 export * from './devices/ds1307';
