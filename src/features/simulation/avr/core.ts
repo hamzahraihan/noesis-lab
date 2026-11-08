@@ -151,6 +151,25 @@ export class AvrBackend implements ExecutionBackend {
     return this.pausedFrame;
   }
 
+  /**
+   * Reads `length` bytes from the AVR data space starting at `address`.
+   *
+   * The data space is one flat array: registers at 0x00-0x1F, I/O at 0x20-0x5F,
+   * SRAM at 0x60 and up. This is the "reads memory" half of the debugging
+   * gap: a sketch stopped on a line can be asked what lives at any address,
+   * not just the 2 KB snapshot the stop frame carries.
+   *
+   * Out-of-range addresses or lengths are clamped rather than throwing, so a
+   * panel that asks for a region past RAMEND gets what is there and nothing
+   * more.
+   */
+  readMemory(address: number, length: number): number[] {
+    if (length <= 0 || address >= this.cpu.data.length) return [];
+    const start = Math.max(0, address | 0);
+    const count = Math.min(length | 0, this.cpu.data.length - start);
+    return Array.from(this.cpu.data.subarray(start, start + count));
+  }
+
   /** Carries on from the held line; it will not stop there again. */
   resumeDebug(): void {
     if (this.pausedFrame === null) return;

@@ -194,6 +194,8 @@ export interface CoreHandle {
   debugFrame(): DebugFrame | null;
   /** Whether the debugger has the program stopped. */
   debugPaused(): boolean;
+  /** Reads `length` bytes from the AVR data space at `address`. */
+  readMemory(address: number, length: number): number[];
   /** Whether the run can be watched at its source lines. */
   debugWatchable(): boolean;
   /** Whether the running core is compiled firmware rather than the script. */
@@ -470,6 +472,11 @@ class SimCore implements CoreHandle {
 
   debugPaused(): boolean {
     return this.avrBackend?.debugPaused() ?? this.runner?.paused === true;
+  }
+
+  /** Reads `length` bytes from the AVR data space at `address`. */
+  readMemory(address: number, length: number): number[] {
+    return this.avrBackend?.readMemory(address, length) ?? [];
   }
 
   /** A compiled core is watchable only when its build carried source rows. */
