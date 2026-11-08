@@ -1209,6 +1209,39 @@
         "Turn the Temperature, Pressure and Humidity knobs and the readings follow.",
         "When the gas resistance drops low enough, the light comes on."
       ]
+    },
+    {
+      "id": "apds9960",
+      "title": "Gesture Sensor",
+      "blurb": "An APDS9960 gesture sensor on I2C — gesture, proximity and ambient light from one breakout. The sketch reads the data registers. A light comes on when a hand is close.",
+      "parts": [
+        {
+          "name": "APDS9960 Gesture Sensor",
+          "qty": 1
+        },
+        {
+          "name": "Red LED",
+          "qty": 1
+        },
+        {
+          "name": "220 Resistor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "apds9960",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// APDS9960 gesture sensor on I2C: gesture, proximity and ambient light.\n// Read the data registers.\nconst byte SENSOR = 0x39;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0x92), HEX);\n\n  // Enable: gesture, proximity and ALS.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x80);\n  Wire.write(0x1D);\n  Wire.endTransmission();\n\n  Serial.println(\"apds9960 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x8C);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  int proximity = Wire.available() ? Wire.read() : 0;\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x8D);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  int ambient = 0;\n  if (Wire.available() >= 2) {\n    ambient = (Wire.read() << 8) | Wire.read();\n  }\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x93);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  int gesture = Wire.available() ? Wire.read() : 0;\n\n  Serial.print(\"proximity \");\n  Serial.print(proximity);\n  Serial.print(\" ambient \");\n  Serial.print(ambient);\n  Serial.print(\" gesture \");\n  Serial.println(gesture);\n\n  digitalWrite(LED, proximity > 200 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports the chip id (0xAB) and then proximity, ambient and gesture.",
+        "Turn the Proximity knob and the reading follows.",
+        "Turn the Ambient knob and the reading follows.",
+        "When a hand is close the light comes on; far away, it goes out."
+      ]
     }
   ]
 }
