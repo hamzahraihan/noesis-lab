@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "bno055-imu",
+      "x": 130,
+      "y": 20,
+      "rotation": 0
+    },
+    {
+      "id": "p3",
+      "type": "led-red",
+      "x": 40,
+      "y": 120,
+      "rotation": 0
+    },
+    {
+      "id": "p4",
+      "type": "resistor-220",
+      "x": 40,
+      "y": 150,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:5V",
+      "to": "p2:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:J1_GND",
+      "to": "p2:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:A4",
+      "to": "p2:SDA",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:A5",
+      "to": "p2:SCL",
+      "colour": "#f97316",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w5",
+      "from": "p1:D9",
+      "to": "p3:A",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w6",
+      "from": "p3:K",
+      "to": "p4:a",
+      "colour": "#22c55e",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w7",
+      "from": "p4:b",
+      "to": "p1:J1_GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

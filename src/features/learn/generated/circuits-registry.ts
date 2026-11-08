@@ -19,6 +19,7 @@ import circuitApds9960 from '../circuits/apds9960.json';
 import circuitBme280 from '../circuits/bme280.json';
 import circuitBme680 from '../circuits/bme680.json';
 import circuitBmp280 from '../circuits/bmp280.json';
+import circuitBno055 from '../circuits/bno055.json';
 import circuitDashboard from '../circuits/dashboard.json';
 import circuitDs3231 from '../circuits/ds3231.json';
 import circuitEeprom24lc256 from '../circuits/eeprom24lc256.json';
@@ -66,6 +67,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "bme280": parseCircuit(circuitBme280, "bme280"),
   "bme680": parseCircuit(circuitBme680, "bme680"),
   "bmp280": parseCircuit(circuitBmp280, "bmp280"),
+  "bno055": parseCircuit(circuitBno055, "bno055"),
   "dashboard": parseCircuit(circuitDashboard, "dashboard"),
   "ds3231": parseCircuit(circuitDs3231, "ds3231"),
   "eeprom24lc256": parseCircuit(circuitEeprom24lc256, "eeprom24lc256"),

@@ -1242,6 +1242,39 @@
         "Turn the Ambient knob and the reading follows.",
         "When a hand is close the light comes on; far away, it goes out."
       ]
+    },
+    {
+      "id": "bno055",
+      "title": "Compass",
+      "blurb": "A BNO055 absolute orientation sensor on I2C — heading, pitch and roll with a magnetometer and sensor fusion. The sketch puts it in NDOF mode and reads the orientation. A light comes on when the heading turns past a quarter turn.",
+      "parts": [
+        {
+          "name": "BNO055 Absolute Orientation",
+          "qty": 1
+        },
+        {
+          "name": "Red LED",
+          "qty": 1
+        },
+        {
+          "name": "220 Resistor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "bno055",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// BNO055 absolute orientation sensor on I2C: heading, pitch and roll.\n// Put the sensor in NDOF mode and read the orientation registers.\nconst byte SENSOR = 0x28;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  if (Wire.available() >= 2) {\n    return (Wire.read() << 8) | Wire.read();\n  }\n  return 0;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0x00), HEX);\n\n  // NDOF mode.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x3D);\n  Wire.write(0x0C);\n  Wire.endTransmission();\n\n  Serial.println(\"bno055 up\");\n}\n\nvoid loop() {\n  int heading = readWord(0x1A);\n  int pitch = readWord(0x1E);\n  if (pitch > 32767) pitch = pitch - 65536;\n  int roll = readWord(0x20);\n  if (roll > 32767) roll = roll - 65536;\n\n  Serial.print(\"heading \");\n  Serial.print(heading);\n  Serial.print(\" pitch \");\n  Serial.print(pitch);\n  Serial.print(\" roll \");\n  Serial.println(roll);\n\n  digitalWrite(LED, heading > 5000 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports the chip id (0xA0) and then heading, pitch and roll.",
+        "Turn the Heading knob and the reading follows.",
+        "Turn the Pitch and Roll knobs and the readings follow.",
+        "Past ninety degrees the light comes on; below it, the light goes out."
+      ]
     }
   ]
 }
