@@ -44,6 +44,8 @@ export interface DebugPanelProps {
   onAddWatchpoint?: (address: number, size: number) => number | Promise<number>;
   /** Removes a watchpoint by id. */
   onRemoveWatchpoint?: (id: number) => boolean | Promise<boolean>;
+  /** Sends a GDB remote protocol packet and returns the response. */
+  onGdbPacket?: (payload: string) => string | Promise<string>;
 }
 
 export const DebugPanel = memo(function DebugPanel({
@@ -58,6 +60,7 @@ export const DebugPanel = memo(function DebugPanel({
   onReadMemory,
   onAddWatchpoint,
   onRemoveWatchpoint,
+  onGdbPacket,
 }: DebugPanelProps) {
   // Memory read state.
   const [readAddr, setReadAddr] = useState('0x100');
@@ -67,6 +70,11 @@ export const DebugPanel = memo(function DebugPanel({
   const [wpAddr, setWpAddr] = useState('0x100');
   const [wpSize, setWpSize] = useState('1');
   const [watchpoints, setWatchpoints] = useState<Array<{ id: number; address: number; size: number }>>([]);
+
+  // GDB state.
+  const [gdbCmd, setGdbCmd] = useState('');
+  const [gdbResp, setGdbResp] = useState('');
+  const [gdbBusy, setGdbBusy] = useState(false);
 
   const doReadMemory = useCallback(async () => {
     if (!onReadMemory) return;
@@ -99,6 +107,17 @@ export const DebugPanel = memo(function DebugPanel({
       setWatchpoints((prev) => prev.filter((wp) => wp.id !== id));
     }
   }, [onRemoveWatchpoint]);
+
+  const doGdbSend = useCallback(async () => {
+    if (!onGdbPacket || !gdbCmd.trim()) return;
+    setGdbBusy(true);
+    try {
+      const resp = await onGdbPacket(gdbCmd.trim());
+      setGdbResp(resp);
+    } finally {
+      setGdbBusy(false);
+    }
+  }, [onGdbPacket, gdbCmd]);
   // The frame is the program the person is looking at; the prop only speaks
   // for a run that has not stopped yet.
   const compiledRun = frame !== null ? frame.compiled === true : compiled;
@@ -272,6 +291,32 @@ export const DebugPanel = memo(function DebugPanel({
                     </li>
                   ))}
                 </ul>
+              )}
+            </details>
+          )}
+          {compiledRun && onGdbPacket && (
+            <details className="rounded border border-[var(--hd-border)]">
+              <summary className="cursor-pointer px-2 py-1 font-sans text-[11px] tracking-[0.08em] uppercase text-[var(--hd-faint)]">
+                GDB
+              </summary>
+              <div className="flex items-center gap-2 px-2 py-1">
+                <input
+                  className="flex-1 rounded border border-[var(--hd-border)] bg-transparent px-1 py-0.5 font-mono text-[11px] text-[var(--hd-text)]"
+                  value={gdbCmd}
+                  onChange={(e) => setGdbCmd(e.target.value)}
+                  placeholder="? g m0,4 c s"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') doGdbSend();
+                  }}
+                />
+                <Button size="sm" variant="secondary" onClick={doGdbSend} disabled={gdbBusy}>
+                  {gdbBusy ? '...' : 'Send'}
+                </Button>
+              </div>
+              {gdbResp !== '' && (
+                <div className="px-2 pb-1 font-mono text-[11px] text-[var(--hd-text)] break-all">
+                  {gdbResp}
+                </div>
               )}
             </details>
           )}

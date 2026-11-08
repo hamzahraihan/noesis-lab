@@ -851,6 +851,13 @@ export default function Bench(props: BenchProps) {
     },
     [workerActive, workerClient, simulation],
   );
+  const debugGdbPacket = useCallback(
+    (payload: string) => {
+      if (workerActive && workerClient) return workerClient.gdbPacket(payload);
+      return Promise.resolve(simulation.gdbPacket(payload));
+    },
+    [workerActive, workerClient, simulation],
+  );
   /* Firmware verdict from the owning backend (worker fault travels by
    * message; the parse/fallback verdicts stay in-page). */
   const activeFirmwareError = workerActive
@@ -2594,6 +2601,7 @@ export default function Bench(props: BenchProps) {
                 onReadMemory={debugReadMemory}
                 onAddWatchpoint={debugAddWatchpoint}
                 onRemoveWatchpoint={debugRemoveWatchpoint}
+                onGdbPacket={debugGdbPacket}
               />
             }
             problems={
