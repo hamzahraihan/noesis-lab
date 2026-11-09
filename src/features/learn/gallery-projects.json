@@ -1339,6 +1339,37 @@
         "Turn the knob past 400 ppm and the light comes on.",
         "The ppm in the log matches the ADC count on A0."
       ]
+    },
+    {
+      "id": "dht22",
+      "title": "Temperature Monitor",
+      "blurb": "A DHT22 sensor on A0. The sketch reads the analog count, converts it back to degrees Celsius, prints it, and turns on a light when the temperature rises above 30 C.",
+      "parts": [
+        {
+          "name": "DHT22 Temp/Humidity",
+          "qty": 1
+        },
+        {
+          "name": "Red LED",
+          "qty": 1
+        },
+        {
+          "name": "220 Resistor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "dht22",
+          "sketch": "#include <Arduino.h>\n\n// DHT22 temperature/humidity sensor on A0. The sensor puts a voltage on the\n// DATA pin proportional to temperature: 0 V at 0 C, 5 V at 50 C. The sketch\n// converts the ADC count back to degrees Celsius and prints it. A light\n// comes on when the temperature rises above 30 C.\nconst byte SENSOR = A0;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Serial.println(\"dht22 up\");\n}\n\nint readCelsius(byte pin) {\n  int count = analogRead(pin);\n  int millivolts = count * 5000 / 1024;\n  int celsius = millivolts * 50 / 5000;\n  return celsius;\n}\n\nvoid loop() {\n  int celsius = readCelsius(SENSOR);\n\n  Serial.print(\"temp \");\n  Serial.print(celsius);\n  Serial.println(\" C\");\n\n  digitalWrite(LED, celsius > 30 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports temperature in degrees Celsius, following the part's Temperature knob.",
+        "Turn the knob past 30 C and the light comes on."
+      ]
     }
   ]
 }

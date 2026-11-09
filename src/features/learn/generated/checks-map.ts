@@ -40,6 +40,7 @@ import {
   bno055Checks,
   adxl335Checks,
   mq2Checks,
+  dht22Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -87,4 +88,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "bno055": (build) => bno055Checks(build),
   "adxl335": (build) => adxl335Checks(build),
   "mq2": (build) => mq2Checks(build),
+  "dht22": (build) => dht22Checks(build),
 };
