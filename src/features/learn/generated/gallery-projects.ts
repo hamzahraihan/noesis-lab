@@ -743,5 +743,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports UVA and UVB counts, following the part's UVA and UVB knobs."],
+  },
+  {
+    id: "sgp30",
+    title: "Air Quality (SGP30)",
+    blurb: "An SGP30 air quality sensor on I2C. The sketch initializes, measures, and reads eCO2 and TVOC.",
+    parts: [{ name: "SGP30 Air Quality", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["sgp30"],
+        sketch: "#include <Wire.h>\n\n// SGP30 air quality sensor on I2C. The sketch sends init and measure\n// commands, then reads eCO2 and TVOC.\nconst byte ADDR = 0x58;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  // Init air quality\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x20);\n  Wire.write(0x03);\n  Wire.endTransmission();\n  delay(10);\n  Serial.println(\"sgp30 up\");\n}\n\nvoid loop() {\n  // Measure air quality\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x20);\n  Wire.write(0x08);\n  Wire.endTransmission();\n  delay(12);\n  Wire.requestFrom(ADDR, (byte)6);\n  if (Wire.available() >= 6) {\n    int eco2 = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n    int tvoc = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n    Serial.print(\"eco2 \");\n    Serial.print(eco2);\n    Serial.print(\" tvoc \");\n    Serial.print(tvoc);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports eCO2 and TVOC, following the part's eCO2 and TVOC knobs."],
   }
 ];
