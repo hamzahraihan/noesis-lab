@@ -84,6 +84,7 @@ export const COMPONENT_KIND: Record<ComponentSpec['kind'], number> = {
   'soil-moisture': 51,
   adxl335: 52,
   'gas-sensor': 53,
+  dht22: 54,
 };
 
 /** Sensor-module variants, in `SensorVariant` order. */

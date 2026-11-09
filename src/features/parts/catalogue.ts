@@ -69,6 +69,7 @@ import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
 import { soilMoistureDefinition } from './devices/soil-moisture';
 import { mq2Definition } from './devices/mq2';
+import { dht22Definition } from './devices/dht22';
 import { lcd1602Definition, lcd2004Definition } from './devices/lcd';
 import { servoDefinition } from './devices/servo';
 import {
@@ -675,6 +676,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'An analog gas sensor: AOUT is a voltage proportional to gas concentration (0 ppm to 1000 ppm). A sketch reads it with analogRead and converts the count back to ppm. No bus, no registers -- just a voltage on a pin.',
     make: mq2Definition,
+  },
+  {
+    id: 'dht22',
+    name: 'DHT22 Temp/Humidity',
+    group: 'input',
+    note: 'A digital temperature and humidity sensor on a single data pin. A sketch polls it and reads the temperature and humidity it reports.',
+    make: dht22Definition,
   },
   {
     id: 'tcs34725-color',

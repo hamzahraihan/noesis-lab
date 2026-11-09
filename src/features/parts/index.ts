@@ -18,6 +18,7 @@ export * from './devices/bme680';
 export * from './devices/apds9960';
 export * from './devices/bno055';
 export * from './devices/adxl335';
+export * from './devices/dht22';
 export * from './devices/mq2';
 export * from './devices/soil-moisture';
 export * from './devices/vl53l0x';

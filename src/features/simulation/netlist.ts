@@ -42,6 +42,7 @@ import {
   adxl335OutputX,
   adxl335OutputY,
   adxl335OutputZ,
+  DHT22_TEMPERATURE_KNOB,
   MQ2_KNOB,
   mq2OutputVolts,
   SEVEN_SEGMENT_SEGMENTS,
@@ -450,6 +451,19 @@ function elementsForPart(
       if (output === GROUND) return [];
       return [
         { kind: 'voltageSource', a: output, b: GROUND, volts: volts, label: 'mq2' },
+      ];
+    }
+
+    case 'dht22': {
+      const temp = state.knob(part.id, DHT22_TEMPERATURE_KNOB);
+      // Temperature 0–50 °C maps to 0–5 V on DATA. Humidity is kept as a
+      // knob for completeness; the bench model of the one-wire protocol
+      // carries temperature on the analog DATA pin.
+      const volts = (temp / 50) * 5;
+      const output = nodeAt('DATA');
+      if (output === GROUND) return [];
+      return [
+        { kind: 'voltageSource', a: output, b: GROUND, volts: volts, label: 'dht22' },
       ];
     }
 
