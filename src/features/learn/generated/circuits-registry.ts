@@ -35,6 +35,7 @@ import circuitMax7219 from '../circuits/max7219.json';
 import circuitMcp23017 from '../circuits/mcp23017.json';
 import circuitMcp4725 from '../circuits/mcp4725.json';
 import circuitMfrc522 from '../circuits/mfrc522.json';
+import circuitMq2 from '../circuits/mq2.json';
 import circuitNokia5110 from '../circuits/nokia-5110.json';
 import circuitParking from '../circuits/parking.json';
 import circuitPca9685 from '../circuits/pca9685.json';
@@ -84,6 +85,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "mcp23017": parseCircuit(circuitMcp23017, "mcp23017"),
   "mcp4725": parseCircuit(circuitMcp4725, "mcp4725"),
   "mfrc522": parseCircuit(circuitMfrc522, "mfrc522"),
+  "mq2": parseCircuit(circuitMq2, "mq2"),
   "nokia-5110": parseCircuit(circuitNokia5110, "nokia-5110"),
   "parking": parseCircuit(circuitParking, "parking"),
   "pca9685": parseCircuit(circuitPca9685, "pca9685"),

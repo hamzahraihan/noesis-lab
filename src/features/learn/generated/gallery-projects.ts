@@ -608,5 +608,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports X, Y and Z in g, following the part's knobs.", "Turn the X knob past one g and the light comes on.", "At rest the axes read near zero, mid-rail, as the chip does."],
+  },
+  {
+    id: "mq2",
+    title: "Gas Detector",
+    blurb: "An MQ-2 gas sensor on A0. The sketch reads the analog count, converts it back to ppm, and prints it. A light comes on when the concentration rises above 400 ppm.",
+    parts: [{ name: "MQ-2 Gas Sensor", qty: 1 }, { name: "Red LED", qty: 1 }, { name: "220 Resistor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["mq2"],
+        sketch: "#include <Arduino.h>\n\n// MQ-2 gas sensor on A0. The sensor outputs a voltage proportional to gas\n// concentration: 0 V at 0 ppm, 2.5 V at 500 ppm, 5 V at 1000 ppm. The sketch\n// converts the ADC count back to ppm and prints it. A light comes on when the\n// concentration rises above 400 ppm.\nconst byte SENSOR = A0;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Serial.println(\"mq2 up\");\n}\n\nint readPpm(byte pin) {\n  int count = analogRead(pin);\n  int millivolts = count * 5000 / 1024;\n  int ppm = millivolts * 1000 / 5000;\n  return ppm;\n}\n\nvoid loop() {\n  int ppm = readPpm(SENSOR);\n\n  Serial.print(\"gas \");\n  Serial.print(ppm);\n  Serial.println(\" ppm\");\n\n  digitalWrite(LED, ppm > 400 ? HIGH : LOW);\n\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports gas concentration in ppm, following the part's Gas concentration knob.", "Turn the knob past 400 ppm and the light comes on.", "The ppm in the log matches the ADC count on A0."],
   }
 ];

@@ -5,7 +5,7 @@
  * a circular dependency (registry.ts consumes the generated CHECKS_MAP).
  */
 
-import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, SEGMENT_MAP } from '@/features/parts';
+import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, SEGMENT_MAP } from '@/features/parts';
 import {
   convergeGlass,
   FIVE_GLYPH,
@@ -2284,6 +2284,48 @@ export function adxl335Checks(build: GalleryBuild): CheckDef[] {
               `the sketch read ${axis} ${read} and the knob is at ${expected}`,
             );
           }
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
+ * mq2 on uno: the reading follows the gas concentration knob.
+ *
+ * The sensor puts a fraction of the supply on AOUT (0 ppm to 1000 ppm over
+ * 0 V to 5 V), the Uno's ADC maps five volts across 1024 counts, and the
+ * sketch converts back to ppm. The sketch's reported ppm has to agree with
+ * the knob within a few ppm.
+ * ------------------------------------------------------------------ */
+
+export function mq2Checks(build: GalleryBuild): CheckDef[] {
+  const sensor = build.circuit.parts?.find((part) => part.type === 'mq2')?.id;
+  return [
+    {
+      name: 'the reading follows the gas concentration knob',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the reading follows the gas concentration knob';
+        const knob = sim.knob;
+        if (knob === undefined || sensor === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read the sensor knob');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        const reported = /gas ([\d]+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report a gas concentration');
+        }
+        const read = Number(reported[1]);
+        const expected = knob(sensor, MQ2_KNOB.id);
+        if (Math.abs(read - expected) > 10) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the sketch read ${read} ppm and the knob is at ${expected}`,
+          );
         }
         return verdict(name, started, 'pass');
       },
