@@ -71,6 +71,7 @@ import {
   ccs811Definition,
   si7021Definition,
   veml6075Definition,
+  sgp30Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -662,6 +663,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A UVA/UVB light sensor on the I2C bus. Reads UVA and UVB counts from registers 0x01-0x04. A sketch reads four bytes and computes UV index.',
     make: veml6075Definition,
+  },
+  {
+    id: 'sgp30-air-quality',
+    name: 'SGP30 Air Quality',
+    group: 'input',
+    note: 'An eCO2 and TVOC sensor on the I2C bus. A sketch sends init (0x2003) and measure (0x2008), then reads eCO2 and TVOC with CRC.',
+    make: sgp30Definition,
   },
   {
     id: 'ina219-current-monitor',

@@ -27,6 +27,7 @@ import { TSL2561_LIGHT_KNOB } from './tsl2561';
 import { CCS811_ECO2_KNOB, CCS811_TVOC_KNOB } from './ccs811';
 import { SI7021_TEMPERATURE_KNOB, SI7021_HUMIDITY_KNOB } from './si7021';
 import { VEML6075_UVA_KNOB, VEML6075_UVB_KNOB } from './veml6075';
+import { SGP30_ECO2_KNOB, SGP30_TVOC_KNOB } from './sgp30';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -396,6 +397,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [VEML6075_UVA_KNOB, VEML6075_UVB_KNOB],
   },
+  sgp30: {
+    id: 'sgp30-air-quality',
+    name: 'SGP30 Air Quality',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [SGP30_ECO2_KNOB, SGP30_TVOC_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -574,4 +585,8 @@ export function si7021Definition(): PartDefinition {
 
 export function veml6075Definition(): PartDefinition {
   return i2cSensorDefinition('veml6075');
+}
+
+export function sgp30Definition(): PartDefinition {
+  return i2cSensorDefinition('sgp30');
 }
