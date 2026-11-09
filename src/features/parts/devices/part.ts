@@ -41,6 +41,7 @@ import { Tmp102 } from './tmp102';
 import { Mlx90614 } from './mlx90614';
 import { Adxl345 } from './adxl345';
 import { Hmc5883l } from './hmc5883l';
+import { Tsl2561 } from './tsl2561';
 
 export type { I2cDevice } from './device';
 
@@ -120,6 +121,7 @@ export function createI2cDevice(
       if (component.device === 'mlx90614') return new Mlx90614();
       if (component.device === 'adxl345') return new Adxl345();
       if (component.device === 'hmc5883l') return new Hmc5883l();
+      if (component.device === 'tsl2561') return new Tsl2561();
       return new Hx711();
     default:
       return null;

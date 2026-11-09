@@ -23,6 +23,7 @@ import { BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB } from './bno0
 import { MLX90614_AMBIENT_KNOB, MLX90614_OBJECT_KNOB } from './mlx90614';
 import { ADXL345_X_KNOB, ADXL345_Y_KNOB, ADXL345_Z_KNOB } from './adxl345';
 import { HMC5883L_X_KNOB, HMC5883L_Y_KNOB, HMC5883L_Z_KNOB } from './hmc5883l';
+import { TSL2561_LIGHT_KNOB } from './tsl2561';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -352,6 +353,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [HMC5883L_X_KNOB, HMC5883L_Y_KNOB, HMC5883L_Z_KNOB],
   },
+  tsl2561: {
+    id: 'tsl2561-light',
+    name: 'TSL2561 Light Sensor',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [TSL2561_LIGHT_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -514,4 +525,8 @@ export function adxl345Definition(): PartDefinition {
 
 export function hmc5883lDefinition(): PartDefinition {
   return i2cSensorDefinition('hmc5883l');
+}
+
+export function tsl2561Definition(): PartDefinition {
+  return i2cSensorDefinition('tsl2561');
 }

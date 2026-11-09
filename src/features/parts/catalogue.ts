@@ -67,6 +67,7 @@ import {
   mlx90614Definition,
   adxl345Definition,
   hmc5883lDefinition,
+  tsl2561Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -630,6 +631,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A 3-axis magnetometer on the I2C bus. Reads X, Z, Y from registers 0x03-0x08. A sketch writes the mode register and reads six bytes.',
     make: hmc5883lDefinition,
+  },
+  {
+    id: 'tsl2561-light',
+    name: 'TSL2561 Light Sensor',
+    group: 'input',
+    note: 'A two-channel light sensor on the I2C bus. Reads channel 0 (visible+IR) and channel 1 (IR only) from registers 0x0C-0x0F. A sketch combines them with the datasheet lux equation.',
+    make: tsl2561Definition,
   },
   {
     id: 'ina219-current-monitor',
