@@ -68,6 +68,7 @@ import {
   adxl345Definition,
   hmc5883lDefinition,
   tsl2561Definition,
+  ccs811Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -638,6 +639,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A two-channel light sensor on the I2C bus. Reads channel 0 (visible+IR) and channel 1 (IR only) from registers 0x0C-0x0F. A sketch combines them with the datasheet lux equation.',
     make: tsl2561Definition,
+  },
+  {
+    id: 'ccs811-air-quality',
+    name: 'CCS811 Air Quality',
+    group: 'input',
+    note: 'An eCO2 and TVOC sensor on the I2C bus. Reads four bytes from ALG_RESULT_DATA. A sketch writes APP_START and reads eCO2 and TVOC.',
+    make: ccs811Definition,
   },
   {
     id: 'ina219-current-monitor',

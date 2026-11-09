@@ -247,7 +247,8 @@ export type I2cSensorVariant =
   | 'mlx90614'
   | 'adxl345'
   | 'hmc5883l'
-  | 'tsl2561';
+  | 'tsl2561'
+  | 'ccs811';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';
