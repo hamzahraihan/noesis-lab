@@ -42,6 +42,8 @@ import {
   adxl335OutputX,
   adxl335OutputY,
   adxl335OutputZ,
+  MQ2_KNOB,
+  mq2OutputVolts,
   SEVEN_SEGMENT_SEGMENTS,
   SENSOR_STIMULUS_KNOBS,
   SLIDE_POSITION_KNOB,
@@ -438,6 +440,16 @@ function elementsForPart(
       if (output === GROUND) return [];
       return [
         { kind: 'voltageSource', a: output, b: GROUND, volts: fraction, label: 'soil-moisture' },
+      ];
+    }
+
+    case 'gas-sensor': {
+      const ppm = state.knob(part.id, MQ2_KNOB);
+      const volts = mq2OutputVolts(ppm);
+      const output = nodeAt('AOUT');
+      if (output === GROUND) return [];
+      return [
+        { kind: 'voltageSource', a: output, b: GROUND, volts: volts, label: 'mq2' },
       ];
     }
 

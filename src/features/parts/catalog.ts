@@ -131,6 +131,7 @@ export type ComponentSpec =
   | { readonly kind: 'lm35' }
   | { readonly kind: 'soil-moisture' }
   | { readonly kind: 'adxl335' }
+  | { readonly kind: 'gas-sensor' }
   | { readonly kind: 'sensor-module'; readonly variant: SensorVariant }
   | { readonly kind: 'dip-switch'; readonly ways: number }
   | { readonly kind: 'slide-potentiometer'; readonly ohms: number }
