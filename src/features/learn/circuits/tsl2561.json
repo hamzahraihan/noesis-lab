@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "parts": [
+    {
+      "id": "p1",
+      "type": "arduino-uno-r3",
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "id": "p2",
+      "type": "tsl2561-light",
+      "x": 130,
+      "y": 20,
+      "rotation": 0
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "p1:5V",
+      "to": "p2:VCC",
+      "colour": "#ef4444",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w2",
+      "from": "p1:J1_GND",
+      "to": "p2:GND",
+      "colour": "#111827",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w3",
+      "from": "p1:A4",
+      "to": "p2:SDA",
+      "colour": "#facc15",
+      "gaugeAwg": 26,
+      "bends": []
+    },
+    {
+      "id": "w4",
+      "from": "p1:A5",
+      "to": "p2:SCL",
+      "colour": "#3b82f6",
+      "gaugeAwg": 26,
+      "bends": []
+    }
+  ]
+}

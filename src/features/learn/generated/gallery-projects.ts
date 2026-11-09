@@ -683,5 +683,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports X, Y, Z magnetic field counts, following the part's X, Y, Z knobs."],
+  },
+  {
+    id: "tsl2561",
+    title: "Light Meter",
+    blurb: "A TSL2561 two-channel light sensor on I2C. The sketch powers it on, reads channels 0 and 1, and prints them.",
+    parts: [{ name: "TSL2561 Light Sensor", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["tsl2561"],
+        sketch: "#include <Wire.h>\n\n// TSL2561 light sensor on I2C. The sketch reads channel 0 and channel 1\n// from registers 0x0C-0x0F and prints channel 0.\nconst byte ADDR = 0x39;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  // Power on\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x00 | 0x80);\n  Wire.write(0x03);\n  Wire.endTransmission();\n  Serial.println(\"tsl2561 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x0c | 0x80);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)4);\n  if (Wire.available() >= 4) {\n    int ch0 = Wire.read() | (Wire.read() << 8);\n    int ch1 = Wire.read() | (Wire.read() << 8);\n    Serial.print(\"ch0 \");\n    Serial.print(ch0);\n    Serial.print(\" ch1 \");\n    Serial.print(ch1);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports channel 0 and channel 1 counts, following the part's Light knob."],
   }
 ];
