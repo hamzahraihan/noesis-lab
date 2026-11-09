@@ -1480,6 +1480,28 @@
       "working": [
         "The serial log reports eCO2 and TVOC, following the part's eCO2 and TVOC knobs."
       ]
+    },
+    {
+      "id": "si7021",
+      "title": "Temp & Humidity",
+      "blurb": "An SI7021 temperature and humidity sensor on I2C. The sketch reads humidity and temperature with CRC-8 and prints them.",
+      "parts": [
+        {
+          "name": "SI7021 Temp/Humidity",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "si7021",
+          "sketch": "#include <Wire.h>\n\n// SI7021 temperature/humidity sensor on I2C. The sketch reads humidity\n// (0xF3) and temperature (0xE0) and prints them.\nconst byte ADDR = 0x40;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  Serial.println(\"si7021 up\");\n}\n\nvoid loop() {\n  // Read humidity\n  Wire.beginTransmission(ADDR);\n  Wire.write(0xF3);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)3);\n  int rh = 0;\n  if (Wire.available() >= 2) {\n    rh = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n  }\n  int humidity = (rh * 125) / 65536 - 6;\n\n  // Read temperature\n  Wire.beginTransmission(ADDR);\n  Wire.write(0xE0);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)3);\n  int rt = 0;\n  if (Wire.available() >= 2) {\n    rt = (Wire.read() << 8) | Wire.read();\n    Wire.read(); // CRC\n  }\n  int temp = (rt * 175) / 65536 - 47;\n\n  Serial.print(\"temp \");\n  Serial.print(temp);\n  Serial.print(\" humidity \");\n  Serial.print(humidity);\n  Serial.println();\n\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports temperature and humidity, following the part's Temperature and Humidity knobs."
+      ]
     }
   ]
 }

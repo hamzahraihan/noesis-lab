@@ -49,6 +49,7 @@ import circuitReaction from '../circuits/reaction.json';
 import circuitSafe from '../circuits/safe.json';
 import circuitScd40 from '../circuits/scd40.json';
 import circuitShiftRegister from '../circuits/shift-register.json';
+import circuitSi7021 from '../circuits/si7021.json';
 import circuitSoilMoisture from '../circuits/soil-moisture.json';
 import circuitSoilProbe from '../circuits/soil-probe.json';
 import circuitTm1637 from '../circuits/tm1637.json';
@@ -105,6 +106,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "safe": parseCircuit(circuitSafe, "safe"),
   "scd40": parseCircuit(circuitScd40, "scd40"),
   "shift-register": parseCircuit(circuitShiftRegister, "shift-register"),
+  "si7021": parseCircuit(circuitSi7021, "si7021"),
   "soil-moisture": parseCircuit(circuitSoilMoisture, "soil-moisture"),
   "soil-probe": parseCircuit(circuitSoilProbe, "soil-probe"),
   "tm1637": parseCircuit(circuitTm1637, "tm1637"),
