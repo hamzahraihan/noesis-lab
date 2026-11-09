@@ -1458,6 +1458,28 @@
       "working": [
         "The serial log reports channel 0 and channel 1 counts, following the part's Light knob."
       ]
+    },
+    {
+      "id": "ccs811",
+      "title": "Air Quality Monitor",
+      "blurb": "A CCS811 air quality sensor on I2C. The sketch starts the application, sets measurement mode, and reads eCO2 and TVOC.",
+      "parts": [
+        {
+          "name": "CCS811 Air Quality",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "ccs811",
+          "sketch": "#include <Wire.h>\n\n// CCS811 air quality sensor on I2C. The sketch starts the application,\n// sets measurement mode, and reads eCO2 and TVOC from ALG_RESULT_DATA.\nconst byte ADDR = 0x5A;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  // Start application\n  Wire.beginTransmission(ADDR);\n  Wire.write(0xF4);\n  Wire.endTransmission();\n  delay(100);\n  // Set measurement mode to 1s\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x01);\n  Wire.write(0x10);\n  Wire.endTransmission();\n  Serial.println(\"ccs811 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x02);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)4);\n  if (Wire.available() >= 4) {\n    int eco2 = (Wire.read() << 8) | Wire.read();\n    int tvoc = (Wire.read() << 8) | Wire.read();\n    Serial.print(\"eco2 \");\n    Serial.print(eco2);\n    Serial.print(\" tvoc \");\n    Serial.print(tvoc);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports eCO2 and TVOC, following the part's eCO2 and TVOC knobs."
+      ]
     }
   ]
 }

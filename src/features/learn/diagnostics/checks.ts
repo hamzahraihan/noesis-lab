@@ -5,7 +5,7 @@
  * a circular dependency (registry.ts consumes the generated CHECKS_MAP).
  */
 
-import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, DHT22_TEMPERATURE_KNOB, MLX90614_AMBIENT_KNOB, ADXL345_X_KNOB, HMC5883L_X_KNOB, TSL2561_LIGHT_KNOB, SEGMENT_MAP } from '@/features/parts';
+import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, DHT22_TEMPERATURE_KNOB, MLX90614_AMBIENT_KNOB, ADXL345_X_KNOB, HMC5883L_X_KNOB, TSL2561_LIGHT_KNOB, CCS811_ECO2_KNOB, SEGMENT_MAP } from '@/features/parts';
 import {
   convergeGlass,
   FIVE_GLYPH,
@@ -2532,6 +2532,47 @@ export function tsl2561Checks(build: GalleryBuild): CheckDef[] {
             started,
             'fail',
             `the sketch read ${ch0} and the knob is at ${expectedCh0}`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
+ * ccs811 on uno: the reading follows the eCO2 knob.
+ *
+ * The sensor reports eCO2 and TVOC on ALG_RESULT_DATA. The sketch reads
+ * four bytes and prints eCO2. The reported value has to agree with the
+ * knob.
+ * ------------------------------------------------------------------ */
+
+export function ccs811Checks(build: GalleryBuild): CheckDef[] {
+  const sensor = build.circuit.parts?.find((part) => part.type === 'ccs811-air-quality')?.id;
+  return [
+    {
+      name: 'the reading follows the eCO2 knob',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the reading follows the eCO2 knob';
+        const knob = sim.knob;
+        if (knob === undefined || sensor === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read the sensor knob');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        const reported = /eco2 ([\d]+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report an eCO2 value');
+        }
+        const eco2 = Number(reported[1]);
+        const expectedEco2 = knob(sensor, CCS811_ECO2_KNOB.id);
+        if (Math.abs(eco2 - expectedEco2) > 5) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the sketch read ${eco2} and the knob is at ${expectedEco2}`,
           );
         }
         return verdict(name, started, 'pass');

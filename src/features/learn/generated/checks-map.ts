@@ -45,6 +45,7 @@ import {
   adxl345Checks,
   hmc5883lChecks,
   tsl2561Checks,
+  ccs811Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -97,4 +98,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "adxl345": (build) => adxl345Checks(build),
   "hmc5883l": (build) => hmc5883lChecks(build),
   "tsl2561": (build) => tsl2561Checks(build),
+  "ccs811": (build) => ccs811Checks(build),
 };
