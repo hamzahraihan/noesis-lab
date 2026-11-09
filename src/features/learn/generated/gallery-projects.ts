@@ -638,5 +638,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports temperature in degrees Celsius, following the part's Temperature knob.", "Turn the knob past 30 C and the light comes on."],
+  },
+  {
+    id: "mlx90614",
+    title: "IR Thermometer",
+    blurb: "An MLX90614 IR temperature sensor on I2C. The sketch reads the ambient temperature register and prints it.",
+    parts: [{ name: "MLX90614 IR Temperature", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["mlx90614"],
+        sketch: "#include <Wire.h>\n\n// MLX90614 IR temperature sensor on I2C. The sketch reads the ambient\n// temperature register (0x06) and prints it.\nconst byte ADDR = 0x5A;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  Serial.println(\"mlx90614 up\");\n}\n\nvoid readTemp(byte reg) {\n  Wire.beginTransmission(ADDR);\n  Wire.write(reg);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)3);\n  if (Wire.available() >= 2) {\n    byte lo = Wire.read();\n    byte hi = Wire.read();\n    Wire.read(); // PEC\n    int raw = lo | (hi << 8);\n    int celsius = raw * 2 / 100 - 273;\n    Serial.print(\"ambient \");\n    Serial.print(celsius);\n    Serial.println(\" C\");\n  }\n}\n\nvoid loop() {\n  readTemp(0x06);\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports ambient temperature in degrees Celsius, following the part's Ambient temperature knob."],
   }
 ];
