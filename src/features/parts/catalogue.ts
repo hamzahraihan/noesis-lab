@@ -66,6 +66,7 @@ import {
   bno055Definition,
   mlx90614Definition,
   adxl345Definition,
+  hmc5883lDefinition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -622,6 +623,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A digital three-axis accelerometer on the I2C bus. Reads X, Y, Z acceleration from registers 0x32-0x37. A sketch writes POWER_CTL to start measuring, then reads six bytes.',
     make: adxl345Definition,
+  },
+  {
+    id: 'hmc5883l-compass',
+    name: 'HMC5883L Compass',
+    group: 'input',
+    note: 'A 3-axis magnetometer on the I2C bus. Reads X, Z, Y from registers 0x03-0x08. A sketch writes the mode register and reads six bytes.',
+    make: hmc5883lDefinition,
   },
   {
     id: 'ina219-current-monitor',

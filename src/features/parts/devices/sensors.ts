@@ -22,6 +22,7 @@ import { APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB }
 import { BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB } from './bno055';
 import { MLX90614_AMBIENT_KNOB, MLX90614_OBJECT_KNOB } from './mlx90614';
 import { ADXL345_X_KNOB, ADXL345_Y_KNOB, ADXL345_Z_KNOB } from './adxl345';
+import { HMC5883L_X_KNOB, HMC5883L_Y_KNOB, HMC5883L_Z_KNOB } from './hmc5883l';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -341,6 +342,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [ADXL345_X_KNOB, ADXL345_Y_KNOB, ADXL345_Z_KNOB],
   },
+  hmc5883l: {
+    id: 'hmc5883l-compass',
+    name: 'HMC5883L Compass',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [HMC5883L_X_KNOB, HMC5883L_Y_KNOB, HMC5883L_Z_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -499,4 +510,8 @@ export function mlx90614Definition(): PartDefinition {
 
 export function adxl345Definition(): PartDefinition {
   return i2cSensorDefinition('adxl345');
+}
+
+export function hmc5883lDefinition(): PartDefinition {
+  return i2cSensorDefinition('hmc5883l');
 }
