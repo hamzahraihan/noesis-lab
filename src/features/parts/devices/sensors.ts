@@ -25,6 +25,7 @@ import { ADXL345_X_KNOB, ADXL345_Y_KNOB, ADXL345_Z_KNOB } from './adxl345';
 import { HMC5883L_X_KNOB, HMC5883L_Y_KNOB, HMC5883L_Z_KNOB } from './hmc5883l';
 import { TSL2561_LIGHT_KNOB } from './tsl2561';
 import { CCS811_ECO2_KNOB, CCS811_TVOC_KNOB } from './ccs811';
+import { SI7021_TEMPERATURE_KNOB, SI7021_HUMIDITY_KNOB } from './si7021';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -374,6 +375,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [CCS811_ECO2_KNOB, CCS811_TVOC_KNOB],
   },
+  si7021: {
+    id: 'si7021-temp-humidity',
+    name: 'SI7021 Temp/Humidity',
+    widthMm: 21.5,
+    heightMm: 20,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [SI7021_TEMPERATURE_KNOB, SI7021_HUMIDITY_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -544,4 +555,8 @@ export function tsl2561Definition(): PartDefinition {
 
 export function ccs811Definition(): PartDefinition {
   return i2cSensorDefinition('ccs811');
+}
+
+export function si7021Definition(): PartDefinition {
+  return i2cSensorDefinition('si7021');
 }

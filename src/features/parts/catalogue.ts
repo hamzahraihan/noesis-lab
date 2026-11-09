@@ -69,6 +69,7 @@ import {
   hmc5883lDefinition,
   tsl2561Definition,
   ccs811Definition,
+  si7021Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -646,6 +647,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'An eCO2 and TVOC sensor on the I2C bus. Reads four bytes from ALG_RESULT_DATA. A sketch writes APP_START and reads eCO2 and TVOC.',
     make: ccs811Definition,
+  },
+  {
+    id: 'si7021-temp-humidity',
+    name: 'SI7021 Temp/Humidity',
+    group: 'input',
+    note: 'A digital temperature and humidity sensor on the I2C bus. Reads humidity (0xF3) and temperature (0xE0) with CRC-8. A sketch sends a command and reads three bytes.',
+    make: si7021Definition,
   },
   {
     id: 'ina219-current-monitor',
