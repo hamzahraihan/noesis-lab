@@ -668,5 +668,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports X, Y, Z acceleration counts, following the part's X, Y, Z knobs."],
+  },
+  {
+    id: "hmc5883l",
+    title: "Digital Compass",
+    blurb: "An HMC5883L 3-axis magnetometer on I2C. The sketch sets gain and mode, reads X/Y/Z from the data registers, and prints them.",
+    parts: [{ name: "HMC5883L Compass", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["hmc5883l"],
+        sketch: "#include <Wire.h>\n\n// HMC5883L magnetometer on I2C. The sketch reads X, Y, Z magnetic field\n// from registers 0x03-0x08 and prints them.\nconst byte ADDR = 0x1E;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  // Set gain and mode\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x01);\n  Wire.write(0x20);\n  Wire.endTransmission();\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x02);\n  Wire.write(0x00);\n  Wire.endTransmission();\n  Serial.println(\"hmc5883l up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x03);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)6);\n  if (Wire.available() >= 6) {\n    int x = (Wire.read() << 8) | Wire.read();\n    int z = (Wire.read() << 8) | Wire.read();\n    int y = (Wire.read() << 8) | Wire.read();\n    Serial.print(\"x \");\n    Serial.print(x);\n    Serial.print(\" y \");\n    Serial.print(y);\n    Serial.print(\" z \");\n    Serial.print(z);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports X, Y, Z magnetic field counts, following the part's X, Y, Z knobs."],
   }
 ];
