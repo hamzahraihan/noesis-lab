@@ -1392,6 +1392,28 @@
       "working": [
         "The serial log reports ambient temperature in degrees Celsius, following the part's Ambient temperature knob."
       ]
+    },
+    {
+      "id": "adxl345",
+      "title": "Digital Accelerometer",
+      "blurb": "An ADXL345 three-axis accelerometer on I2C. The sketch enables measurement, reads X/Y/Z from the data registers, and prints them.",
+      "parts": [
+        {
+          "name": "ADXL345 Accelerometer",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "adxl345",
+          "sketch": "#include <Wire.h>\n\n// ADXL345 accelerometer on I2C. The sketch reads X, Y, Z acceleration\n// from registers 0x32-0x37 and prints them.\nconst byte ADDR = 0x53;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  // Enable measurement\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x2D);\n  Wire.write(0x08);\n  Wire.endTransmission();\n  Serial.println(\"adxl345 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x32);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)6);\n  if (Wire.available() >= 6) {\n    int x = Wire.read() | (Wire.read() << 8);\n    int y = Wire.read() | (Wire.read() << 8);\n    int z = Wire.read() | (Wire.read() << 8);\n    Serial.print(\"x \");\n    Serial.print(x);\n    Serial.print(\" y \");\n    Serial.print(y);\n    Serial.print(\" z \");\n    Serial.print(z);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports X, Y, Z acceleration counts, following the part's X, Y, Z knobs."
+      ]
     }
   ]
 }
