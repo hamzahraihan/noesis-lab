@@ -25,6 +25,7 @@ export * from './devices/hmc5883l';
 export * from './devices/tsl2561';
 export * from './devices/ccs811';
 export * from './devices/si7021';
+export * from './devices/veml6075';
 export * from './devices/mlx90614';
 export * from './devices/soil-moisture';
 export * from './devices/vl53l0x';

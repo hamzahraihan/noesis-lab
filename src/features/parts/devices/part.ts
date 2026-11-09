@@ -44,6 +44,7 @@ import { Hmc5883l } from './hmc5883l';
 import { Tsl2561 } from './tsl2561';
 import { Ccs811 } from './ccs811';
 import { Si7021 } from './si7021';
+import { Veml6075 } from './veml6075';
 
 export type { I2cDevice } from './device';
 
@@ -126,6 +127,7 @@ export function createI2cDevice(
       if (component.device === 'tsl2561') return new Tsl2561();
       if (component.device === 'ccs811') return new Ccs811();
       if (component.device === 'si7021') return new Si7021();
+      if (component.device === 'veml6075') return new Veml6075();
       return new Hx711();
     default:
       return null;

@@ -70,6 +70,7 @@ import {
   tsl2561Definition,
   ccs811Definition,
   si7021Definition,
+  veml6075Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -654,6 +655,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A digital temperature and humidity sensor on the I2C bus. Reads humidity (0xF3) and temperature (0xE0) with CRC-8. A sketch sends a command and reads three bytes.',
     make: si7021Definition,
+  },
+  {
+    id: 'veml6075-uv',
+    name: 'VEML6075 UV Sensor',
+    group: 'input',
+    note: 'A UVA/UVB light sensor on the I2C bus. Reads UVA and UVB counts from registers 0x01-0x04. A sketch reads four bytes and computes UV index.',
+    make: veml6075Definition,
   },
   {
     id: 'ina219-current-monitor',
