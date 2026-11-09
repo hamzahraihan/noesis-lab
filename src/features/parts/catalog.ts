@@ -244,7 +244,8 @@ export type I2cSensorVariant =
   | 'bme680'
   | 'apds9960'
   | 'bno055'
-  | 'mlx90614';
+  | 'mlx90614'
+  | 'adxl345';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

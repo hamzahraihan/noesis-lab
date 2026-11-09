@@ -65,6 +65,7 @@ import {
   apds9960Definition,
   bno055Definition,
   mlx90614Definition,
+  adxl345Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -614,6 +615,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'A non-contact IR thermometer on the I2C bus. Reads ambient and object temperature from registers 0x06 and 0x07. A sketch writes the register address and reads three bytes (low, high, PEC).',
     make: mlx90614Definition,
+  },
+  {
+    id: 'adxl345-accel',
+    name: 'ADXL345 Accelerometer',
+    group: 'input',
+    note: 'A digital three-axis accelerometer on the I2C bus. Reads X, Y, Z acceleration from registers 0x32-0x37. A sketch writes POWER_CTL to start measuring, then reads six bytes.',
+    make: adxl345Definition,
   },
   {
     id: 'ina219-current-monitor',

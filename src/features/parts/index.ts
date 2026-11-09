@@ -20,6 +20,7 @@ export * from './devices/bno055';
 export * from './devices/adxl335';
 export * from './devices/dht22';
 export * from './devices/mq2';
+export * from './devices/adxl345';
 export * from './devices/mlx90614';
 export * from './devices/soil-moisture';
 export * from './devices/vl53l0x';

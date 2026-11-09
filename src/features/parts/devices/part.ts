@@ -39,6 +39,7 @@ import { ScriptedI2cDevice } from './scripted';
 import { Sht31 } from './sht31';
 import { Tmp102 } from './tmp102';
 import { Mlx90614 } from './mlx90614';
+import { Adxl345 } from './adxl345';
 
 export type { I2cDevice } from './device';
 
@@ -116,6 +117,7 @@ export function createI2cDevice(
       if (component.device === 'bno055') return new Bno055();
       if (component.device === 'vl53l0x') return new Vl53l0x();
       if (component.device === 'mlx90614') return new Mlx90614();
+      if (component.device === 'adxl345') return new Adxl345();
       return new Hx711();
     default:
       return null;
