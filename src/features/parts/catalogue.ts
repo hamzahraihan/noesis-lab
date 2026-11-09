@@ -64,6 +64,7 @@ import {
   bme680Definition,
   apds9960Definition,
   bno055Definition,
+  mlx90614Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -606,6 +607,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Heading, pitch and roll over I2C — the nine-axis sensor with a magnetometer and sensor fusion. The sketch reads the orientation registers back.',
     make: bno055Definition,
+  },
+  {
+    id: 'mlx90614-ir-temp',
+    name: 'MLX90614 IR Temperature',
+    group: 'input',
+    note: 'A non-contact IR thermometer on the I2C bus. Reads ambient and object temperature from registers 0x06 and 0x07. A sketch writes the register address and reads three bytes (low, high, PEC).',
+    make: mlx90614Definition,
   },
   {
     id: 'ina219-current-monitor',

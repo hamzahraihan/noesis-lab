@@ -38,6 +38,7 @@ import { Eeprom24lc256 } from './eeprom24lc256';
 import { ScriptedI2cDevice } from './scripted';
 import { Sht31 } from './sht31';
 import { Tmp102 } from './tmp102';
+import { Mlx90614 } from './mlx90614';
 
 export type { I2cDevice } from './device';
 
@@ -114,6 +115,7 @@ export function createI2cDevice(
       if (component.device === 'apds9960') return new Apds9960();
       if (component.device === 'bno055') return new Bno055();
       if (component.device === 'vl53l0x') return new Vl53l0x();
+      if (component.device === 'mlx90614') return new Mlx90614();
       return new Hx711();
     default:
       return null;

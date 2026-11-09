@@ -20,6 +20,7 @@ import { MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB } from './max30102';
 import { BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB } from './bme680';
 import { APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB } from './apds9960';
 import { BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB } from './bno055';
+import { MLX90614_AMBIENT_KNOB, MLX90614_OBJECT_KNOB } from './mlx90614';
 import { VL53L0X_DISTANCE_KNOB } from './vl53l0x';
 import { DS3231_TEMPERATURE_KNOB } from './ds3231';
 import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from './ina219';
@@ -319,6 +320,16 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB],
   },
+  mlx90614: {
+    id: 'mlx90614-ir-temp',
+    name: 'MLX90614 IR Temperature',
+    widthMm: 18.5,
+    heightMm: 16,
+    bodyColour: '#1e3a5f',
+    legendColour: '#e8f2ff',
+    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
+    knobs: [MLX90614_AMBIENT_KNOB, MLX90614_OBJECT_KNOB],
+  },
 };
 
 function headerPins(module: I2cModule): PinSpec[] {
@@ -469,4 +480,8 @@ export function apds9960Definition(): PartDefinition {
 /** BNO055 absolute orientation sensor: heading, pitch and roll over I2C. */
 export function bno055Definition(): PartDefinition {
   return i2cSensorDefinition('bno055');
+}
+
+export function mlx90614Definition(): PartDefinition {
+  return i2cSensorDefinition('mlx90614');
 }
