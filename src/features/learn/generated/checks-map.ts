@@ -47,6 +47,7 @@ import {
   tsl2561Checks,
   ccs811Checks,
   si7021Checks,
+  veml6075Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -101,4 +102,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "tsl2561": (build) => tsl2561Checks(build),
   "ccs811": (build) => ccs811Checks(build),
   "si7021": (build) => si7021Checks(build),
+  "veml6075": (build) => veml6075Checks(build),
 };

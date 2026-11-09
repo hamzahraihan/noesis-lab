@@ -5,7 +5,7 @@
  * a circular dependency (registry.ts consumes the generated CHECKS_MAP).
  */
 
-import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, DHT22_TEMPERATURE_KNOB, MLX90614_AMBIENT_KNOB, ADXL345_X_KNOB, HMC5883L_X_KNOB, TSL2561_LIGHT_KNOB, CCS811_ECO2_KNOB, SI7021_TEMPERATURE_KNOB, SEGMENT_MAP } from '@/features/parts';
+import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, DHT22_TEMPERATURE_KNOB, MLX90614_AMBIENT_KNOB, ADXL345_X_KNOB, HMC5883L_X_KNOB, TSL2561_LIGHT_KNOB, CCS811_ECO2_KNOB, SI7021_TEMPERATURE_KNOB, VEML6075_UVA_KNOB, SEGMENT_MAP } from '@/features/parts';
 import {
   convergeGlass,
   FIVE_GLYPH,
@@ -2614,6 +2614,46 @@ export function si7021Checks(build: GalleryBuild): CheckDef[] {
             started,
             'fail',
             `the sketch read ${temp} C and the knob is at ${expectedTemp}`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
+ * veml6075 on uno: the reading follows the UVA knob.
+ *
+ * The sensor reports UVA and UVB counts. The sketch reads four bytes
+ * and prints UVA. The reported value has to agree with the knob.
+ * ------------------------------------------------------------------ */
+
+export function veml6075Checks(build: GalleryBuild): CheckDef[] {
+  const sensor = build.circuit.parts?.find((part) => part.type === 'veml6075-uv')?.id;
+  return [
+    {
+      name: 'the reading follows the UVA knob',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the reading follows the UVA knob';
+        const knob = sim.knob;
+        if (knob === undefined || sensor === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read the sensor knob');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        const reported = /uva ([\d]+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report a UVA count');
+        }
+        const uva = Number(reported[1]);
+        const expectedUva = knob(sensor, VEML6075_UVA_KNOB.id);
+        if (Math.abs(uva - expectedUva) > 5) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the sketch read ${uva} and the knob is at ${expectedUva}`,
           );
         }
         return verdict(name, started, 'pass');

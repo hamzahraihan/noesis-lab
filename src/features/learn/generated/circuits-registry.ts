@@ -54,6 +54,7 @@ import circuitSoilMoisture from '../circuits/soil-moisture.json';
 import circuitSoilProbe from '../circuits/soil-probe.json';
 import circuitTm1637 from '../circuits/tm1637.json';
 import circuitTsl2561 from '../circuits/tsl2561.json';
+import circuitVeml6075 from '../circuits/veml6075.json';
 import circuitVl53l0x from '../circuits/vl53l0x.json';
 import circuitWeather from '../circuits/weather.json';
 
@@ -111,6 +112,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "soil-probe": parseCircuit(circuitSoilProbe, "soil-probe"),
   "tm1637": parseCircuit(circuitTm1637, "tm1637"),
   "tsl2561": parseCircuit(circuitTsl2561, "tsl2561"),
+  "veml6075": parseCircuit(circuitVeml6075, "veml6075"),
   "vl53l0x": parseCircuit(circuitVl53l0x, "vl53l0x"),
   "weather": parseCircuit(circuitWeather, "weather"),
 };

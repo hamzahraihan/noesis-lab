@@ -1502,6 +1502,28 @@
       "working": [
         "The serial log reports temperature and humidity, following the part's Temperature and Humidity knobs."
       ]
+    },
+    {
+      "id": "veml6075",
+      "title": "UV Meter",
+      "blurb": "A VEML6075 UV sensor on I2C. The sketch reads UVA and UVB counts and prints them.",
+      "parts": [
+        {
+          "name": "VEML6075 UV Sensor",
+          "qty": 1
+        }
+      ],
+      "builds": [
+        {
+          "board": "uno",
+          "circuit": "veml6075",
+          "sketch": "#include <Wire.h>\n\n// VEML6075 UV sensor on I2C. The sketch reads UVA and UVB counts\n// from registers 0x01-0x04 and prints them.\nconst byte ADDR = 0x10;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  Serial.println(\"veml6075 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x01);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)4);\n  if (Wire.available() >= 4) {\n    int uva = Wire.read() | (Wire.read() << 8);\n    int uvb = Wire.read() | (Wire.read() << 8);\n    Serial.print(\"uva \");\n    Serial.print(uva);\n    Serial.print(\" uvb \");\n    Serial.print(uvb);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+          "libraries": []
+        }
+      ],
+      "working": [
+        "The serial log reports UVA and UVB counts, following the part's UVA and UVB knobs."
+      ]
     }
   ]
 }
