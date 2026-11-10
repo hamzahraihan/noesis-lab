@@ -48,7 +48,6 @@
     "avr8js": "0.21.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "esp32-emu": "^1.2.0",
     "littlefs": "0.1.0",
     "lucide-react": "^1.52.0",
     "lz-string": "^1.5.0",
