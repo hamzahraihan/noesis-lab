@@ -5,7 +5,7 @@
  * a circular dependency (registry.ts consumes the generated CHECKS_MAP).
  */
 
-import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, DHT22_TEMPERATURE_KNOB, MLX90614_AMBIENT_KNOB, ADXL345_X_KNOB, HMC5883L_X_KNOB, TSL2561_LIGHT_KNOB, CCS811_ECO2_KNOB, SI7021_TEMPERATURE_KNOB, VEML6075_UVA_KNOB, SGP30_ECO2_KNOB, SEGMENT_MAP } from '@/features/parts';
+import { DS3231_TEMPERATURE_KNOB, BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB, LM35_TEMPERATURE_KNOB, MOISTURE_KNOB, VL53L0X_DISTANCE_KNOB, BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB, AHT20_TEMPERATURE_KNOB, AHT20_HUMIDITY_KNOB, SCD40_CO2_KNOB, SCD40_TEMPERATURE_KNOB, SCD40_HUMIDITY_KNOB, MAX30102_HEART_RATE_KNOB, MAX30102_SPO2_KNOB, BME680_PRESSURE_KNOB, BME680_TEMPERATURE_KNOB, BME680_HUMIDITY_KNOB, BME680_GAS_KNOB, APDS9960_PROXIMITY_KNOB, APDS9960_AMBIENT_KNOB, APDS9960_GESTURE_KNOB, BNO055_HEADING_KNOB, BNO055_PITCH_KNOB, BNO055_ROLL_KNOB, ADXL335_X_KNOB, ADXL335_Y_KNOB, ADXL335_Z_KNOB, MQ2_KNOB, DHT22_TEMPERATURE_KNOB, MLX90614_AMBIENT_KNOB, ADXL345_X_KNOB, HMC5883L_X_KNOB, TSL2561_LIGHT_KNOB, CCS811_ECO2_KNOB, SI7021_TEMPERATURE_KNOB, VEML6075_UVA_KNOB, SGP30_ECO2_KNOB, MAX30100_HEART_RATE_KNOB, SEGMENT_MAP } from '@/features/parts';
 import {
   convergeGlass,
   FIVE_GLYPH,
@@ -2695,6 +2695,47 @@ export function sgp30Checks(build: GalleryBuild): CheckDef[] {
             started,
             'fail',
             `the sketch read ${eco2} and the knob is at ${expectedEco2}`,
+          );
+        }
+        return verdict(name, started, 'pass');
+      },
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
+ * max30100 on uno: the reading follows the heart rate knob.
+ *
+ * The sensor reports IR and red counts. The sketch reads four bytes
+ * and prints IR. The reported value has to agree with the knob.
+ * ------------------------------------------------------------------ */
+
+export function max30100Checks(build: GalleryBuild): CheckDef[] {
+  const sensor = build.circuit.parts?.find((part) => part.type === 'max30100-pulse')?.id;
+  return [
+    {
+      name: 'the reading follows the heart rate knob',
+      run: (sim) => {
+        const started = performance.now();
+        const name = 'the reading follows the heart rate knob';
+        const knob = sim.knob;
+        if (knob === undefined || sensor === undefined) {
+          return verdict(name, started, 'skip', 'the bench cannot read the sensor knob');
+        }
+        for (let frame = 0; frame < 30; frame++) sim.tick(0.05);
+        const reported = /ir ([\d]+)/.exec(sim.serialText());
+        if (reported === null) {
+          return verdict(name, started, 'fail', 'the sketch did not report an IR count');
+        }
+        const ir = Number(reported[1]);
+        const expectedHr = knob(sensor, MAX30100_HEART_RATE_KNOB.id);
+        const expectedIr = expectedHr * 16;
+        if (Math.abs(ir - expectedIr) > 5) {
+          return verdict(
+            name,
+            started,
+            'fail',
+            `the sketch read ${ir} and the knob is at ${expectedIr}`,
           );
         }
         return verdict(name, started, 'pass');

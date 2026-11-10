@@ -33,6 +33,7 @@ import circuitExpanderInterrupt from '../circuits/expander-interrupt.json';
 import circuitHmc5883l from '../circuits/hmc5883l.json';
 import circuitInstrumentBench from '../circuits/instrument-bench.json';
 import circuitLm35 from '../circuits/lm35.json';
+import circuitMax30100 from '../circuits/max30100.json';
 import circuitMax30102 from '../circuits/max30102.json';
 import circuitMax6675 from '../circuits/max6675.json';
 import circuitMax7219 from '../circuits/max7219.json';
@@ -92,6 +93,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "hmc5883l": parseCircuit(circuitHmc5883l, "hmc5883l"),
   "instrument-bench": parseCircuit(circuitInstrumentBench, "instrument-bench"),
   "lm35": parseCircuit(circuitLm35, "lm35"),
+  "max30100": parseCircuit(circuitMax30100, "max30100"),
   "max30102": parseCircuit(circuitMax30102, "max30102"),
   "max6675": parseCircuit(circuitMax6675, "max6675"),
   "max7219": parseCircuit(circuitMax7219, "max7219"),

@@ -49,6 +49,7 @@ import {
   si7021Checks,
   veml6075Checks,
   sgp30Checks,
+  max30100Checks,
   eepromChecks,
   max7219Checks,
   nokia5110Checks,
@@ -105,4 +106,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "si7021": (build) => si7021Checks(build),
   "veml6075": (build) => veml6075Checks(build),
   "sgp30": (build) => sgp30Checks(build),
+  "max30100": (build) => max30100Checks(build),
 };

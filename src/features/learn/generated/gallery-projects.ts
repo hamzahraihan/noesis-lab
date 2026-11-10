@@ -758,5 +758,20 @@ export const GALLERY: readonly (GalleryProject & { readonly id: GalleryProjectId
       }
     ],
     working: ["The serial log reports eCO2 and TVOC, following the part's eCO2 and TVOC knobs."],
+  },
+  {
+    id: "max30100",
+    title: "Pulse Oximeter (MAX30100)",
+    blurb: "A MAX30100 pulse oximeter on I2C. The sketch reads IR and red counts from FIFO_DATA and prints them.",
+    parts: [{ name: "MAX30100 Pulse Ox", qty: 1 }],
+    builds: [
+      {
+        board: "uno",
+        circuit: CIRCUITS["max30100"],
+        sketch: "#include <Wire.h>\n\n// MAX30100 pulse oximeter on I2C. The sketch reads IR and red counts\n// from FIFO_DATA and prints them.\nconst byte ADDR = 0x57;\n\nvoid setup() {\n  Serial.begin(115200);\n  Wire.begin();\n  Serial.println(\"max30100 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(ADDR);\n  Wire.write(0x05);\n  Wire.endTransmission(false);\n  Wire.requestFrom(ADDR, (byte)4);\n  if (Wire.available() >= 4) {\n    int ir = (Wire.read() << 8) | Wire.read();\n    int red = (Wire.read() << 8) | Wire.read();\n    Serial.print(\"ir \");\n    Serial.print(ir);\n    Serial.print(\" red \");\n    Serial.print(red);\n    Serial.println();\n  }\n  delay(500);\n}\n",
+        libraries: []
+      }
+    ],
+    working: ["The serial log reports IR and red counts, following the part's Heart rate and SpO2 knobs."],
   }
 ];
