@@ -156,10 +156,12 @@ feature it has but has not written down would not show.
    and watchpoints and attaches remotely. The symbols for those are already
    in the ELF, so the next slice is DWARF variable and location reading
    rather than a new execution path.
-6. **ESP32 machine code** (part of 63/48). The largest lift with the least
-   certain payoff. No maintained open Xtensa core exists to drop in, and
-   the interpreter already covers the curriculum. Treat as its own spike only
-   if instruction-level ESP32 fidelity becomes a product goal.
+6. **ESP32 machine code** (part of 63/48). A maintained open Xtensa core does
+   exist now (`esp32-emu`), but it does not close the gap: it boots a prebuilt
+   image, it does not compile one, and the blocker is the missing Xtensa
+   toolchain, not the core. Measured in Node, its MicroPython boot took 14.4 s
+   against about 2.5 s for the path the bench already runs. See
+   `docs/adr/0001-drop-esp32-machine-execution-path.md`.
 
 ## The ceiling, stated honestly
 
