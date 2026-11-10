@@ -58,7 +58,6 @@ import avrCoreWasmUrl from '../avr/wasm/avr-core.wasm?url';
 import { hexForSourcesHash, parseIntelHex, sourcesHashForProject } from '../avr/hex';
 import { Rp2040Backend } from '../rp2040/core';
 import { fetchRp2040Assets, type Rp2040Assets } from '../rp2040/assets';
-import { Esp32MachineBackend } from '../esp32-machine/backend';
 import { buildLittlefsImage } from '../rp2040/image';
 import type { Rp2040Hooks } from '../rp2040/backend';
 import { Esp32Backend } from '../esp32/core';
@@ -173,7 +172,7 @@ export interface CoreHandle {
   rebuild(
     bench: Bench,
     firmware: FirmwareProject,
-    execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine',
+    execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32',
     wasm?: boolean,
     fetchWasm?: () => Promise<ArrayBuffer>,
     fetchRp2040?: () => Promise<Rp2040Assets>,
@@ -295,7 +294,7 @@ class SimCore implements CoreHandle {
   private debugger: FirmwareDebugger | null = null;
   private avrBackend: AvrBackend | null = null;
   private gdbProtocol: GdbRemoteProtocol | null = null;
-  private executionMode: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine' = 'interpreter';
+  private executionMode: 'interpreter' | 'avr' | 'rp2040' | 'esp32' = 'interpreter';
   private avrSettledRevision = -1;
   private wantWasm = false;
   private wasmDemoted = false;
@@ -326,12 +325,6 @@ class SimCore implements CoreHandle {
   /** Bumped by every rebuild; an attach whose generation is stale never lands. */
   private esp32Generation = 0;
 
-  /** ESP32 machine code backend (esp32-emu) for C++ sketches. */
-  private esp32MachineBackend: Esp32MachineBackend | null = null;
-  /** True from an esp32-machine rebuild until its chip has booted (or failed). */
-  private esp32MachinePending = false;
-  /** Bumped by every rebuild; an attach whose generation is stale never lands. */
-  private esp32MachineGeneration = 0;
   private pendingDelayMs = 0;
   // Fault-cause contract: Wasm attach failures must set a `'wasm ...'`-prefixed
   // cause here without touching the interpreter runner (reserved: the
@@ -587,7 +580,7 @@ class SimCore implements CoreHandle {
   rebuild(
     bench: Bench,
     firmware: FirmwareProject,
-    execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32' | 'esp32-machine',
+    execution: 'interpreter' | 'avr' | 'rp2040' | 'esp32',
     wasm = false,
     fetchWasm: () => Promise<ArrayBuffer> = defaultFetchWasmBytes,
     fetchRp2040: () => Promise<Rp2040Assets> = fetchRp2040Assets,
@@ -644,16 +637,11 @@ class SimCore implements CoreHandle {
     this.esp32Backend = null;
     this.esp32Generation += 1;
     this.esp32Pending = execution === 'esp32';
-    this.esp32MachineBackend = null;
-    this.esp32MachineGeneration += 1;
-    this.esp32MachinePending = execution === 'esp32-machine';
     if (execution === 'avr') this.tryFlashAvr(firmware);
     if (execution === 'rp2040')
       void this.attachRp2040Async(firmware, this.rp2040Generation, fetchRp2040);
     if (execution === 'esp32')
       void this.attachEsp32Async(firmware, this.esp32Generation, fetchEsp32);
-    if (execution === 'esp32-machine')
-      void this.attachEsp32MachineAsync(firmware, this.esp32MachineGeneration);
     this.engine.rebuild(bench, this.controls);
     this.ensureScriptedRuntime();
     this.engine.settle();
@@ -703,16 +691,6 @@ class SimCore implements CoreHandle {
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
       }
-      if (this.esp32MachineBackend) {
-        this.esp32MachineBackend.step(Math.max(frameEnd - this.engine.timeMs, 0));
-        this.engine.settle();
-        if (this.esp32MachineBackend.fault) {
-          this.faultText = this.esp32MachineBackend.fault;
-          this.esp32MachineBackend = null;
-        }
-        this.advanceBy(frameEnd - this.engine.timeMs);
-        return;
-      }
       /*
        * An rp2040 machine boots asynchronously (artifacts, then the image).
        * Until it lands nothing executes: time still advances, so Run, Reset and
@@ -730,14 +708,6 @@ class SimCore implements CoreHandle {
        * nothing executes, for the same reason.
        */
       if (this.esp32Pending) {
-        this.advanceBy(frameEnd - this.engine.timeMs);
-        return;
-      }
-      /*
-       * The ESP32 machine code boots the same way: its WASM engine and ROM
-       * arrive before the chip runs. Until it lands nothing executes.
-       */
-      if (this.esp32MachinePending) {
         this.advanceBy(frameEnd - this.engine.timeMs);
         return;
       }
@@ -1167,43 +1137,6 @@ class SimCore implements CoreHandle {
       // An explicit ESP32 mode does not silently fall back to the
       // interpreter: the mode asked for the real chip, and a Python front end
       // that happens to accept the files is a different engine.
-      this.runner = null;
-    }
-  }
-
-  /**
-   * Async attach for `execution === 'esp32-machine'`: fetch the esp32-emu
-   * assets, create the backend, and start it with the user's firmware image.
-   * Generation-gated so a stale attach never lands.
-   */
-  private async attachEsp32MachineAsync(
-    firmware: FirmwareProject,
-    generation: number,
-  ): Promise<void> {
-    if (this.mcu.board.id !== 'esp32') return;
-    try {
-      const image = firmware.files.find((f) => f.name === 'image.bin')?.content ?? '';
-      const fsContent = firmware.files.find((f) => f.name === 'filesystem.bin')?.content;
-      const imageBuffer = new Uint8Array(image ? [...image].map((c) => c.charCodeAt(0) & 0xff) : []).buffer as ArrayBuffer;
-      const filesystem = fsContent ? new Uint8Array([...fsContent].map((c) => c.charCodeAt(0) & 0xff)) : undefined;
-      const backend = await import('../esp32-machine/backend').then((m) => m.createEsp32MachineBackend(
-        this.esp32Hooks(),
-        imageBuffer,
-        filesystem,
-      ));
-      if (generation !== this.esp32MachineGeneration) return;
-      if (backend.fault) {
-        this.faultText = backend.fault;
-        this.esp32MachinePending = false;
-        this.runner = null;
-        return;
-      }
-      this.esp32MachineBackend = backend;
-      this.esp32MachinePending = false;
-    } catch (error) {
-      if (generation !== this.esp32MachineGeneration) return;
-      this.esp32MachinePending = false;
-      this.faultText = error instanceof Error ? error.message : String(error);
       this.runner = null;
     }
   }
