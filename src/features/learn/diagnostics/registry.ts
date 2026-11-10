@@ -63,9 +63,6 @@ function makeSimFor(build: GalleryBuild, project: FirmwareProject): () => Counti
     if (build.execution === 'esp32') {
       throw new Error('esp32 builds run in the simulation worker, not in-page');
     }
-    if (build.execution === 'esp32-machine') {
-      throw new Error('esp32-machine builds run in the simulation worker, not in-page');
-    }
     sim.execution = build.execution ?? 'interpreter';
     sim.loadCircuit(build.circuit);
     sim.loadFirmware(project);

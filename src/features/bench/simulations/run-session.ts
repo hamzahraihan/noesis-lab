@@ -10,7 +10,7 @@ import type { FirmwareProject } from '@/features/simulation';
  */
 export interface RunSession {
   readonly project: FirmwareProject;
-  readonly backend: 'avr' | 'interpreter' | 'rp2040' | 'esp32' | 'esp32-machine';
+  readonly backend: 'avr' | 'interpreter' | 'rp2040' | 'esp32';
   readonly benchRevision: number;
   readonly owner: 'worker' | 'in-page';
 }
