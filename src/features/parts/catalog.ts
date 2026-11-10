@@ -251,7 +251,8 @@ export type I2cSensorVariant =
   | 'ccs811'
   | 'si7021'
   | 'veml6075'
-  | 'sgp30';
+  | 'sgp30'
+  | 'max30100';
 
 /** The character LCDs, which differ only in how much glass they have. */
 export type LcdVariant = '1602' | '2004';

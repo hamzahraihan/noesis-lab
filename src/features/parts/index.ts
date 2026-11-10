@@ -27,6 +27,7 @@ export * from './devices/ccs811';
 export * from './devices/si7021';
 export * from './devices/veml6075';
 export * from './devices/sgp30';
+export * from './devices/max30100';
 export * from './devices/mlx90614';
 export * from './devices/soil-moisture';
 export * from './devices/vl53l0x';

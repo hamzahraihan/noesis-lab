@@ -72,6 +72,7 @@ import {
   si7021Definition,
   veml6075Definition,
   sgp30Definition,
+  max30100Definition,
 } from './devices/sensors';
 import { lm35Definition } from './devices/lm35';
 import { adxl335Definition } from './devices/adxl335';
@@ -670,6 +671,13 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'An eCO2 and TVOC sensor on the I2C bus. A sketch sends init (0x2003) and measure (0x2008), then reads eCO2 and TVOC with CRC.',
     make: sgp30Definition,
+  },
+  {
+    id: 'max30100-pulse',
+    name: 'MAX30100 Pulse Ox',
+    group: 'input',
+    note: 'A pulse oximeter on the I2C bus. Reads IR and red counts from FIFO_DATA (0x05). A sketch reads four bytes and converts to heart rate and SpO2.',
+    make: max30100Definition,
   },
   {
     id: 'ina219-current-monitor',

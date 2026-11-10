@@ -46,6 +46,7 @@ import { Ccs811 } from './ccs811';
 import { Si7021 } from './si7021';
 import { Veml6075 } from './veml6075';
 import { Sgp30 } from './sgp30';
+import { Max30100 } from './max30100';
 
 export type { I2cDevice } from './device';
 
@@ -130,6 +131,7 @@ export function createI2cDevice(
       if (component.device === 'si7021') return new Si7021();
       if (component.device === 'veml6075') return new Veml6075();
       if (component.device === 'sgp30') return new Sgp30();
+      if (component.device === 'max30100') return new Max30100();
       return new Hx711();
     default:
       return null;
