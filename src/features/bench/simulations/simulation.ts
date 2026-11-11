@@ -51,7 +51,7 @@ import {
   parseIntelHex,
   sourcesHashForProject,
 } from '@/features/simulation';
-import { GdbRemoteProtocol } from '@/features/simulation/avr/debug/gdb';
+import { GdbRemoteProtocol } from '@/features/simulation';
 import {
   compileInWorker as builtinCompileInWorker,
   compileProjectWithLibraries as builtinCompileProjectWithLibraries,
