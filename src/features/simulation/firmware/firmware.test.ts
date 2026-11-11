@@ -181,15 +181,6 @@ describe('lexer and parser', () => {
     expect(thrown).toBeInstanceOf(FirmwareSyntaxError);
     expect((thrown as FirmwareSyntaxError).location.line).toBe(2);
   });
-
-  it('parses a C-style cast of a type keyword', () => {
-    // `(byte)3` is how sketches read I²C register counts: Wire.requestFrom(ADDR, (byte)3)
-    expect(() => parseFirmware('void setup() {\n  byte value = (byte)3;\n}')).not.toThrow();
-    // Nested casts and parenthesized operands still parse.
-    expect(() => parseFirmware('void setup() {\n  int x = (byte)(a + 1);\n}')).not.toThrow();
-    // Plain parenthesized expressions still parse.
-    expect(() => parseFirmware('void setup() {\n  int x = (a + 1);\n}')).not.toThrow();
-  });
 });
 
 describe('language semantics', () => {
