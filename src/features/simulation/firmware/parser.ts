@@ -1532,6 +1532,22 @@ class Parser {
       return { kind: 'identifier', name: token.text, location: token.location };
     }
     if (token.kind === 'punctuation' && token.text === '(') {
+      const typeToken = this.peek();
+      const afterType = this.peek(1);
+      if (
+        typeToken.kind === 'keyword' &&
+        TYPE_KEYWORDS.includes(typeToken.text) &&
+        afterType.text === ')'
+      ) {
+        // A cast such as `(byte)3` names a storage width. The interpreter
+        // keeps values as plain numbers and enforces no fixed-width widths,
+        // so the type is descriptive and the cast evaluates to its operand.
+        // It exists so sketches the real compiler accepts parse here; plain
+        // `(x)` parenthesized expressions are unaffected.
+        this.next();
+        this.next();
+        return this.readUnary();
+      }
       const inner = this.readExpression();
       this.expectPunctuation(')');
       return inner;
