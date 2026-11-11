@@ -43,7 +43,6 @@ import {
 import {
   ads1115Definition,
   bh1750Definition,
-  htu21dDefinition,
   bmp180Definition,
   ds1307Definition,
   ds3231Definition,
@@ -700,13 +699,6 @@ export const PART_CATALOGUE: readonly CatalogueEntry[] = [
     group: 'input',
     note: 'Ambient light as a sixteen-bit count. The command byte chooses one-shot or continuous and the resolution, and the sketch divides by 1.2 to get lux.',
     make: bh1750Definition,
-  },
-  {
-    id: 'htu21d-temp-humidity',
-    name: 'HTU21D Temp/Humidity',
-    group: 'input',
-    note: 'Temperature and humidity as raw words over I2C: one command byte per measurement, two data bytes and a CRC back. Temperature is -46.85 + 175.72 * count / 65536; humidity is -6 + 125 * count / 65536.',
-    make: htu21dDefinition,
   },
   {
     id: 'tmp102-temperature',

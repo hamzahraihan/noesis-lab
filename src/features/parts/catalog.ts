@@ -229,7 +229,6 @@ export type I2cSensorVariant =
   | 'ina219'
   | 'ads1115'
   | 'bh1750'
-  | 'htu21d'
   | 'tmp102'
   | 'mcp9808'
   | 'lm75'

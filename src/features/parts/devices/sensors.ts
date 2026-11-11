@@ -11,7 +11,6 @@
 import type { I2cSensorVariant, KnobSpec, PartDefinition, PinSpec } from '../catalog';
 import { ADS1115_CHANNEL_KNOBS } from './ads1115';
 import { BH1750_LIGHT_KNOB } from './bh1750';
-import { HTU21D_HUMIDITY_KNOB, HTU21D_TEMPERATURE_KNOB } from './htu21d';
 import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from './bmp180';
 import { BMP280_PRESSURE_KNOB, BMP280_TEMPERATURE_KNOB } from './bmp280';
 import { BME280_PRESSURE_KNOB, BME280_TEMPERATURE_KNOB, BME280_HUMIDITY_KNOB } from './bme280';
@@ -178,16 +177,6 @@ const I2C_MODULES: Readonly<Record<I2cSensorVariant, I2cModule>> = {
     legendColour: '#e8e8e8',
     header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
     knobs: [BH1750_LIGHT_KNOB],
-  },
-  htu21d: {
-    id: 'htu21d-temp-humidity',
-    name: 'HTU21D Temp/Humidity',
-    widthMm: 21.5,
-    heightMm: 20,
-    bodyColour: '#1b2a4a',
-    legendColour: '#e8e8e8',
-    header: { x: 2.54, y: 3.81, names: ['GND', 'VCC', 'SDA', 'SCL'], alongColumn: true },
-    knobs: [HTU21D_TEMPERATURE_KNOB, HTU21D_HUMIDITY_KNOB],
   },
   tmp102: {
     id: 'tmp102-temperature',
@@ -615,9 +604,4 @@ export function sgp30Definition(): PartDefinition {
 
 export function max30100Definition(): PartDefinition {
   return i2cSensorDefinition('max30100');
-}
-
-/** HTU21D temperature and humidity sensor: ambient conditions over I2C. */
-export function htu21dDefinition(): PartDefinition {
-  return i2cSensorDefinition('htu21d');
 }

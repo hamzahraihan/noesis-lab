@@ -8,7 +8,6 @@ export * from './passives';
 export * from './devices/device';
 export * from './devices/ads1115';
 export * from './devices/bh1750';
-export * from './devices/htu21d';
 export * from './devices/bmp180';
 export * from './devices/bmp280';
 export * from './devices/bme280';
