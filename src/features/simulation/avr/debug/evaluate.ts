@@ -217,6 +217,7 @@ function evaluateExpr(
             break;
           }
           case 0x1a:
+          case 0x1a:
           case 0x1b:
           case 0x1c:
           case 0x1d:
@@ -231,21 +232,19 @@ function evaluateExpr(
             const a = pop();
             if (a === undefined || b === undefined) return null;
             let value: number;
-            if (opcode === 0x1a) value = a.value & b.value;
-            else if (opcode === 0x1b) {
-              if (b.value === 0) return null;
-              value = Math.floor(a.value / b.value);
-            } else if (opcode === 0x1c) value = a.value - b.value;
-            else if (opcode === 0x1d) {
-              if (b.value === 0) return null;
-              value = a.value % b.value;
-            } else if (opcode === 0x1e) value = a.value * b.value;
-            else if (opcode === 0x21) value = a.value | b.value;
-            else if (opcode === 0x22) value = a.value + b.value;
-            else if (opcode === 0x24) value = a.value << b.value;
-            else if (opcode === 0x25) value = a.value >>> b.value;
-            else if (opcode === 0x26) value = ((a.value << 16) >> 16) >> b.value;
-            else value = a.value ^ b.value;
+            switch (opcode) {
+              case 0x1a: value = a.value & b.value; break;
+              case 0x1b: if (b.value === 0) return null; value = Math.floor(a.value / b.value); break;
+              case 0x1c: value = a.value - b.value; break;
+              case 0x1d: if (b.value === 0) return null; value = a.value % b.value; break;
+              case 0x1e: value = a.value * b.value; break;
+              case 0x21: value = a.value | b.value; break;
+              case 0x22: value = a.value + b.value; break;
+              case 0x24: value = a.value << b.value; break;
+              case 0x25: value = a.value >>> b.value; break;
+              case 0x26: value = ((a.value << 16) >> 16) >> b.value; break;
+              case 0x27: value = a.value ^ b.value; break;
+            }
             const kind = a.kind === 'address' || b.kind === 'address' ? 'address' : 'value';
             push(kind, value, Math.max(a.size, b.size), a.flash === true || b.flash === true);
             break;
