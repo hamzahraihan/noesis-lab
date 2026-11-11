@@ -177,10 +177,11 @@ function evaluateExpr(
             break;
           }
           case 0x16: {
-            const a = pop();
             const b = pop();
+            const a = pop();
             if (a !== undefined && b !== undefined) {
-              stack.push(b, a);
+              push(b.kind, b.value, b.size, b.flash === true);
+              push(a.kind, a.value, a.size, a.flash === true);
             }
             break;
           }
@@ -189,8 +190,24 @@ function evaluateExpr(
             const b = pop();
             const c = pop();
             if (a !== undefined && b !== undefined && c !== undefined) {
-              stack.push(a, c, b);
+              push(b.kind, b.value, b.size, b.flash === true);
+              push(c.kind, c.value, c.size, c.flash === true);
+              push(a.kind, a.value, a.size, a.flash === true);
             }
+            break;
+          }
+          case 0x18: {
+            // DW_OP_xderef: dereference an address in a given address space.
+            // Pop the address space, then the address, push the value found.
+            // AVR has one address space (data memory), so the space is popped
+            // and discarded; the address is dereferenced as a 16-bit read.
+            const space = popValue();
+            const address = popValue();
+            if (space === null || address === null) return null;
+            if (address.kind !== 'address' && address.kind !== 'value') return null;
+            const bytes = readData(ctx.data, address.value, 2);
+            if (bytes === null) return null;
+            push('value', bytes[0]! | (bytes[1]! << 8), 2);
             break;
           }
           case 0x19: {
@@ -202,6 +219,7 @@ function evaluateExpr(
           case 0x1a:
           case 0x1b:
           case 0x1c:
+          case 0x1d:
           case 0x1e:
           case 0x21:
           case 0x22:
@@ -218,7 +236,10 @@ function evaluateExpr(
               if (b.value === 0) return null;
               value = Math.floor(a.value / b.value);
             } else if (opcode === 0x1c) value = a.value - b.value;
-            else if (opcode === 0x1e) value = a.value * b.value;
+            else if (opcode === 0x1d) {
+              if (b.value === 0) return null;
+              value = a.value % b.value;
+            } else if (opcode === 0x1e) value = a.value * b.value;
             else if (opcode === 0x21) value = a.value | b.value;
             else if (opcode === 0x22) value = a.value + b.value;
             else if (opcode === 0x24) value = a.value << b.value;

@@ -93,6 +93,10 @@ const INFO: CompiledDebugInfo = {
         { name: 'missing', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0xf3, 0x01, 0x50] } },
         { name: 'bad', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0x03, 0x00, 0x09, 0x80, 0x00] } },
         { name: 'stackVar', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0x91, 0x05] } },
+        { name: 'swapVar', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0x0a, 0x0a, 0x00, 0x0a, 0x14, 0x00, 0x16] } },
+        { name: 'rotVar', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0x0a, 0x01, 0x00, 0x0a, 0x02, 0x00, 0x0a, 0x03, 0x00, 0x17] } },
+        { name: 'xderefVar', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0x0a, 0x00, 0x01, 0x0a, 0x00, 0x00, 0x18] } },
+        { name: 'modVar', type: 0, scope: 'local', location: { kind: 'expr', bytes: [0x0a, 0x1e, 0x00, 0x0a, 0x07, 0x00, 0x1d] } },
       ],
     },
   ],
@@ -135,6 +139,10 @@ describe('readVariables', () => {
     expect(values.get('word')).toBe('65536');
     expect(values.get('partial')).toBe('2…');
     expect(values.get('stackVar')).toBe('9');
+    expect(values.get('swapVar')).toBe('10');
+    expect(values.get('rotVar')).toBe('3');
+    expect(values.get('xderefVar')).toBe('3');
+    expect(values.get('modVar')).toBe('2');
     expect(values.get('gCount')).toBe('3');
   });
 
