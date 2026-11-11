@@ -31,6 +31,7 @@ import circuitEnvironmentBench from '../circuits/environment-bench.json';
 import circuitEsp32Tft from '../circuits/esp32-tft.json';
 import circuitExpanderInterrupt from '../circuits/expander-interrupt.json';
 import circuitHmc5883l from '../circuits/hmc5883l.json';
+import circuitHtu21d from '../circuits/htu21d.json';
 import circuitInstrumentBench from '../circuits/instrument-bench.json';
 import circuitLm35 from '../circuits/lm35.json';
 import circuitMax30100 from '../circuits/max30100.json';
@@ -91,6 +92,7 @@ export const CIRCUITS: Readonly<Record<string, CircuitDocument>> = {
   "esp32-tft": parseCircuit(circuitEsp32Tft, "esp32-tft"),
   "expander-interrupt": parseCircuit(circuitExpanderInterrupt, "expander-interrupt"),
   "hmc5883l": parseCircuit(circuitHmc5883l, "hmc5883l"),
+  "htu21d": parseCircuit(circuitHtu21d, "htu21d"),
   "instrument-bench": parseCircuit(circuitInstrumentBench, "instrument-bench"),
   "lm35": parseCircuit(circuitLm35, "lm35"),
   "max30100": parseCircuit(circuitMax30100, "max30100"),

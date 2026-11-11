@@ -47,6 +47,7 @@ import {
   tsl2561Checks,
   ccs811Checks,
   si7021Checks,
+  htu21dChecks,
   veml6075Checks,
   sgp30Checks,
   max30100Checks,
@@ -107,4 +108,5 @@ export const CHECKS_MAP: Record<GalleryProjectId, (build: GalleryBuild) => Check
   "veml6075": (build) => veml6075Checks(build),
   "sgp30": (build) => sgp30Checks(build),
   "max30100": (build) => max30100Checks(build),
+  "htu21d": (build) => htu21dChecks(build),
 };
