@@ -1740,6 +1740,30 @@ function esp32S3Definition(): PartDefinition {
     },
   };
 }
+/**
+ * ESP32-S2 DevKit, on the same DevKit outline as the ESP32-WROOM-32.
+ *
+ * Like the C3 and S3 above, the bench models the S2 through the interpreter
+ * on the classic ESP32's pin table, so the header geometry and pin table
+ * transfer unchanged. Only the board identity and serial prefix differ.
+ */
+function esp32S2Definition(): PartDefinition {
+  const base = esp32Definition();
+  return {
+    ...base,
+    id: 'esp32-s2-devkit',
+    name: 'ESP32-S2 DevKit',
+    component: {
+      kind: 'mcu',
+      board: {
+        ...(base.component as { kind: 'mcu'; board: any }).board,
+        id: 'esp32-s2',
+        name: 'ESP32-S2',
+        serialPrefix: 'ESP32-S2',
+      },
+    },
+  };
+}
 
 /**
  * STM32F103 "Blue Pill", on the Arduino Uno's header geometry for the bench.
@@ -1775,6 +1799,7 @@ function stm32f103Definition(): PartDefinition {
 let esp32c3: PartDefinition | null = null;
 let esp32s3: PartDefinition | null = null;
 let stm32f103: PartDefinition | null = null;
+let esp32s2: PartDefinition | null = null;
 
 export function esp32C3DevKit(): PartDefinition {
   return (esp32c3 ??= esp32C3Definition());
@@ -1782,6 +1807,9 @@ export function esp32C3DevKit(): PartDefinition {
 
 export function esp32S3DevKit(): PartDefinition {
   return (esp32s3 ??= esp32S3Definition());
+}
+export function esp32S2DevKit(): PartDefinition {
+  return (esp32s2 ??= esp32S2Definition());
 }
 
 export function stm32f103BluePill(): PartDefinition {

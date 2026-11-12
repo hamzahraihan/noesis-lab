@@ -20,6 +20,7 @@ import type { BoardId } from '../boardRegistry';
 import starterEsp32 from './starter-esp32.json';
 import starterEsp32C3 from './starter-esp32-c3.json';
 import starterEsp32S3 from './starter-esp32-s3.json';
+import starterEsp32S2 from './starter-esp32-s2.json';
 import starterStm32f103 from './starter-stm32f103.json';
 import starterAttiny85 from './starter-attiny85.json';
 import starterFranzininho from './starter-franzininho.json';
@@ -61,6 +62,7 @@ export const STARTER_CIRCUITS: Readonly<Record<BoardId, CircuitDocument>> = {
   esp32: parseCircuit(starterEsp32, 'starter-esp32'),
   'esp32-c3': parseCircuit(starterEsp32C3, 'starter-esp32-c3'),
   'esp32-s3': parseCircuit(starterEsp32S3, 'starter-esp32-s3'),
+  'esp32-s2': parseCircuit(starterEsp32S2, 'starter-esp32-s2'),
   stm32f103: parseCircuit(starterStm32f103, 'starter-stm32f103'),
   nano: parseCircuit(starterNano, 'starter-nano'),
   mega: parseCircuit(starterMega, 'starter-mega'),

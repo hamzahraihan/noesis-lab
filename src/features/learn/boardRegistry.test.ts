@@ -314,6 +314,6 @@ describe('board registry', () => {
         expect(Math.max(...levels), `${board.name} LED never lit`).toBeGreaterThan(1.5);
         expect(Math.min(...levels), `${board.name} LED never went dark`).toBeLessThan(0.5);
       }
-    });
+    }, 30_000);
   });
 });

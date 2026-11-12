@@ -21,6 +21,7 @@ import {
   esp32DevKitV1,
   esp32C3DevKit,
   esp32S3DevKit,
+  esp32S2DevKit,
   franzininhoBoard,
   nanoRp2040Connect,
   raspberryPi4,
@@ -32,6 +33,7 @@ export type BoardId =
   | 'esp32'
   | 'esp32-c3'
   | 'esp32-s3'
+  | 'esp32-s2'
   | 'stm32f103'
   | 'uno'
   | 'mega'
@@ -119,6 +121,15 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     language: 'arduino-cpp',
     languages: ['arduino-cpp', 'python'],
     summary: '3.3 V ESP32-S3 board on the ESP32 DevKit outline.',
+    bestFor: 'More GPIO and USB on the ESP32 family.',
+  },
+  {
+    id: 'esp32-s2',
+    name: 'ESP32-S2 DevKit',
+    make: esp32S2DevKit,
+    language: 'arduino-cpp',
+    languages: ['arduino-cpp', 'python'],
+    summary: '3.3 V dual-core ESP32-S2 board on the ESP32 DevKit outline.',
     bestFor: 'More GPIO and USB on the ESP32 family.',
   },
   {
