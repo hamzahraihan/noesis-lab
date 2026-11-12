@@ -80,6 +80,10 @@ The repository name is **`noesis-lab`** (noasis, not "noasis"). Use this exact s
 
 Issues live in the repo's GitHub Issues (uses the `gh` CLI). See `docs/agents/issue-tracker.md`.
 
+### Triage labels
+
+Five canonical triage labels. See `docs/agents/triage-labels.md`.
+
 ### Domain docs
 
 Single-context layout (root `GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.
