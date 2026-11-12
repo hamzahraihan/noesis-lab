@@ -35,6 +35,29 @@
       "license": "Apache-2.0",
       "source": "https://github.com/espressif/esp-rom-elfs",
       "note": "Espressif's own mask ROM, the first thing the chip runs. The image the emulator boots from; rev 3.0 is the silicon the DevKit V1 carries."
+    },
+    {
+      "name": "MicroPython (ESP32-S2 port, ESP32_GENERIC_S2 variant)",
+      "version": "v1.29.0",
+      "releaseDate": "2026-08-24",
+      "file": "ESP32_GENERIC_S2-20260824-v1.29.0.bin",
+      "bytes": 1535312,
+      "sha256": "c7e30ea6978437432cbb6233886a8037db766e84d6ae844acb6ed20d00cf5873",
+      "url": "https://micropython.org/resources/firmware/ESP32_GENERIC_S2-20260824-v1.29.0.bin",
+      "license": "MIT",
+      "source": "https://github.com/micropython/micropython",
+      "note": "The same MicroPython release the ESP32-S2 port ships. A combined bootloader, partition table and application, flashed at 0x1000. Pinned for the ESP32-S2 board; boots once the esp32sim machine for the S2 exists (the S2 machine is the blocked half of this artefact set)."
+    },
+    {
+      "name": "ESP32-S2 mask ROM (rev 0)",
+      "version": "20260528",
+      "file": "esp32s2_rev0_rom.elf",
+      "bytes": 292128,
+      "sha256": "cabae5c901fe816aea5e74fbb621ad6479ad1b399d6e7212295191559654572d",
+      "url": "https://github.com/espressif/esp-rom-elfs/releases/tag/20260528",
+      "license": "Apache-2.0",
+      "source": "https://github.com/espressif/esp-rom-elfs",
+      "note": "Espressif's own mask ROM for the ESP32-S2, from the same esp-rom-elfs release as the classic ESP32 rev 3.0 ROM the emulator already boots. The image the S2 emulator boots from once the S2 machine exists."
     }
   ]
 }
