@@ -259,7 +259,7 @@ and a convincing one, and it costs about a hundred lines rather than a dependenc
 
 ### 6.4 Boards, panels and what else is on the bench
 
-**<!-- COUNT:BOARDS -->12<!-- /COUNT --> boards, each with its own pin numbering and its own buses.** The ESP32
+**<!-- COUNT:BOARDS -->13<!-- /COUNT --> boards, each with its own pin numbering and its own buses.** The ESP32
 DevKit V1 and the Arduino Uno came first; the Mega 2560, the Nano and the Nano
 RP2040 Connect joined them, and the Raspberry Pi Pico and the Pi 4 after
 that. They are not interchangeable, and the differences are the point -- A0 is

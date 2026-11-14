@@ -18,9 +18,7 @@ What the generator cannot invent is the content: the circuit document under
 live in one file per project under
 `src/features/learn/diagnostics/checks/<id>.ts`. A project with no checks is
 still a failure — `diagnostics/registry.test.ts` runs every interpreter build and
-fails on a check that fails. Five checks fail today and are named in that file's
-`KNOWN_GAPS` with the reason each is wrong; they are not wiring gaps, and they are
-listed rather than deleted so the failure stays visible.
+fails on a check that fails, so a broken check cannot survive unnoticed.
 
 Counts in `docs/parity-scorecard.md`, `docs/PLAN.md`, and `PRODUCT.md` are
 `<!-- COUNT:... -->` placeholders. Run `npm run update:docs-counts` after a
