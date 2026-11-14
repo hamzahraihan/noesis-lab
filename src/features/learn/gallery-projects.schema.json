@@ -7,11 +7,26 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "title", "blurb", "parts", "builds", "working"],
+        "required": ["id", "title", "blurb", "parts", "builds", "working", "checks", "wireFloor"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
           "title": { "type": "string" },
           "blurb": { "type": "string" },
+          "checks": {
+            "description": "The check symbol this project's checks live under. A string for a single-build project; an object keyed by variant when one project ships two builds with different checks.",
+            "oneOf": [
+              { "type": "string", "pattern": "^[A-Za-z0-9]+Checks$" },
+              {
+                "type": "object",
+                "additionalProperties": { "type": "string", "pattern": "^[A-Za-z0-9]+Checks$" }
+              }
+            ]
+          },
+          "wireFloor": {
+            "description": "The fewest wires this project's circuit must carry. A project that states 1 is saying it has one, not that it was never measured.",
+            "type": "integer",
+            "minimum": 1
+          },
           "parts": {
             "type": "array",
             "items": {

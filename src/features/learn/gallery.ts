@@ -54,6 +54,15 @@ export interface GalleryBuild {
    * unpinned here, so the manifest defaults apply at fetch time.
    */
   readonly libraries?: readonly ProjectLibrary[];
+  /**
+   * How long this build's checks may run, in milliseconds, when the runner's
+   * default cap is not enough.
+   *
+   * The AVR worker compile measures ~150 s, over the 120 s default. A cost that
+   * belongs to one build is stated with that build rather than in a special case
+   * in the registry.
+   */
+  readonly wallCapMs?: number;
 }
 
 /** The runnable firmware for a build: one multi-file project or one sketch. */

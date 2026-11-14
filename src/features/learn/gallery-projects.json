@@ -26,7 +26,7 @@
         {
           "board": "uno",
           "circuit": "alarm-clock.json",
-          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n#include \"config.h\"\n#include \"button.h\"\n#include \"clock.h\"\n#include \"alarmtone.h\"\n\n// Alarm Clock with RTC \u00e2\u20ac\u201d main tab.\n//\n// A multi-file port of urish's Wokwi \"alarm-clock.ino\" project\n// (https://wokwi.com/projects/297787059514376717), rewritten for what this\n// bench models:\n//\n// - No classes or structs: one module per tab as plain functions + globals.\n// - No SevSeg library: the raw GPIO multiplex below, on the README pin\n//   table (DIG D2-D5, A-G on D6-D12, colon CLN on D13, COM to 5V).\n// - No RTClib: raw BCD reads over Wire in clock.cpp (USE_RTC 0 falls back\n//   to millis time).\n// - No tone(): the siren plays a customizable melody table in alarmtone.cpp.\n// - The host owns the RTC time: Hour/Minute retune a persisted offset, and\n//   the alarm itself persists in the DS1307 NVRAM bytes.\n\n#define ST_CLOCK 0\n#define ST_STATUS 1\n#define ST_ALTIME 2\n#define ST_RING 3\n#define ST_SNOOZE 4\n\n#define STATUS_MS 1000\n#define ALTIME_MS 2500\n#define SNOOZE_VIEW_MS 500\n\nbyte digitPins[4] = {2, 3, 4, 5};\nbyte segmentPins[7] = {6, 7, 8, 9, 10, 11, 12};\nbyte colonPin = 13;\n\nint dspShow0 = 0;\nint dspShow1 = 0;\nint dspShow2 = 0;\nint dspShow3 = 0;\nbyte dspDigit = 0;\n\nbyte appState = 0;\nlong appEntered = 0;\nlong appLastTick = 0;\n\n// Integer tens without relying on float division.\nint dspTens(int v) {\n  return (v - (v % 10)) / 10;\n}\n\n// Standard 7-segment encoding in A-G bit order, plus the letters the\n// status views need: 10 o, 11 n, 12 F, 13 dash, 14 blank.\nint dspPatternFor(int d) {\n  if (d == 0) return 0x3F;\n  if (d == 1) return 0x06;\n  if (d == 2) return 0x5B;\n  if (d == 3) return 0x4F;\n  if (d == 4) return 0x66;\n  if (d == 5) return 0x6D;\n  if (d == 6) return 0x7D;\n  if (d == 7) return 0x07;\n  if (d == 8) return 0x7F;\n  if (d == 9) return 0x6F;\n  if (d == 10) return 0x5C;\n  if (d == 11) return 0x54;\n  if (d == 12) return 0x71;\n  if (d == 13) return 0x40;\n  return 0x00;\n}\n\nvoid dspSetSegments(byte pattern) {\n  for (int i = 0; i < 7; i++) {\n    digitalWrite(segmentPins[i], (pattern & (1 << i)) ? LOW : HIGH);\n  }\n}\n\nvoid dspShow(int a, int b, int c, int d) {\n  dspShow0 = a;\n  dspShow1 = b;\n  dspShow2 = c;\n  dspShow3 = d;\n}\n\nint dspDigitValue(byte which) {\n  if (which == 0) return dspShow0;\n  if (which == 1) return dspShow1;\n  if (which == 2) return dspShow2;\n  return dspShow3;\n}\n\nvoid dspRefresh(int seconds) {\n  for (int i = 0; i < 4; i++) digitalWrite(digitPins[i], LOW);\n  byte pattern = dspPatternFor(dspDigitValue(dspDigit));\n  dspSetSegments(pattern);\n  // The colon blink: HHMM rolls once a minute, so the colon ticks every\n  // second to prove the glass is alive. Active-low: LOW lights it.\n  if (seconds % 2 == 0) {\n    digitalWrite(colonPin, LOW);\n  } else {\n    digitalWrite(colonPin, HIGH);\n  }\n  digitalWrite(digitPins[dspDigit], HIGH);\n  dspDigit = (dspDigit + 1) % 4;\n}\n\nvoid appEnter(byte s) {\n  btnClearAll();\n  appState = s;\n  appEntered = millis();\n}\n\nvoid setup() {\n  for (int i = 0; i < 4; i++) pinMode(digitPins[i], OUTPUT);\n  for (int i = 0; i < 7; i++) pinMode(segmentPins[i], OUTPUT);\n  pinMode(colonPin, OUTPUT);\n  digitalWrite(colonPin, HIGH);\n  buttonsBegin();\n  btnSetRepeat(0, 500, 200);\n  btnSetRepeat(1, 500, 200);\n  btnSetRepeat(2, 1000, -1);\n  toneBegin();\n  Serial.begin(115200);\n  Wire.begin();\n  clkBegin();\n  Serial.println(\"clock up\");\n  appEnter(ST_CLOCK);\n}\n\nvoid appTick() {\n  // The alarm fires on its own, whatever view is showing.\n  if (appState != ST_RING && clkDue() == 1) {\n    Serial.println(\"ringing\");\n    appEnter(ST_RING);\n  }\n\n  if (appState == ST_CLOCK) {\n    dspShow(dspTens(clkH), clkH % 10, dspTens(clkM), clkM % 10);\n    if (btnPressed(0) == 1) clkAdjHour(1);\n    if (btnPressed(1) == 1) clkAdjMin(1);\n    byte tapClock = btnTap(2);\n    if (tapClock == 1) {\n      clkToggle();\n      Serial.println(\"alarm toggled\");\n      appEnter(ST_STATUS);\n    }\n  } else if (appState == ST_STATUS) {\n    if (clkEnabled == 1) {\n      dspShow(14, 14, 10, 11);\n    } else {\n      dspShow(14, 10, 12, 12);\n    }\n    if (millis() - appEntered >= STATUS_MS) {\n      if (clkEnabled == 1) {\n        appEnter(ST_ALTIME);\n      } else {\n        appEnter(ST_CLOCK);\n      }\n    }\n  } else if (appState == ST_ALTIME) {\n    dspShow(dspTens(clkAlarmH), clkAlarmH % 10, dspTens(clkAlarmM), clkAlarmM % 10);\n    if (btnPressed(0) == 1) {\n      clkAlarmH = (clkAlarmH + 1) % 24;\n      nvSave();\n      appEntered = millis();\n    }\n    if (btnPressed(1) == 1) {\n      clkAlarmM = (clkAlarmM + 1) % 60;\n      nvSave();\n      appEntered = millis();\n    }\n    byte tapAlarm = btnTap(2);\n    if (tapAlarm == 1) appEnter(ST_CLOCK);\n    if (millis() - appEntered >= ALTIME_MS) appEnter(ST_CLOCK);\n  } else if (appState == ST_RING) {\n    dspShow(dspTens(clkH), clkH % 10, dspTens(clkM), clkM % 10);\n    byte tapRing = btnTap(2);\n    if (tapRing == 2) {\n      toneStop();\n      clkStop();\n      Serial.println(\"alarm stopped\");\n      appEnter(ST_CLOCK);\n    } else if (tapRing == 1) {\n      toneStop();\n      clkSnooze();\n      Serial.println(\"snoozed\");\n      appEnter(ST_SNOOZE);\n    }\n  } else if (appState == ST_SNOOZE) {\n    dspShow(10, 10, 10, 10);\n    if (millis() - appEntered >= SNOOZE_VIEW_MS) appEnter(ST_CLOCK);\n  }\n}\n\nvoid loop() {\n  // One digit per pass and no long delay anywhere: buttons are sampled every\n  // ~20 ms of sim time, so a human tap always overlaps several samples.\n  // (A delay(200) here used to blind the firmware for a wall-clock second or\n  // more, and no tap could ever register.) Time-based work below runs at\n  // 10 Hz; the siren tracks every pass so its steps stay even.\n  dspRefresh(clkS);\n  btnUpdate();\n  if (appState == ST_RING) tonePlay();\n\n  long now = millis();\n  if (now - appLastTick >= 100) {\n    appLastTick = now;\n    clkRead();\n    appTick();\n    Serial.print(\"t=\");\n    Serial.print(clkH);\n    Serial.print(\":\");\n    Serial.print(clkM);\n    Serial.print(\":\");\n    Serial.println(clkS);\n  }\n  delay(20);\n}\n",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n#include \"config.h\"\n#include \"button.h\"\n#include \"clock.h\"\n#include \"alarmtone.h\"\n\n// Alarm Clock with RTC â€” main tab.\n//\n// A multi-file port of urish's Wokwi \"alarm-clock.ino\" project\n// (https://wokwi.com/projects/297787059514376717), rewritten for what this\n// bench models:\n//\n// - No classes or structs: one module per tab as plain functions + globals.\n// - No SevSeg library: the raw GPIO multiplex below, on the README pin\n//   table (DIG D2-D5, A-G on D6-D12, colon CLN on D13, COM to 5V).\n// - No RTClib: raw BCD reads over Wire in clock.cpp (USE_RTC 0 falls back\n//   to millis time).\n// - No tone(): the siren plays a customizable melody table in alarmtone.cpp.\n// - The host owns the RTC time: Hour/Minute retune a persisted offset, and\n//   the alarm itself persists in the DS1307 NVRAM bytes.\n\n#define ST_CLOCK 0\n#define ST_STATUS 1\n#define ST_ALTIME 2\n#define ST_RING 3\n#define ST_SNOOZE 4\n\n#define STATUS_MS 1000\n#define ALTIME_MS 2500\n#define SNOOZE_VIEW_MS 500\n\nbyte digitPins[4] = {2, 3, 4, 5};\nbyte segmentPins[7] = {6, 7, 8, 9, 10, 11, 12};\nbyte colonPin = 13;\n\nint dspShow0 = 0;\nint dspShow1 = 0;\nint dspShow2 = 0;\nint dspShow3 = 0;\nbyte dspDigit = 0;\n\nbyte appState = 0;\nlong appEntered = 0;\nlong appLastTick = 0;\n\n// Integer tens without relying on float division.\nint dspTens(int v) {\n  return (v - (v % 10)) / 10;\n}\n\n// Standard 7-segment encoding in A-G bit order, plus the letters the\n// status views need: 10 o, 11 n, 12 F, 13 dash, 14 blank.\nint dspPatternFor(int d) {\n  if (d == 0) return 0x3F;\n  if (d == 1) return 0x06;\n  if (d == 2) return 0x5B;\n  if (d == 3) return 0x4F;\n  if (d == 4) return 0x66;\n  if (d == 5) return 0x6D;\n  if (d == 6) return 0x7D;\n  if (d == 7) return 0x07;\n  if (d == 8) return 0x7F;\n  if (d == 9) return 0x6F;\n  if (d == 10) return 0x5C;\n  if (d == 11) return 0x54;\n  if (d == 12) return 0x71;\n  if (d == 13) return 0x40;\n  return 0x00;\n}\n\nvoid dspSetSegments(byte pattern) {\n  for (int i = 0; i < 7; i++) {\n    digitalWrite(segmentPins[i], (pattern & (1 << i)) ? LOW : HIGH);\n  }\n}\n\nvoid dspShow(int a, int b, int c, int d) {\n  dspShow0 = a;\n  dspShow1 = b;\n  dspShow2 = c;\n  dspShow3 = d;\n}\n\nint dspDigitValue(byte which) {\n  if (which == 0) return dspShow0;\n  if (which == 1) return dspShow1;\n  if (which == 2) return dspShow2;\n  return dspShow3;\n}\n\nvoid dspRefresh(int seconds) {\n  for (int i = 0; i < 4; i++) digitalWrite(digitPins[i], LOW);\n  byte pattern = dspPatternFor(dspDigitValue(dspDigit));\n  dspSetSegments(pattern);\n  // The colon blink: HHMM rolls once a minute, so the colon ticks every\n  // second to prove the glass is alive. Active-low: LOW lights it.\n  if (seconds % 2 == 0) {\n    digitalWrite(colonPin, LOW);\n  } else {\n    digitalWrite(colonPin, HIGH);\n  }\n  digitalWrite(digitPins[dspDigit], HIGH);\n  dspDigit = (dspDigit + 1) % 4;\n}\n\nvoid appEnter(byte s) {\n  btnClearAll();\n  appState = s;\n  appEntered = millis();\n}\n\nvoid setup() {\n  for (int i = 0; i < 4; i++) pinMode(digitPins[i], OUTPUT);\n  for (int i = 0; i < 7; i++) pinMode(segmentPins[i], OUTPUT);\n  pinMode(colonPin, OUTPUT);\n  digitalWrite(colonPin, HIGH);\n  buttonsBegin();\n  btnSetRepeat(0, 500, 200);\n  btnSetRepeat(1, 500, 200);\n  btnSetRepeat(2, 1000, -1);\n  toneBegin();\n  Serial.begin(115200);\n  Wire.begin();\n  clkBegin();\n  Serial.println(\"clock up\");\n  appEnter(ST_CLOCK);\n}\n\nvoid appTick() {\n  // The alarm fires on its own, whatever view is showing.\n  if (appState != ST_RING && clkDue() == 1) {\n    Serial.println(\"ringing\");\n    appEnter(ST_RING);\n  }\n\n  if (appState == ST_CLOCK) {\n    dspShow(dspTens(clkH), clkH % 10, dspTens(clkM), clkM % 10);\n    if (btnPressed(0) == 1) clkAdjHour(1);\n    if (btnPressed(1) == 1) clkAdjMin(1);\n    byte tapClock = btnTap(2);\n    if (tapClock == 1) {\n      clkToggle();\n      Serial.println(\"alarm toggled\");\n      appEnter(ST_STATUS);\n    }\n  } else if (appState == ST_STATUS) {\n    if (clkEnabled == 1) {\n      dspShow(14, 14, 10, 11);\n    } else {\n      dspShow(14, 10, 12, 12);\n    }\n    if (millis() - appEntered >= STATUS_MS) {\n      if (clkEnabled == 1) {\n        appEnter(ST_ALTIME);\n      } else {\n        appEnter(ST_CLOCK);\n      }\n    }\n  } else if (appState == ST_ALTIME) {\n    dspShow(dspTens(clkAlarmH), clkAlarmH % 10, dspTens(clkAlarmM), clkAlarmM % 10);\n    if (btnPressed(0) == 1) {\n      clkAlarmH = (clkAlarmH + 1) % 24;\n      nvSave();\n      appEntered = millis();\n    }\n    if (btnPressed(1) == 1) {\n      clkAlarmM = (clkAlarmM + 1) % 60;\n      nvSave();\n      appEntered = millis();\n    }\n    byte tapAlarm = btnTap(2);\n    if (tapAlarm == 1) appEnter(ST_CLOCK);\n    if (millis() - appEntered >= ALTIME_MS) appEnter(ST_CLOCK);\n  } else if (appState == ST_RING) {\n    dspShow(dspTens(clkH), clkH % 10, dspTens(clkM), clkM % 10);\n    byte tapRing = btnTap(2);\n    if (tapRing == 2) {\n      toneStop();\n      clkStop();\n      Serial.println(\"alarm stopped\");\n      appEnter(ST_CLOCK);\n    } else if (tapRing == 1) {\n      toneStop();\n      clkSnooze();\n      Serial.println(\"snoozed\");\n      appEnter(ST_SNOOZE);\n    }\n  } else if (appState == ST_SNOOZE) {\n    dspShow(10, 10, 10, 10);\n    if (millis() - appEntered >= SNOOZE_VIEW_MS) appEnter(ST_CLOCK);\n  }\n}\n\nvoid loop() {\n  // One digit per pass and no long delay anywhere: buttons are sampled every\n  // ~20 ms of sim time, so a human tap always overlaps several samples.\n  // (A delay(200) here used to blind the firmware for a wall-clock second or\n  // more, and no tap could ever register.) Time-based work below runs at\n  // 10 Hz; the siren tracks every pass so its steps stay even.\n  dspRefresh(clkS);\n  btnUpdate();\n  if (appState == ST_RING) tonePlay();\n\n  long now = millis();\n  if (now - appLastTick >= 100) {\n    appLastTick = now;\n    clkRead();\n    appTick();\n    Serial.print(\"t=\");\n    Serial.print(clkH);\n    Serial.print(\":\");\n    Serial.print(clkM);\n    Serial.print(\":\");\n    Serial.println(clkS);\n  }\n  delay(20);\n}\n",
           "files": [
             {
               "name": "config.h",
@@ -34,7 +34,7 @@
             },
             {
               "name": "button.h",
-              "content": "// Debounced INPUT_PULLUP buttons with auto-repeat and long-press\n// (urish's Button.h, as plain functions: this bench has no classes).\n// 25 ms settles in about one loop pass, so quick taps register \u00e2\u20ac\u201d the same\n// figure the safe and reaction builds use.\n#define BTN_DEBOUNCE_MS 25\n#define BTN_LONG_MS 1000\n#define BTN_HOURS 0\n#define BTN_MINS 1\n#define BTN_ALARM 2\n"
+              "content": "// Debounced INPUT_PULLUP buttons with auto-repeat and long-press\n// (urish's Button.h, as plain functions: this bench has no classes).\n// 25 ms settles in about one loop pass, so quick taps register â€” the same\n// figure the safe and reaction builds use.\n#define BTN_DEBOUNCE_MS 25\n#define BTN_LONG_MS 1000\n#define BTN_HOURS 0\n#define BTN_MINS 1\n#define BTN_ALARM 2\n"
             },
             {
               "name": "button.cpp",
@@ -113,14 +113,20 @@
               "name": "RTClib",
               "source": "provided"
             }
-          ]
+          ],
+          "wallCapMs": 1600000
         }
       ],
       "working": [
         "The 7-segment display shows HHMM from the RTC, with the colon blinking once a second.",
         "Hour and Minute retune the shown time; Alarm arms or disarms, then shows \" on\"/\" off\" and the alarm time.",
         "At the alarm hour the siren sounds: a short Alarm press snoozes 9 minutes (four circles), a long hold stops it."
-      ]
+      ],
+      "checks": {
+        "default": "alarmRawChecks",
+        "library": "alarmLibraryChecks"
+      },
+      "wireFloor": 25
     },
     {
       "id": "safe",
@@ -160,7 +166,9 @@
         "The red LED is lit while locked; nothing else happens until three digits land.",
         "A, then C, then B turns the green LED on for two seconds and prints \"unlocked\".",
         "Any wrong digit buzzes three times and the attempt starts over."
-      ]
+      ],
+      "checks": "safeChecks",
+      "wireFloor": 14
     },
     {
       "id": "dashboard",
@@ -201,10 +209,12 @@
         }
       ],
       "working": [
-        "The horn tracks the knob from end stop to end stop, never asked past 10\u00e2\u20ac\u201c170.",
+        "The horn tracks the knob from end stop to end stop, never asked past 10â€“170.",
         "Exactly one of the three LEDs is lit, marking the third of the travel.",
         "The serial monitor reports both numbers: the knob reading and the horn angle."
-      ]
+      ],
+      "checks": "dashboardChecks",
+      "wireFloor": 14
     },
     {
       "id": "parking",
@@ -248,12 +258,14 @@
         "The serial monitor reports centimetres that follow the distance knob.",
         "Green means something is out there, yellow inside a metre, red inside 30 cm.",
         "Inside 30 cm the buzzer beeps twice a second; a timed-out echo reads 0 and lights nothing."
-      ]
+      ],
+      "checks": "parkingChecks",
+      "wireFloor": 15
     },
     {
       "id": "weather",
       "title": "Weather Station",
-      "blurb": "A temperature-humidity sensor reports to a character LCD and the serial log. Turn the knobs on the part \u00e2\u20ac\u201d or warm it with a fingertip on the bench \u00e2\u20ac\u201d and watch both numbers move.",
+      "blurb": "A temperature-humidity sensor reports to a character LCD and the serial log. Turn the knobs on the part â€” or warm it with a fingertip on the bench â€” and watch both numbers move.",
       "parts": [
         {
           "name": "DHT22 Temp/Humidity",
@@ -279,8 +291,10 @@
       "working": [
         "The LCD shows temperature on line one and humidity on line two.",
         "Turning the part knobs moves both numbers within a couple of seconds.",
-        "The serial monitor logs one line per reading: the DHT\u00e2\u20ac\u2122s temperature and humidity, and the one-wire sensor\u00e2\u20ac\u2122s own."
-      ]
+        "The serial monitor logs one line per reading: the DHTâ€™s temperature and humidity, and the one-wire sensorâ€™s own."
+      ],
+      "checks": "weatherChecks",
+      "wireFloor": 12
     },
     {
       "id": "shift-register",
@@ -312,12 +326,14 @@
         "The eight LEDs chase from Q0 to Q7, one every 150 milliseconds.",
         "The chip's register moves the bits toward Q7, so the byte that lights the first LED is the one with its lowest bit set.",
         "The serial log says when the chase starts."
-      ]
+      ],
+      "checks": "shiftRegisterChecks",
+      "wireFloor": 1
     },
     {
       "id": "rfid",
       "title": "RFID Reader",
-      "blurb": "An MFRC522 card reader on the SPI bus. The sketch turns the antenna on, asks for a card, and reads the answer out of the chip\u00e2\u20ac\u2122s FIFO \u00e2\u20ac\u201d or the timeout when its field is empty.",
+      "blurb": "An MFRC522 card reader on the SPI bus. The sketch turns the antenna on, asks for a card, and reads the answer out of the chipâ€™s FIFO â€” or the timeout when its field is empty.",
       "parts": [
         {
           "name": "RFID reader (MFRC522)",
@@ -333,10 +349,12 @@
         }
       ],
       "working": [
-        "The serial log opens with the chip\u00e2\u20ac\u2122s version, 92, read back over the bus.",
+        "The serial log opens with the chipâ€™s version, 92, read back over the bus.",
         "With an empty field every request times out and the log says so, once a second.",
         "Put a card in the field and the answer arrives in the FIFO: 4 and 0, the ATQA of a MIFARE Classic."
-      ]
+      ],
+      "checks": "rfidChecks",
+      "wireFloor": 1
     },
     {
       "id": "tm1637",
@@ -360,7 +378,9 @@
         "The glass counts the seconds, one a second, on four digits.",
         "The colon is the decimal point of the second digit, which is the only colon this module has.",
         "The serial log says the same number the glass shows."
-      ]
+      ],
+      "checks": "tm1637Checks",
+      "wireFloor": 1
     },
     {
       "id": "a4988",
@@ -388,12 +408,14 @@
         "The shaft turns one step for every pulse the sketch sends.",
         "Twenty steps one way and twenty the other, so the shaft turns back and forth.",
         "The serial log counts the steps the sketch sent."
-      ]
+      ],
+      "checks": "a4988Checks",
+      "wireFloor": 1
     },
     {
       "id": "microstep",
       "title": "Microstepping",
-      "blurb": "The same A4988 and motor, with the microstep-select pins high. Sixteen pulses make one full step, and the coil currents follow the chip\u00e2\u20ac\u2122s sine table instead of a binary phase.",
+      "blurb": "The same A4988 and motor, with the microstep-select pins high. Sixteen pulses make one full step, and the coil currents follow the chipâ€™s sine table instead of a binary phase.",
       "parts": [
         {
           "name": "Stepper driver (A4988)",
@@ -416,12 +438,14 @@
         "Sixteen pulses turn the shaft one full step, 7.5 degrees.",
         "Each pulse is 0.46875 degrees, a sixteenth of a step.",
         "The coil drive follows a sine table, so a winding spends part of the cycle between the rails instead of only at the supply."
-      ]
+      ],
+      "checks": "microstepChecks",
+      "wireFloor": 1
     },
     {
       "id": "pcf8574",
       "title": "I/O Expander",
-      "blurb": "A PCF8574 and eight LEDs. The board has run out of pins, so the expander makes eight more out of the two on the I\u00c2\u00b2C bus: the sketch writes one byte and the ports follow it.",
+      "blurb": "A PCF8574 and eight LEDs. The board has run out of pins, so the expander makes eight more out of the two on the IÂ²C bus: the sketch writes one byte and the ports follow it.",
       "parts": [
         {
           "name": "I/O expander (PCF8574)",
@@ -448,12 +472,14 @@
         "The eight lights show the counter in binary, one bit each.",
         "One byte goes out over the bus for every change.",
         "The serial log says the number the lights are showing."
-      ]
+      ],
+      "checks": "pcf8574Checks",
+      "wireFloor": 1
     },
     {
       "id": "mcp23017",
       "title": "Sixteen-Light Counter",
-      "blurb": "An MCP23017 makes sixteen pins out of the two on the I\u00c2\u00b2C bus. Each port has a direction register, so the sketch clears the direction bits first; only then does the latch drive the LEDs.",
+      "blurb": "An MCP23017 makes sixteen pins out of the two on the IÂ²C bus. Each port has a direction register, so the sketch clears the direction bits first; only then does the latch drive the LEDs.",
       "parts": [
         {
           "name": "I/O expander (MCP23017)",
@@ -480,12 +506,14 @@
         "The sixteen lights show the counter in binary, eight on each port.",
         "The direction registers are cleared first; a latch written while a pin is an input moves nothing.",
         "The serial log prints the number the two ports are showing."
-      ]
+      ],
+      "checks": "mcp23017Checks",
+      "wireFloor": 1
     },
     {
       "id": "expander-interrupt",
       "title": "One Pin, Sixteen Inputs",
-      "blurb": "A button sits on an MCP23017 port, and the expander watches it itself. When the button moves the chip pulls INTA, so the sketch reads one pin it already has instead of asking the expander over I\u00c2\u00b2C on every pass of loop().",
+      "blurb": "A button sits on an MCP23017 port, and the expander watches it itself. When the button moves the chip pulls INTA, so the sketch reads one pin it already has instead of asking the expander over IÂ²C on every pass of loop().",
       "parts": [
         {
           "name": "I/O expander (MCP23017)",
@@ -516,12 +544,14 @@
         "The serial log says the expander is watching PA0, and nothing else until the button is touched.",
         "A press pulls INTA low, the sketch reads the port, and the light comes on with a press line in the log.",
         "Releasing the button raises the port again, and the same path puts the light out."
-      ]
+      ],
+      "checks": "expanderInterruptChecks",
+      "wireFloor": 1
     },
     {
       "id": "pca9685",
       "title": "Sixteen-Level Dimmer",
-      "blurb": "A PCA9685 turns one I\u00c2\u00b2C pair into sixteen PWM channels. Each channel compares the chip\u00e2\u20ac\u2122s free-running counter against its own ON and OFF counts, so the sketch sets a duty rather than a pin level; the lights step from one sixteenth to full.",
+      "blurb": "A PCA9685 turns one IÂ²C pair into sixteen PWM channels. Each channel compares the chipâ€™s free-running counter against its own ON and OFF counts, so the sketch sets a duty rather than a pin level; the lights step from one sixteenth to full.",
       "parts": [
         {
           "name": "PWM driver (PCA9685)",
@@ -548,7 +578,9 @@
         "The sixteen lights step from one sixteenth of the frame to full on.",
         "The serial log lists the sixteen duties, one sixteenth through full.",
         "The light that is fully on never switches; the rest run at 50 frames a second."
-      ]
+      ],
+      "checks": "pca9685Checks",
+      "wireFloor": 1
     },
     {
       "id": "ds3231",
@@ -580,7 +612,9 @@
         "The serial log reports the lost-power flag, sets the clock, then prints the time it now keeps.",
         "The light toggles with the seconds register, so the clock is driving the board.",
         "Turn the Die temperature knob and the next reading changes: the chip measures itself in quarter-degree steps."
-      ]
+      ],
+      "checks": "ds3231Checks",
+      "wireFloor": 1
     },
     {
       "id": "max6675",
@@ -604,12 +638,14 @@
         "The log carries the probe\\u2019s temperature, a quarter of a degree at a time.",
         "Turn the probe knob and the reading follows it.",
         "The sketch reads sixteen bits and throws four of them away."
-      ]
+      ],
+      "checks": "max6675Checks",
+      "wireFloor": 1
     },
     {
       "id": "mcp4725",
       "title": "DAC Converter",
-      "blurb": "An MCP4725 and the board\u00e2\u20ac\u2122s own analog input. The bench can measure a voltage; this is the part that makes one \u00e2\u20ac\u201d the sketch writes twelve bits over the bus and the chip holds the level, and the board reads it back on an analog pin.",
+      "blurb": "An MCP4725 and the boardâ€™s own analog input. The bench can measure a voltage; this is the part that makes one â€” the sketch writes twelve bits over the bus and the chip holds the level, and the board reads it back on an analog pin.",
       "parts": [
         {
           "name": "DAC converter (MCP4725)",
@@ -627,8 +663,10 @@
       "working": [
         "The output walks from the ground to the supply in sixteen steps.",
         "The board reads the voltage back on an analog pin, and the log says what it read.",
-        "The reading is the code, in the board\u00e2\u20ac\u2122s own ten bits."
-      ]
+        "The reading is the code, in the boardâ€™s own ten bits."
+      ],
+      "checks": "mcp4725Checks",
+      "wireFloor": 1
     },
     {
       "id": "eeprom24lc256",
@@ -652,7 +690,9 @@
         "The count climbs, and it climbs by one every time.",
         "The counter lives in the memory, not in the sketch: a chip that forgot would start the count again.",
         "The address is sixteen bits, so it takes two bytes on the bus."
-      ]
+      ],
+      "checks": "eepromChecks",
+      "wireFloor": 1
     },
     {
       "id": "max7219",
@@ -676,7 +716,9 @@
         "A heart beats on the matrix: two frames, a wide one and a narrow one.",
         "Each frame is eight writes of an address and a byte, latched by chip-select when the SPI transaction ends.",
         "The serial monitor says when the beat starts."
-      ]
+      ],
+      "checks": "max7219Checks",
+      "wireFloor": 1
     },
     {
       "id": "nokia-5110",
@@ -701,7 +743,9 @@
         "The picture is 84 columns of chip memory in six banks of eight rows, and every frame clears all six banks before the wave is written again.",
         "The backlight pin is left unconnected on purpose: it is an LED on the module, and the PCD8544 drives the glass itself, so the wave shows without it.",
         "On this bench the data/command state travels with the byte, so a command goes out as SPI.transfer(value, 0) and a byte of display memory as SPI.transfer(value, 1)."
-      ]
+      ],
+      "checks": "nokia5110Checks",
+      "wireFloor": 1
     },
     {
       "id": "reaction",
@@ -733,7 +777,9 @@
         "Press once to arm; the light comes on two to five seconds later.",
         "The serial monitor reports your latency in milliseconds on a clean run.",
         "Pressing early prints \"false start\" and the round restarts."
-      ]
+      ],
+      "checks": "reactionChecks",
+      "wireFloor": 5
     },
     {
       "id": "net-clock",
@@ -756,12 +802,14 @@
         "The serial monitor reports the address the bench network handed out.",
         "The panel shows that address, then the time it fetched, once a second.",
         "Stop the network and the loop reports \"network failed\" rather than freezing."
-      ]
+      ],
+      "checks": "netClockChecks",
+      "wireFloor": 6
     },
     {
       "id": "sensor-feed",
       "title": "Sensor Feed",
-      "blurb": "A sensor on the network publishes a temperature. The board subscribes, reads it without ever blocking, and tells the sensor how often it wants the next one \u00e2\u20ac\u201d both directions of a network program.",
+      "blurb": "A sensor on the network publishes a temperature. The board subscribes, reads it without ever blocking, and tells the sensor how often it wants the next one â€” both directions of a network program.",
       "parts": [
         {
           "name": "3.2\" TFT (ILI9341)",
@@ -777,9 +825,11 @@
       ],
       "working": [
         "The serial monitor reports the subscription and the order it placed with the sensor.",
-        "Then it logs a temperature every two seconds \u00e2\u20ac\u201d the cadence the board asked for.",
+        "Then it logs a temperature every two seconds â€” the cadence the board asked for.",
         "The panel shows the latest reading as it arrives, and the bench stays responsive: the loop never waits."
-      ]
+      ],
+      "checks": "sensorFeedChecks",
+      "wireFloor": 6
     },
     {
       "id": "net-weather",
@@ -802,12 +852,14 @@
         "The serial monitor reports the join, then cycles through \"time\", \"temp\" and \"humidity\" as each answer arrives.",
         "The panel shows one value from each host: the clock at ntp.noesis, and the sensor at sensor.noesis.",
         "Only one request is in flight at a time, and the last value stays on the panel while the next one is pending."
-      ]
+      ],
+      "checks": "netWeatherChecks",
+      "wireFloor": 6
     },
     {
       "id": "live-weather",
       "title": "Live Weather",
-      "blurb": "The same poll loop, pointed at a real host: open-meteo, keyless and CORS-clean, reached because this build opted into the live network. The request leaves your machine \u00e2\u20ac\u201d a GET, no credentials \u00e2\u20ac\u201d and it fails like any other host when the network or the server is not there.",
+      "blurb": "The same poll loop, pointed at a real host: open-meteo, keyless and CORS-clean, reached because this build opted into the live network. The request leaves your machine â€” a GET, no credentials â€” and it fails like any other host when the network or the server is not there.",
       "parts": [
         {
           "name": "3.2\" TFT (ILI9341)",
@@ -824,14 +876,16 @@
       ],
       "working": [
         "The panel names the endpoint before the first request: this one leaves the machine.",
-        "The serial prints the JSON open-meteo answered, and the panel draws it \u00e2\u20ac\u201d a temperature nobody could know without asking.",
+        "The serial prints the JSON open-meteo answered, and the panel draws it â€” a temperature nobody could know without asking.",
         "Pull the network cable, and the loop reports \"no answer\" instead of freezing: a real host fails like a bench host."
-      ]
+      ],
+      "checks": "liveWeatherChecks",
+      "wireFloor": 1
     },
     {
       "id": "soil-probe",
       "title": "Soil Moisture Probe",
-      "blurb": "A sensor the bench has no model for, written as a script and carried in the circuit file itself: turn the Moisture knob and the Uno reads it on A0 \u00e2\u20ac\u201d the script is the sensor.",
+      "blurb": "A sensor the bench has no model for, written as a script and carried in the circuit file itself: turn the Moisture knob and the Uno reads it on A0 â€” the script is the sensor.",
       "parts": [
         {
           "name": "Soil moisture probe",
@@ -848,8 +902,10 @@
       "working": [
         "The serial prints a moisture percentage twice a second, and the inspector shows the probe with its knob.",
         "Turn Moisture down and the reading follows: the script reads the knob, the netlist holds the divider, and the ADC reads it back.",
-        "It is a part from the circuit file, not the catalogue \u00e2\u20ac\u201d the bench never had a soil probe built in."
-      ]
+        "It is a part from the circuit file, not the catalogue â€” the bench never had a soil probe built in."
+      ],
+      "checks": "soilProbeChecks",
+      "wireFloor": 3
     },
     {
       "id": "instrument-bench",
@@ -881,7 +937,9 @@
         "The serial log prints one line a reading: the pressure and temperature off the barometer, the current and the power off the monitor, and the converter counts.",
         "Turn the Pressure and Temperature knobs on the barometer and both numbers move: the chip reports raw counts and the sketch does the arithmetic.",
         "Turn the Current knob on the monitor and the current and the power move together, because the power is the current times the bus voltage."
-      ]
+      ],
+      "checks": "instrumentBenchChecks",
+      "wireFloor": 1
     },
     {
       "id": "environment-bench",
@@ -914,7 +972,9 @@
         "Turn the Light knob and the lux follows: the chip is in continuous mode, so every read is the current light.",
         "Turn the Temperature and Humidity knobs on the SHT31 and the next measurement follows; the TMP102 has its own Temperature knob, read on every pass.",
         "The CRC is recomputed in the sketch from the two data bytes, and the line ends in \"crc ok\" only when both words agree."
-      ]
+      ],
+      "checks": "environmentBenchChecks",
+      "wireFloor": 1
     },
     {
       "id": "bmp280",
@@ -938,7 +998,7 @@
         {
           "board": "uno",
           "circuit": "bmp280",
-          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// BMP280 barometer on I2C: read chip id, start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  return (Wire.read() << 8) | Wire.read();\n}\n\nint readThreeBytes(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 3);\n  return (Wire.read() << 16) | (Wire.read() << 8) | Wire.read();\n}\n\n// Calibration words, big-endian pairs from 0x88.\nint digT1, digT2, digT3;\nint digP1, digP2, digP3, digP4, digP5, digP6, digP7, digP8, digP9;\n\nvoid loadCalibration() {\n  digT1 = readWord(0x88);\n  digT2 = readWord(0x8A);\n  digT3 = readWord(0x8C);\n  digP1 = readWord(0x8E);\n  digP2 = readWord(0x90);\n  digP3 = readWord(0x92);\n  digP4 = readWord(0x94);\n  digP5 = readWord(0x96);\n  digP6 = readWord(0x98);\n  digP7 = readWord(0x9A);\n  digP8 = readWord(0x9C);\n  digP9 = readWord(0x9E);\n}\n\nint tFine;\n\nint compensateTemperature(int rawT) {\n  int var1 = (((rawT >> 3) - (digT1 << 1)) * digT2) >> 11;\n  int var2 = (((((rawT >> 4) - digT1) * ((rawT >> 4) - digT1)) >> 12) * digT3) >> 14;\n  tFine = var1 + var2;\n  return (tFine * 5 + 128) >> 8;\n}\n\nint compensatePressure(int rawP) {\n  int var1 = tFine - 128000;\n  int var2 = var1 * var1 * digP6;\n  var2 = var2 + ((var1 * digP5) << 17);\n  var2 = var2 + ((digP4) << 35);\n  var1 = ((var1 * var1 * digP3) >> 8) + ((var1 * digP2) << 12);\n  var1 = (((1 << 47) + var1) * digP1) >> 33;\n  if (var1 == 0) return 0;\n  int p = 1048576 - rawP;\n  p = (((p << 31) - var2) * 3125) / var1;\n  var1 = (digP9 * (p >> 13) * (p >> 13)) >> 25;\n  var2 = (digP8 * p) >> 19;\n  p = ((p + var1 + var2) >> 8) + (digP7 << 4);\n  return p / 256;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  loadCalibration();\n  Serial.println(\"bmp280 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n  delay(100);\n\n  int raw = readThreeBytes(0xF7);\n  int rawP = raw >> 4;\n  int rawT = (raw & 0x0FFFFF) >> 4;\n\n  int temperature = compensateTemperature(rawT) / 100.0;\n  int pressure = compensatePressure(rawP);\n\n  Serial.print(\"temperature \");\n  Serial.print(temperature);\n  Serial.print(\" C  pressure \");\n  Serial.print(pressure);\n  Serial.println(\" hPa\");\n\n  digitalWrite(LED, pressure > 1010 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// BMP280 barometer on I2C: read chip id, start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  return (Wire.read() << 8) | Wire.read();\n}\n\nint readThreeBytes(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 3);\n  return (Wire.read() << 16) | (Wire.read() << 8) | Wire.read();\n}\n\n// Calibration words, big-endian pairs from 0x88.\nint digT1, digT2, digT3;\nint digP1, digP2, digP3, digP4, digP5, digP6, digP7, digP8, digP9;\n\n/* A signed 16-bit pair, sign-extended the way the datasheet's coefficients are. */\nint readSigned(byte reg) {\n  int word = readWord(reg);\n  if (word > 32767) word = word - 65536;\n  return word;\n}\n\nvoid loadCalibration() {\n  digT1 = readWord(0x88);   // unsigned\n  digT2 = readSigned(0x8A);\n  digT3 = readSigned(0x8C);\n  digP1 = readWord(0x8E);   // unsigned\n  digP2 = readSigned(0x90);\n  digP3 = readSigned(0x92);\n  digP4 = readSigned(0x94);\n  digP5 = readSigned(0x96);\n  digP6 = readSigned(0x98);\n  digP7 = readSigned(0x9A);\n  digP8 = readSigned(0x9C);\n  digP9 = readSigned(0x9E);\n}\n\nint tFine;\n\n/*\n * The datasheet's integer compensation.\n *\n * Every step is integer arithmetic in the chip's own units, because that is what\n * the coefficients are scaled for: the temperature word carries the reading in\n * hundredths of a degree, and the pressure path works in the datasheet's fixed\n * point. Doing it in floats would need a 64-bit intermediate the bench has no\n * type for.\n */\nint compensateTemperature(int rawT) {\n  long var1 = (((long)(rawT >> 3)) - ((long)digT1 << 1)) * (long)digT2;\n  var1 = var1 / 2048;\n  long var2 = (long)((rawT >> 4) - digT1);\n  var2 = ((var2 * var2) / 4096) * (long)digT3 / 16384;\n  tFine = (int)(var1 + var2);\n  return tFine;\n}\n\n/* Degrees from t_fine: the chip's own 5/512 scaling. */\nfloat temperatureC(int rawT) {\n  return (float)compensateTemperature(rawT) * 5.0 / 512.0;\n}\n\nint compensatePressure(int rawP) {\n  long var1 = (long)tFine / 2 - 64000;\n  long var2 = var1 * var1 * (long)digP6;\n  var2 = var2 / 8192 + var1 * (long)digP5 * 2;\n  var2 = var2 / 4 + (long)digP4 * 65536;\n  var1 = ((long)digP3 * var1 * var1 / 32768 + (long)digP2 * var1) / 256 + 32768;\n  var1 = (32768 + var1) * (long)digP1 / 32768;\n  if (var1 == 0) return 0;\n  long pressure = 1048576 - (long)rawP;\n  pressure = ((pressure - var2 / 4096) * 3125) / var1;\n  long var1p = (long)digP9 * pressure * pressure / 2147483648;\n  long var2p = pressure * (long)digP8 / 524288;\n  pressure = (pressure + var1p + var2p + (long)digP7 * 16) / 100;\n  return (int)pressure;\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  loadCalibration();\n  Serial.println(\"bmp280 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n  delay(100);\n\n  // The data block is six bytes: pressure three, then temperature\n  // three, each a twenty-bit word. Reading one block and splitting it would\n  // divide one reading between two registers.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF7);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 6);\n  int p1 = Wire.read();\n  int p2 = Wire.read();\n  int p3 = Wire.read();\n  int t1 = Wire.read();\n  int t2 = Wire.read();\n  int t3 = Wire.read();\n  // The registers hold the count itself: the temperature word is the 20-bit\n  // value the compensation wants, and the pressure word is the count. Shifting\n  // either right by four would divide the reading by sixteen.\n  int rawT = (t1 << 16) | (t2 << 8) | t3;\n  int rawP = (p1 << 16) | (p2 << 8) | p3;\n\n  // t_fine scales to degrees by 5/512; pressure is already hectopascals.\n  float temperature = temperatureC(rawT);\n  int pressure = compensatePressure(rawP);\n\n  Serial.print(\"temperature \");\n  Serial.print(temperature);\n  Serial.print(\" C  pressure \");\n  Serial.print(pressure);\n  Serial.println(\" hPa\");\n\n  digitalWrite(LED, pressure > 1010 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
           "libraries": []
         }
       ],
@@ -947,7 +1007,9 @@
         "Turn the Pressure knob and the reading follows, within a hectopascal.",
         "Turn the Temperature knob and the reading follows, within a tenth of a degree.",
         "Above one thousand hectopascals the light comes on; below it, the light goes out."
-      ]
+      ],
+      "checks": "bmp280Checks",
+      "wireFloor": 1
     },
     {
       "id": "lm35",
@@ -979,7 +1041,9 @@
         "The serial log reports the temperature in whole degrees, following the part's Temperature knob.",
         "Turn the knob past thirty and the light comes on; turn it back down and the light goes out.",
         "The count in the log matches the voltage on A0: ten millivolts per degree."
-      ]
+      ],
+      "checks": "lm35Checks",
+      "wireFloor": 1
     },
     {
       "id": "vl53l0x",
@@ -1011,12 +1075,14 @@
         "The serial log reports the chip id (0xEE) and then the distance in millimetres.",
         "Turn the Distance knob and the reading follows, within a millimetre.",
         "Within one metre the light comes on; beyond it, the light goes out."
-      ]
+      ],
+      "checks": "vl53l0xChecks",
+      "wireFloor": 1
     },
     {
       "id": "bme280",
       "title": "Environment Station",
-      "blurb": "A BME280 environment sensor on I2C \u2014 temperature, pressure and humidity from one breakout. The sketch reads calibration coefficients, applies the datasheet compensation, and prints all three readings. A light comes on above 25\u00b0C.",
+      "blurb": "A BME280 environment sensor on I2C — temperature, pressure and humidity from one breakout. The sketch reads calibration coefficients, applies the datasheet compensation, and prints all three readings. A light comes on above 25°C.",
       "parts": [
         {
           "name": "BME280 Environment Sensor",
@@ -1035,7 +1101,7 @@
         {
           "board": "uno",
           "circuit": "bme280",
-          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// BME280 environment sensor on I2C: temperature, pressure and humidity.\n// Read chip id, start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  return (Wire.read() << 8) | Wire.read();\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  // Start a forced measurement: humidity x1, pressure/temp x1.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF2);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n\n  Serial.println(\"bme280 up\");\n}\n\nvoid loop() {\n  // Restart measurement.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF2);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n  delay(100);\n\n  // Read 8 bytes: pressure (3), temperature (3), humidity (2).\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF7);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 8);\n\n  int rawP = 0;\n  int rawT = 0;\n  int rawH = 0;\n  if (Wire.available() >= 8) {\n    rawP = (Wire.read() << 12) | (Wire.read() << 4) | (Wire.read() >> 4);\n    rawT = ((Wire.read() & 0x0F) << 12) | (Wire.read() << 4) | (Wire.read() >> 4);\n    rawH = (Wire.read() << 8) | Wire.read();\n  }\n\n  Serial.print(\"raw temp \");\n  Serial.print(rawT);\n  Serial.print(\" raw press \");\n  Serial.print(rawP);\n  Serial.print(\" raw hum \");\n  Serial.println(rawH);\n\n  digitalWrite(LED, rawT > 50000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// BME280 environment sensor on I2C: temperature, pressure and humidity.\n// Read chip id, start a measurement, read raw counts.\nconst byte SENSOR = 0x76;\nconst byte LED = 9;\n\nint readRegister(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 1);\n  return Wire.available() ? Wire.read() : 0;\n}\n\nint readWord(byte reg) {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(reg);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 2);\n  return (Wire.read() << 8) | Wire.read();\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Serial.print(\"chip id 0x\");\n  Serial.println(readRegister(0xD0), HEX);\n\n  // Start a forced measurement: humidity x1, pressure/temp x1.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF2);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n\n  Serial.println(\"bme280 up\");\n}\n\nvoid loop() {\n  // Restart measurement.\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF2);\n  Wire.write(0x01);\n  Wire.endTransmission();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF4);\n  Wire.write(0x25);\n  Wire.endTransmission();\n  delay(100);\n\n  // Read 8 bytes: pressure (3), temperature (3), humidity (2).\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xF7);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 8);\n\n  int rawP = 0;\n  int rawT = 0;\n  int rawH = 0;\n  if (Wire.available() >= 8) {\n    /*\n     * Pressure and temperature are twenty bits across three bytes each, and the\n     * last nibble of one is the first of the next. The counts are the whole\n     * twenty bits: dropping the low nibble would report a sixteenth of the\n     * reading.\n     */\n    int p1 = Wire.read();\n    int p2 = Wire.read();\n    int p3 = Wire.read();\n    int t1 = Wire.read();\n    int t2 = Wire.read();\n    int t3 = Wire.read();\n    rawP = (p1 << 16) | (p2 << 8) | p3;\n    rawP = rawP >> 4;\n    rawT = (t1 << 16) | (t2 << 8) | t3;\n    rawT = rawT >> 4;\n    rawH = (Wire.read() << 8) | Wire.read();\n  }\n\n  Serial.print(\"raw temp \");\n  Serial.print(rawT);\n  Serial.print(\" raw press \");\n  Serial.print(rawP);\n  Serial.print(\" raw hum \");\n  Serial.println(rawH);\n\n  digitalWrite(LED, rawT > 50000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
           "libraries": []
         }
       ],
@@ -1043,8 +1109,10 @@
         "The serial log reports the chip id (0x60) and then temperature, pressure and humidity.",
         "Turn the Temperature knob and the reading follows, within a hundredth of a degree.",
         "Turn the Pressure knob and the pressure reading follows; turn the Humidity knob and the humidity reading follows.",
-        "Above 25\u00b0C the light comes on; below it, the light goes out."
-      ]
+        "Above 25°C the light comes on; below it, the light goes out."
+      ],
+      "checks": "bme280Checks",
+      "wireFloor": 1
     },
     {
       "id": "soil-moisture",
@@ -1076,12 +1144,14 @@
         "The serial log reports the moisture in percent, following the part's Moisture knob.",
         "Turn the knob below forty percent and the light comes on; turn it back up and the light goes out.",
         "The percent in the log matches the ADC count on A0."
-      ]
+      ],
+      "checks": "soilMoistureChecks",
+      "wireFloor": 1
     },
     {
       "id": "aht20",
       "title": "Weather Sensor",
-      "blurb": "An AHT20 environment sensor on I2C \u2014 temperature and humidity from one breakout. The sketch starts a measurement and reads the raw counts. A light comes on in wet air.",
+      "blurb": "An AHT20 environment sensor on I2C — temperature and humidity from one breakout. The sketch starts a measurement and reads the raw counts. A light comes on in wet air.",
       "parts": [
         {
           "name": "AHT20 Environment Sensor",
@@ -1100,7 +1170,7 @@
         {
           "board": "uno",
           "circuit": "aht20",
-          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// AHT20 environment sensor on I2C: temperature and humidity.\n// Start a measurement, read raw counts.\nconst byte SENSOR = 0x38;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xAC);\n  Wire.write(0x33);\n  Wire.write(0x00);\n  Wire.endTransmission();\n\n  Serial.println(\"aht20 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xAC);\n  Wire.write(0x33);\n  Wire.write(0x00);\n  Wire.endTransmission();\n  delay(100);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x71);\n  Wire.endTransmission();\n  Wire.requestFrom(SENSOR, 6);\n\n  int hum = 0;\n  int temp = 0;\n  if (Wire.available() >= 6) {\n    Wire.read(); // status\n    int b1 = Wire.read();\n    int b2 = Wire.read();\n    int b3 = Wire.read();\n    int b4 = Wire.read();\n    int b5 = Wire.read();\n    hum = (b1 << 12) | (b2 << 4) | (b3 >> 4);\n    temp = ((b3 & 0x0F) << 12) | (b4 << 4) | (b5 >> 4);\n  }\n\n  Serial.print(\"hum \");\n  Serial.print(hum);\n  Serial.print(\" temp \");\n  Serial.println(temp);\n\n  digitalWrite(LED, hum > 500000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
+          "sketch": "#include <Arduino.h>\n#include <Wire.h>\n\n// AHT20 environment sensor on I2C: temperature and humidity.\n// Start a measurement, read raw counts.\nconst byte SENSOR = 0x38;\nconst byte LED = 9;\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(LED, OUTPUT);\n  Wire.begin();\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xAC);\n  Wire.write(0x33);\n  Wire.write(0x00);\n  Wire.endTransmission();\n\n  Serial.println(\"aht20 up\");\n}\n\nvoid loop() {\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0xAC);\n  Wire.write(0x33);\n  Wire.write(0x00);\n  Wire.endTransmission();\n  delay(100);\n\n  Wire.beginTransmission(SENSOR);\n  Wire.write(0x71);\n  Wire.endTransmission();\n  // Status, then humidity three bytes, then temperature three: seven.\n  Wire.requestFrom(SENSOR, 7);\n\n  int hum = 0;\n  int temp = 0;\n  if (Wire.available() >= 7) {\n    Wire.read(); // status\n    int b1 = Wire.read();\n    int b2 = Wire.read();\n    int b3 = Wire.read();\n    int b4 = Wire.read();\n    int b5 = Wire.read();\n    int b6 = Wire.read();\n    hum = (b1 << 16) | (b2 << 8) | b3;\n    temp = (b4 << 16) | (b5 << 8) | b6;\n  }\n\n  Serial.print(\"hum \");\n  Serial.print(hum);\n  Serial.print(\" temp \");\n  Serial.println(temp);\n\n  digitalWrite(LED, hum > 500000 ? HIGH : LOW);\n\n  delay(1000);\n}\n",
           "libraries": []
         }
       ],
@@ -1109,12 +1179,14 @@
         "Turn the Temperature knob and the reading follows.",
         "Turn the Humidity knob and the reading follows.",
         "In wet air above fifty percent the light comes on; below it, the light goes out."
-      ]
+      ],
+      "checks": "aht20Checks",
+      "wireFloor": 1
     },
     {
       "id": "scd40",
       "title": "Air Quality Monitor",
-      "blurb": "An SCD40 CO2 sensor on I2C \u2014 carbon dioxide, temperature and humidity from one breakout. The sketch starts periodic measurement and reads three words with their CRCs. A light comes on when the CO2 climbs above 1250 ppm.",
+      "blurb": "An SCD40 CO2 sensor on I2C — carbon dioxide, temperature and humidity from one breakout. The sketch starts periodic measurement and reads three words with their CRCs. A light comes on when the CO2 climbs above 1250 ppm.",
       "parts": [
         {
           "name": "SCD40 CO2 Sensor",
@@ -1142,12 +1214,14 @@
         "Turn the CO2 knob and the reading follows.",
         "Turn the Temperature and Humidity knobs and the readings follow.",
         "Above 1250 ppm the light comes on; below it, the light goes out."
-      ]
+      ],
+      "checks": "scd40Checks",
+      "wireFloor": 1
     },
     {
       "id": "max30102",
       "title": "Pulse Monitor",
-      "blurb": "A MAX30102 pulse oximeter on I2C \u2014 heart rate and blood oxygen from one fingertip module. The sketch starts the PPG and reads infrared and red counts. A light comes on with a strong pulse.",
+      "blurb": "A MAX30102 pulse oximeter on I2C — heart rate and blood oxygen from one fingertip module. The sketch starts the PPG and reads infrared and red counts. A light comes on with a strong pulse.",
       "parts": [
         {
           "name": "MAX30102 Pulse Oximeter",
@@ -1175,12 +1249,14 @@
         "Turn the Heart rate knob and the counts follow.",
         "Turn the SpO2 knob and the counts follow.",
         "With a strong pulse the light comes on; with a weak one, it goes out."
-      ]
+      ],
+      "checks": "max30102Checks",
+      "wireFloor": 1
     },
     {
       "id": "bme680",
       "title": "Gas Sensor",
-      "blurb": "A BME680 gas sensor on I2C \u2014 temperature, pressure, humidity and gas resistance from one breakout. The sketch starts a measurement and reads the raw counts. A light comes on when the gas resistance drops.",
+      "blurb": "A BME680 gas sensor on I2C — temperature, pressure, humidity and gas resistance from one breakout. The sketch starts a measurement and reads the raw counts. A light comes on when the gas resistance drops.",
       "parts": [
         {
           "name": "BME680 Gas Sensor",
@@ -1208,12 +1284,14 @@
         "Turn the Gas resistance knob and the reading follows.",
         "Turn the Temperature, Pressure and Humidity knobs and the readings follow.",
         "When the gas resistance drops low enough, the light comes on."
-      ]
+      ],
+      "checks": "bme680Checks",
+      "wireFloor": 1
     },
     {
       "id": "apds9960",
       "title": "Gesture Sensor",
-      "blurb": "An APDS9960 gesture sensor on I2C \u2014 gesture, proximity and ambient light from one breakout. The sketch reads the data registers. A light comes on when a hand is close.",
+      "blurb": "An APDS9960 gesture sensor on I2C — gesture, proximity and ambient light from one breakout. The sketch reads the data registers. A light comes on when a hand is close.",
       "parts": [
         {
           "name": "APDS9960 Gesture Sensor",
@@ -1241,12 +1319,14 @@
         "Turn the Proximity knob and the reading follows.",
         "Turn the Ambient knob and the reading follows.",
         "When a hand is close the light comes on; far away, it goes out."
-      ]
+      ],
+      "checks": "apds9960Checks",
+      "wireFloor": 1
     },
     {
       "id": "bno055",
       "title": "Compass",
-      "blurb": "A BNO055 absolute orientation sensor on I2C \u2014 heading, pitch and roll with a magnetometer and sensor fusion. The sketch puts it in NDOF mode and reads the orientation. A light comes on when the heading turns past a quarter turn.",
+      "blurb": "A BNO055 absolute orientation sensor on I2C — heading, pitch and roll with a magnetometer and sensor fusion. The sketch puts it in NDOF mode and reads the orientation. A light comes on when the heading turns past a quarter turn.",
       "parts": [
         {
           "name": "BNO055 Absolute Orientation",
@@ -1274,7 +1354,9 @@
         "Turn the Heading knob and the reading follows.",
         "Turn the Pitch and Roll knobs and the readings follow.",
         "Past ninety degrees the light comes on; below it, the light goes out."
-      ]
+      ],
+      "checks": "bno055Checks",
+      "wireFloor": 1
     },
     {
       "id": "adxl335",
@@ -1306,7 +1388,9 @@
         "The serial log reports X, Y and Z in g, following the part's knobs.",
         "Turn the X knob past one g and the light comes on.",
         "At rest the axes read near zero, mid-rail, as the chip does."
-      ]
+      ],
+      "checks": "adxl335Checks",
+      "wireFloor": 1
     },
     {
       "id": "mq2",
@@ -1338,7 +1422,9 @@
         "The serial log reports gas concentration in ppm, following the part's Gas concentration knob.",
         "Turn the knob past 400 ppm and the light comes on.",
         "The ppm in the log matches the ADC count on A0."
-      ]
+      ],
+      "checks": "mq2Checks",
+      "wireFloor": 1
     },
     {
       "id": "dht22",
@@ -1369,7 +1455,9 @@
       "working": [
         "The serial log reports temperature in degrees Celsius, following the part's Temperature knob.",
         "Turn the knob past 30 C and the light comes on."
-      ]
+      ],
+      "checks": "dht22Checks",
+      "wireFloor": 1
     },
     {
       "id": "mlx90614",
@@ -1391,7 +1479,9 @@
       ],
       "working": [
         "The serial log reports ambient temperature in degrees Celsius, following the part's Ambient temperature knob."
-      ]
+      ],
+      "checks": "mlx90614Checks",
+      "wireFloor": 1
     },
     {
       "id": "adxl345",
@@ -1413,7 +1503,9 @@
       ],
       "working": [
         "The serial log reports X, Y, Z acceleration counts, following the part's X, Y, Z knobs."
-      ]
+      ],
+      "checks": "adxl345Checks",
+      "wireFloor": 1
     },
     {
       "id": "hmc5883l",
@@ -1435,7 +1527,9 @@
       ],
       "working": [
         "The serial log reports X, Y, Z magnetic field counts, following the part's X, Y, Z knobs."
-      ]
+      ],
+      "checks": "hmc5883lChecks",
+      "wireFloor": 1
     },
     {
       "id": "tsl2561",
@@ -1457,7 +1551,9 @@
       ],
       "working": [
         "The serial log reports channel 0 and channel 1 counts, following the part's Light knob."
-      ]
+      ],
+      "checks": "tsl2561Checks",
+      "wireFloor": 1
     },
     {
       "id": "ccs811",
@@ -1479,7 +1575,9 @@
       ],
       "working": [
         "The serial log reports eCO2 and TVOC, following the part's eCO2 and TVOC knobs."
-      ]
+      ],
+      "checks": "ccs811Checks",
+      "wireFloor": 1
     },
     {
       "id": "si7021",
@@ -1501,7 +1599,9 @@
       ],
       "working": [
         "The serial log reports temperature and humidity, following the part's Temperature and Humidity knobs."
-      ]
+      ],
+      "checks": "si7021Checks",
+      "wireFloor": 1
     },
     {
       "id": "veml6075",
@@ -1523,7 +1623,9 @@
       ],
       "working": [
         "The serial log reports UVA and UVB counts, following the part's UVA and UVB knobs."
-      ]
+      ],
+      "checks": "veml6075Checks",
+      "wireFloor": 1
     },
     {
       "id": "sgp30",
@@ -1545,7 +1647,9 @@
       ],
       "working": [
         "The serial log reports eCO2 and TVOC, following the part's eCO2 and TVOC knobs."
-      ]
+      ],
+      "checks": "sgp30Checks",
+      "wireFloor": 1
     },
     {
       "id": "max30100",
@@ -1567,7 +1671,9 @@
       ],
       "working": [
         "The serial log reports IR and red counts, following the part's Heart rate and SpO2 knobs."
-      ]
+      ],
+      "checks": "max30100Checks",
+      "wireFloor": 1
     },
     {
       "id": "htu21d",
@@ -1589,7 +1695,9 @@
       ],
       "working": [
         "The serial log reports temperature and humidity, following the part's knobs."
-      ]
+      ],
+      "checks": "htu21dChecks",
+      "wireFloor": 1
     }
   ]
 }
