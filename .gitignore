@@ -12,6 +12,22 @@ dist
 dist-ssr
 *.local
 
+# Secrets: environment files and credential material stay out of the repo, so a
+# read tool cannot pull them into a prompt and a `git add .` cannot commit them.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+secrets.json
+secrets.yml
+secrets.yaml
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
