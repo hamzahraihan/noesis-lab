@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import {
@@ -97,6 +97,33 @@ async function tier2Reachable(): Promise<boolean> {
     return false;
   }
 }
+
+/*
+ * The gallery JSON is read as UTF-8 by the generator and by every tool that
+ * rewrites it. A writer that treats those bytes as Windows-1252 leaves the file
+ * parsable and the strings subtly wrong -- an em-dash becomes three characters --
+ * and nothing downstream notices: the sketches still compile, and the only
+ * consumer that hashes the text is the AVR hex manifest, whose drift is reported
+ * as a hash mismatch two steps away from the cause. So the encoding is asserted
+ * where the text enters the repo.
+ */
+describe('the gallery JSON encoding', () => {
+  it('reads as UTF-8 and carries no double-encoded characters', () => {
+    const source = readFileSync(join(__dirname, 'gallery-projects.json'), 'utf8');
+    // A UTF-8 byte sequence decoded as Windows-1252 survives as these characters:
+    // `Ã`/`Â` before a Latin-1 range char, or the three-character `â€…` run that an
+    // em-dash, en-dash, quote or ellipsis becomes.
+    expect(source).not.toMatch(/[ÃÂ][\u0080-\u00bf]/);
+    expect(source).not.toMatch(/â€[\u0080-\u00bf\u2018-\u201d]/);
+    // Every code point the file carries must be a real character, not a byte
+    // value parked in the C1 range where no text belongs.
+    const stray = [...source].filter((char) => {
+      const code = char.codePointAt(0)!;
+      return (code >= 0x80 && code <= 0x9f) || code === 0xfffd;
+    });
+    expect(stray).toEqual([]);
+  });
+});
 
 describe('the project gallery', () => {
   it('numbers every project uniquely and builds each at least once', () => {
