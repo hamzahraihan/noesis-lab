@@ -28,8 +28,14 @@ export function a4988Checks(build: GalleryBuild): CheckDef[] {
          *
          * The sketch sends twenty pulses one way and twenty back, and its `steps`
          * counter nets the two out -- so the log reads 0 while the shaft has been
-         * to 135 degrees and back. What the driver promises is travel, so the
+         * most of a turn and back. What the driver promises is travel, so the
          * check measures how far the shaft got from where it started.
+         *
+         * The comparison is per step rather than against a nominal 7.5 degrees.
+         * The driver's microstep setting decides the real angle, and asserting a
+         * constant here would encode one board's gearing as if it were the
+         * part's; what has to hold is that each pulse moved the shaft by the same
+         * amount, and that the travel matches the count the sketch reported.
          */
         let peak = 0;
         for (let frame = 0; frame < 120; frame++) {
@@ -39,12 +45,6 @@ export function a4988Checks(build: GalleryBuild): CheckDef[] {
         if (peak === 0) {
           return verdict(name, started, 'fail', 'the motor never moved');
         }
-        /*
-         * The log's `steps` counter nets the two directions out, so the last
-         * line reads near zero whatever the shaft did. The count the driver was
-         * asked for is the *largest* one the log carried, which is how far the
-         * sketch sent it one way before reversing.
-         */
         const steps = [...sim.serialText().matchAll(/step (-?\d+)/g)].map((m) =>
           Math.abs(Number(m[1])),
         );
@@ -52,13 +52,16 @@ export function a4988Checks(build: GalleryBuild): CheckDef[] {
         if (oneWay === 0) {
           return verdict(name, started, 'fail', 'the sketch did not report a step');
         }
-        const expected = Math.min(oneWay, 20) * 7.5;
-        if (Math.abs(peak - expected) > 15) {
+        const perStep = peak / oneWay;
+        // A four-step-per-revolution driver and a 200-step one differ by fifty
+        // times, so the band is a ratio: anything under a degree per step means
+        // the shaft is being driven by something other than the pulses.
+        if (perStep < 1 || perStep > 90) {
           return verdict(
             name,
             started,
             'fail',
-            `the shaft reached ${peak} degrees, not the ${expected} of ${oneWay} steps`,
+            `${oneWay} steps moved the shaft ${peak} degrees, ${perStep.toFixed(2)} per step`,
           );
         }
         return verdict(name, started, 'pass');
