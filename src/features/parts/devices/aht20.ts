@@ -49,16 +49,22 @@ const STATUS_READY = 0x18;
 /** Twenty-bit range of the AHT20 converter. */
 const FULL_SCALE = 0x100000;
 
-/** The raw humidity count for a given relative humidity, twenty bits. */
+/**
+ * The raw humidity count for a given relative humidity, twenty bits.
+ *
+ * The full twenty-bit span is the reading: a sketch that decodes it with the
+ * datasheet's `value * 100 / 2^20` gets the percent the operator dialled in.
+ * Pre-shifting here would make the same sketch read a sixteenth of it.
+ */
 function rawHumidityFor(percent: number): number {
   const clamped = Math.max(0, Math.min(100, percent));
-  return Math.round(((clamped / 100) * FULL_SCALE) / 16);
+  return Math.round((clamped / 100) * FULL_SCALE);
 }
 
 /** The raw temperature count for a given temperature, twenty bits. */
 function rawTemperatureFor(celsius: number): number {
   const clamped = Math.max(-40, Math.min(85, celsius));
-  return Math.round((((clamped + 50) / 200) * FULL_SCALE) / 16);
+  return Math.round(((clamped + 50) / 200) * FULL_SCALE);
 }
 
 export class Aht20 implements I2cDevice {
@@ -98,8 +104,11 @@ export class Aht20 implements I2cDevice {
     this.celsius = conditions.celsius;
     this.humidity = conditions.humidity;
 
-    this.rawHumidity = rawHumidityFor(this.humidity) << 4;
-    this.rawTemperature = rawTemperatureFor(this.celsius) << 4;
+    // The counts are the twenty-bit readings themselves; the data registers
+    // place them across three bytes. Shifting them left here would push the top
+    // nibble out of the register.
+    this.rawHumidity = rawHumidityFor(this.humidity);
+    this.rawTemperature = rawTemperatureFor(this.celsius);
     this.stale = false;
   }
 
@@ -127,11 +136,15 @@ export class Aht20 implements I2cDevice {
   /** The byte at a register address, zero for the addresses that hold none. */
   private register(address: number): number {
     if (address === DATA_MSB) return STATUS_READY;
-    if (address === DATA_MSB + 1 || address === DATA_MSB + 2 || address === DATA_MSB + 3) {
+    // Humidity is three bytes from DATA_MSB + 1, temperature three from
+    // DATA_MSB + 4. The ranges are disjoint: overlapping them at +3 answered
+    // the temperature's first byte as the humidity's last, which made the
+    // reading come back at half scale.
+    if (address >= DATA_MSB + 1 && address <= DATA_MSB + 3) {
       return this.humidityByte(address - DATA_MSB - 1);
     }
-    if (address === DATA_MSB + 3 || address === DATA_MSB + 4 || address === DATA_MSB + 5) {
-      return this.temperatureByte(address - DATA_MSB - 3);
+    if (address >= DATA_MSB + 4 && address <= DATA_MSB + 6) {
+      return this.temperatureByte(address - DATA_MSB - 4);
     }
     return 0;
   }
