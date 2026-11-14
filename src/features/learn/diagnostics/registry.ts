@@ -173,9 +173,10 @@ export function buildRegistry(): RegistryEntry[] {
         buildLabel: build.variant === undefined ? build.board : `${build.board}:${build.variant}`,
         makeSim: makeSimFor(build, project),
         checks: checksFor(entry.id, build),
-        // The AVR worker compile measures ~150 s, over the 120 s runner default.
-        extendedCapMs:
-          entry.id === 'alarm-clock' && build.variant === 'library' ? 1_600_000 : undefined,
+        // A build that takes longer than the runner default says so itself:
+        // the AVR worker compile measures ~150 s, over the 120 s default, and
+        // the cost belongs with the project rather than in a special case here.
+        extendedCapMs: build.wallCapMs,
       };
     }),
   );

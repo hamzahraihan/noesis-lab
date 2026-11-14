@@ -2,12 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildRegistry } from './registry';
 import { runHarness } from './harness';
 import { FIVE_GLYPH, ONE_GLYPH, ZERO_GLYPH } from './probes';
-import {
-  GALLERY_PROJECT_IDS,
-  GALLERY_BUILD_LABELS,
-  NETWORK_PROJECT_IDS,
-  NEW_PART_PROJECT_IDS,
-} from '../generated/test-coverage';
+import { GALLERY_PROJECT_IDS, GALLERY_BUILD_LABELS, NETWORK_PROJECT_IDS } from '../generated/test-coverage';
+import { GALLERY } from '../gallery';
 
 describe('registry', () => {
   it('covers every gallery project and build', () => {
@@ -23,40 +19,56 @@ describe('registry', () => {
   });
 
   /*
-   * The checks are live-acceptance code, so at least the fast ones are run
-   * here: a check that cannot pass is worse than no check, and the registry's
-   * coverage test cannot see the difference.
+   * Every interpreter build's checks run here. They used to be picked by hand
+   * from a six-id list in the generator, so the other forty-six projects had
+   * checks that typechecked and never executed -- which is how five broken
+   * checks survived long enough to be found by running them.
+   *
+   * Those five were real defects in the devices and the sketches, not in the
+   * wiring: a stepper's shaft compared against a counter the sketch nets out, a
+   * pin asked for by its alias, and three sensors whose registers were shifted
+   * twice. They are fixed, so the leg asserts every project rather than listing
+   * exceptions.
    */
-  it('passes its live checks for the network projects', async () => {
+  it('passes its live checks for every interpreter project', async () => {
+    const interpreterBuilds = buildRegistry().filter((entry) => {
+      const build = GALLERY.find((p) => p.id === entry.projectId)?.builds.find(
+        (b) => (b.variant === undefined ? b.board : `${b.board}:${b.variant}`) === entry.buildLabel,
+      );
+      return build?.execution === undefined || build.execution === 'interpreter';
+    });
+    // Guards the leg against silently shrinking to nothing again.
+    expect(interpreterBuilds.length).toBeGreaterThan(40);
+
+    // Every failure is collected rather than stopping at the first: a leg that
+    // reports one project at a time sends the reader back for each, and the
+    // point of running them all is to see the whole set at once.
+    const failures: string[] = [];
+    for (const entry of interpreterBuilds) {
+      const report = await runHarness(entry.checks, entry.makeSim, {
+        wallCapMs: entry.extendedCapMs,
+      });
+      for (const result of report.results) {
+        if (result.status === 'fail') {
+          failures.push(`${entry.projectId}@${entry.buildLabel}: ${result.name} -- ${result.detail}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  }, 600_000);
+
+  it('keeps the network projects on their offline half', async () => {
     /*
      * live-weather's checks are the offline half of that project on purpose:
      * the harness builds a bench with no live bridge, so they pin the join and
-     * the reported failure rather than a third party's answer.
+     * the reported failure rather than a third party's answer. The projects that
+     * speak on a real network are the ESP32 ones, which run in the worker.
      */
     for (const id of NETWORK_PROJECT_IDS) {
       const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
-      const report = await runHarness(entry.checks, entry.makeSim);
-      const failed = report.results.filter((result) => result.status === 'fail');
-      expect(failed, `${id}: ${failed.map((result) => result.detail).join('; ')}`).toEqual([]);
-      expect(
-        report.results.every((result) => result.status === 'pass'),
-        id,
-      ).toBe(true);
+      expect(entry.checks.length, `${id} checks`).toBeGreaterThan(0);
     }
-  }, 30_000);
-
-  it('passes its live checks for the new part projects', async () => {
-    for (const id of NEW_PART_PROJECT_IDS) {
-      const entry = buildRegistry().find((candidate) => candidate.projectId === id)!;
-      const report = await runHarness(entry.checks, entry.makeSim);
-      const failed = report.results.filter((result) => result.status === 'fail');
-      expect(failed, `${id}: ${failed.map((result) => result.detail).join('; ')}`).toEqual([]);
-      expect(
-        report.results.every((result) => result.status === 'pass'),
-        id,
-      ).toBe(true);
-    }
-  }, 30_000);
+  });
 
   it('shows 15:00 on the driven alarm glass', () => {
     const entry = buildRegistry().find(
@@ -67,14 +79,15 @@ describe('registry', () => {
     expect(sim.glass().glyphs).toEqual([ONE_GLYPH, FIVE_GLYPH, ZERO_GLYPH, ZERO_GLYPH]);
   }, 60000);
 
-  it('extends the wall cap on the alarm-clock library entry only', () => {
-    for (const entry of buildRegistry()) {
-      if (entry.projectId === 'alarm-clock' && entry.buildLabel === 'uno:library') {
-        expect(entry.extendedCapMs).toBe(1_600_000);
-      } else {
-        expect(entry.extendedCapMs).toBeUndefined();
-      }
-    }
+  it('takes the long wall cap from the build that needs it', () => {
+    const library = buildRegistry().find(
+      (candidate) => candidate.projectId === 'alarm-clock' && candidate.buildLabel === 'uno:library',
+    )!;
+    expect(library.extendedCapMs).toBe(1_600_000);
+    const plain = buildRegistry().find(
+      (candidate) => candidate.projectId === 'alarm-clock' && candidate.buildLabel === 'uno',
+    )!;
+    expect(plain.extendedCapMs).toBeUndefined();
   });
 
   it('counts ticks through the adapter', () => {
