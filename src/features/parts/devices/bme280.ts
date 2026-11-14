@@ -124,10 +124,12 @@ export class Bme280 implements I2cDevice {
     this.celsius = conditions.celsius;
     this.humidity = conditions.humidity;
 
-    // The temperature count is twenty bits, left-aligned across three bytes.
-    this.rawTemperature = rawTemperatureFor(this.celsius) << 4;
-    this.rawPressure = rawPressureFor(this.pascals / 100) << 4;
-    this.rawHumidity = rawHumidityFor(this.humidity) << 4;
+    // The counts are twenty bits; the data registers place them. Shifting them
+    // left here would drop the top nibble and the chip would answer a sixteenth
+    // of the reading the operator dialled in.
+    this.rawTemperature = rawTemperatureFor(this.celsius);
+    this.rawPressure = rawPressureFor(this.pascals / 100);
+    this.rawHumidity = rawHumidityFor(this.humidity);
     this.stale = false;
   }
 
