@@ -59,47 +59,64 @@ export const BMP280_CALIBRATION = {
   digT2: 26735,
   /** Temperature compensation, signed. */
   digT3: -1000,
+  /*
+   * The pressure coefficients are chosen so the compensation decodes the count
+   * this device stores: `digP1` is 250, which with the offset-encoded register
+   * word (see `rawPressureFor`) returns the hectopascals the operator dialled
+   * in. The correction terms are zero because the bench's chip is a model, not
+   * a sampled part -- a real BMP280's coefficients vary per device, and a model
+   * that pretended otherwise would answer readings no real chip gives.
+   */
   /** Pressure compensation, unsigned. */
-  digP1: 41264,
+  digP1: 250,
   /** Pressure compensation, signed. */
-  digP2: -23743,
+  digP2: 0,
   /** Pressure compensation, signed. */
-  digP3: 32768,
+  digP3: 0,
   /** Pressure compensation, signed. */
-  digP4: -10240,
+  digP4: 0,
   /** Pressure compensation, signed. */
-  digP5: -2048,
+  digP5: 0,
   /** Pressure compensation, signed. */
-  digP6: 32768,
+  digP6: 0,
   /** Pressure compensation, signed. */
-  digP7: -4096,
+  digP7: 0,
   /** Pressure compensation, signed. */
-  digP8: -8192,
+  digP8: 0,
   /** Pressure compensation, signed. */
-  digP9: 16384,
+  digP9: 0,
 } as const;
 
 /**
- * How many raw counts per degree Celsius. The BMP280's temperature word is
- * twenty bits, so a scale of 16 counts per degree keeps the whole range in
- * range with room to spare.
+ * The temperature count the compensation decodes.
+ *
+ * These coefficients put 0 C at 442032 counts and a degree at 63.04, so a raw
+ * count of 400 -- which is what a naive "16 counts per degree" scale gives at
+ * 25 C -- decodes as -7148 C. The chip stores the count on the scale its own
+ * compensation assumes, which is why the offset is here rather than in the
+ * sketch.
  */
-const COUNTS_PER_DEGREE = 16;
+const RAW_COUNTS_AT_ZERO_C = 442_032;
+const RAW_COUNTS_PER_DEGREE = 63.04;
 
-/** How many raw counts per hectopascal. */
+/** How many raw counts per hectopascal, on the scale the compensation decodes. */
 const COUNTS_PER_HECTOPASCAL = 16;
 
 /**
- * The datasheet's temperature compensation: raw count in, hundredths of a
- * degree out. The divisions truncate towards zero, matching the chip's C.
+ * The datasheet's temperature compensation: raw count in, `t_fine` out.
+ *
+ * `t_fine` is the chip's own intermediate, and the pressure compensation takes
+ * it as it is. Returning the scaled temperature here instead handed the pressure
+ * path a value a hundred times too small, which is why the two functions
+ * disagreed about what the other was passing. The degrees are `t_fine * 5 / 512`,
+ * which is the caller's business.
  */
 export function bmp280CompensateTemperature(raw: number): number {
   const cal = BMP280_CALIBRATION;
   const var1 = (((raw >> 3) - (cal.digT1 << 1)) * cal.digT2) / 2048;
   const var2 =
     (((((raw >> 4) - cal.digT1) * ((raw >> 4) - cal.digT1)) / 4096) * cal.digT3) / 16384;
-  const tFine = var1 + var2;
-  return (tFine * 5) / 512;
+  return var1 + var2;
 }
 
 /**
@@ -124,14 +141,22 @@ export function bmp280CompensatePressure(raw: number, tFine: number): number {
   return pressure;
 }
 
-/** The raw temperature count for a given temperature, in twenty-bit left-aligned form. */
+/** The raw temperature count for a given temperature, in the compensation's own scale. */
 function rawTemperatureFor(celsius: number): number {
-  return Math.max(0, Math.min(0xfffff, Math.round(celsius * COUNTS_PER_DEGREE)));
+  const raw = Math.round(RAW_COUNTS_AT_ZERO_C + celsius * RAW_COUNTS_PER_DEGREE);
+  return Math.max(0, Math.min(0xfffff, raw));
 }
 
-/** The raw pressure count for a given pressure, in twenty-bit left-aligned form. */
+/**
+ * The raw pressure count for a given pressure, in the compensation's own scale.
+ *
+ * The datasheet's compensation subtracts the raw word from 1048576, so the word
+ * counts *down* from full scale as the pressure rises. Storing `hPa * 16`
+ * instead made every reading come back negative.
+ */
 function rawPressureFor(hectopascals: number): number {
-  return Math.max(0, Math.min(0xfffff, Math.round(hectopascals * COUNTS_PER_HECTOPASCAL)));
+  const raw = 1_048_576 - Math.round(hectopascals * COUNTS_PER_HECTOPASCAL);
+  return Math.max(0, Math.min(0xfffff, raw));
 }
 
 export class Bmp280 implements I2cDevice {
@@ -172,9 +197,12 @@ export class Bmp280 implements I2cDevice {
     this.pascals = conditions.pascals;
     this.celsius = conditions.celsius;
 
-    // The temperature count is twenty bits, left-aligned across three bytes.
-    this.rawTemperature = rawTemperatureFor(this.celsius) << 4;
-    this.rawPressure = rawPressureFor(this.pascals / 100) << 4;
+    // The counts are twenty bits. `dataByte` places them across three bytes,
+    // so they are stored as the count itself: shifting them left here would
+    // push the top nibble out of the register and the chip would answer with a
+    // reading a sixteenth of the one the operator dialled in.
+    this.rawTemperature = rawTemperatureFor(this.celsius);
+    this.rawPressure = rawPressureFor(this.pascals / 100);
     this.stale = false;
   }
 
@@ -203,7 +231,11 @@ export class Bmp280 implements I2cDevice {
     if (address >= CALIBRATION && address < CALIBRATION + 24) {
       return this.calibrationByte(address - CALIBRATION);
     }
-    if (address === DATA_MSB || address === DATA_MSB + 1 || address === DATA_MSB + 2) {
+    // Six data registers: pressure at +0..+2, temperature at +3..+5. Answering
+    // only the first three left the temperature word reading zero, so every
+    // sketch that read the block got a temperature of -45 C while the pressure
+    // looked plausible.
+    if (address >= DATA_MSB && address <= DATA_MSB + 5) {
       return this.dataByte(address - DATA_MSB);
     }
     return 0;
