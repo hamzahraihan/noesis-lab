@@ -39,6 +39,7 @@ task-*-report.md
 src/features/simulation/avr/wasm/.build-tmp-*
 graphify-out/
 .opencode/
+.omo/
 
 # husky internals
 .husky/_
