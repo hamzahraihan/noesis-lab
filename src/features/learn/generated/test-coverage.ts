@@ -2,7 +2,6 @@ export const GALLERY_PROJECT_IDS = ["alarm-clock","safe","dashboard","parking","
 export type GalleryProjectId = typeof GALLERY_PROJECT_IDS[number];
 export const GALLERY_BUILD_LABELS = ["alarm-clock@uno","alarm-clock@uno:library","safe@uno","dashboard@uno","parking@uno","weather@uno","shift-register@uno","rfid@uno","tm1637@uno","a4988@uno","microstep@uno","pcf8574@uno","mcp23017@uno","expander-interrupt@uno","pca9685@uno","ds3231@uno","max6675@uno","mcp4725@uno","eeprom24lc256@uno","max7219@uno","nokia-5110@uno","reaction@uno","net-clock@esp32","sensor-feed@esp32","net-weather@esp32","live-weather@esp32","soil-probe@uno","instrument-bench@uno","environment-bench@uno","bmp280@uno","lm35@uno","vl53l0x@uno","bme280@uno","soil-moisture@uno","aht20@uno","scd40@uno","max30102@uno","bme680@uno","apds9960@uno","bno055@uno","adxl335@uno","mq2@uno","dht22@uno","mlx90614@uno","adxl345@uno","hmc5883l@uno","tsl2561@uno","ccs811@uno","si7021@uno","veml6075@uno","sgp30@uno","max30100@uno","htu21d@uno"] as const;
 export const NETWORK_PROJECT_IDS = ["net-clock","sensor-feed","net-weather","live-weather"] as const;
-export const NEW_PART_PROJECT_IDS = ["ds3231","mcp23017","expander-interrupt","pca9685","microstep","environment-bench"] as const;
 export const WIRE_FLOORS: Record<GalleryProjectId, number> = {
   "alarm-clock": 25,
   "safe": 14,
