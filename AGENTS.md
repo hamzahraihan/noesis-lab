@@ -5,13 +5,22 @@
 Add the project to `src/features/learn/gallery-projects.json` and run
 `npm run generate:gallery`. That writes `src/features/learn/generated/` —
 the `GALLERY` entries, the circuit registry, the checks map, and the test
-coverage list — so the five hand-synced files this used to need
-(`gallery.ts`, `circuits/index.ts`, `diagnostics/registry.ts`,
-`gallery.test.ts`, `diagnostics/registry.test.ts`) can no longer disagree.
+coverage record — so the hand-synced files this used to need can no longer
+disagree.
+
+The JSON carries the two fields the generator used to keep in tables beside
+itself: `checks` names the check symbol (an object keyed by variant when one
+project ships two builds), and `wireFloor` states the fewest wires the project's
+circuit must carry. Nothing about a project is decided anywhere else.
 
 What the generator cannot invent is the content: the circuit document under
-`src/features/learn/circuits/`, the sketch, and a checks function. A build with
-no checks is still a failure — `diagnostics/registry.test.ts` asserts it.
+`src/features/learn/circuits/`, the sketch, and the checks themselves, which
+live in one file per project under
+`src/features/learn/diagnostics/checks/<id>.ts`. A project with no checks is
+still a failure — `diagnostics/registry.test.ts` runs every interpreter build and
+fails on a check that fails. Five checks fail today and are named in that file's
+`KNOWN_GAPS` with the reason each is wrong; they are not wiring gaps, and they are
+listed rather than deleted so the failure stays visible.
 
 Counts in `docs/parity-scorecard.md`, `docs/PLAN.md`, and `PRODUCT.md` are
 `<!-- COUNT:... -->` placeholders. Run `npm run update:docs-counts` after a
@@ -27,6 +36,7 @@ change that moves one; CI re-runs it and fails on any diff.
 | The Wasm ABI stays in step with TypeScript | `native/abi/part-state.schema.json` generates the C header and the TS types; `npm run generate:abi` runs in `prepare` |
 | Docs counts match the source | `<!-- COUNT:... -->` placeholders; CI runs `update:docs-counts` and fails on a diff |
 | Committed code is lint-clean | Husky `pre-commit` → `lint-staged` → `oxlint --fix`; CI runs `npm run lint` |
+| A device with knobs reads them from the world, never from a list in the engine | `devices/world.ts` is the only place a knob reaches a device; `world.test.ts` turns each knob on a real bench and fails if the device was handed nothing |
 
 ## The diagnostics harness reads pins by definition id
 
@@ -37,6 +47,25 @@ so a check looks like "the light never came on".
 
 Checks in one entry share a single sim and run in order, so a later check may
 depend on state an earlier one built — the existing entries already do this.
+
+## A device with knobs gets its world from `devices/world.ts`
+
+Each device declares the knobs it wants (`KnobSpec` list) and a `setXSource`
+setter. `installWorld(device, { controls, partId })` joins the two, and the
+engine calls it on every rebuild — the device reads the world when the chip
+reports, so a knob turned between two reads is seen by the next one.
+
+The old arrangement was a 57-line `instanceof` chain in `engine-legacy.ts` that
+covered 12 of the 30 knob-bearing I2C devices. The other 19 declared a knob
+nothing read, so the bench showed a control that did nothing. `createI2cDevice`
+also ended in `return new Hx711()`, which is why an HTU21D gallery build loaded
+clean and handed the firmware a load cell.
+
+Two things follow for a new device: add an arm to `world.ts` (the chain is
+keyed on the concrete class, so a device with no arm is visibly missing), and
+add a case to `world.test.ts` — it turns the knob to both ends of its range and
+asserts what the device was handed, so a missing arm fails there rather than on
+a bench.
 
 ## Sketch constraint: no attachInterrupt
 
