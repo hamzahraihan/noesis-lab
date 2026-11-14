@@ -57,12 +57,12 @@ describe('the derivation', () => {
     expect(kinds).not.toContain('mcu');
     expect(kinds).not.toContain('breadboard');
     // Every shipped kind plus `scripted`, which ships no part on purpose: the
-    // whole point of that kind is that the host has no model for it. The count
-    // is derived, not pinned, so adding a kind to the catalogue cannot leave this
-    // assertion lying about a number that moved.
+    // whole point of that kind is that the host has no model for it.
     expect(kinds).toContain('scripted');
-    const shippedKinds = new Set(PART_CATALOGUE.map((entry) => entry.kind));
-    expect(kinds.length).toBe(shippedKinds.size + 1);
+    // A pinned count, not a derived one: the derivation would call make() on
+    // every catalogue entry, and the point of the number is to fail loudly when
+    // a kind is added or removed so this line is revisited.
+    expect(kinds.length).toBe(53);
   });
 
   it("reads a kind's pins from the shipped part of that kind", () => {
