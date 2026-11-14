@@ -49,7 +49,7 @@ export function esp32AvailableFor(
   worker: boolean,
   language: FirmwareLanguage = 'python',
 ): BackendAvailability {
-  if (boardId !== 'esp32') {
+  if (boardId !== 'esp32' && boardId !== 'esp32-s2') {
     return { ok: false, reason: 'ESP32 mode needs an ESP32 board' };
   }
   if (!worker) return { ok: false, reason: 'ESP32 mode needs the simulation worker' };
