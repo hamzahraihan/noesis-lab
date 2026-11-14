@@ -7,12 +7,31 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const SOURCE = join(ROOT, 'src/features/learn/gallery-projects.json');
 const OUT_DIR = join(ROOT, 'src/features/learn/generated');
+const DIR_CHECKS = join(ROOT, 'src/features/learn/diagnostics/checks');
+
+/** The file a symbol lives in, for the one project that ships two builds. */
+const FILE_OF_SYMBOL: Record<string, string> = {
+  alarmRawChecks: 'alarm-clock.raw',
+  alarmLibraryChecks: 'alarm-clock.library',
+};
+const fileForSymbol = (symbol: string): string => FILE_OF_SYMBOL[symbol] ?? symbol.replace(/Checks$/, '');
 
 type SourceProject = {
   id: string;
   title: string;
   blurb: string;
   parts: { name: string; qty: number }[];
+  /**
+   * The check symbol this project's checks live under, or a map of variant to
+   * symbol when one project ships two builds with different checks.
+   *
+   * A string is the common case: `checks/htu21d.ts` exports `htu21dChecks`, and
+   * the generator emits the import and the call. The map is the alarm-clock
+   * shape, whose `library` build runs on a different core than its default one.
+   */
+  checks: string | Record<string, string>;
+  /** The fewest wires this project's circuit must carry. */
+  wireFloor: number;
   builds: {
     board: string;
     circuit: string;
@@ -22,94 +41,14 @@ type SourceProject = {
     variant?: string;
     execution?: string;
     network?: string;
+    /** How long this build's checks may run, when the default cap is not enough. */
+    wallCapMs?: number;
   }[];
   working: string[];
 };
 
 export type Source = { projects: SourceProject[] };
 
-const CHECK_ENTRIES: Record<string, string> = {
-  'alarm-clock': "(build) => build.variant === 'library' ? alarmLibraryChecks : alarmRawChecks",
-  'safe': '() => safeChecks',
-  'dashboard': '() => dashboardChecks',
-  'parking': '() => parkingChecks',
-  'weather': '() => weatherChecks',
-  'reaction': '() => reactionChecks',
-  'net-clock': '() => netClockChecks',
-  'sensor-feed': '() => sensorFeedChecks',
-  'net-weather': '() => netWeatherChecks',
-  'live-weather': '() => liveWeatherChecks',
-  'soil-probe': '() => soilProbeChecks',
-  'instrument-bench': '() => instrumentBenchChecks',
-  'environment-bench': '() => environmentBenchChecks',
-  'shift-register': '(build) => shiftRegisterChecks(build)',
-  'rfid': '() => rfidChecks',
-  'tm1637': '(build) => tm1637Checks(build)',
-  'a4988': '(build) => a4988Checks(build)',
-  'microstep': '(build) => microstepChecks(build)',
-  'pcf8574': '(build) => pcf8574Checks(build)',
-  'mcp23017': '(build) => mcp23017Checks(build)',
-  'expander-interrupt': '(build) => expanderInterruptChecks(build)',
-  'pca9685': '(build) => pca9685Checks(build)',
-  'ds3231': '(build) => ds3231Checks(build)',
-  'max6675': '(build) => max6675Checks(build)',
-  'mcp4725': '(build) => mcp4725Checks(build)',
-  'lm35': '(build) => lm35Checks(build)',
-  'bmp280': '(build) => bmp280Checks(build)',
-  'vl53l0x': '(build) => vl53l0xChecks(build)',
-  'bme280': '(build) => bme280Checks(build)',
-  'soil-moisture': '(build) => soilMoistureChecks(build)',
-  'aht20': '(build) => aht20Checks(build)',
-  'scd40': '(build) => scd40Checks(build)',
-  'max30102': '(build) => max30102Checks(build)',
-  'bme680': '(build) => bme680Checks(build)',
-  'apds9960': '(build) => apds9960Checks(build)',
-  'bno055': '(build) => bno055Checks(build)',
-  'adxl335': '(build) => adxl335Checks(build)',
-  'mq2': '(build) => mq2Checks(build)',
-  'dht22': '(build) => dht22Checks(build)',
-  'mlx90614': '(build) => mlx90614Checks(build)',
-  'adxl345': '(build) => adxl345Checks(build)',
-  'hmc5883l': '(build) => hmc5883lChecks(build)',
-  'tsl2561': '(build) => tsl2561Checks(build)',
-  'ccs811': '(build) => ccs811Checks(build)',
-  'si7021': '(build) => si7021Checks(build)',
-  'htu21d': '(build) => htu21dChecks(build)',
-  'veml6075': '(build) => veml6075Checks(build)',
-  'sgp30': '(build) => sgp30Checks(build)',
-  'max30100': '(build) => max30100Checks(build)',
-  'eeprom24lc256': '() => eepromChecks()',
-  'max7219': '(build) => max7219Checks(build)',
-  'nokia-5110': '(build) => nokia5110Checks(build)',
-};
-
-const WIRE_FLOORS: Record<string, number> = {
-  'alarm-clock': 25,
-  safe: 14,
-  dashboard: 14,
-  parking: 15,
-  weather: 12,
-  reaction: 5,
-  'htu21d': 1,
-  'net-clock': 6,
-  'sensor-feed': 6,
-  'net-weather': 6,
-  'soil-probe': 3,
-};
-
-// Projects whose checks run in the "network projects" test leg.
-// Derived from the board: any project that ships an ESP32 build.
-// (Kept as a derived list in generateTestCoverage.)
-
-// Projects whose checks run in the "new part projects" test leg.
-const NEW_PART_PROJECT_IDS = [
-  'ds3231',
-  'mcp23017',
-  'expander-interrupt',
-  'pca9685',
-  'microstep',
-  'environment-bench',
-];
 
 function tsString(value: string): string {
   return JSON.stringify(value);
@@ -194,6 +133,9 @@ function generateGalleryProjects(source: Source): string {
       if (build.network !== undefined) {
         fields.push(`network: ${tsString(build.network)}`);
       }
+      if (build.wallCapMs !== undefined) {
+        fields.push(`wallCapMs: ${build.wallCapMs}`);
+      }
       return `      {\n        ${fields.join(',\n        ')}\n      }`;
     });
     const parts = project.parts.map((part) => `{ name: ${tsString(part.name)}, qty: ${part.qty} }`).join(', ');
@@ -219,68 +161,124 @@ ${projectLiterals.join(',\n')}
 `;
 }
 
+/**
+ * The expression that yields a project's checks for a given build.
+ *
+ * A check symbol is either a factory taking the build (`htu21dChecks(build)`) or
+ * a plain `CheckDef[]` constant (`safeChecks`). The map's values are factories
+ * either way, so the generated entry names which form it is.
+ *
+ * A project whose builds carry different checks names a symbol per variant;
+ * `alarm-clock` is the one, because its `library` build runs on a different core.
+ */
+function checkEntryFor(project: SourceProject): string {
+  if (typeof project.checks === 'string') {
+    if (project.builds.length > 1) {
+      throw new Error(
+        `${project.id}: ${project.builds.length} builds but a single check symbol; name one per variant`,
+      );
+    }
+    return arrowFor([project.checks]);
+  }
+
+  const variants = Object.keys(project.checks);
+  const needed = [...new Set(project.builds.map((build) => build.variant ?? 'default'))];
+  const missing = needed.filter((variant) => !variants.includes(variant));
+  if (missing.length > 0) {
+    throw new Error(`${project.id}: no check named for build(s) ${missing.join(', ')}`);
+  }
+  const symbols = [...new Set(Object.values(project.checks))];
+  if (symbols.length === 1) return arrowFor(symbols);
+
+  // Each arm is a thunk, so a constant and a factory sit in the same record
+  // without the constant being called at module load.
+  const lookup = Object.entries(project.checks)
+    .map(([variant, symbol]) => `  ${JSON.stringify(variant)}: ${thunk(symbol)},`)
+    .join('\n');
+  return `(build) => {
+  const byVariant: Record<string, () => CheckDef[]> = {
+${lookup}
+  };
+  const fallback = byVariant.default ?? Object.values(byVariant)[0]!;
+  return (byVariant[build.variant ?? 'default'] ?? fallback)();
+}`;
+}
+
+/** A thunk that yields a symbol's checks, calling it when it is a factory. */
+function thunk(symbol: string): string {
+  return `() => ${call(symbol, 'build')}`;
+}
+
+/**
+ * The arrow a single-symbol project needs.
+ *
+ * `build` is named only when a symbol uses it: the map's values all take the
+ * build, and an unused parameter is a lint error in a generated file nobody
+ * wants to edit.
+ */
+function arrowFor(symbols: readonly string[]): string {
+  const param = wantsBuild(symbols) ? 'build' : '_build';
+  return `(${param}) => ${symbols.map((symbol) => call(symbol, 'build')).join(' ?? []')}`;
+}
+
+/** How a check symbol is called. */
+const enum Form {
+  Constant,
+  Factory,
+  BuildFactory,
+}
+
+/**
+ * The call form for a check symbol, which is one of three things.
+ *
+ * Read from the module the symbol lives in rather than from its name: `safeChecks`
+ * is a constant, `eepromChecks()` is a factory taking nothing, and
+ * `htu21dChecks(build)` is a factory taking the build. The map's values all take
+ * the build, so the generated entry adapts whichever form the module exports.
+ */
+const formCache = new Map<string, Form>();
+function formOf(symbol: string): Form {
+  const cached = formCache.get(symbol);
+  if (cached !== undefined) return cached;
+  const source = readFileSync(join(DIR_CHECKS, `${fileForSymbol(symbol)}.ts`), 'utf8');
+  const decl = source.match(new RegExp(`export (?:function|const) ${symbol}\\b[^\\n]*`))?.[0] ?? '';
+  const form: Form = !/^export function/.test(decl)
+    ? Form.Constant
+    : /\(\s*\w+\s*:/.test(decl)
+      ? Form.BuildFactory
+      : Form.Factory;
+  formCache.set(symbol, form);
+  return form;
+}
+
+/** The call form for a check symbol, given the parameter name to pass. */
+function call(symbol: string, build: string): string {
+  const form = formOf(symbol);
+  if (form === Form.Constant) return symbol;
+  if (form === Form.Factory) return `${symbol}()`;
+  return `${symbol}(${build})`;
+}
+
+/** Whether any symbol in the list wants the build passed to it. */
+function wantsBuild(symbols: readonly string[]): boolean {
+  return symbols.some((symbol) => formOf(symbol) === Form.BuildFactory);
+}
+
 function generateChecksMap(source: Source): string {
-  const checkImports = [
-    'alarmRawChecks',
-    'alarmLibraryChecks',
-    'safeChecks',
-    'dashboardChecks',
-    'parkingChecks',
-    'weatherChecks',
-    'reactionChecks',
-    'netClockChecks',
-    'sensorFeedChecks',
-    'netWeatherChecks',
-    'liveWeatherChecks',
-    'soilProbeChecks',
-    'instrumentBenchChecks',
-    'environmentBenchChecks',
-    'shiftRegisterChecks',
-    'rfidChecks',
-    'tm1637Checks',
-    'a4988Checks',
-    'microstepChecks',
-    'pcf8574Checks',
-    'mcp23017Checks',
-    'expanderInterruptChecks',
-    'pca9685Checks',
-    'ds3231Checks',
-    'max6675Checks',
-    'mcp4725Checks',
-    'lm35Checks',
-    'bmp280Checks',
-    'vl53l0xChecks',
-    'bme280Checks',
-    'soilMoistureChecks',
-    'aht20Checks',
-    'scd40Checks',
-    'max30102Checks',
-    'bme680Checks',
-    'apds9960Checks',
-    'bno055Checks',
-    'adxl335Checks',
-    'mq2Checks',
-    'dht22Checks',
-    'mlx90614Checks',
-    'adxl345Checks',
-    'hmc5883lChecks',
-    'tsl2561Checks',
-  'ccs811Checks',
-  'si7021Checks',
-  'htu21dChecks',
-  'veml6075Checks',
-    'sgp30Checks',
-    'max30100Checks',
-    'eepromChecks',
-    'max7219Checks',
-    'nokia5110Checks',
-  ];
+  const symbols = new Set<string>();
+  for (const project of source.projects) {
+    const values =
+      typeof project.checks === 'string' ? [project.checks] : Object.values(project.checks);
+    for (const symbol of values) {
+      if (!/^[A-Za-z0-9]+Checks$/.test(symbol)) {
+        throw new Error(`${project.id}: '${symbol}' is not a check symbol`);
+      }
+      symbols.add(symbol);
+    }
+  }
+  const checkImports = [...symbols].sort();
   const entries = source.projects
-    .map((project) => {
-      const expr = CHECK_ENTRIES[project.id];
-      if (!expr) return `  ${JSON.stringify(project.id)}: () => [],`;
-      return `  ${JSON.stringify(project.id)}: ${expr},`;
-    })
+    .map((project) => `  ${JSON.stringify(project.id)}: ${checkEntryFor(project)},`)
     .join('\n');
   return `import type { GalleryBuild, GalleryProjectId } from '@/features/learn/gallery';
 import type { CheckDef } from '@/features/learn/diagnostics/harness';
@@ -294,6 +292,14 @@ ${entries}
 `;
 }
 
+/**
+ * The generated coverage record: every project id, its build labels, the
+ * projects that speak on a real network, and each project's own wire floor.
+ *
+ * Every list here is derived from the project documents. The only thing a caller
+ * still needs to decide is how slow a run may be, and that travels with the
+ * project too (`wallCapMs`), so nothing is kept in a second place.
+ */
 function generateTestCoverage(source: Source): string {
   const ids = source.projects.map((project) => project.id);
   const labels = source.projects.flatMap((project) =>
@@ -304,18 +310,13 @@ function generateTestCoverage(source: Source): string {
   const networkIds = source.projects
     .filter((project) => project.builds.some((build) => build.board === 'esp32'))
     .map((project) => project.id);
-  // Every project needs an entry: the generated type is
-  // `Record<GalleryProjectId, number>`, so a hand-kept map that gains a
-  // project but not a floor would fail typecheck. Derive the full record from
-  // the project list and default the ones nobody set a floor for.
-  const wireFloorsEntries = ids
-    .map((id: string) => `  ${JSON.stringify(id)}: ${WIRE_FLOORS[id] ?? 1},`)
+  const wireFloorsEntries = source.projects
+    .map((project) => `  ${JSON.stringify(project.id)}: ${project.wireFloor},`)
     .join('\n');
   return `export const GALLERY_PROJECT_IDS = ${JSON.stringify(ids)} as const;
 export type GalleryProjectId = typeof GALLERY_PROJECT_IDS[number];
 export const GALLERY_BUILD_LABELS = ${JSON.stringify(labels)} as const;
 export const NETWORK_PROJECT_IDS = ${JSON.stringify(networkIds)} as const;
-export const NEW_PART_PROJECT_IDS = ${JSON.stringify(NEW_PART_PROJECT_IDS)} as const;
 export const WIRE_FLOORS: Record<GalleryProjectId, number> = {
 ${wireFloorsEntries}
 } as const;
@@ -360,7 +361,12 @@ export function generateAll(source?: Source | any): {
 
   const checksMap = new String(checksMapCode) as any;
   for (const project of normalized.projects) {
-    checksMap[project.id] = CHECK_ENTRIES[project.id] ?? '() => []';
+    // The generated code carries the symbol name; expose it here so a test can
+    // assert a project's checks without parsing the TypeScript.
+    checksMap[project.id] =
+      typeof project.checks === 'string'
+        ? project.checks
+        : Object.values(project.checks).join(',');
   }
 
   return {
