@@ -5,6 +5,7 @@ export * from './breadboard';
 export * from './catalog';
 export * from './modules';
 export * from './passives';
+export * from './devices/world';
 export * from './devices/device';
 export * from './devices/ads1115';
 export * from './devices/bh1750';

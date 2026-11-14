@@ -46,6 +46,7 @@ import { Ccs811 } from './ccs811';
 import { Si7021 } from './si7021';
 import { Veml6075 } from './veml6075';
 import { Sgp30 } from './sgp30';
+import { Htu21d } from './htu21d';
 import { Max30100 } from './max30100';
 
 export type { I2cDevice } from './device';
@@ -132,7 +133,15 @@ export function createI2cDevice(
       if (component.device === 'veml6075') return new Veml6075();
       if (component.device === 'sgp30') return new Sgp30();
       if (component.device === 'max30100') return new Max30100();
-      return new Hx711();
+      if (component.device === 'htu21d') return new Htu21d();
+      if (component.device === 'hx711') return new Hx711();
+      /*
+       * An I2C sensor the host has no model for is a build error, not a part
+       * that silently answers as something else. The previous fallback returned
+       * a load-cell amplifier for every unrecognised variant, which is how a
+       * temperature sensor ended up on the bench reporting counts.
+       */
+      throw new Error(`parts: no I2C device model for '${component.device}'`);
     default:
       return null;
   }

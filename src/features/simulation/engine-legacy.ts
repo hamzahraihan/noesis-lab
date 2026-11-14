@@ -14,6 +14,7 @@
  */
 import { createController, type DisplayController } from '@/features/parts';
 import { createI2cDevice, isI2cDevice, type I2cDevice } from '@/features/parts';
+import { installWorld } from '@/features/parts';
 import { coilEnergized } from '@/features/parts';
 import { IR_RELEASE_MS, NEC_CODES, REMOTE_KEY_KNOB } from '@/features/parts';
 import { DIGIT_KNOB } from '@/features/parts';
@@ -30,15 +31,8 @@ import {
 } from '@/features/parts';
 import { Servo } from '@/features/parts';
 import { createLcd, type Lcd1602 } from '@/features/parts';
-import { Ads1115 } from '@/features/parts';
-import { ADS1115_CHANNEL_KNOBS } from '@/features/parts';
-import { Bh1750, BH1750_LIGHT_KNOB } from '@/features/parts';
-import { Bmp180 } from '@/features/parts';
-import { BMP180_PRESSURE_KNOB, BMP180_TEMPERATURE_KNOB } from '@/features/parts';
 import { Ds1307 } from '@/features/parts';
-import { Ds3231, DS3231_TEMPERATURE_KNOB } from '@/features/parts';
-import { Sht31, SHT31_HUMIDITY_KNOB, SHT31_TEMPERATURE_KNOB } from '@/features/parts';
-import { Tmp102, TMP102_TEMPERATURE_KNOB, Mcp9808, MCP9808_TEMPERATURE_KNOB, Lm75, LM75_TEMPERATURE_KNOB, Tcs34725, TCS34725_RED_KNOB, TCS34725_GREEN_KNOB, TCS34725_BLUE_KNOB, TCS34725_CLEAR_KNOB, Pcf8591, PCF8591_CH0_KNOB, PCF8591_CH1_KNOB, PCF8591_CH2_KNOB, PCF8591_CH3_KNOB } from '@/features/parts';
+import { Ds3231 } from '@/features/parts';
 import { Shift595, SHIFT595_OUTPUT_OHMS, SHIFT595_OUTPUTS } from '@/features/parts';
 import { Mfrc522, MFRC522_CARD_KNOB } from '@/features/parts';
 import { Tm1637 } from '@/features/parts';
@@ -59,10 +53,6 @@ import { Max6675, MAX6675_TEMPERATURE_KNOB } from '@/features/parts';
 import { Mcp4725, MCP4725_OUTPUT_OHMS } from '@/features/parts';
 import { SUPPLY_VOLTAGE_KNOB } from '@/features/parts';
 import { Ili9341 } from '@/features/parts';
-import { Ina219 } from '@/features/parts';
-import { INA219_BUS_KNOB, INA219_CURRENT_KNOB } from '@/features/parts';
-import { Hx711 } from '@/features/parts';
-import { HX711_LOAD_KNOB } from '@/features/parts';
 import { Ssd1306 } from '@/features/parts';
 import { SevenSegment } from '@/features/parts';
 import { Max7219 } from '@/features/parts';
@@ -611,65 +601,10 @@ export class Engine {
        * rather than being told about it on a tick: what the operator has
        * dialled in is what the world is doing, and a knob turned between two
        * reads is seen by the very next one. The page and the worker both hold
-       * the knobs, so this is where the two meet.
+       * the knobs, so this is where the two meet -- and which chip reads which
+       * knob is the device's own declaration, not a list kept here.
        */
-      if (device instanceof Bmp180) {
-        device.setConditionsSource(() => ({
-          pascals: this.dynamicState.knob(part.id, BMP180_PRESSURE_KNOB) * 100,
-          celsius: this.dynamicState.knob(part.id, BMP180_TEMPERATURE_KNOB),
-        }));
-      } else if (device instanceof Ina219) {
-        device.setConditionsSource(() => ({
-          busVolts: this.dynamicState.knob(part.id, INA219_BUS_KNOB),
-          amps: this.dynamicState.knob(part.id, INA219_CURRENT_KNOB) / 1000,
-        }));
-      } else if (device instanceof Ads1115) {
-        device.setChannelsSource(() =>
-          ADS1115_CHANNEL_KNOBS.map((knob) => this.dynamicState.knob(part.id, knob)),
-        );
-      } else if (device instanceof Hx711) {
-        // The load on the cell was a knob the amplifier never heard about:
-        // it read the tare for as long as the bench existed.
-        device.setLoadSource(() => this.dynamicState.knob(part.id, HX711_LOAD_KNOB));
-      } else if (device instanceof Ds3231) {
-        // The thermometer is on the die, and the die is the one place on the
-        // bench a knob can reach. The chip reads it when a sketch asks, so a
-        // turn between two reads is seen by the next one.
-        device.setTemperatureSource(() => this.dynamicState.knob(part.id, DS3231_TEMPERATURE_KNOB));
-      } else if (device instanceof Bh1750) {
-        device.setLightSource(() => this.dynamicState.knob(part.id, BH1750_LIGHT_KNOB));
-      } else if (device instanceof Tmp102) {
-        device.setTemperatureSource(() =>
-          this.dynamicState.knob(part.id, TMP102_TEMPERATURE_KNOB),
-        );
-      } else if (device instanceof Mcp9808) {
-        device.setTemperatureSource(() =>
-          this.dynamicState.knob(part.id, MCP9808_TEMPERATURE_KNOB),
-        );
-      } else if (device instanceof Lm75) {
-        device.setTemperatureSource(() =>
-          this.dynamicState.knob(part.id, LM75_TEMPERATURE_KNOB),
-        );
-      } else if (device instanceof Tcs34725) {
-        device.setSource(() => ({
-          red: this.dynamicState.knob(part.id, TCS34725_RED_KNOB),
-          green: this.dynamicState.knob(part.id, TCS34725_GREEN_KNOB),
-          blue: this.dynamicState.knob(part.id, TCS34725_BLUE_KNOB),
-          clear: this.dynamicState.knob(part.id, TCS34725_CLEAR_KNOB),
-        }));
-      } else if (device instanceof Pcf8591) {
-        device.setChannelsSource(() => [
-          this.dynamicState.knob(part.id, PCF8591_CH0_KNOB),
-          this.dynamicState.knob(part.id, PCF8591_CH1_KNOB),
-          this.dynamicState.knob(part.id, PCF8591_CH2_KNOB),
-          this.dynamicState.knob(part.id, PCF8591_CH3_KNOB),
-        ]);
-      } else if (device instanceof Sht31) {
-        device.setConditionsSource(() => ({
-          celsius: this.dynamicState.knob(part.id, SHT31_TEMPERATURE_KNOB),
-          humidity: this.dynamicState.knob(part.id, SHT31_HUMIDITY_KNOB),
-        }));
-      }
+      if (device) installWorld(device, { controls: this.dynamicState, partId: part.id });
       if (part.definition.component.kind === 'servo') this.servos.set(part.id, new Servo());
       if (part.definition.component.kind === 'shift-register') {
         this.shiftRegisters.set(part.id, new Shift595());
