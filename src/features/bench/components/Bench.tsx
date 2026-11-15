@@ -64,7 +64,7 @@ import { ScopePanel } from '@/features/instruments';
 import { MultimeterPanel } from '@/features/instruments';
 import { DebugPanel } from '@/features/instruments';
 import { Plotter } from '@/features/instruments';
-import { LogicAnalyser } from '@/features/instruments';
+import { LogicAnalyser, DEFAULT_BUS_DECODE, type BusDecodeState } from '@/features/instruments';
 import { BusMonitor } from '@/features/instruments';
 import { downloadText } from '@/features/instruments';
 import {
@@ -1281,6 +1281,12 @@ export default function Bench(props: BenchProps) {
 
   const meterRedLabel = meterPins.find((pin) => pin.id === meterRedPin)?.label ?? null;
   const meterBlackLabel = meterPins.find((pin) => pin.id === meterBlackPin)?.label ?? null;
+  /*
+   * The analyser's decode configuration. Lives here rather than inside the
+   * panel because the bottom panel unmounts its body on a tab switch, which
+   * would take the lane assignment with it.
+   */
+  const [busDecode, setBusDecode] = useState<BusDecodeState>(DEFAULT_BUS_DECODE);
   /*
    * How much of the bench has changed, which is not the same question as which
    * bench it is: turning a part moves its contacts in place, so the bench
@@ -2575,6 +2581,8 @@ export default function Bench(props: BenchProps) {
                 logicVolts={simulation.mcu.board.logicVolts}
                 onTogglePin={(pinId) => simulation.toggleAnalysedPin(pinId)}
                 isCapturing={(pinId) => simulation.isPinAnalysed(pinId)}
+                decode={busDecode}
+                onDecode={setBusDecode}
               />
             }
             bus={<BusMonitor entries={simulation.busLines()} onClear={clearBusLog} />}

@@ -3,6 +3,7 @@
 export { ScopePanel } from './Scope';
 export { MultimeterPanel } from './Multimeter';
 export { LogicAnalyser } from './LogicAnalyser';
+export { DEFAULT_BUS_DECODE, type BusDecodeState, type DecodeMode } from './bus-decode';
 export { BusMonitor } from './BusMonitor';
 export { DebugPanel } from './DebugPanel';
 export { Plotter } from './Plotter';
