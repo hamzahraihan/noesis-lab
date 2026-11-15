@@ -172,6 +172,240 @@ export function decodeUart(
 
   return frames;
 }
+/**
+ * Level transitions in a trace, in capture order.
+ *
+ * The decoders below work from the edges the solver recorded, the same way
+ * `decodeUart` does -- what an instrument on the bench would see, including
+ * the transitions firmware never meant to produce.
+ */
+interface Edge {
+  readonly t: number;
+  readonly rising: boolean;
+}
+
+function edgesOf(samples: readonly TraceSample[], low: number): Edge[] {
+  const edges: Edge[] = [];
+  let level = samples[0].v > low;
+  for (let i = 1; i < samples.length; i++) {
+    const next = samples[i].v > low;
+    if (next !== level) {
+      edges.push({ t: samples[i].t, rising: next });
+      level = next;
+    }
+  }
+  return edges;
+}
+
+/** A frame open or close, or one byte shifted out on one of the data lines. */
+export interface SpiEvent {
+  readonly t: number;
+  readonly type: 'frame-start' | 'byte' | 'frame-end';
+  /** Which data line the byte travelled on; absent for frame boundaries. */
+  readonly line?: 'mosi' | 'miso';
+  /** The shifted byte, MSB first; absent for frame boundaries. */
+  readonly value?: number;
+}
+
+/**
+ * Decodes an SPI capture (mode 0: the receiver samples on the rising clock).
+ *
+ * The chip select is what makes a frame a frame: a falling edge opens one and
+ * a rising edge closes it, and clock pulses outside a selected frame are not
+ * decoded -- the slave is not listening, so the wire carries noise as far as
+ * the protocol is concerned. With no `cs` trace at all the capture is treated
+ * as one long selected frame, which is what a bench without a slave-select
+ * line can honestly report. Bytes are timestamped at the rising edge that
+ * sampled their last bit, so an event's `t` is the moment the byte was whole.
+ */
+export function decodeSpi(
+  trace: {
+    readonly sck: readonly TraceSample[];
+    readonly cs?: readonly TraceSample[];
+    readonly mosi?: readonly TraceSample[];
+    readonly miso?: readonly TraceSample[];
+  },
+  highVolts = 3.3,
+): SpiEvent[] {
+  const events: SpiEvent[] = [];
+  const { sck, cs, mosi, miso } = trace;
+  if (sck.length < 2) return events;
+
+  const low = highVolts / 2;
+  const hasCs = cs !== undefined && cs.length >= 2;
+
+  /*
+   * One merged timeline so a chip-select edge lands between the clock edges
+   * it belongs between: a frame that closes mid-byte drops the partial byte,
+   * which is what the slave's SPI port does.
+   */
+  const timeline: { t: number; kind: 'cs-down' | 'cs-up' | 'sck-rise' }[] = [];
+  if (hasCs) {
+    for (const edge of edgesOf(cs, low)) {
+      timeline.push({ t: edge.t, kind: edge.rising ? 'cs-up' : 'cs-down' });
+    }
+  }
+  for (const edge of edgesOf(sck, low)) {
+    if (edge.rising) timeline.push({ t: edge.t, kind: 'sck-rise' });
+  }
+  timeline.sort((a, b) => a.t - b.t);
+
+  let selectedFrame = hasCs ? cs[0].v <= low : true;
+  let bitCount = 0;
+  let mosiByte = 0;
+  let misoByte = 0;
+
+  for (const step of timeline) {
+    if (step.kind === 'cs-down') {
+      events.push({ t: step.t, type: 'frame-start' });
+      selectedFrame = true;
+      bitCount = 0;
+      mosiByte = 0;
+      misoByte = 0;
+      continue;
+    }
+    if (step.kind === 'cs-up') {
+      events.push({ t: step.t, type: 'frame-end' });
+      selectedFrame = false;
+      bitCount = 0;
+      mosiByte = 0;
+      misoByte = 0;
+      continue;
+    }
+    if (!selectedFrame) continue;
+
+    if (mosi && mosi.length >= 1) {
+      const v = sampleAt(mosi, step.t);
+      if (v > low) mosiByte |= 1 << (7 - bitCount);
+    }
+    if (miso && miso.length >= 1) {
+      const v = sampleAt(miso, step.t);
+      if (v > low) misoByte |= 1 << (7 - bitCount);
+    }
+    bitCount++;
+    if (bitCount === 8) {
+      if (mosi && mosi.length >= 1) {
+        events.push({ t: step.t, type: 'byte', line: 'mosi', value: mosiByte });
+      }
+      if (miso && miso.length >= 1) {
+        events.push({ t: step.t, type: 'byte', line: 'miso', value: misoByte });
+      }
+      bitCount = 0;
+      mosiByte = 0;
+      misoByte = 0;
+    }
+  }
+
+  return events;
+}
+
+/** One decoded I²C transaction event: a phase of it, timestamped at capture. */
+export interface I2cEvent {
+  readonly t: number;
+  readonly type:
+    | 'start'
+    | 'repeated-start'
+    | 'address'
+    | 'data'
+    | 'ack'
+    | 'nack'
+    | 'stop';
+  /** The 7-bit address for `address` events, the shifted byte for `data`. */
+  readonly value?: number;
+  /** For `address` events: true when the read/write bit asked for a read. */
+  readonly read?: boolean;
+}
+
+/**
+ * Decodes an I²C capture (open-drain: idle is high, MSB first, ACK is the
+ * ninth clock with SDA low).
+ *
+ * A start or repeated start is SDA falling while SCL is high; a stop is SDA
+ * rising while SCL is high. The first byte after either is an address (7-bit,
+ * top seven bits, with the read/write bit kept aside); every byte after that
+ * is data. Each event is timestamped at the wire transition or clock edge
+ * that produced it. Clock stretching is honoured implicitly -- bits are read
+ * on SCL's rising edges however long the line was held low -- and 10-bit
+ * addressing is reported as the two bytes it is made of.
+ */
+export function decodeI2c(
+  trace: {
+    readonly sda: readonly TraceSample[];
+    readonly scl: readonly TraceSample[];
+  },
+  highVolts = 3.3,
+): I2cEvent[] {
+  const events: I2cEvent[] = [];
+  const { sda, scl } = trace;
+  if (sda.length < 2 || scl.length < 2) return events;
+
+  const low = highVolts / 2;
+  let sclLevel = scl[0].v > low;
+  let active = false;
+  let expectingAddress = false;
+  let bitCount = 0;
+  let byte = 0;
+
+  const timeline: { t: number; line: 'sda' | 'scl'; rising: boolean }[] = [
+    ...edgesOf(sda, low).map((edge) => ({ ...edge, line: 'sda' as const })),
+    ...edgesOf(scl, low).map((edge) => ({ ...edge, line: 'scl' as const })),
+  ].sort((a, b) => a.t - b.t);
+
+  for (const step of timeline) {
+    if (step.line === 'scl') {
+      sclLevel = step.rising;
+      if (!step.rising || !active) continue;
+
+      const v = sampleAt(sda, step.t);
+      const bit = v > low ? 1 : 0;
+      if (bitCount < 8) {
+        byte = (byte << 1) | bit;
+        bitCount++;
+        if (bitCount === 8) {
+          if (expectingAddress) {
+            events.push({
+              t: step.t,
+              type: 'address',
+              value: (byte >> 1) & 0x7f,
+              read: (byte & 1) === 1,
+            });
+            expectingAddress = false;
+          } else {
+            events.push({ t: step.t, type: 'data', value: byte });
+          }
+        }
+        continue;
+      }
+      /*
+       * The ninth clock is the ACK. SDA low means the receiver pulled it
+       * down; high means nobody answered.
+       */
+      events.push({ t: step.t, type: bit === 0 ? 'ack' : 'nack' });
+      bitCount = 0;
+      byte = 0;
+      continue;
+    }
+
+    // SDA edge.
+    if (step.rising) {
+      if (active && sclLevel) {
+        events.push({ t: step.t, type: 'stop' });
+        active = false;
+        bitCount = 0;
+        byte = 0;
+      }
+      continue;
+    }
+    if (!sclLevel) continue; // data line moved while the clock was low: a bit, not a start
+    events.push({ t: step.t, type: active ? 'repeated-start' : 'start' });
+    active = true;
+    expectingAddress = true;
+    bitCount = 0;
+    byte = 0;
+  }
+
+  return events;
+}
 
 /**
  * A capture as CSV: the time and the voltage at every sample.
