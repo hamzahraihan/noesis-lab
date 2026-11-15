@@ -209,3 +209,24 @@ ways it usually goes wrong:
 If you skip, at least do the three-minute diagnostic above, and read the **Shared
 rules** and **Portability notes** in [`README.md`](README.md) first. Those apply at
 every level and are the things that bite hardest.
+
+---
+
+## 10. Gallery companions — which projects reinforce which module
+
+The gallery's projects are destinations, not curriculum, but most of them lean on
+an exercise's concepts. Noting the pairing here so the examples reinforce the
+graded exercises. Modules with no companion are deliberate: Level 1 is bare, and
+the TFT map and single-board-computer modules have no gallery build yet.
+
+| Module | Gallery projects |
+| --- | --- |
+| 1 — Reading the world (1.1, 1.2) | safe, reaction |
+| 2 — Signals that are not on or off (2.1, 2.2) | dashboard, lm35, soil-moisture, soil-probe, mq2, adxl335, dht22, weather |
+| 3 — Talking to other chips (3.1 I²C) | environment-bench, instrument-bench, bmp280, bme280, aht20, scd40, bme680, htu21d, si7021, mlx90614, max30102, max30100, tsl2561, ccs811, sgp30, veml6075, apds9960, adxl345, hmc5883l, bno055, vl53l0x, ds3231, alarm-clock, pcf8574, mcp23017, pca9685, eeprom24lc256, mcp4725 |
+| 3 — Talking to other chips (3.2 SPI & framing) | shift-register, max7219, nokia-5110, rfid, max6675, tm1637 |
+| 4 — Faster than the loop (4.1, 4.2) | parking, expander-interrupt |
+| 5 — Maps & networks (5.3) | net-clock, net-weather, sensor-feed, live-weather |
+
+Not mapped: **a4988** and **microstep** (stepper control — no exercise teaches
+it yet).
