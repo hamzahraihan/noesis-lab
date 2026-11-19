@@ -129,7 +129,7 @@ export const BOARDS: ReadonlyArray<BoardOption> = [
     make: esp32S2DevKit,
     language: 'arduino-cpp',
     languages: ['arduino-cpp', 'python'],
-    summary: '3.3 V dual-core ESP32-S2 board on the ESP32 DevKit outline.',
+    summary: '3.3 V single-core ESP32-S2 board on the ESP32 DevKit outline.',
     bestFor: 'More GPIO and USB on the ESP32 family.',
   },
   {

@@ -1,11 +1,17 @@
 /**
  * Builds the ESP32 emulator's WebAssembly module.
  *
- * The module is upstream's, with two local patches: the GPIO seam a bench
- * needs to read what the chip drives and to drive what it reads, and the I2C
- * seam that lets the host answer the chip's I2C controller, so the bench's
- * devices are on the bus the firmware talks on. The build is reproducible --
- * a pinned upstream commit, the pinned patches, and upstream's own build
+ * The module is upstream's, with four local patches: the GPIO seam a bench
+ * needs to read what the chip drives and to drive what it reads, the I2C
+ * seam that lets the host answer the chip's I2C controller, the SPI seam for
+ * the chip's SPI master, and the ESP32-S2 machine (the `esp32s2` crate, built
+ * from the overlay under `src/features/simulation/esp32/esp32s2/`, the correct
+ * system-timer register map for the S2/S3, and the wasm factory's `esp32s2`
+ * machine arm). The S2 machine boots the mask ROM and the second-stage
+ * bootloader far into the MicroPython startup, but the application never
+ * reaches the banner on the emulated path yet -- the S2 leg is experimental,
+ * and the interpreter stays the offered backend for the S2 board.
+ * The build is reproducible -- a pinned upstream commit, the pinned patches, and upstream's own build
  * script -- so the module committed under
  * `src/features/simulation/esp32/firmware/` can be rebuilt and checked
  * against the hash the manifest records.
@@ -33,7 +39,7 @@
  * manual `cargo build` lands there too.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -45,7 +51,10 @@ const PATCHES = [
   join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-gpio-seam.patch'),
   join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-i2c-seam.patch'),
   join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-spi-seam.patch'),
+  join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-systimer-map.patch'),
+  join(ROOT, 'src/features/simulation/esp32/patches/esp32sim-s2-machine.patch'),
 ];
+const OVERLAY = join(ROOT, 'src/features/simulation/esp32/esp32s2');
 const TARGET = join(ROOT, 'src/features/simulation/esp32/firmware/esp32sim.wasm');
 const MANIFEST = join(ROOT, 'src/features/simulation/esp32/firmware/manifest.json');
 
@@ -102,6 +111,11 @@ try {
   run('git', ['clone', '--filter=blob:none', UPSTREAM, work]);
   run('git', ['checkout', COMMIT], work);
   for (const patch of PATCHES) run('git', ['apply', patch], work);
+  // The S2 machine: the crate is not upstream, so the build copies the
+  // overlay (the same bytes the manifest and ticket describe) into the
+  // work tree. The s2-machine patch wires the workspace and the wasm
+  // factory to it.
+  cpSync(OVERLAY, join(work, 'esp32s2'), { recursive: true });
   // Upstream's script copies the module out of `target/`, which is where
   // cargo leaves it only when the target directory is the default. This
   // script points cargo at a shared directory so a rebuild is incremental,

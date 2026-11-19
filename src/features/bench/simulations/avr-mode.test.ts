@@ -52,6 +52,12 @@ describe('esp32 mode availability', () => {
       reason: 'ESP32 mode needs the simulation worker',
     });
   });
+  it('is refused on the ESP32-S2, whose emulated path is not ready yet', () => {
+    expect(esp32AvailableFor('esp32-s2', true)).toEqual({
+      ok: false,
+      reason: expect.stringContaining('experimental'),
+    });
+  });
 
   it('is refused for a C++ sketch, because the chip runs MicroPython', () => {
     expect(esp32AvailableFor('esp32', true, 'arduino-cpp')).toEqual({

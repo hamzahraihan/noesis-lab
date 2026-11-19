@@ -1,0 +1,200 @@
+diff --git a/esp-periph/src/systimer.rs b/esp-periph/src/systimer.rs
+index 9e022b2e..2730fb76 100644
+--- a/esp-periph/src/systimer.rs
++++ b/esp-periph/src/systimer.rs
+@@ -1,33 +1,64 @@
+-//! System timer: two 52-bit units at 16 MHz, three comparators (esp_timer and the FreeRTOS tick).
++//! System timer, the modern ESP32-S2/S3/C2/C3/C6/H2 map (IDF `systimer_reg.h`):
++//! a single 52-bit counter, three comparators (one-shot and period modes), and the
++//! UPDATE/VALUE_VALID handshake the IDF uses to read the counter.
++//!
++//! A 52-bit counter at a fixed ratio, three comparators, and the UPDATE/VALUE_VALID handshake
++//! the IDF uses to read the counter. The XTAL and PLL step registers are recorded but the model
++//! advances one count per Systimer tick, which is what the IDF's default configuration does.
+ use crate::device::{Device, WriteEffect};
+ use emu_core::ClockDomain;
+ 
+-// ------------------------------------------------------------------ System timer (16 MHz, 2 units, 3 comparators)
++const COUNT_MASK: u64 = (1u64 << 52) - 1;
++const TIMER_UPDATE: u32 = 1 << 31;
++const WORK_EN: u32 = 1 << 31;
++const PERIOD_MODE: u32 = 1 << 30;
++const PERIOD_MASK: u32 = 0x3FFF_FFFF;
++const TIMER_LOAD: u32 = 1 << 31;
++
+ pub struct Systimer {
+-    /// one-shot alarm armed by COMPx_LOAD; fires as soon as the unit counter >= target (the S3
+-    /// compensates missed alarms: esp_timer arms targets already in the past to fire "now")
+-    pub armed: [bool; 3],
++    /// 0x00: bit 0 CLK_FO (XTAL), bit 31 CLK_EN.
+     pub conf: u32,
+-    pub unit: [u64; 2], pub unit_latch: [u64; 2], pub load: [u64; 2],
+-    pub target: [u64; 3], pub target_conf: [u32; 3], pub period_start: [u64; 3],
+-    pub int_ena: u32, pub int_raw: u32,
+-    ticks_acc: u64,
++    /// 0x08/0xc: the 52-bit value loaded into the counter by the LOAD command.
++    pub load: u64,
++    /// 0x10: XTAL step (bits 9:0) and PLL step (bits 19:10); the model advances one per tick.
++    pub step: u32,
++    /// 0x14..0x28: the 52-bit compare targets.
++    pub target: [u64; 3],
++    /// 0x2c..0x34: bit 31 WORK_EN, bit 30 PERIOD_MODE, bits 29:0 PERIOD.
++    pub target_conf: [u32; 3],
++    /// 0x3c/0x40: the counter latched by the UPDATE command; VALUE_VALID is set with it.
++    pub value: u64,
++    pub value_valid: bool,
++    pub int_ena: u32,
++    pub int_raw: u32,
++    counter: u64,
++    period_start: [u64; 3],
++    armed: [bool; 3],
+ }
++
+ impl Systimer {
+-    pub fn new() -> Self { Systimer { conf: 0, unit: [0; 2], unit_latch: [0; 2], load: [0; 2], target: [0; 3], target_conf: [0; 3], period_start: [0; 3], int_ena: 0, int_raw: 0, ticks_acc: 0, armed: [false; 3] } }
++    pub fn new() -> Self {
++        Systimer {
++            conf: 0, load: 0, step: 0,
++            target: [0; 3], target_conf: [0; 3],
++            value: 0, value_valid: false,
++            int_ena: 0, int_raw: 0,
++            counter: 0, period_start: [0; 3], armed: [false; 3],
++        }
++    }
++
+     pub fn tick(&mut self, ticks: u64) {
+-        for u in 0..2 {
+-            if self.conf & (1 << (30 - u as u32)) != 0 { self.unit[u] = (self.unit[u] + ticks) & ((1u64 << 52) - 1); }
++        if self.conf & 0x8000_0000 != 0 {
++            self.counter = self.counter.wrapping_add(ticks) & COUNT_MASK;
+         }
+         for t in 0..3 {
+-            if self.conf & (1 << (24 + t as u32)) == 0 { continue; }
+-            let unit = ((self.target_conf[t] >> 31) & 1) as usize;
+-            let now = self.unit[unit];
+-            if self.target_conf[t] & (1 << 30) != 0 {
+-                let period = (self.target_conf[t] & 0x03ff_ffff) as u64;
+-                if period > 0 && now.wrapping_sub(self.period_start[t]) >= period {
+-                    // one alarm per elapsed period; re-align so a lagging start can't fire on every call
+-                    let elapsed = now.wrapping_sub(self.period_start[t]);
++            if self.target_conf[t] & WORK_EN == 0 { continue; }
++            let now = self.counter;
++            if self.target_conf[t] & PERIOD_MODE != 0 {
++                let period = (self.target_conf[t] & PERIOD_MASK) as u64;
++                if period == 0 { continue; }
++                let elapsed = now.wrapping_sub(self.period_start[t]);
++                if elapsed >= period {
+                     self.period_start[t] = now - (elapsed % period);
+                     self.int_raw |= 1 << t;
+                 }
+@@ -36,45 +67,68 @@ impl Systimer {
+                 self.int_raw |= 1 << t;
+             }
+         }
+-        let _ = &mut self.ticks_acc;
+     }
++
+     pub fn read(&mut self, off: u32) -> u32 {
+         match off {
+             0x0 => self.conf,
+-            0x4 | 0x8 => 1 << 29,
+-            0xc => (self.load[0] >> 32) as u32, 0x10 => self.load[0] as u32,
+-            0x14 => (self.load[1] >> 32) as u32, 0x18 => self.load[1] as u32,
+-            0x1c => (self.target[0] >> 32) as u32, 0x20 => self.target[0] as u32,
+-            0x24 => (self.target[1] >> 32) as u32, 0x28 => self.target[1] as u32,
+-            0x2c => (self.target[2] >> 32) as u32, 0x30 => self.target[2] as u32,
+-            0x34 => self.target_conf[0], 0x38 => self.target_conf[1], 0x3c => self.target_conf[2],
+-            0x40 => (self.unit_latch[0] >> 32) as u32, 0x44 => self.unit_latch[0] as u32,
+-            0x48 => (self.unit_latch[1] >> 32) as u32, 0x4c => self.unit_latch[1] as u32,
+-            0x64 => self.int_ena, 0x68 => self.int_raw, 0x70 => self.int_raw & self.int_ena,
+-            0x74 => self.target[0] as u32, 0x78 => (self.target[0] >> 32) as u32,
+-            0x7c => self.target[1] as u32, 0x80 => (self.target[1] >> 32) as u32,
+-            0x84 => self.target[2] as u32, 0x88 => (self.target[2] >> 32) as u32,
++            0x4 => 0, // SYSTIMER_LOAD_REG: TIMER_LOAD is a write-1 command
++            0x8 => (self.load >> 32) as u32 & 0xfffff,
++            0xc => self.load as u32,
++            0x10 => self.step,
++            0x14 => (self.target[0] >> 32) as u32 & 0xfffff,
++            0x18 => self.target[0] as u32,
++            0x1c => (self.target[1] >> 32) as u32 & 0xfffff,
++            0x20 => self.target[1] as u32,
++            0x24 => (self.target[2] >> 32) as u32 & 0xfffff,
++            0x28 => self.target[2] as u32,
++            0x2c => self.target_conf[0],
++            0x30 => self.target_conf[1],
++            0x34 => self.target_conf[2],
++            // SYSTIMER_UPDATE_REG: bit 31 is write-only, bit 30 VALUE_VALID is read-only
++            0x38 => (self.value_valid as u32) << 30,
++            0x3c => (self.value >> 32) as u32 & 0xfffff,
++            0x40 => self.value as u32,
++            0x44 => self.int_ena,
++            0x48 => self.int_raw,
++            0x4c => 0, // SYSTIMER_INT_CLR_REG: write-1 to clear
+             0xfc => 0x2006171,
+             _ => 0,
+         }
+     }
++
+     pub fn write(&mut self, off: u32, v: u32) {
+         match off {
+             0x0 => self.conf = v,
+-            0x4 => if v & (1 << 30) != 0 { self.unit_latch[0] = self.unit[0]; },
+-            0x8 => if v & (1 << 30) != 0 { self.unit_latch[1] = self.unit[1]; },
+-            0xc => self.load[0] = (self.load[0] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32), 0x10 => self.load[0] = (self.load[0] & !0xffff_ffff) | v as u64,
+-            0x14 => self.load[1] = (self.load[1] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32), 0x18 => self.load[1] = (self.load[1] & !0xffff_ffff) | v as u64,
+-            0x1c => self.target[0] = (self.target[0] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32), 0x20 => self.target[0] = (self.target[0] & !0xffff_ffff) | v as u64,
+-            0x24 => self.target[1] = (self.target[1] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32), 0x28 => self.target[1] = (self.target[1] & !0xffff_ffff) | v as u64,
+-            0x2c => self.target[2] = (self.target[2] & 0xffff_ffff) | ((v as u64 & 0xfffff) << 32), 0x30 => self.target[2] = (self.target[2] & !0xffff_ffff) | v as u64,
+-            0x34 => self.target_conf[0] = v, 0x38 => self.target_conf[1] = v, 0x3c => self.target_conf[2] = v,
+-            0x50 | 0x54 | 0x58 => { let t = ((off - 0x50) / 4) as usize; let unit = ((self.target_conf[t] >> 31) & 1) as usize; self.period_start[t] = self.unit[unit]; self.armed[t] = true; }
+-            0x5c => self.unit[0] = self.load[0], 0x60 => self.unit[1] = self.load[1],
+-            0x64 => self.int_ena = v & 7, 0x6c => self.int_raw &= !v,
++            0x4 => { if v & TIMER_LOAD != 0 { self.counter = self.load; } }
++            0x8 => self.load = (self.load & !0xfffff_0000_0000) | (((v as u64) & 0xfffff) << 32),
++            0xc => self.load = (self.load & !0xffff_ffff) | v as u64,
++            0x10 => self.step = v,
++            0x14 => self.target[0] = (self.target[0] & !0xfffff_0000_0000) | (((v as u64) & 0xfffff) << 32),
++            0x18 => self.target[0] = (self.target[0] & !0xffff_ffff) | v as u64,
++            0x1c => self.target[1] = (self.target[1] & !0xfffff_0000_0000) | (((v as u64) & 0xfffff) << 32),
++            0x20 => self.target[1] = (self.target[1] & !0xffff_ffff) | v as u64,
++            0x24 => self.target[2] = (self.target[2] & !0xfffff_0000_0000) | (((v as u64) & 0xfffff) << 32),
++            0x28 => self.target[2] = (self.target[2] & !0xffff_ffff) | v as u64,
++            0x2c => self.arm(0, v),
++            0x30 => self.arm(1, v),
++            0x34 => self.arm(2, v),
++            // SYSTIMER_UPDATE_REG: bit 31 TIMER_UPDATE latches the counter into VALUE_HI/LO
++            // and sets VALUE_VALID (bit 30); the IDF polls VALUE_VALID before reading.
++            0x38 => { if v & TIMER_UPDATE != 0 { self.value = self.counter; self.value_valid = true; } }
++            0x44 => self.int_ena = v & 7,
++            0x48 => {} // SYSTIMER_INT_RAW_REG: read-only
++            0x4c => self.int_raw &= !(v & 7),
+             _ => {}
+         }
+     }
++
++    fn arm(&mut self, t: usize, v: u32) {
++        // Arming a comparator re-anchors the period epoch and enables the one-shot.
++        self.target_conf[t] = v;
++        self.armed[t] = v & WORK_EN != 0 && v & PERIOD_MODE == 0;
++        self.period_start[t] = self.counter;
++    }
+     pub fn irq(&self, t: usize) -> bool { self.int_raw & self.int_ena & (1 << t) != 0 }
+ }
+ 
+@@ -90,12 +144,10 @@ impl Device for Systimer {
+     fn next_deadline(&self) -> Option<u64> {
+         let mut best: Option<u64> = None;
+         for t in 0..3 {
+-            if self.conf & (1 << (24 + t as u32)) == 0 { continue; }
+-            let unit = ((self.target_conf[t] >> 31) & 1) as usize;
+-            if self.conf & (1 << (30 - unit as u32)) == 0 { continue; }              // unit stopped: never fires
+-            let now = self.unit[unit];
+-            let ticks = if self.target_conf[t] & (1 << 30) != 0 {
+-                let period = (self.target_conf[t] & 0x03ff_ffff) as u64;
++            if self.target_conf[t] & WORK_EN == 0 { continue; }
++            let now = self.counter;
++            let ticks = if self.target_conf[t] & PERIOD_MODE != 0 {
++                let period = (self.target_conf[t] & PERIOD_MASK) as u64;
+                 if period == 0 { continue; }
+                 let elapsed = now.wrapping_sub(self.period_start[t]);
+                 if elapsed >= period { 0 } else { period - elapsed }

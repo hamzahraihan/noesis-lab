@@ -37,19 +37,27 @@ export function rp2040AvailableFor(boardId: BoardId, worker: boolean): BackendAv
  * Whether the emulated ESP32 can run.
  *
  * The chip is a WebAssembly emulator, so it lives in the simulation worker
- * like the RP2 engine does, and it is seated on the ESP32 board alone: the
- * chip it emulates is that board's chip, and no other board here has one.
- *
- * The chip's own firmware is MicroPython, so a sketch in C++ has nothing to
- * run on there. The mode is offered for a Python sketch and refused for a C++
- * one, with the reason the operator needs.
+ * like the RP2 engine does. The classic ESP32 board is seated with its own
+ * chip and boots the stock emulator artefacts; the ESP32-S2 board is not:
+ * the S2 machine in the committed wasm boots the mask ROM and starts the
+ * app, but the application never prints the banner on the emulated path,
+ * so the board is refused for now and keeps
+ * the interpreter. The mode is offered for a Python sketch and refused for
+ * a C++ one, with the reason the operator needs.
  */
 export function esp32AvailableFor(
   boardId: BoardId,
   worker: boolean,
   language: FirmwareLanguage = 'python',
 ): BackendAvailability {
-  if (boardId !== 'esp32' && boardId !== 'esp32-s2') {
+  if (boardId === 'esp32-s2') {
+    return {
+      ok: false,
+      reason:
+        'The emulated ESP32-S2 path is experimental: the emulator boots the ROM far into the MicroPython startup, but the app does not print the banner yet. Use Python (the interpreter) instead.',
+    };
+  }
+  if (boardId !== 'esp32') {
     return { ok: false, reason: 'ESP32 mode needs an ESP32 board' };
   }
   if (!worker) return { ok: false, reason: 'ESP32 mode needs the simulation worker' };

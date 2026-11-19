@@ -121,7 +121,7 @@ export const PROJECTS: readonly BoardProject[] = [
   {
     board: 'esp32-s2',
     project: 'Starter bench: LED, OLED and TFT',
-    tagline: 'Dual-core ESP32-S2 on the ESP32 family.',
+    tagline: 'Single-core ESP32-S2 on the ESP32 family.',
     why: 'An ESP32-S2 board on the same DevKit outline, running the same sketches through the interpreter.',
     youWillSee: [...STARTER_SEEN],
     tryNext: [],

@@ -1,0 +1,106 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 5db82772..30f3e8b2 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,6 +1,6 @@
+ [workspace]
+ resolver = "2"
+-members = ["emu-core", "esp-periph", "esp-soc", "xtensa-lx7", "esp32s3", "cli", "wasm", "wasm-jit", "riscv-rv32", "esp32c3", "esp32c6", "esp32"]
++members = ["emu-core", "esp-periph", "esp-soc", "xtensa-lx7", "esp32s3", "esp32s2", "cli", "wasm", "wasm-jit", "riscv-rv32", "esp32c3", "esp32c6", "esp32"]
+ 
+ [workspace.package]
+ version = "0.3.0"
+diff --git a/esp-soc/src/pins.rs b/esp-soc/src/pins.rs
+index 6ac742a2..66b3d94c 100644
+--- a/esp-soc/src/pins.rs
++++ b/esp-soc/src/pins.rs
+@@ -14,6 +14,8 @@ impl ChipPins {
+     pub const S3: Self = Self { valid: ((1u64 << 49) - 1) & !(15 << 22), input_select: 0x80, output_mask: 0x3ff };
+     /// Classic ESP32 routes read the linear, S3-numbered pad copy kept by its GPIO adapter.
+     pub const ESP32: Self = Self { valid: ((1u64 << 40) - 1) & !((1 << 20) | (1 << 24) | (15 << 28)), input_select: 0x80, output_mask: 0x3ff };
++    /// GPIO0..21, GPIO26..GPIO46 (46 is input-only); GPIO22..25 do not exist on the S2.
++    pub const S2: Self = Self { valid: ((1u64 << 22) - 1) | (1u64 << 26) | (((1u64 << 47) - 1) & !((1u64 << 33) - 1)), input_select: 0x80, output_mask: 0x1ff };
+     pub fn routes<'a>(&'a self, gpio: &'a Gpio, mux: &'a RegRam) -> PinRoutes<'a> { PinRoutes { chip: self, gpio, mux } }
+ }
+ 
+diff --git a/esp-soc/src/uart.rs b/esp-soc/src/uart.rs
+index 0d82b4f1..e42aa17e 100644
+--- a/esp-soc/src/uart.rs
++++ b/esp-soc/src/uart.rs
+@@ -47,6 +47,9 @@ impl UartPins {
+     // (FUNC_GPIO16_U2RXD/GPIO17_U2TXD 4), used by uart_pins.h U*_MUX_FUNC.
+     pub const ESP32: Self = Self { chip: ChipPins::ESP32, signals: &[14, 17, 198], native: &[(1, 3, 0), (10, 9, 4), (17, 16, 4)] };
+     pub const S3: Self = Self { chip: ChipPins::S3, signals: &[12, 15, 18], native: &[(43, 44, 0), (17, 18, 2)] };
++    // IDF gpio_sig_map.h (esp32s2): U0TXD/U0RXD = 14, U1TXD/U1RXD = 17; no UART2 on the S2.
++    // U0 native GPIO43/44 (FUNC 0), U1 native GPIO17/18 (FUNC 2), as on the S3.
++    pub const S2: Self = Self { chip: ChipPins::S2, signals: &[14, 17], native: &[(43, 44, 0), (17, 18, 2)] };
+     pub const C3: Self = Self { chip: ChipPins::C3, signals: &[6, 9], native: &[(21, 20, 0)] };
+     pub const C6: Self = Self { chip: ChipPins::C6, signals: &[6, 9], native: &[(16, 17, 0)] };
+ 
+diff --git a/wasm/Cargo.toml b/wasm/Cargo.toml
+index e80e480e..f750372e 100644
+--- a/wasm/Cargo.toml
++++ b/wasm/Cargo.toml
+@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
+ 
+ [dependencies]
+ esp32s3 = { path = "../esp32s3" }
++esp32s2 = { path = "../esp32s2" }
+ esp-soc = { path = "../esp-soc" }
+ esp-periph = { path = "../esp-periph" }
+ esp32c3 = { path = "../esp32c3" }
+diff --git a/wasm/src/lib.rs b/wasm/src/lib.rs
+index c1632e72..267e4b8f 100644
+--- a/wasm/src/lib.rs
++++ b/wasm/src/lib.rs
+@@ -145,6 +145,14 @@ pub unsafe extern "C" fn esp32sim_new(board: *const u8, board_len: usize, flash_
+         m.console.mask = 2;
+         prepare(&mut m);
+         MachineKind::C6(Box::new(m))
++    } else if board == "esp32s2" || board == "s2" {
++        let mut m = esp32s2::machine([0x24, 0x6f, 0x28, 0, 0x11, 0x22]);
++        let Some(b) = esp32s2::board::make_board(&board) else { log(&format!("[emu] unknown board '{}'", board)); return std::ptr::null_mut() };
++        m.bus.board = b;
++        m.bus.attach_board_devices();
++        m.bus.set_flash_size(flash_bytes);
++        prepare(&mut m);
++        MachineKind::S2(Box::new(m))
+     } else {
+         let mut m = esp32s3::machine([0x44, 0x1b, 0xf6, 0x75, 0xdc, 0xe0]);
+         let Some(b) = esp32s3::board::make_board(&board) else { log(&format!("[emu] unknown board '{}'", board)); return std::ptr::null_mut() };
+diff --git a/wasm/src/machine.rs b/wasm/src/machine.rs
+index b463540e..cbf61287 100644
+--- a/wasm/src/machine.rs
++++ b/wasm/src/machine.rs
+@@ -76,6 +76,7 @@ impl<S: Soc> MachineApi for Machine<S> {
+ /// Chip-specific ABI calls borrow an S3 directly; no runtime type erasure or downcasts.
+ pub(super) enum MachineKind {
+     S3(Box<esp32s3::Machine>),
++    S2(Box<esp32s2::Machine>),
+     C3(Box<esp32c3::Machine>),
+     C6(Box<esp32c6::Machine>),
+     Esp32(Box<esp32::Machine>),
+@@ -85,18 +86,21 @@ impl MachineKind {
+     pub fn s3_mut(&mut self) -> Option<&mut esp32s3::Machine> {
+         match self { Self::S3(m) => Some(m), _ => None }
+     }
++    pub fn s2_mut(&mut self) -> Option<&mut esp32s2::Machine> {
++        match self { Self::S2(m) => Some(m), _ => None }
++    }
+ }
+ 
+ impl std::ops::Deref for MachineKind {
+     type Target = dyn MachineApi;
+     fn deref(&self) -> &Self::Target {
+-        match self { Self::S3(m) => m.as_ref(), Self::C3(m) => m.as_ref(), Self::C6(m) => m.as_ref(), Self::Esp32(m) => m.as_ref() }
++        match self { Self::S3(m) => m.as_ref(), Self::S2(m) => m.as_ref(), Self::C3(m) => m.as_ref(), Self::C6(m) => m.as_ref(), Self::Esp32(m) => m.as_ref() }
+     }
+ }
+ 
+ impl std::ops::DerefMut for MachineKind {
+     fn deref_mut(&mut self) -> &mut Self::Target {
+-        match self { Self::S3(m) => m.as_mut(), Self::C3(m) => m.as_mut(), Self::C6(m) => m.as_mut(), Self::Esp32(m) => m.as_mut() }
++        match self { Self::S3(m) => m.as_mut(), Self::S2(m) => m.as_mut(), Self::C3(m) => m.as_mut(), Self::C6(m) => m.as_mut(), Self::Esp32(m) => m.as_mut() }
+     }
+ }
+ 

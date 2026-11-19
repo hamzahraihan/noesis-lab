@@ -2,16 +2,16 @@
   "note": "The pinned artefacts of the ESP32 machine path: the emulator, the chip's own mask ROM, and the MicroPython image it boots. Re-verify with the sha256 above; never patch in place.",
   "artifacts": [
     {
-      "name": "esp32sim (WebAssembly build, with the GPIO, I2C and SPI seams)",
-      "version": "2026-08-25 + esp32sim-gpio-seam.patch + esp32sim-i2c-seam.patch + esp32sim-spi-seam.patch",
+      "name": "esp32sim (WebAssembly build, with the GPIO, I2C and SPI seams, and the ESP32-S2 machine)",
+      "version": "2026-11-19 + esp32sim-gpio-seam.patch + esp32sim-i2c-seam.patch + esp32sim-spi-seam.patch + esp32sim-systimer-map.patch + esp32sim-s2-machine.patch",
       "file": "esp32sim.wasm",
-      "bytes": 3393594,
-      "sha256": "1fb7925e17c184a764a72e6a08834bf3ee1c3dfc9fd46636cb69a9ec527dfe0f",
+      "bytes": 3920429,
+      "sha256": "f9fcd252a0adab987248abd5ac40ee22ac3ebfcfbafc8252b86a8543d2a93dc6",
       "url": "https://mikroverk.github.io/esp32sim/wasm/esp32sim.wasm",
       "license": "MIT",
       "source": "https://github.com/mikroverk/esp32sim",
       "toolchain": "rustc 1.99.1 (stable-x86_64-pc-windows-msvc), wasm32-unknown-unknown",
-      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif. This build carries the three local patches in ../patches/: the GPIO seam, which adds the three exports a bench needs to read what the chip drives and to drive what it reads; the I2C seam, which lets the host answer the chip's I2C controller so the bench's devices are on the bus the firmware talks on; and the SPI seam, which does the same for the chip's SPI master, with the levels of the D/C and chip-select lines the host has to know about. scripts/build-esp32-wasm.mjs rebuilds it from upstream and the patches; the hash above is the toolchain's output, and the host family changes it."
+      "note": "The emulator: it boots the chip's own mask ROM, the second-stage bootloader and an unmodified application. Unofficial and not affiliated with Espressif. This build carries five local patches in ../patches/: the GPIO seam, the I2C seam and the SPI seam (the bench seams), the corrected ESP32-S2/S3 system-timer register map, and the ESP32-S2 machine (the esp32s2 crate from the overlay under ../esp32s2/, wired into the wasm factory). scripts/build-esp32-wasm.mjs rebuilds it from upstream and the patches; the hash above is the toolchain's output, and the host family changes it. The S2 machine boots the S2 mask ROM and starts the app, but the application does not print the banner on the emulated path yet, so the S2 board is offered the interpreter only and the S2 leg is experimental. The classic ESP32 path is unchanged."
     },
     {
       "name": "MicroPython (ESP32 port, ESP32_GENERIC variant)",
@@ -46,7 +46,7 @@
       "url": "https://micropython.org/resources/firmware/ESP32_GENERIC_S2-20260824-v1.29.0.bin",
       "license": "MIT",
       "source": "https://github.com/micropython/micropython",
-      "note": "The same MicroPython release the ESP32-S2 port ships. A combined bootloader, partition table and application, flashed at 0x1000. Pinned for the ESP32-S2 board; boots once the esp32sim machine for the S2 exists (the S2 machine is the blocked half of this artefact set)."
+      "note": "The same MicroPython release the ESP32-S2 port ships. A combined bootloader, partition table and application, flashed at 0x1000. Pinned for the ESP32-S2 board. The S2 machine in esp32sim.wasm boots this image far into the app startup, but the banner never prints on the emulated path, so the board is offered the interpreter only."
     },
     {
       "name": "ESP32-S2 mask ROM (rev 0)",
@@ -57,7 +57,7 @@
       "url": "https://github.com/espressif/esp-rom-elfs/releases/tag/20260528",
       "license": "Apache-2.0",
       "source": "https://github.com/espressif/esp-rom-elfs",
-      "note": "Espressif's own mask ROM for the ESP32-S2, from the same esp-rom-elfs release as the classic ESP32 rev 3.0 ROM the emulator already boots. The image the S2 emulator boots from once the S2 machine exists."
+      "note": "Espressif's own mask ROM for the ESP32-S2, from the same esp-rom-elfs release as the classic ESP32 rev 3.0 ROM the emulator already boots. The first thing the S2 machine runs; it boots the combined image above far into the app startup, but the banner never prints on the emulated path."
     }
   ]
 }
